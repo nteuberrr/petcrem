@@ -2,6 +2,9 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/Badge'
+import { fmtLitros, fmtPrecio, fmtFecha } from '@/lib/format'
+
+type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
 
 type ClienteDetalle = {
   id: string
@@ -20,7 +23,14 @@ type ClienteDetalle = {
   codigo_servicio: string
   estado: string
   ciclo_id: string
+  veterinaria_id: string
+  tipo_precios: string
+  adicionales: string
   fecha_creacion: string
+  fecha_defuncion: string
+  notas: string
+  tipo_pago: string
+  estado_pago: string
   ciclo?: {
     id: string
     fecha: string
@@ -31,13 +41,31 @@ type ClienteDetalle = {
   } | null
 }
 
+type Veterinario = { id: string; nombre: string; activo: string; tipo_precios: string }
+type Producto = { id: string; nombre: string; precio: string; stock: string; activo: string }
+type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
+type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
+type TramoEspecial = Tramo & { veterinaria_id: string }
+
 export default function ClienteDetallePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
   const [cliente, setCliente] = useState<ClienteDetalle | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [descargandoCert, setDescargandoCert] = useState(false)
   const [form, setForm] = useState<Partial<ClienteDetalle>>({})
+  const [veterinarias, setVeterinarias] = useState<Veterinario[]>([])
+  const [esVeterinaria, setEsVeterinaria] = useState(false)
+  const [tramosEspeciales, setTramosEspeciales] = useState<TramoEspecial[]>([])
+  const [preciosGenerales, setPreciosGenerales] = useState<Tramo[]>([])
+  const [preciosConvenio, setPreciosConvenio] = useState<Tramo[]>([])
+
+  // Adicionales
+  const [showAdicionales, setShowAdicionales] = useState(false)
+  const [adicionales, setAdicionales] = useState<AdicionalItem[]>([])
+  const [productosDisp, setProductosDisp] = useState<Producto[]>([])
+  const [otrosServicios, setOtrosServicios] = useState<OtroServicio[]>([])
 
   useEffect(() => {
     fetch(`/api/clientes/${id}`)
@@ -45,22 +73,107 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       .then(d => {
         setCliente(d)
         setForm(d)
+        if (d.veterinaria_id) setEsVeterinaria(true)
+        if (d.adicionales) {
+          try { setAdicionales(JSON.parse(d.adicionales)) } catch {}
+        }
         setLoading(false)
       })
+    fetch('/api/veterinarios?activo=true')
+      .then(r => r.json())
+      .then(d => setVeterinarias(Array.isArray(d) ? d : []))
+    fetch('/api/productos')
+      .then(r => r.json())
+      .then(d => setProductosDisp(Array.isArray(d) ? d.filter((p: Producto) => p.activo === 'TRUE') : []))
+    fetch('/api/servicios?tipo=otros')
+      .then(r => r.json())
+      .then(d => setOtrosServicios(Array.isArray(d) ? d.filter((s: OtroServicio) => s.activo === 'TRUE') : []))
+    fetch('/api/precios?tipo=general')
+      .then(r => r.json())
+      .then(d => setPreciosGenerales(Array.isArray(d) ? d : []))
+    fetch('/api/precios?tipo=convenio')
+      .then(r => r.json())
+      .then(d => setPreciosConvenio(Array.isArray(d) ? d : []))
   }, [id])
+
+  // Load special pricing when vet changes
+  useEffect(() => {
+    const vetId = form.veterinaria_id
+    if (!vetId) { setTramosEspeciales([]); return }
+    const vet = veterinarias.find(v => v.id === vetId)
+    if (vet?.tipo_precios === 'precios_especiales') {
+      fetch(`/api/precios/especiales?veterinaria_id=${vetId}`)
+        .then(r => r.json())
+        .then(d => setTramosEspeciales(Array.isArray(d) ? d : []))
+    } else {
+      setTramosEspeciales([])
+    }
+  }, [form.veterinaria_id, veterinarias])
+
+  // Auto-set tipo_precios when vet is selected
+  useEffect(() => {
+    if (!form.veterinaria_id) {
+      setForm(f => ({ ...f, tipo_precios: 'general' }))
+      return
+    }
+    const vet = veterinarias.find(v => v.id === form.veterinaria_id)
+    if (vet) {
+      setForm(f => ({ ...f, tipo_precios: vet.tipo_precios === 'precios_especiales' ? 'especial' : 'convenio' }))
+    }
+  }, [form.veterinaria_id, veterinarias])
+
+  async function descargarCertificado() {
+    setDescargandoCert(true)
+    try {
+      const res = await fetch(`/api/clientes/${id}/certificado`)
+      if (!res.ok) {
+        const err = await res.json()
+        alert(err.error ?? 'Error generando el certificado')
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `certificado-${cliente?.codigo ?? id}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setDescargandoCert(false)
+    }
+  }
 
   async function handleSave() {
     setSaving(true)
+    const payload = {
+      ...form,
+      veterinaria_id: esVeterinaria ? (form.veterinaria_id ?? '') : '',
+      tipo_precios: esVeterinaria ? form.tipo_precios : 'general',
+      adicionales: JSON.stringify(adicionales),
+    }
     const res = await fetch(`/api/clientes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     })
     if (res.ok) {
       const updated = await res.json()
       setCliente(updated)
     }
     setSaving(false)
+  }
+
+  function toggleAdicional(tipo: 'producto' | 'servicio', item: { id: string; nombre: string; precio: string }) {
+    const existing = adicionales.find(a => a.tipo === tipo && a.id === item.id)
+    if (existing) {
+      setAdicionales(prev => prev.filter(a => !(a.tipo === tipo && a.id === item.id)))
+    } else {
+      setAdicionales(prev => [...prev, { tipo, id: item.id, nombre: item.nombre, precio: parseFloat(item.precio) || 0, qty: 1 }])
+    }
+  }
+
+  function updateQty(tipo: 'producto' | 'servicio', itemId: string, qty: number) {
+    setAdicionales(prev => prev.map(a => a.tipo === tipo && a.id === itemId ? { ...a, qty: Math.max(1, qty) } : a))
   }
 
   if (loading) return <div className="p-8 text-gray-400 text-sm">Cargando...</div>
@@ -70,17 +183,89 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     ? parseFloat(cliente.ciclo.litros_fin) - parseFloat(cliente.ciclo.litros_inicio)
     : null
 
+  const vetSeleccionada = veterinarias.find(v => v.id === cliente.veterinaria_id)
+  const totalAdicionales = adicionales.reduce((sum, a) => sum + a.precio * a.qty, 0)
+
+  // Resolver tabla de precios según tipo_precios del formulario
+  const tablaPrecios: Tramo[] = form.tipo_precios === 'especial'
+    ? tramosEspeciales
+    : form.tipo_precios === 'convenio'
+      ? preciosConvenio
+      : preciosGenerales
+  const tablaNombre = form.tipo_precios === 'especial'
+    ? 'Precios especiales'
+    : form.tipo_precios === 'convenio'
+      ? 'Precios convenio'
+      : 'Precios generales'
+
+  // Encontrar tramo para el peso dado
+  function encontrarTramo(tabla: Tramo[], pesoKg: number): Tramo | null {
+    if (!tabla.length || !isFinite(pesoKg) || pesoKg <= 0) return null
+    const maxPesoMin = Math.max(...tabla.map(t => parseFloat(t.peso_min) || 0))
+    const tramoTope = tabla.find(t => (parseFloat(t.peso_min) || 0) === maxPesoMin)
+    if (tramoTope && pesoKg >= maxPesoMin) return tramoTope
+    return tabla.find(t => {
+      const min = parseFloat(t.peso_min) || 0
+      const max = parseFloat(t.peso_max) || 0
+      return pesoKg >= min && pesoKg <= max
+    }) ?? null
+  }
+
+  const pesoKg = parseFloat(form.peso_kg ?? '0') || 0
+  const tramoAplicable = encontrarTramo(tablaPrecios, pesoKg)
+  const codigoServ = form.codigo_servicio ?? 'CI'
+  const precioServicio = tramoAplicable
+    ? parseFloat(
+        codigoServ === 'CI' ? tramoAplicable.precio_ci :
+        codigoServ === 'CP' ? tramoAplicable.precio_cp :
+        tramoAplicable.precio_sd
+      ) || 0
+    : 0
+  const totalServicio = precioServicio + totalAdicionales
+
+  const rangoTramo = tramoAplicable
+    ? (() => {
+        const maxPesoMin = Math.max(...tablaPrecios.map(t => parseFloat(t.peso_min) || 0))
+        const min = parseFloat(tramoAplicable.peso_min) || 0
+        return min === maxPesoMin ? `${min} kg o más` : `${tramoAplicable.peso_min} – ${tramoAplicable.peso_max} kg`
+      })()
+    : null
+
+  // Price type options based on selected vet
+  const precioOptions = (() => {
+    if (!esVeterinaria || !form.veterinaria_id) return [{ value: 'general', label: 'Precios generales' }]
+    const vet = veterinarias.find(v => v.id === form.veterinaria_id)
+    const opts = [
+      { value: 'general', label: 'Precios generales' },
+      { value: 'convenio', label: 'Precios convenio' },
+    ]
+    if (vet?.tipo_precios === 'precios_especiales') {
+      opts.push({ value: 'especial', label: 'Precios especiales' })
+    }
+    return opts
+  })()
+
   return (
     <div className="max-w-3xl">
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-600">←</button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">{cliente.nombre_mascota}</h1>
           <div className="flex items-center gap-2 mt-1">
             <span className="font-mono text-xs text-indigo-700 font-semibold bg-indigo-50 px-2 py-0.5 rounded">{cliente.codigo}</span>
             <Badge variant={cliente.estado === 'cremado' ? 'green' : 'yellow'}>{cliente.estado}</Badge>
+            {vetSeleccionada && <Badge variant="blue">{vetSeleccionada.nombre}</Badge>}
           </div>
         </div>
+        {cliente.estado === 'cremado' && (
+          <button
+            onClick={descargarCertificado}
+            disabled={descargandoCert}
+            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {descargandoCert ? '⏳ Generando...' : '📄 Certificado PDF'}
+          </button>
+        )}
       </div>
 
       {/* Datos de ingreso */}
@@ -93,9 +278,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <Field label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
           <Field label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
           <Field label="Fecha de retiro" type="date" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
+          <Field label="Fecha de defunción" type="date" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
           <Field label="Especie" value={form.especie} onChange={v => setForm(f => ({ ...f, especie: v }))} />
           <Field label="Peso (kg)" type="number" value={form.peso_kg} onChange={v => setForm(f => ({ ...f, peso_kg: v }))} />
-          <div>
+          <div className="col-span-2">
             <label className="text-xs font-medium text-gray-500">Tipo de servicio</label>
             <select
               value={form.codigo_servicio}
@@ -108,14 +294,258 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             </select>
           </div>
         </div>
-        <div className="flex justify-end mt-4">
+
+        {/* Veterinaria */}
+        <div className="mt-5 pt-5 border-t border-gray-100">
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={esVeterinaria}
+              onChange={e => {
+                setEsVeterinaria(e.target.checked)
+                if (!e.target.checked) setForm(f => ({ ...f, veterinaria_id: '', tipo_precios: 'general' }))
+              }}
+              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <span className="text-sm font-medium text-gray-700">Cliente Veterinaria</span>
+          </label>
+
+          {esVeterinaria && (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-500">Veterinaria</label>
+                <select
+                  value={form.veterinaria_id ?? ''}
+                  onChange={e => setForm(f => ({ ...f, veterinaria_id: e.target.value }))}
+                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Seleccionar veterinaria...</option>
+                  {veterinarias.map(v => (
+                    <option key={v.id} value={v.id}>{v.nombre}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500">Tipo de precios</label>
+                <select
+                  value={form.tipo_precios ?? 'general'}
+                  onChange={e => setForm(f => ({ ...f, tipo_precios: e.target.value }))}
+                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {precioOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                {tramosEspeciales.length > 0 && (
+                  <p className="text-xs text-purple-600 mt-1">{tramosEspeciales.length} tramo(s) especiales cargados</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Pago */}
+        <div className="mt-5 pt-5 border-t border-gray-100">
+          <p className="text-sm font-semibold text-gray-900 mb-3">Pago</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500">Tipo de pago</label>
+              <select
+                value={form.tipo_pago ?? ''}
+                onChange={e => setForm(f => ({ ...f, tipo_pago: e.target.value }))}
+                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">—</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="pos">POS</option>
+                <option value="efectivo">Efectivo</option>
+                <option value="link">Link de pago</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500">Estado de pago</label>
+              <select
+                value={form.estado_pago ?? 'pendiente'}
+                onChange={e => setForm(f => ({ ...f, estado_pago: e.target.value }))}
+                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="pendiente">Pendiente de pago</option>
+                <option value="pagado">Pagado</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Notas */}
+        <div className="mt-5 pt-5 border-t border-gray-100">
+          <label className="text-sm font-semibold text-gray-900">Notas</label>
+          <textarea
+            value={form.notas ?? ''}
+            onChange={e => setForm(f => ({ ...f, notas: e.target.value }))}
+            rows={3}
+            placeholder="Comentarios sobre el servicio, la mascota o el tutor..."
+            className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+          />
+        </div>
+
+        <div className="flex justify-end mt-5">
           <button
             onClick={handleSave}
             disabled={saving}
-            className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
           >
             {saving ? 'Guardando...' : 'Guardar cambios'}
           </button>
+        </div>
+      </div>
+
+      {/* Adicionales */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 overflow-hidden">
+        <button
+          onClick={() => setShowAdicionales(!showAdicionales)}
+          className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <h2 className="text-base font-semibold text-gray-900">Adicionales</h2>
+            {adicionales.length > 0 && (
+              <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                {adicionales.length} ítem(s) · {fmtPrecio(totalAdicionales)}
+              </span>
+            )}
+          </div>
+          <span className="text-gray-400 text-sm">{showAdicionales ? '▲' : '▼'}</span>
+        </button>
+
+        {showAdicionales && (
+          <div className="border-t border-gray-100 px-6 pb-6 pt-4">
+            {/* Productos */}
+            {productosDisp.length > 0 && (
+              <div className="mb-6">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Productos y ánforas</p>
+                <div className="space-y-2">
+                  {productosDisp.map(p => {
+                    const item = adicionales.find(a => a.tipo === 'producto' && a.id === p.id)
+                    const stockNum = parseInt(p.stock || '0')
+                    return (
+                      <div key={p.id} className="flex items-center gap-3 py-1.5">
+                        <input
+                          type="checkbox"
+                          checked={!!item}
+                          onChange={() => toggleAdicional('producto', p)}
+                          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="flex-1 text-sm text-gray-900">{p.nombre}</span>
+                        <span className="text-xs text-gray-500">{fmtPrecio(p.precio)}</span>
+                        {stockNum < 50 && <span className="text-xs text-red-500 font-medium">⚠ stock: {stockNum}</span>}
+                        {item && (
+                          <input
+                            type="number"
+                            min={1}
+                            value={item.qty}
+                            onChange={e => updateQty('producto', p.id, parseInt(e.target.value) || 1)}
+                            className="w-16 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Otros servicios */}
+            {otrosServicios.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Otros servicios</p>
+                <div className="space-y-2">
+                  {otrosServicios.map(s => {
+                    const item = adicionales.find(a => a.tipo === 'servicio' && a.id === s.id)
+                    return (
+                      <div key={s.id} className="flex items-center gap-3 py-1.5">
+                        <input
+                          type="checkbox"
+                          checked={!!item}
+                          onChange={() => toggleAdicional('servicio', s)}
+                          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="flex-1 text-sm text-gray-900">{s.nombre}</span>
+                        <span className="text-xs text-gray-500">{fmtPrecio(s.precio)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {adicionales.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center">
+                <span className="text-sm text-gray-600">{adicionales.length} ítem(s) seleccionado(s)</span>
+                <span className="font-semibold text-gray-900">{fmtPrecio(totalAdicionales)}</span>
+              </div>
+            )}
+
+            {productosDisp.length === 0 && otrosServicios.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-4">Sin productos ni servicios adicionales activos</p>
+            )}
+
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {saving ? 'Guardando...' : 'Guardar adicionales'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Resumen del servicio */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-900">Resumen del servicio</h2>
+          <span className="text-xs text-gray-400">{tablaNombre}</span>
+        </div>
+
+        <div className="space-y-2.5">
+          <div className="flex items-start justify-between py-2 border-b border-gray-100">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-900">
+                Cremación {codigoServ}
+                {rangoTramo && <span className="text-gray-500 font-normal"> · {rangoTramo}</span>}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {pesoKg > 0 ? `${pesoKg} kg` : 'Ingresa el peso para calcular'}
+                {pesoKg > 0 && !tramoAplicable && (
+                  <span className="text-red-500 ml-2">⚠ Sin tramo de precio aplicable</span>
+                )}
+              </p>
+            </div>
+            <p className="text-sm font-semibold text-gray-900">{fmtPrecio(precioServicio)}</p>
+          </div>
+
+          {adicionales.length > 0 && (
+            <>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">Adicionales</p>
+              {adicionales.map(a => (
+                <div key={`${a.tipo}-${a.id}`} className="flex items-center justify-between py-1">
+                  <p className="text-sm text-gray-700">
+                    {a.nombre}
+                    {a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
+                  </p>
+                  <p className="text-sm text-gray-700">{fmtPrecio(a.precio * a.qty)}</p>
+                </div>
+              ))}
+              <div className="flex items-center justify-between py-1 border-t border-gray-100 pt-2">
+                <p className="text-xs text-gray-500">Subtotal adicionales</p>
+                <p className="text-sm font-medium text-gray-700">{fmtPrecio(totalAdicionales)}</p>
+              </div>
+            </>
+          )}
+
+          <div className="flex items-center justify-between pt-3 mt-2 border-t-2 border-gray-200">
+            <p className="text-base font-bold text-gray-900">Total</p>
+            <p className="text-lg font-bold text-indigo-700">{fmtPrecio(totalServicio)}</p>
+          </div>
         </div>
       </div>
 
@@ -124,9 +554,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         <h2 className="text-base font-semibold text-gray-900 mb-4">Proceso de cremación</h2>
         {cliente.ciclo ? (
           <div className="grid grid-cols-2 gap-4">
-            <InfoField label="Fecha del ciclo" value={cliente.ciclo.fecha} />
+            <InfoField label="Fecha del ciclo" value={fmtFecha(cliente.ciclo.fecha)} />
             <InfoField label="Número de ciclo" value={`#${cliente.ciclo.numero_ciclo}`} />
-            <InfoField label="Litros utilizados" value={litrosUsados !== null ? `${litrosUsados} L` : '—'} />
+            <InfoField label="Litros utilizados" value={litrosUsados !== null ? fmtLitros(litrosUsados) : '—'} />
             <InfoField label="Comentarios" value={cliente.ciclo.comentarios || '—'} />
           </div>
         ) : (

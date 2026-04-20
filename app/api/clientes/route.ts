@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSheetData, appendRow, getNextId } from '@/lib/google-sheets'
+import { getSheetData, appendRow, getNextId, ensureColumn } from '@/lib/google-sheets'
 import { generarCodigo } from '@/lib/codigo-generator'
 
 const ClienteSchema = z.object({
@@ -16,6 +16,8 @@ const ClienteSchema = z.object({
   peso_kg: z.number().positive(),
   tipo_servicio: z.string().min(1),
   codigo_servicio: z.enum(['CI', 'CP', 'SD']),
+  veterinaria_id: z.string().optional(),
+  adicionales: z.string().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -44,6 +46,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const data = ClienteSchema.parse(body)
+    await ensureColumn('clientes', 'veterinaria_id')
+    await ensureColumn('clientes', 'adicionales')
     const codigo = await generarCodigo(data.letra_especie, data.codigo_servicio)
     const id = await getNextId('clientes')
     const now = new Date().toISOString().split('T')[0]
@@ -64,6 +68,8 @@ export async function POST(req: NextRequest) {
       codigo_servicio: data.codigo_servicio,
       estado: 'pendiente',
       ciclo_id: '',
+      veterinaria_id: data.veterinaria_id ?? '',
+      adicionales: data.adicionales ?? '[]',
       fecha_creacion: now,
     }
     await appendRow('clientes', row)

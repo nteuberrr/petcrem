@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, getNextId } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, getNextId, deleteRow } from '@/lib/google-sheets'
 
 export async function GET() {
   try {
@@ -24,6 +24,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(row, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+    const rows = await getSheetData('especies')
+    const idx = rows.findIndex(r => r.id === id)
+    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    await deleteRow('especies', idx)
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
 

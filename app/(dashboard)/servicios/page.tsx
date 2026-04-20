@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Toggle } from '@/components/ui/Toggle'
 import { Modal } from '@/components/ui/Modal'
+import { fmtPrecio, fmtNumero } from '@/lib/format'
 
 type PrecioTramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
 type Producto = { id: string; nombre: string; precio: string; foto_url: string; activo: string }
@@ -28,7 +29,7 @@ export default function ServiciosPage() {
     fetch('/api/veterinarios?activo=true').then(r => r.json()).then(d => setVets(Array.isArray(d) ? d : []))
   }, [])
 
-  const fmt = (n: string) => `$${parseInt(n || '0').toLocaleString('es-CL')}`
+  const fmt = fmtPrecio
 
   async function toggleProducto(p: Producto) {
     const res = await fetch('/api/productos', {
@@ -106,7 +107,7 @@ export default function ServiciosPage() {
           <tbody className="divide-y divide-gray-50">
             {precios.map(p => (
               <tr key={p.id}>
-                <td className="py-2 text-gray-600">{p.peso_min}–{p.peso_max} kg</td>
+                <td className="py-2 text-gray-600">{fmtNumero(p.peso_min)}–{fmtNumero(p.peso_max)} kg</td>
                 <td className="py-2 text-gray-900 font-medium">{fmt(p.precio_ci)}</td>
                 <td className="py-2 text-gray-900 font-medium">{fmt(p.precio_cp)}</td>
                 <td className="py-2 text-gray-900 font-medium">{fmt(p.precio_sd)}</td>
@@ -190,7 +191,7 @@ export default function ServiciosPage() {
             <label className="text-xs font-medium text-gray-700">Precio (CLP)</label>
             <input required type="number" min="0" value={prodForm.precio} onChange={e => setProdForm(f => ({ ...f, precio: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
-          <button type="submit" className="w-full bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700">Guardar</button>
+          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">Guardar</button>
         </form>
       </Modal>
 
@@ -204,7 +205,7 @@ export default function ServiciosPage() {
             <label className="text-xs font-medium text-gray-700">Precio (CLP)</label>
             <input required type="number" min="0" value={otroForm.precio} onChange={e => setOtroForm(f => ({ ...f, precio: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
-          <button type="submit" className="w-full bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700">Guardar</button>
+          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">Guardar</button>
         </form>
       </Modal>
 

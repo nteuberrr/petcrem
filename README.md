@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PetCrem — Alma Animal
 
-## Getting Started
+Sistema de gestión para crematorio de mascotas: fichas de clientes, ciclos de cremación, control de petróleo, precios por veterinaria (general / convenio / especial), certificados PDF y dashboard con KPIs.
 
-First, run the development server:
+Stack: **Next.js 16 (App Router) · TypeScript · Tailwind v4 · NextAuth · Google Sheets API · pdf-lib · Recharts**.
+
+## Módulos
+
+- **Dashboard** — KPIs del mes (mascotas, ingresos, ciclos, pagos pendientes, stock petróleo), ratios de eficiencia y gráficos (ventas, especies, top veterinarias, top productos).
+- **Clientes** — Fichas de mascotas con peso, especie, tipo de servicio (CI/CP/SD), veterinaria asignada, adicionales (productos + servicios), pago y notas.
+- **Operaciones** — Ciclos de cremación (con mascotas, horario y litros) y control de carga de petróleo (neto/IVA/específico/total bruto).
+- **Bases de datos** — Registro de veterinarios.
+- **Configuración** — Precios (generales, convenio, especiales por vet con tramos reordenables), productos, especies, tipos de servicio, otros servicios y usuarios.
+- **Reportes** — Exportación Excel (ejecutivo, por veterinaria).
+
+## Setup local
 
 ```bash
+npm install
+cp .env.example .env.local   # completar con valores reales
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Variables de entorno
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Var | Uso |
+| --- | --- |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | Service Account con acceso al Sheet |
+| `GOOGLE_PRIVATE_KEY` | Clave privada del Service Account (con `\n` escapados) |
+| `GOOGLE_SPREADSHEET_ID` | ID del Google Sheet que funciona de DB |
+| `GOOGLE_DRIVE_FOLDER_ID` | Carpeta de Drive para uploads de fotos (opcional) |
+| `NEXTAUTH_SECRET` | Secret de NextAuth (generar con `openssl rand -base64 32`) |
+| `NEXTAUTH_URL` | URL de la app (`http://localhost:3000` en dev) |
+| `ADMIN_EMAIL` · `ADMIN_PASSWORD` | Credenciales del admin fallback |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deploy en Vercel
 
-## Learn More
+1. Push el repo a GitHub.
+2. En [vercel.com/new](https://vercel.com/new) importar el repo.
+3. Cargar todas las variables de entorno de arriba en **Settings → Environment Variables** (usar Production + Preview).
+4. En cuanto termine el build, actualizar `NEXTAUTH_URL` con la URL definitiva de Vercel.
 
-To learn more about Next.js, take a look at the following resources:
+## Estructura
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+app/
+  (dashboard)/          # layout con sidebar, rutas autenticadas
+    dashboard/          # KPIs + charts
+    clientes/           # lista + ficha individual
+    operaciones/        # ciclos + petróleo
+    bases/              # veterinarios
+    configuracion/      # precios, productos, especies, usuarios, etc.
+    reportes/
+  api/                  # endpoints de CRUD contra Google Sheets
+  login/
+lib/
+  google-sheets.ts      # wrapper + ensureSheet / ensureColumn / moveRow
+  certificate-generator.ts  # PDF con pdf-lib
+  format.ts             # formateo CLP, litros, kg, fechas
+components/
+  ui/                   # Modal, Toggle, Badge
+  Sidebar.tsx
+```

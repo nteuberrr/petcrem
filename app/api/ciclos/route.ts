@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSheetData, appendRow, updateRow, getNextId } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, getNextId, ensureColumn } from '@/lib/google-sheets'
 
 const CicloSchema = z.object({
   fecha: z.string().min(1),
@@ -8,6 +8,8 @@ const CicloSchema = z.object({
   litros_fin: z.number(),
   mascotas_ids: z.array(z.string()),
   comentarios: z.string().optional().default(''),
+  hora_inicio: z.string().optional().default(''),
+  hora_fin: z.string().optional().default(''),
 })
 
 export async function GET() {
@@ -31,8 +33,11 @@ export async function POST(req: NextRequest) {
     const data = CicloSchema.parse(body)
 
     const ciclos = await getSheetData('ciclos')
-    const delDia = ciclos.filter((c) => c.fecha === data.fecha)
-    const numeroCiclo = delDia.length + 1
+    const numeros = ciclos.map(c => parseInt(c.numero_ciclo || '0', 10)).filter(n => !isNaN(n))
+    const numeroCiclo = (numeros.length ? Math.max(...numeros) : 0) + 1
+
+    await ensureColumn('ciclos', 'hora_inicio')
+    await ensureColumn('ciclos', 'hora_fin')
 
     const id = await getNextId('ciclos')
     const now = new Date().toISOString().split('T')[0]
@@ -45,6 +50,8 @@ export async function POST(req: NextRequest) {
       litros_fin: String(data.litros_fin),
       mascotas_ids: JSON.stringify(data.mascotas_ids),
       comentarios: data.comentarios,
+      hora_inicio: data.hora_inicio ?? '',
+      hora_fin: data.hora_fin ?? '',
       fecha_creacion: now,
     }
     await appendRow('ciclos', row)
