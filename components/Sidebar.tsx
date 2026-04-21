@@ -4,19 +4,22 @@ import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 
 const nav = [
-  { href: '/dashboard', label: 'Dashboard', icon: '📊' },
-  { href: '/clientes', label: 'Clientes', icon: '🐾' },
-  { href: '/operaciones', label: 'Operaciones', icon: '🔥' },
-  { href: '/bases', label: 'Bases de datos', icon: '🗄️' },
-  { href: '/configuracion', label: 'Configuración', icon: '⚙️' },
-  { href: '/reportes', label: 'Reportes', icon: '📈' },
+  { href: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: true },
+  { href: '/clientes', label: 'Clientes', icon: '🐾', adminOnly: false },
+  { href: '/operaciones', label: 'Operaciones', icon: '🔥', adminOnly: false },
+  { href: '/bases', label: 'Bases de datos', icon: '🗄️', adminOnly: true },
+  { href: '/configuracion', label: 'Configuración', icon: '⚙️', adminOnly: true },
+  { href: '/reportes', label: 'Reportes', icon: '📈', adminOnly: true },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const { data: session } = useSession()
   const userName = session?.user?.name ?? session?.user?.email ?? ''
+  const role = session?.user?.role ?? 'operador'
+  const isAdmin = role === 'admin'
   const initials = userName.slice(0, 2).toUpperCase()
+  const items = nav.filter(n => !n.adminOnly || isAdmin)
 
   return (
     <aside className="w-60 bg-gray-900 text-white flex flex-col min-h-screen fixed left-0 top-0 z-10">
@@ -25,7 +28,7 @@ export default function Sidebar() {
         <p className="text-gray-400 text-xs mt-0.5">Gestión crematorio</p>
       </Link>
       <nav className="flex-1 py-4 px-3 space-y-0.5">
-        {nav.map(({ href, label, icon }) => {
+        {items.map(({ href, label, icon }) => {
           const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
           return (
             <Link
@@ -49,7 +52,10 @@ export default function Sidebar() {
             <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
               {initials}
             </div>
-            <span className="text-xs text-gray-400 truncate">{userName}</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs text-gray-300 truncate">{userName}</div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide">{role}</div>
+            </div>
           </div>
         )}
         <button

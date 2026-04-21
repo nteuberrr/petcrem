@@ -128,6 +128,41 @@ export async function ensureColumn(sheetName: string, columnName: string): Promi
   })
 }
 
+/**
+ * Ensures all given columns exist as headers in row 1. Does it in a single
+ * write so sequential ensureColumn calls don't each re-read headers.
+ */
+export async function ensureColumns(sheetName: string, columnNames: string[]): Promise<void> {
+  const sheets = getSheets()
+  const headersRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${sheetName}!1:1`,
+  })
+  const headers = (headersRes.data.values?.[0] as string[]) ?? []
+  const missing = columnNames.filter(c => !headers.includes(c))
+  if (missing.length === 0) return
+  const startIdx = headers.length
+  const startCol = columnLetter(startIdx)
+  const endCol = columnLetter(startIdx + missing.length - 1)
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${sheetName}!${startCol}1:${endCol}1`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [missing] },
+  })
+}
+
+function columnLetter(idx: number): string {
+  // 0 → A, 25 → Z, 26 → AA, 27 → AB, ...
+  let s = ''
+  let n = idx
+  while (true) {
+    s = String.fromCharCode(65 + (n % 26)) + s
+    if (n < 26) return s
+    n = Math.floor(n / 26) - 1
+  }
+}
+
 export async function deleteRow(sheetName: string, rowIndex: number): Promise<void> {
   const sheets = getSheets()
   const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })

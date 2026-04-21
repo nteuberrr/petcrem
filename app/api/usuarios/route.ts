@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumn, ensureSheet } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/google-sheets'
 
 const EXPECTED_COLS = ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion']
 
 async function ensureUsuariosSheet() {
   await ensureSheet('usuarios')
-  for (const col of EXPECTED_COLS) await ensureColumn('usuarios', col)
+  await ensureColumns('usuarios', EXPECTED_COLS)
 }
 
 export async function GET() {
@@ -32,20 +32,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'nombre, email y password requeridos' }, { status: 400 })
     }
     await ensureUsuariosSheet()
+    // Evitar duplicados por email
+    const existentes = await getSheetData('usuarios')
+    if (existentes.some(u => u.email?.trim().toLowerCase() === String(body.email).trim().toLowerCase())) {
+      return NextResponse.json({ error: 'Ya existe un usuario con ese email' }, { status: 409 })
+    }
     const id = await getNextId('usuarios')
     const now = new Date().toISOString().split('T')[0]
     const row = {
       id,
-      nombre: body.nombre,
-      email: body.email,
-      password: body.password,
-      rol: body.rol ?? 'operador',
+      nombre: String(body.nombre),
+      email: String(body.email),
+      password: String(body.password),
+      rol: body.rol === 'admin' ? 'admin' : 'operador',
       activo: 'TRUE',
       fecha_creacion: now,
     }
     await appendRow('usuarios', row)
     return NextResponse.json({ id, nombre: row.nombre, email: row.email, rol: row.rol, activo: row.activo }, { status: 201 })
   } catch (e) {
+    console.error('[usuarios POST]', e)
     return NextResponse.json({ error: String(e) }, { status: 400 })
   }
 }
