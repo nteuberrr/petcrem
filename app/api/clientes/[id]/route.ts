@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow, ensureColumn, deleteRow } from '@/lib/google-sheets'
+import { getSheetData, updateRow, ensureColumns, deleteRow } from '@/lib/google-sheets'
 
 export async function GET(
   _req: NextRequest,
@@ -32,14 +32,10 @@ export async function PATCH(
     const { id } = await params
     const body = await req.json()
 
-    await Promise.all([
-      ensureColumn('clientes', 'veterinaria_id'),
-      ensureColumn('clientes', 'adicionales'),
-      ensureColumn('clientes', 'tipo_precios'),
-      ensureColumn('clientes', 'fecha_defuncion'),
-      ensureColumn('clientes', 'notas'),
-      ensureColumn('clientes', 'tipo_pago'),
-      ensureColumn('clientes', 'estado_pago'),
+    await ensureColumns('clientes', [
+      'veterinaria_id', 'adicionales', 'tipo_precios',
+      'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
+      'peso_declarado', 'peso_ingreso', 'despacho_id',
     ])
 
     const rows = await getSheetData('clientes')
@@ -98,14 +94,17 @@ async function adjustProductStock(
   newItems.filter(a => a.tipo === 'producto').forEach(a => { newQty[a.id] = (newQty[a.id] || 0) + (a.qty ?? 1) })
 
   const allIds = new Set([...Object.keys(oldQty), ...Object.keys(newQty)])
-  for (const pid of allIds) {
-    const delta = (oldQty[pid] || 0) - (newQty[pid] || 0) // positive = freed, negative = consumed
-    if (delta === 0) continue
-    const pidx = productoRows.findIndex(p => p.id === pid)
-    if (pidx === -1) continue
-    const currentStock = parseInt(productoRows[pidx].stock || '0', 10)
-    const newStock = Math.max(0, currentStock + delta)
-    productoRows[pidx] = { ...productoRows[pidx], stock: String(newStock) }
-    await updateRow('productos', pidx, productoRows[pidx])
-  }
+  const idxById = new Map(productoRows.map((p, i) => [p.id, i]))
+  await Promise.all(
+    Array.from(allIds).map((pid) => {
+      const delta = (oldQty[pid] || 0) - (newQty[pid] || 0) // positive = freed, negative = consumed
+      if (delta === 0) return Promise.resolve()
+      const pidx = idxById.get(pid)
+      if (pidx === undefined) return Promise.resolve()
+      const currentStock = parseInt(productoRows[pidx].stock || '0', 10)
+      const newStock = Math.max(0, currentStock + delta)
+      productoRows[pidx] = { ...productoRows[pidx], stock: String(newStock) }
+      return updateRow('productos', pidx, productoRows[pidx])
+    })
+  )
 }

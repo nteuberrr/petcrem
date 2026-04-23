@@ -91,9 +91,11 @@ export default function ClientesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
+    const pesoDeclarado = parseFloat(form.peso_kg)
     const body = {
       ...form,
-      peso_kg: parseFloat(form.peso_kg),
+      peso_kg: pesoDeclarado, // legacy
+      peso_declarado: pesoDeclarado,
       misma_direccion: form.misma_direccion,
       veterinaria_id: noEsVeterinaria ? '' : form.veterinaria_id,
       adicionales: JSON.stringify(adicionales),
@@ -162,7 +164,7 @@ export default function ClientesPage() {
                   <td className="px-4 py-3 font-medium text-gray-900">{c.nombre_mascota}</td>
                   <td className="px-4 py-3 text-gray-600">{c.nombre_tutor}</td>
                   <td className="px-4 py-3 text-gray-600">{c.especie}</td>
-                  <td className="px-4 py-3 text-gray-600">{fmtKg(c.peso_kg)}</td>
+                  <td className="px-4 py-3 text-gray-600">{fmtKg(c.peso_kg || '0')}</td>
                   <td className="px-4 py-3 text-gray-600">{c.codigo_servicio}</td>
                   <td className="px-4 py-3">
                     <Badge variant={c.estado === 'cremado' ? 'green' : 'yellow'}>{c.estado}</Badge>

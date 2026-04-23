@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, appendRow, updateRow, getNextId, deleteRow } from '@/lib/google-sheets'
+import { todayISO } from '@/lib/dates'
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const hoja = tipo === 'otros' ? 'otros_servicios' : 'tipos_servicio'
     const id = await getNextId(hoja)
-    const now = new Date().toISOString().split('T')[0]
+    const now = todayISO()
     const row = { id, ...body, activo: 'TRUE', fecha_creacion: now }
     await appendRow(hoja, row)
     return NextResponse.json(row, { status: 201 })

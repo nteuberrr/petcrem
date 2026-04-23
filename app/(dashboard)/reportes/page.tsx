@@ -89,9 +89,9 @@ export default function ReportesPage() {
       const rows = [
         ['Ciclo', 'Fecha', 'Mascotas', 'Litros'],
         ...data.ciclos.map(c => [
-          `#${c.numero_ciclo}`, c.fecha,
+          `N° ${c.numero_ciclo}`, c.fecha,
           c.mascotas_ids.length,
-          parseFloat(c.litros_fin) - parseFloat(c.litros_inicio),
+          Math.abs(parseFloat(c.litros_fin) - parseFloat(c.litros_inicio)),
         ]),
       ]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Operacional')
@@ -109,7 +109,7 @@ export default function ReportesPage() {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Resumen')
       const crema = [['Especie', 'Cantidad'], ...Object.entries(data.por_especie).map(([k, v]) => [k, v])]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(crema), 'Cremaciones')
-      const ciclos = [['Ciclo', 'Fecha', 'Mascotas', 'Litros'], ...data.ciclos.map(c => [`#${c.numero_ciclo}`, c.fecha, c.mascotas_ids.length, parseFloat(c.litros_fin) - parseFloat(c.litros_inicio)])]
+      const ciclos = [['Ciclo', 'Fecha', 'Mascotas', 'Litros'], ...data.ciclos.map(c => [`N° ${c.numero_ciclo}`, c.fecha, c.mascotas_ids.length, Math.abs(parseFloat(c.litros_fin) - parseFloat(c.litros_inicio))])]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ciclos), 'Operacional')
     }
 
@@ -226,10 +226,10 @@ export default function ReportesPage() {
                 <tbody className="divide-y divide-gray-50">
                   {data.ciclos.map(c => (
                     <tr key={c.id}>
-                      <td className="py-2 font-medium">#{c.numero_ciclo}</td>
+                      <td className="py-2 font-medium">N° {c.numero_ciclo}</td>
                       <td className="py-2 text-gray-600">{fmtFecha(c.fecha)}</td>
                       <td className="py-2 text-gray-600">{c.mascotas_ids.length}</td>
-                      <td className="py-2 text-gray-600">{fmtLitros(parseFloat(c.litros_fin) - parseFloat(c.litros_inicio))}</td>
+                      <td className="py-2 text-gray-600">{fmtLitros(Math.abs(parseFloat(c.litros_fin) - parseFloat(c.litros_inicio)))}</td>
                     </tr>
                   ))}
                 </tbody>

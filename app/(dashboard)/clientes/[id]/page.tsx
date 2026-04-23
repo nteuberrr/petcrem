@@ -19,6 +19,9 @@ type ClienteDetalle = {
   especie: string
   letra_especie: string
   peso_kg: string
+  peso_declarado: string
+  peso_ingreso: string
+  despacho_id: string
   tipo_servicio: string
   codigo_servicio: string
   estado: string
@@ -71,6 +74,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     fetch(`/api/clientes/${id}`)
       .then(r => r.json())
       .then(d => {
+        // Retrocompat: si viene peso_kg pero no peso_declarado, copiar
+        if (!d.peso_declarado && d.peso_kg) d.peso_declarado = d.peso_kg
         setCliente(d)
         setForm(d)
         if (d.veterinaria_id) setEsVeterinaria(true)
@@ -180,7 +185,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   if (!cliente) return <div className="p-8 text-gray-400 text-sm">Cliente no encontrado</div>
 
   const litrosUsados = cliente.ciclo
-    ? parseFloat(cliente.ciclo.litros_fin) - parseFloat(cliente.ciclo.litros_inicio)
+    ? Math.abs(parseFloat(cliente.ciclo.litros_fin) - parseFloat(cliente.ciclo.litros_inicio))
     : null
 
   const vetSeleccionada = veterinarias.find(v => v.id === cliente.veterinaria_id)
@@ -211,7 +216,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     }) ?? null
   }
 
-  const pesoKg = parseFloat(form.peso_kg ?? '0') || 0
+  // Preferir peso_ingreso (real) sobre peso_declarado para el cálculo del servicio
+  const pesoIngreso = parseFloat(form.peso_ingreso || '') || 0
+  const pesoDeclarado = parseFloat(form.peso_declarado || form.peso_kg || '') || 0
+  const pesoKg = pesoIngreso > 0 ? pesoIngreso : pesoDeclarado
   const tramoAplicable = encontrarTramo(tablaPrecios, pesoKg)
   const codigoServ = form.codigo_servicio ?? 'CI'
   const precioServicio = tramoAplicable
@@ -248,7 +256,12 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   return (
     <div className="max-w-3xl">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-600">←</button>
+        <button onClick={() => router.back()}
+          className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
+          title="Volver">
+          <span className="text-base">←</span>
+          <span>Volver</span>
+        </button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">{cliente.nombre_mascota}</h1>
           <div className="flex items-center gap-2 mt-1">
@@ -280,7 +293,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <Field label="Fecha de retiro" type="date" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
           <Field label="Fecha de defunción" type="date" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
           <Field label="Especie" value={form.especie} onChange={v => setForm(f => ({ ...f, especie: v }))} />
-          <Field label="Peso (kg)" type="number" value={form.peso_kg} onChange={v => setForm(f => ({ ...f, peso_kg: v }))} />
+          <Field label="Peso declarado (kg)" type="number" step="0.1" value={form.peso_declarado || form.peso_kg} onChange={v => setForm(f => ({ ...f, peso_declarado: v, peso_kg: v }))} />
+          <PesoIngresoField
+            value={form.peso_ingreso ?? ''}
+            onChange={v => setForm(f => ({ ...f, peso_ingreso: v }))}
+            pesoDeclarado={parseFloat(form.peso_declarado || form.peso_kg || '0') || 0}
+            tabla={tablaPrecios}
+            codigoServ={form.codigo_servicio ?? 'CI'}
+          />
           <div className="col-span-2">
             <label className="text-xs font-medium text-gray-500">Tipo de servicio</label>
             <select
@@ -555,7 +575,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         {cliente.ciclo ? (
           <div className="grid grid-cols-2 gap-4">
             <InfoField label="Fecha del ciclo" value={fmtFecha(cliente.ciclo.fecha)} />
-            <InfoField label="Número de ciclo" value={`#${cliente.ciclo.numero_ciclo}`} />
+            <InfoField label="Número de ciclo" value={`N° ${cliente.ciclo.numero_ciclo}`} />
             <InfoField label="Litros utilizados" value={litrosUsados !== null ? fmtLitros(litrosUsados) : '—'} />
             <InfoField label="Comentarios" value={cliente.ciclo.comentarios || '—'} />
           </div>
@@ -570,18 +590,107 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   )
 }
 
-function Field({ label, value, onChange, type = 'text' }: {
-  label: string; value?: string; onChange: (v: string) => void; type?: string
+function Field({ label, value, onChange, type = 'text', step }: {
+  label: string; value?: string; onChange: (v: string) => void; type?: string; step?: string
 }) {
   return (
     <div>
       <label className="text-xs font-medium text-gray-500">{label}</label>
       <input
         type={type}
+        step={step}
         value={value ?? ''}
         onChange={e => onChange(e.target.value)}
         className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
       />
+    </div>
+  )
+}
+
+function PesoIngresoField({ value, onChange, pesoDeclarado, tabla, codigoServ }: {
+  value: string
+  onChange: (v: string) => void
+  pesoDeclarado: number
+  tabla: Tramo[]
+  codigoServ: string
+}) {
+  const pesoIngreso = parseFloat(value) || 0
+
+  function findTramo(peso: number): Tramo | null {
+    if (!tabla.length || peso <= 0) return null
+    const maxMin = Math.max(...tabla.map(t => parseFloat(t.peso_min) || 0))
+    const top = tabla.find(t => (parseFloat(t.peso_min) || 0) === maxMin)
+    if (top && peso >= maxMin) return top
+    return tabla.find(t => {
+      const min = parseFloat(t.peso_min) || 0
+      const max = parseFloat(t.peso_max) || 0
+      return peso >= min && peso <= max
+    }) ?? null
+  }
+
+  function precioTramo(tr: Tramo | null): number {
+    if (!tr) return 0
+    const raw = codigoServ === 'CP' ? tr.precio_cp : codigoServ === 'SD' ? tr.precio_sd : tr.precio_ci
+    return parseFloat(raw) || 0
+  }
+
+  type Feedback =
+    | { kind: 'alerta'; diff: number }
+    | { kind: 'igual' }
+    | { kind: 'menor'; diff: number }
+    | null
+
+  let feedback: Feedback = null
+  if (pesoIngreso > 0 && pesoDeclarado > 0 && tabla.length > 0) {
+    const tramoDecl = findTramo(pesoDeclarado)
+    const tramoIng = findTramo(pesoIngreso)
+    if (tramoDecl && tramoIng) {
+      const pDecl = precioTramo(tramoDecl)
+      const pIng = precioTramo(tramoIng)
+      if (tramoIng.id === tramoDecl.id) {
+        feedback = { kind: 'igual' }
+      } else if (pIng > pDecl) {
+        feedback = { kind: 'alerta', diff: pIng - pDecl }
+      } else if (pIng < pDecl) {
+        feedback = { kind: 'menor', diff: pDecl - pIng }
+      }
+    }
+  }
+
+  const isAlerta = feedback?.kind === 'alerta'
+
+  return (
+    <div>
+      <label className="text-xs font-medium text-gray-500">Peso ingreso (kg)</label>
+      <div className="relative">
+        <input
+          type="number"
+          step="0.1"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          className={`mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
+            isAlerta ? 'border-amber-400 bg-amber-50 focus:ring-amber-500' : 'border-gray-200 focus:ring-indigo-500'
+          }`}
+        />
+        {isAlerta && (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-600 text-lg leading-none pointer-events-none">⚠</span>
+        )}
+      </div>
+      {feedback?.kind === 'alerta' && (
+        <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <span className="text-amber-600 shrink-0">⚠</span>
+          <div>
+            <p className="font-medium">Cobro adicional pendiente: el peso real supera el tramo declarado.</p>
+            <p className="mt-0.5">Diferencia a cobrar: <span className="font-bold">{fmtPrecio(feedback.diff)}</span></p>
+          </div>
+        </div>
+      )}
+      {feedback?.kind === 'igual' && (
+        <p className="mt-1 text-xs text-gray-500">✓ Mismo tramo que el peso declarado — no hay cobro adicional.</p>
+      )}
+      {feedback?.kind === 'menor' && (
+        <p className="mt-1 text-xs text-emerald-600">Tramo inferior — ahorro potencial de {fmtPrecio(feedback.diff)}</p>
+      )}
     </div>
   )
 }

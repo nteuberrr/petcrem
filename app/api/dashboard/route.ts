@@ -6,14 +6,16 @@ type AdicionalItem = { tipo: string; id: string; nombre?: string; precio?: numbe
 
 function findTramo(tabla: Tramo[], pesoKg: number): Tramo | null {
   if (!tabla.length || !isFinite(pesoKg) || pesoKg <= 0) return null
-  const maxMin = Math.max(...tabla.map(t => parseFloat(t.peso_min) || 0))
-  const top = tabla.find(t => (parseFloat(t.peso_min) || 0) === maxMin)
-  if (top && pesoKg >= maxMin) return top
-  return tabla.find(t => {
+  let maxMin = -Infinity
+  let top: Tramo | null = null
+  for (const t of tabla) {
     const min = parseFloat(t.peso_min) || 0
     const max = parseFloat(t.peso_max) || 0
-    return pesoKg >= min && pesoKg <= max
-  }) ?? null
+    if (min > maxMin) { maxMin = min; top = t }
+    if (pesoKg >= min && pesoKg <= max) return t
+  }
+  if (top && pesoKg >= maxMin) return top
+  return null
 }
 
 function precioTramo(tramo: Tramo | null, codigo: string): number {
@@ -25,10 +27,11 @@ function precioTramo(tramo: Tramo | null, codigo: string): number {
 export async function GET() {
   try {
     const safe = (name: string) => getSheetData(name).catch(() => [] as Record<string, string>[])
-    const [clientes, ciclos, cargas, vets, preciosGRaw, preciosCRaw, preciosERaw, productos, otrosSrv] = await Promise.all([
+    const [clientes, ciclos, cargas, cargasVehiculo, vets, preciosGRaw, preciosCRaw, preciosERaw, productos, otrosSrv] = await Promise.all([
       safe('clientes'),
       safe('ciclos'),
       safe('cargas_petroleo'),
+      safe('vehiculo_cargas'),
       safe('veterinarios'),
       safe('precios_generales'),
       safe('precios_convenio'),
@@ -43,8 +46,19 @@ export async function GET() {
     const vetById: Record<string, Record<string, string>> = {}
     vets.forEach(v => { vetById[v.id] = v })
 
-    const productoNombre = (pid: string) => productos.find(p => p.id === pid)?.nombre ?? `prod:${pid}`
-    const servicioNombre = (sid: string) => otrosSrv.find(s => s.id === sid)?.nombre ?? `srv:${sid}`
+    const productoNombreMap = new Map(productos.map(p => [p.id, p.nombre]))
+    const servicioNombreMap = new Map(otrosSrv.map(s => [s.id, s.nombre]))
+    const productoNombre = (pid: string) => productoNombreMap.get(pid) ?? `prod:${pid}`
+    const servicioNombre = (sid: string) => servicioNombreMap.get(sid) ?? `srv:${sid}`
+
+    // Pre-filter tabla especiales por veterinaria para evitar recalcular en cada cliente
+    const preciosEByVet = new Map<string, Tramo[]>()
+    for (const t of preciosE) {
+      const vid = t.veterinaria_id ?? ''
+      const arr = preciosEByVet.get(vid) ?? []
+      arr.push(t)
+      preciosEByVet.set(vid, arr)
+    }
 
     const now = new Date()
     const mesActual = now.getMonth()
@@ -52,33 +66,57 @@ export async function GET() {
     const startMesActual = new Date(anioActual, mesActual, 1)
     startMesActual.setHours(0, 0, 0, 0)
 
+    // Cache de fecha por cliente (parseo una sola vez)
+    const fechaCache = new Map<string, Date | null>()
     function fechaCliente(c: Record<string, string>): Date | null {
+      const cached = fechaCache.get(c.id)
+      if (cached !== undefined) return cached
       const raw = c.fecha_retiro || c.fecha_creacion
-      if (!raw) return null
-      const d = new Date(raw)
-      return isNaN(d.getTime()) ? null : d
+      let d: Date | null = null
+      if (raw) {
+        const parsed = new Date(raw)
+        d = isNaN(parsed.getTime()) ? null : parsed
+      }
+      fechaCache.set(c.id, d)
+      return d
     }
 
-    // Cálculo de ingreso por cliente
-    function ingresoCliente(c: Record<string, string>): { total: number; servicio: number; adicionales: number; adicionalesItems: AdicionalItem[] } {
+    // Cache de adicionales parseados (evita JSON.parse repetido por cliente)
+    const adicionalesCache = new Map<string, AdicionalItem[]>()
+    function adicionalesDe(c: Record<string, string>): AdicionalItem[] {
+      const cached = adicionalesCache.get(c.id)
+      if (cached) return cached
+      let items: AdicionalItem[] = []
+      try { items = JSON.parse(c.adicionales || '[]') } catch (e) { console.warn('[dashboard] adicionales parse fail', c.id, e) }
+      adicionalesCache.set(c.id, items)
+      return items
+    }
+
+    // Cálculo de ingreso por cliente (cacheado por id)
+    type Ingreso = { total: number; servicio: number; adicionales: number; adicionalesItems: AdicionalItem[] }
+    const ingresoCache = new Map<string, Ingreso>()
+    function ingresoCliente(c: Record<string, string>): Ingreso {
+      const cached = ingresoCache.get(c.id)
+      if (cached) return cached
       const peso = parseFloat(c.peso_kg) || 0
       const codigo = c.codigo_servicio || 'CI'
       let tabla: Tramo[] = preciosG
       const explicit = c.tipo_precios
       if (explicit === 'convenio') tabla = preciosC
-      else if (explicit === 'especial') tabla = preciosE.filter(t => t.veterinaria_id === c.veterinaria_id)
+      else if (explicit === 'especial') tabla = preciosEByVet.get(c.veterinaria_id ?? '') ?? []
       else if (explicit === 'general') tabla = preciosG
       else if (c.veterinaria_id) {
         const vet = vetById[c.veterinaria_id]
-        if (vet?.tipo_precios === 'precios_especiales') tabla = preciosE.filter(t => t.veterinaria_id === c.veterinaria_id)
+        if (vet?.tipo_precios === 'precios_especiales') tabla = preciosEByVet.get(c.veterinaria_id) ?? []
         else tabla = preciosC
       }
       const tramo = findTramo(tabla, peso)
       const servicio = precioTramo(tramo, codigo)
-      let adicionalesItems: AdicionalItem[] = []
-      try { adicionalesItems = JSON.parse(c.adicionales || '[]') } catch { /* empty */ }
+      const adicionalesItems = adicionalesDe(c)
       const adicionales = adicionalesItems.reduce((s, a) => s + (a.precio ?? 0) * (a.qty ?? 1), 0)
-      return { total: servicio + adicionales, servicio, adicionales, adicionalesItems }
+      const result = { total: servicio + adicionales, servicio, adicionales, adicionalesItems }
+      ingresoCache.set(c.id, result)
+      return result
     }
 
     // Stock petróleo
@@ -86,115 +124,107 @@ export async function GET() {
     const totalConsumido = ciclos.reduce((s, c) => {
       const ini = parseFloat(c.litros_inicio) || 0
       const fin = parseFloat(c.litros_fin) || 0
-      return s + Math.max(0, fin - ini)
+      return s + Math.abs(fin - ini)
     }, 0)
     const stock = totalCargado - totalConsumido
 
-    // Mes actual
-    const cremadosMes = clientes.filter(c => c.estado === 'cremado' && (() => {
+    // Total monto gastado en combustible del vehículo
+    const totalMontoVehiculo = cargasVehiculo.reduce((s, r) => s + (parseFloat(r.monto) || 0), 0)
+
+    // Filtros base — calculados una sola vez
+    const cremadosTodos = clientes.filter(c => c.estado === 'cremado')
+    const cremadosMes = cremadosTodos.filter(c => {
       const f = fechaCliente(c)
       return f && f >= startMesActual && f <= now
-    })())
+    })
     const ciclosMes = ciclos.filter(c => {
       const f = c.fecha ? new Date(c.fecha) : null
       return f && !isNaN(f.getTime()) && f >= startMesActual && f <= now
     })
-    const litrosMes = ciclosMes.reduce((s, c) => s + Math.max(0, (parseFloat(c.litros_fin) || 0) - (parseFloat(c.litros_inicio) || 0)), 0)
-    const pendientes = clientes.filter(c => c.estado !== 'cremado').length
+    const litrosMes = ciclosMes.reduce((s, c) => s + Math.abs((parseFloat(c.litros_fin) || 0) - (parseFloat(c.litros_inicio) || 0)), 0)
+    const pendientes = clientes.length - cremadosTodos.length
 
     const ingresosMes = cremadosMes.reduce((s, c) => s + ingresoCliente(c).total, 0)
 
     // Ratios
-    const mascotasTotalCremadas = clientes.filter(c => c.estado === 'cremado').length
-    const mascotasPorLitro = totalConsumido > 0 ? mascotasTotalCremadas / totalConsumido : 0
+    const mascotasTotalCremadas = cremadosTodos.length
     const ciclosPorLitro = totalConsumido > 0 ? ciclos.length / totalConsumido : 0
     const litrosPorCiclo = ciclos.length > 0 ? totalConsumido / ciclos.length : 0
     const litrosPorMascota = mascotasTotalCremadas > 0 ? totalConsumido / mascotasTotalCremadas : 0
+    const costoVehiculoPorMascota = mascotasTotalCremadas > 0 ? totalMontoVehiculo / mascotasTotalCremadas : 0
 
-    // Ventas últimos 12 meses
-    const ventasPorMes: Array<{ mes: string; ingresos: number; mascotas: number }> = []
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(anioActual, mesActual - i, 1)
-      const start = new Date(d.getFullYear(), d.getMonth(), 1)
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 1)
-      const cremadosEnMes = clientes.filter(c => {
-        if (c.estado !== 'cremado') return false
-        const f = fechaCliente(c)
-        return f && f >= start && f < end
-      })
-      const ingresos = cremadosEnMes.reduce((s, c) => s + ingresoCliente(c).total, 0)
-      ventasPorMes.push({
-        mes: d.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' }),
-        ingresos,
-        mascotas: cremadosEnMes.length,
-      })
+    // Ventas últimos 12 meses — agrupar en una pasada en vez de 12 filters
+    const startVentanas = Array.from({ length: 12 }, (_, k) => {
+      const i = 11 - k
+      return new Date(anioActual, mesActual - i, 1)
+    })
+    const ventanaIdx = new Map<string, number>() // key "yyyy-mm" → bucket index
+    startVentanas.forEach((d, idx) => ventanaIdx.set(`${d.getFullYear()}-${d.getMonth()}`, idx))
+    const buckets = startVentanas.map(d => ({
+      mes: d.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' }),
+      ingresos: 0,
+      mascotas: 0,
+    }))
+    const limiteIzq = startVentanas[0]
+    for (const c of cremadosTodos) {
+      const f = fechaCliente(c)
+      if (!f || f < limiteIzq) continue
+      const idx = ventanaIdx.get(`${f.getFullYear()}-${f.getMonth()}`)
+      if (idx === undefined) continue
+      buckets[idx].ingresos += ingresoCliente(c).total
+      buckets[idx].mascotas += 1
     }
+    const ventasPorMes = buckets
 
-    // Top servicios
+    // Top servicios + ventas por vet + por especie + pendientes pago — un solo loop sobre cremados
     const servicioCount: Record<string, number> = { CI: 0, CP: 0, SD: 0 }
-    clientes.filter(c => c.estado === 'cremado').forEach(c => {
+    const ventasVet: Record<string, { vet: string; ingresos: number; mascotas: number }> = {}
+    const especieCount: Record<string, number> = {}
+    let pendientesPago = 0
+    let montoPendientePago = 0
+    for (const c of cremadosTodos) {
       const k = (c.codigo_servicio || 'CI').toUpperCase()
       servicioCount[k] = (servicioCount[k] || 0) + 1
-    })
+      const e = c.especie || 'Sin especie'
+      especieCount[e] = (especieCount[e] || 0) + 1
+      const ingreso = ingresoCliente(c).total
+      if (c.veterinaria_id) {
+        const vetName = vetById[c.veterinaria_id]?.nombre ?? `Vet #${c.veterinaria_id}`
+        if (!ventasVet[c.veterinaria_id]) ventasVet[c.veterinaria_id] = { vet: vetName, ingresos: 0, mascotas: 0 }
+        ventasVet[c.veterinaria_id].ingresos += ingreso
+        ventasVet[c.veterinaria_id].mascotas += 1
+      }
+      if (c.estado_pago !== 'pagado') {
+        pendientesPago += 1
+        montoPendientePago += ingreso
+      }
+    }
     const topServicios = Object.entries(servicioCount)
       .map(([codigo, count]) => ({ codigo, count }))
       .sort((a, b) => b.count - a.count)
-
-    // Ventas por veterinaria
-    const ventasVet: Record<string, { vet: string; ingresos: number; mascotas: number }> = {}
-    clientes.filter(c => c.estado === 'cremado' && c.veterinaria_id).forEach(c => {
-      const vetName = vetById[c.veterinaria_id]?.nombre ?? `Vet #${c.veterinaria_id}`
-      if (!ventasVet[c.veterinaria_id]) ventasVet[c.veterinaria_id] = { vet: vetName, ingresos: 0, mascotas: 0 }
-      ventasVet[c.veterinaria_id].ingresos += ingresoCliente(c).total
-      ventasVet[c.veterinaria_id].mascotas += 1
-    })
     const ventasPorVet = Object.values(ventasVet).sort((a, b) => b.ingresos - a.ingresos).slice(0, 10)
-
-    // Top productos
-    const prodCount: Record<string, number> = {}
-    clientes.forEach(c => {
-      try {
-        const items: AdicionalItem[] = JSON.parse(c.adicionales || '[]')
-        items.filter(i => i.tipo === 'producto').forEach(i => {
-          prodCount[i.id] = (prodCount[i.id] || 0) + (i.qty ?? 1)
-        })
-      } catch { /* empty */ }
-    })
-    const topProductos = Object.entries(prodCount)
-      .map(([id, qty]) => ({ nombre: productoNombre(id), qty }))
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 5)
-
-    // Top otros servicios
-    const srvCount: Record<string, number> = {}
-    clientes.forEach(c => {
-      try {
-        const items: AdicionalItem[] = JSON.parse(c.adicionales || '[]')
-        items.filter(i => i.tipo === 'servicio').forEach(i => {
-          srvCount[i.id] = (srvCount[i.id] || 0) + (i.qty ?? 1)
-        })
-      } catch { /* empty */ }
-    })
-    const topOtrosServicios = Object.entries(srvCount)
-      .map(([id, qty]) => ({ nombre: servicioNombre(id), qty }))
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 5)
-
-    // Por especie
-    const especieCount: Record<string, number> = {}
-    clientes.filter(c => c.estado === 'cremado').forEach(c => {
-      const e = c.especie || 'Sin especie'
-      especieCount[e] = (especieCount[e] || 0) + 1
-    })
     const porEspecie = Object.entries(especieCount)
       .map(([especie, count]) => ({ especie, count }))
       .sort((a, b) => b.count - a.count)
 
-    // Pagos pendientes
-    const pendientesPago = clientes.filter(c => c.estado === 'cremado' && c.estado_pago !== 'pagado').length
-    const montoPendientePago = clientes
-      .filter(c => c.estado === 'cremado' && c.estado_pago !== 'pagado')
-      .reduce((s, c) => s + ingresoCliente(c).total, 0)
+    // Top productos + top otros servicios — un solo loop sobre clientes (parsea adicionales 1 vez)
+    const prodCount: Record<string, number> = {}
+    const srvCount: Record<string, number> = {}
+    for (const c of clientes) {
+      const items = adicionalesDe(c)
+      for (const i of items) {
+        if (i.tipo === 'producto') prodCount[i.id] = (prodCount[i.id] || 0) + (i.qty ?? 1)
+        else if (i.tipo === 'servicio') srvCount[i.id] = (srvCount[i.id] || 0) + (i.qty ?? 1)
+      }
+    }
+    const topProductos = Object.entries(prodCount)
+      .map(([id, qty]) => ({ nombre: productoNombre(id), qty }))
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 5)
+    const topOtrosServicios = Object.entries(srvCount)
+      .map(([id, qty]) => ({ nombre: servicioNombre(id), qty }))
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 5)
 
     return NextResponse.json({
       kpis: {
@@ -209,10 +239,10 @@ export async function GET() {
         monto_pendiente: montoPendientePago,
       },
       ratios: {
-        mascotas_por_litro: mascotasPorLitro,
         ciclos_por_litro: ciclosPorLitro,
         litros_por_ciclo: litrosPorCiclo,
         litros_por_mascota: litrosPorMascota,
+        costo_vehiculo_por_mascota: costoVehiculoPorMascota,
       },
       ventas_por_mes: ventasPorMes,
       top_servicios: topServicios,

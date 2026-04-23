@@ -1,11 +1,16 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { Fragment, useState, useEffect, useCallback } from 'react'
 import { fmtLitros, fmtNumero, fmtKg, fmtFecha, fmtPrecio } from '@/lib/format'
+import { todayISO } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
+import VehiculoTab from '@/components/VehiculoTab'
+import DespachosTab from '@/components/DespachosTab'
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
-  especie: string; peso_kg: string; estado: string
+  especie: string; peso_kg?: string; peso_declarado?: string; peso_ingreso?: string
+  estado: string
+  direccion_despacho?: string; comuna?: string; telefono?: string
 }
 
 type Ciclo = {
@@ -13,6 +18,7 @@ type Ciclo = {
   litros_inicio: string; litros_fin: string
   mascotas_ids: string[]; comentarios: string
   hora_inicio?: string; hora_fin?: string
+  temperatura_camara?: string
 }
 
 type CargaPetroleo = {
@@ -32,13 +38,14 @@ function calcMinutos(ini: string, fin: string): number | null {
 }
 
 export default function OperacionesPage() {
-  const [operTab, setOperTab] = useState<'ciclos' | 'petroleo'>('ciclos')
-  const [fecha, setFecha] = useState(() => new Date().toISOString().split('T')[0])
+  const [operTab, setOperTab] = useState<'ciclos' | 'petroleo' | 'vehiculo' | 'despachos'>('ciclos')
+  const [fecha, setFecha] = useState(() => todayISO())
   const [litrosInicio, setLitrosInicio] = useState('')
   const [litrosFin, setLitrosFin] = useState('')
   const [comentarios, setComentarios] = useState('')
   const [horaInicio, setHoraInicio] = useState('')
   const [horaFin, setHoraFin] = useState('')
+  const [temperaturaCamara, setTemperaturaCamara] = useState('')
   const [buscarMascota, setBuscarMascota] = useState('')
   const [seleccionadas, setSeleccionadas] = useState<Cliente[]>([])
   const [ciclos, setCiclos] = useState<Ciclo[]>([])
@@ -55,7 +62,7 @@ export default function OperacionesPage() {
   // Petróleo
   const [cargas, setCargas] = useState<CargaPetroleo[]>([])
   const [resumenPet, setResumenPet] = useState<ResumenPetroleo>({ total_cargado: 0, total_consumido: 0, stock_actual: 0, ciclos_count: 0 })
-  const [petForm, setPetForm] = useState({ fecha: new Date().toISOString().split('T')[0], litros: '', precio_neto: '', iva: '', especifico: '', notas: '' })
+  const [petForm, setPetForm] = useState({ fecha: todayISO(), litros: '', precio_neto: '', iva: '', especifico: '', notas: '' })
   const [savingPet, setSavingPet] = useState(false)
 
   const fetchCiclos = useCallback(async () => {
@@ -91,7 +98,7 @@ export default function OperacionesPage() {
       }),
     })
     if (res.ok) {
-      setPetForm({ fecha: new Date().toISOString().split('T')[0], litros: '', precio_neto: '', iva: '', especifico: '', notas: '' })
+      setPetForm({ fecha: todayISO(), litros: '', precio_neto: '', iva: '', especifico: '', notas: '' })
       await fetchPetroleo()
     } else {
       const err = await res.json().catch(() => ({}))
@@ -164,6 +171,7 @@ export default function OperacionesPage() {
         comentarios,
         hora_inicio: horaInicio,
         hora_fin: horaFin,
+        temperatura_camara: temperaturaCamara,
       }),
     })
     if (res.ok) {
@@ -173,6 +181,7 @@ export default function OperacionesPage() {
       setComentarios('')
       setHoraInicio('')
       setHoraFin('')
+      setTemperaturaCamara('')
       await fetchCiclos()
     }
     setSaving(false)
@@ -191,7 +200,17 @@ export default function OperacionesPage() {
     }
   }
 
-  const pesoTotal = seleccionadas.reduce((sum, c) => sum + (parseFloat(c.peso_kg) || 0), 0)
+  function pesoTotalCiclo(ciclo: Ciclo): number {
+    return ciclo.mascotas_ids.reduce((sum, id) => {
+      const m = clientesMap[id]
+      if (!m) return sum
+      // Preferir peso_ingreso (real) sobre peso_declarado/legacy peso_kg
+      const peso = parseFloat(m.peso_ingreso ?? '') || parseFloat(m.peso_declarado ?? '') || parseFloat(m.peso_kg ?? '') || 0
+      return sum + peso
+    }, 0)
+  }
+
+  const pesoTotal = seleccionadas.reduce((sum, c) => sum + (parseFloat(c.peso_ingreso || c.peso_declarado || c.peso_kg || "0") || 0), 0)
   const minutos = calcMinutos(horaInicio, horaFin)
 
   return (
@@ -202,11 +221,14 @@ export default function OperacionesPage() {
       </div>
 
       {/* Sub-tabs */}
-      <div className="flex gap-2">
-        {(['ciclos', 'petroleo'] as const).map(t => (
+      <div className="flex gap-2 flex-wrap">
+        {(['ciclos', 'petroleo', 'vehiculo', 'despachos'] as const).map(t => (
           <button key={t} onClick={() => setOperTab(t)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${operTab === t ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-            {t === 'ciclos' ? '🔥 Ciclos de cremación' : '⛽ Carga de Petróleo'}
+            {t === 'ciclos' ? '🔥 Ciclos de cremación'
+              : t === 'petroleo' ? '⛽ Carga de Petróleo'
+              : t === 'vehiculo' ? '🚐 Vehículo'
+              : '📦 Despachos'}
           </button>
         ))}
       </div>
@@ -236,7 +258,7 @@ export default function OperacionesPage() {
           </div>
 
           {/* Horario */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div>
               <label className="text-xs font-medium text-gray-700">Hora inicio</label>
               <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)}
@@ -252,6 +274,11 @@ export default function OperacionesPage() {
               <div className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 font-medium">
                 {minutos !== null ? `${minutos} minutos` : '—'}
               </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700">Temperatura cámara (°C)</label>
+              <input type="number" step="1" value={temperaturaCamara} onChange={e => setTemperaturaCamara(e.target.value)}
+                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
           </div>
 
@@ -294,7 +321,7 @@ export default function OperacionesPage() {
                     <div>
                       <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
                       <span className="ml-2 text-sm text-gray-900 font-medium">{c.nombre_mascota}</span>
-                      <span className="ml-2 text-xs text-gray-500">· {c.especie} · {fmtKg(c.peso_kg)}</span>
+                      <span className="ml-2 text-xs text-gray-500">· {c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || c.peso_kg || "0")}</span>
                     </div>
                     <button type="button" onClick={() => quitar(c.id)}
                       className="text-red-400 hover:text-red-600 text-xl leading-none w-6 h-6 flex items-center justify-center">×</button>
@@ -329,47 +356,69 @@ export default function OperacionesPage() {
         {ciclos.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">Sin ciclos registrados</div>
         ) : (
-          <div className="divide-y divide-gray-100">
-            {ciclos.map(ciclo => {
-              const litros = parseFloat(ciclo.litros_fin) - parseFloat(ciclo.litros_inicio)
-              const mins = calcMinutos(ciclo.hora_inicio ?? '', ciclo.hora_fin ?? '')
-              return (
-                <div key={ciclo.id}>
-                  <button type="button" onClick={() => toggleExpandir(ciclo)}
-                    className="w-full text-left px-6 py-4 hover:bg-gray-50 transition-colors flex items-center justify-between">
-                    <div className="flex items-center gap-4 flex-wrap">
-                      <span className="text-sm font-semibold text-gray-900">Ciclo #{ciclo.numero_ciclo}</span>
-                      <span className="text-xs text-gray-500">{fmtFecha(ciclo.fecha)}</span>
-                      <span className="text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">{fmtNumero(ciclo.mascotas_ids.length)} mascotas</span>
-                      <span className="text-xs text-gray-600">{fmtLitros(litros)} petróleo</span>
-                      {ciclo.hora_inicio && ciclo.hora_fin && (
-                        <span className="text-xs text-indigo-600">{ciclo.hora_inicio}–{ciclo.hora_fin}{mins ? ` (${mins} min)` : ''}</span>
-                      )}
-                    </div>
-                    <span className="text-gray-400 text-sm">{expandido === ciclo.id ? '▲' : '▼'}</span>
-                  </button>
-                  {expandido === ciclo.id && (
-                    <div className="px-6 pb-5 bg-gray-50 border-t border-gray-100">
-                      <div className="divide-y divide-gray-100 mt-2">
-                        {ciclo.mascotas_ids.map(mid => {
-                          const m = clientesMap[mid]
-                          return m ? (
-                            <div key={mid} className="py-2 flex gap-4 text-sm">
-                              <span className="font-mono text-xs text-indigo-700 font-semibold">{m.codigo}</span>
-                              <span className="text-gray-900">{m.nombre_mascota}</span>
-                              <span className="text-gray-500">{m.especie} · {fmtKg(m.peso_kg)}</span>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  {['N° Ciclo', 'Fecha', 'Mascotas', 'Litros inicio', 'Litros fin', 'Litros usados', 'Lt/kg', 'Lt/mascota', 'Temp. cámara', ''].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {ciclos.map(ciclo => {
+                  const lInicio = parseFloat(ciclo.litros_inicio) || 0
+                  const lFin = parseFloat(ciclo.litros_fin) || 0
+                  const litrosUsados = Math.abs(lInicio - lFin)
+                  const pesoTotal = pesoTotalCiclo(ciclo)
+                  const ltPorKg = pesoTotal > 0 ? litrosUsados / pesoTotal : 0
+                  const ltPorMascota = ciclo.mascotas_ids.length > 0 ? litrosUsados / ciclo.mascotas_ids.length : 0
+                  return (
+                    <Fragment key={ciclo.id}>
+                      <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>
+                        <td className="px-4 py-3 font-semibold text-gray-900">N° {ciclo.numero_ciclo}</td>
+                        <td className="px-4 py-3 text-gray-700">{fmtFecha(ciclo.fecha)}</td>
+                        <td className="px-4 py-3 text-gray-700">{fmtNumero(ciclo.mascotas_ids.length)}</td>
+                        <td className="px-4 py-3 text-gray-700">{fmtNumero(lInicio, 0)} L</td>
+                        <td className="px-4 py-3 text-gray-700">{fmtNumero(lFin, 0)} L</td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{fmtNumero(litrosUsados, 0)} L</td>
+                        <td className="px-4 py-3 text-gray-700">{pesoTotal > 0 ? fmtNumero(ltPorKg, 1) : '—'}</td>
+                        <td className="px-4 py-3 text-gray-700">{ciclo.mascotas_ids.length > 0 ? fmtNumero(ltPorMascota, 1) : '—'}</td>
+                        <td className="px-4 py-3 text-gray-700">{ciclo.temperatura_camara ? `${ciclo.temperatura_camara}°C` : '—'}</td>
+                        <td className="px-4 py-3 text-gray-400 text-sm">{expandido === ciclo.id ? '▲' : '▼'}</td>
+                      </tr>
+                      {expandido === ciclo.id && (
+                        <tr>
+                          <td colSpan={10} className="px-6 py-4 bg-gray-50 border-b border-gray-100">
+                            <div className="divide-y divide-gray-100">
+                              {ciclo.mascotas_ids.map(mid => {
+                                const m = clientesMap[mid]
+                                return m ? (
+                                  <div key={mid} className="py-2 flex gap-4 text-sm">
+                                    <span className="font-mono text-xs text-indigo-700 font-semibold">{m.codigo}</span>
+                                    <span className="text-gray-900">{m.nombre_mascota}</span>
+                                    <span className="text-gray-500">{m.especie} · {fmtKg(m.peso_ingreso || m.peso_declarado || m.peso_kg || "0")}</span>
+                                  </div>
+                                ) : (
+                                  <div key={mid} className="py-2 text-xs text-gray-400">ID: {mid}</div>
+                                )
+                              })}
                             </div>
-                          ) : (
-                            <div key={mid} className="py-2 text-xs text-gray-400">ID: {mid}</div>
-                          )
-                        })}
-                      </div>
-                      {ciclo.comentarios && <p className="text-xs text-gray-500 mt-3 italic">{ciclo.comentarios}</p>}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+                            {ciclo.hora_inicio && ciclo.hora_fin && (
+                              <p className="text-xs text-indigo-600 mt-3">
+                                Horario: {ciclo.hora_inicio}–{ciclo.hora_fin}
+                                {calcMinutos(ciclo.hora_inicio, ciclo.hora_fin) !== null ? ` (${calcMinutos(ciclo.hora_inicio, ciclo.hora_fin)} min)` : ''}
+                              </p>
+                            )}
+                            {ciclo.comentarios && <p className="text-xs text-gray-500 mt-2 italic">{ciclo.comentarios}</p>}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -491,6 +540,9 @@ export default function OperacionesPage() {
         </>
       )}
 
+      {operTab === 'vehiculo' && <VehiculoTab />}
+      {operTab === 'despachos' && <DespachosTab />}
+
       {/* Modal selección mascotas */}
       <Modal open={showModal} onClose={() => setShowModal(false)} title="Mascotas pendientes de cremación">
         <div className="space-y-3">
@@ -522,7 +574,7 @@ export default function OperacionesPage() {
                       <span className="ml-2 text-sm text-gray-900 font-medium">{c.nombre_mascota}</span>
                       <span className="ml-1 text-xs text-gray-500">({c.nombre_tutor})</span>
                     </div>
-                    <span className="text-xs text-gray-400 shrink-0">{c.especie} · {fmtKg(c.peso_kg)}</span>
+                    <span className="text-xs text-gray-400 shrink-0">{c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || c.peso_kg || "0")}</span>
                   </label>
                 )
               })}
@@ -566,7 +618,7 @@ function InlineSearch({ buscar, excluir, onSelect }: { buscar: string; excluir: 
           <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
           <span className="ml-2 text-sm text-gray-900">{c.nombre_mascota}</span>
           <span className="ml-2 text-xs text-gray-500">({c.nombre_tutor})</span>
-          <span className="ml-2 text-xs text-gray-400">{c.especie} · {fmtKg(c.peso_kg)}</span>
+          <span className="ml-2 text-xs text-gray-400">{c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || c.peso_kg || "0")}</span>
         </button>
       ))}
     </div>

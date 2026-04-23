@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumn, ensureSheet } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/google-sheets'
 
 const EXPECTED_COLS = ['id', 'veterinaria_id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd']
 
@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const vetId = searchParams.get('veterinaria_id')
     await ensureSheet('precios_especiales')
-    for (const col of EXPECTED_COLS) await ensureColumn('precios_especiales', col)
+    await ensureColumns('precios_especiales', EXPECTED_COLS)
     let rows = await getSheetData('precios_especiales')
     if (vetId) rows = rows.filter(r => r.veterinaria_id === vetId)
     return NextResponse.json(rows)
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     await ensureSheet('precios_especiales')
-    for (const col of EXPECTED_COLS) await ensureColumn('precios_especiales', col)
+    await ensureColumns('precios_especiales', EXPECTED_COLS)
     const id = await getNextId('precios_especiales')
     const row = {
       id,

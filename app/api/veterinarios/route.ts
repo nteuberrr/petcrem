@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSheetData, appendRow, updateRow, getNextId, deleteRow } from '@/lib/google-sheets'
+import { todayISO } from '@/lib/dates'
 
 const VetSchema = z.object({
   nombre: z.string().min(1),
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const data = VetSchema.parse(body)
     const id = await getNextId('veterinarios')
-    const now = new Date().toISOString().split('T')[0]
+    const now = todayISO()
     const row = { id, ...data, activo: 'TRUE', fecha_creacion: now }
     await appendRow('veterinarios', row)
     return NextResponse.json(row, { status: 201 })

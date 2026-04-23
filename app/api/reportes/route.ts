@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     })
 
     // KPIs
-    const cremados = delMes.filter((c) => c.estado === 'cremado').length
+    const cremados = delMes.filter((c) => c.estado === 'cremado')
     const pendientes = clientes.filter((c) => c.estado === 'pendiente').length
     const litros = ciclosDelMes.reduce(
       (acc, c) => acc + (parseFloat(c.litros_fin) - parseFloat(c.litros_inicio)),
@@ -33,11 +33,10 @@ export async function GET(req: NextRequest) {
     )
 
     // Ingresos estimados
-    let ingresos = 0
-    for (const c of delMes.filter((cl) => cl.estado === 'cremado')) {
-      const precio = await calcularPrecio(parseFloat(c.peso_kg), c.codigo_servicio, 'general')
-      ingresos += precio
-    }
+    const precios = await Promise.all(
+      cremados.map((c) => calcularPrecio(parseFloat(c.peso_kg), c.codigo_servicio, 'general'))
+    )
+    const ingresos = precios.reduce((s, p) => s + p, 0)
 
     // Por especie
     const porEspecie: Record<string, number> = {}
@@ -53,7 +52,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       kpis: {
-        total_cremaciones_mes: cremados,
+        total_cremaciones_mes: cremados.length,
         pendientes,
         ciclos_mes: ciclosDelMes.length,
         litros_mes: Math.round(litros * 10) / 10,

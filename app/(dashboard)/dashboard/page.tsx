@@ -5,6 +5,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid,
 } from 'recharts'
+import TimelineStatus from '@/components/TimelineStatus'
 
 type Data = {
   kpis: {
@@ -12,7 +13,7 @@ type Data = {
     litros_mes: number; ingresos_mes: number; stock_petroleo: number
     stock_bajo: boolean; pendientes_pago: number; monto_pendiente: number
   }
-  ratios: { mascotas_por_litro: number; ciclos_por_litro: number; litros_por_ciclo: number; litros_por_mascota: number }
+  ratios: { ciclos_por_litro: number; litros_por_ciclo: number; litros_por_mascota: number; costo_vehiculo_por_mascota: number }
   ventas_por_mes: Array<{ mes: string; ingresos: number; mascotas: number }>
   top_servicios: Array<{ codigo: string; count: number }>
   ventas_por_vet: Array<{ vet: string; ingresos: number; mascotas: number }>
@@ -65,10 +66,10 @@ export default function DashboardPage() {
   ]
 
   const ratiosArr = [
-    { label: 'Mascotas / litro', value: data.ratios.mascotas_por_litro.toFixed(3), sub: 'mascotas cremadas por litro de petróleo' },
-    { label: 'Litros / mascota', value: data.ratios.litros_por_mascota.toFixed(2) + ' L', sub: 'consumo promedio por mascota' },
-    { label: 'Litros / ciclo', value: data.ratios.litros_por_ciclo.toFixed(2) + ' L', sub: 'consumo promedio por ciclo' },
-    { label: 'Ciclos / litro', value: data.ratios.ciclos_por_litro.toFixed(3), sub: 'ciclos por litro de petróleo' },
+    { label: 'Litros / mascota', value: data.ratios.litros_por_mascota.toFixed(1) + ' L', sub: 'consumo promedio por mascota' },
+    { label: 'Litros / ciclo', value: data.ratios.litros_por_ciclo.toFixed(1) + ' L', sub: 'consumo promedio por ciclo' },
+    { label: 'Ciclos / litro', value: data.ratios.ciclos_por_litro.toFixed(1), sub: 'ciclos por litro de petróleo' },
+    { label: 'Costo vehículo / mascota', value: fmtPrecio(data.ratios.costo_vehiculo_por_mascota), sub: 'gasto combustible por mascota retirada' },
   ]
 
   return (
@@ -78,14 +79,21 @@ export default function DashboardPage() {
         <p className="text-gray-500 text-sm mt-0.5">Resumen operativo — {mesActual} {new Date().getFullYear()}</p>
       </div>
 
+      {/* Timeline Status */}
+      <TimelineStatus />
+
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4">
         {kpis.map(k => (
-          <div key={k.label} className={`bg-white rounded-xl shadow-sm border p-5 ${k.alert ? 'border-red-200' : 'border-gray-100'}`}>
-            <div className={`inline-flex items-center justify-center w-9 h-9 rounded-lg text-lg ${k.color} mb-3`}>{k.icon}</div>
-            <p className="text-2xl font-bold text-gray-900">{k.value}</p>
-            <p className="text-xs text-gray-500 mt-1">{k.label}</p>
-            {k.alert && <p className="text-xs text-red-600 mt-1 font-medium">⚠ Stock bajo</p>}
+          <div key={k.label} className={`bg-white rounded-xl shadow-md border-2 p-5 flex items-center gap-4 ${k.alert ? 'border-red-300' : 'border-gray-200'}`}>
+            <div className={`shrink-0 inline-flex items-center justify-center w-12 h-12 rounded-xl text-2xl ${k.color}`}>
+              {k.icon}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xl font-bold text-gray-900 truncate">{k.value}</p>
+              <p className="text-xs text-gray-500 mt-0.5 truncate">{k.label}</p>
+              {k.alert && <p className="text-xs text-red-600 mt-0.5 font-medium">⚠ Stock bajo</p>}
+            </div>
           </div>
         ))}
       </div>

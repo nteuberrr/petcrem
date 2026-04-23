@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSheetData, appendRow, updateRow, getNextId, ensureColumn } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, getNextId, ensureColumns } from '@/lib/google-sheets'
+import { todayISO } from '@/lib/dates'
 
 const CicloSchema = z.object({
   fecha: z.string().min(1),
@@ -10,6 +11,7 @@ const CicloSchema = z.object({
   comentarios: z.string().optional().default(''),
   hora_inicio: z.string().optional().default(''),
   hora_fin: z.string().optional().default(''),
+  temperatura_camara: z.string().optional().default(''),
 })
 
 export async function GET() {
@@ -36,11 +38,10 @@ export async function POST(req: NextRequest) {
     const numeros = ciclos.map(c => parseInt(c.numero_ciclo || '0', 10)).filter(n => !isNaN(n))
     const numeroCiclo = (numeros.length ? Math.max(...numeros) : 0) + 1
 
-    await ensureColumn('ciclos', 'hora_inicio')
-    await ensureColumn('ciclos', 'hora_fin')
+    await ensureColumns('ciclos', ['hora_inicio', 'hora_fin', 'temperatura_camara'])
 
     const id = await getNextId('ciclos')
-    const now = new Date().toISOString().split('T')[0]
+    const now = todayISO()
 
     const row = {
       id,
@@ -52,22 +53,25 @@ export async function POST(req: NextRequest) {
       comentarios: data.comentarios,
       hora_inicio: data.hora_inicio ?? '',
       hora_fin: data.hora_fin ?? '',
+      temperatura_camara: data.temperatura_camara ?? '',
       fecha_creacion: now,
     }
     await appendRow('ciclos', row)
 
     // Actualizar clientes incluidos a estado "cremado"
     const clientes = await getSheetData('clientes')
-    for (const mascotaId of data.mascotas_ids) {
-      const idx = clientes.findIndex((c) => c.id === mascotaId)
-      if (idx !== -1) {
-        await updateRow('clientes', idx, {
+    const idxById = new Map(clientes.map((c, i) => [c.id, i]))
+    await Promise.all(
+      data.mascotas_ids.map((mascotaId) => {
+        const idx = idxById.get(mascotaId)
+        if (idx === undefined) return Promise.resolve()
+        return updateRow('clientes', idx, {
           ...clientes[idx],
           estado: 'cremado',
           ciclo_id: id,
         })
-      }
-    }
+      })
+    )
 
     return NextResponse.json(row, { status: 201 })
   } catch (e) {

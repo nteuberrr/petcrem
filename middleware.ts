@@ -12,8 +12,8 @@ function isOperadorAllowed(pathname: string): boolean {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Rutas públicas: login, NextAuth API
-  if (pathname === '/login' || pathname.startsWith('/api/auth')) {
+  // Rutas públicas: login, NextAuth API, init-sheets (idempotente, no muta datos existentes)
+  if (pathname === '/login' || pathname.startsWith('/api/auth') || pathname === '/api/init-sheets') {
     return NextResponse.next()
   }
 
@@ -40,8 +40,10 @@ export async function middleware(req: NextRequest) {
       // Permitir APIs que las secciones de operador necesitan
       const allowedApis = [
         '/api/clientes', '/api/ciclos', '/api/petroleo',
+        '/api/vehiculo', '/api/despachos',
         '/api/especies', '/api/servicios', '/api/productos',
         '/api/veterinarios', '/api/precios', '/api/upload',
+        '/api/init-sheets',
       ]
       if (allowedApis.some(p => pathname.startsWith(p))) return NextResponse.next()
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })

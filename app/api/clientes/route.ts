@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSheetData, appendRow, getNextId, ensureColumn } from '@/lib/google-sheets'
+import { getSheetData, appendRow, getNextId, ensureColumns } from '@/lib/google-sheets'
 import { generarCodigo } from '@/lib/codigo-generator'
+import { todayISO } from '@/lib/dates'
 
 const ClienteSchema = z.object({
   nombre_mascota: z.string().min(1),
@@ -13,11 +14,16 @@ const ClienteSchema = z.object({
   fecha_retiro: z.string().min(1),
   especie: z.string().min(1),
   letra_especie: z.string().length(1),
-  peso_kg: z.number().positive(),
+  // Compat: acepta peso_declarado (nuevo) o peso_kg (legacy)
+  peso_declarado: z.number().positive().optional(),
+  peso_kg: z.number().positive().optional(),
+  peso_ingreso: z.number().positive().optional(),
   tipo_servicio: z.string().min(1),
   codigo_servicio: z.enum(['CI', 'CP', 'SD']),
   veterinaria_id: z.string().optional(),
   adicionales: z.string().optional(),
+}).refine(d => d.peso_declarado !== undefined || d.peso_kg !== undefined, {
+  message: 'peso_declarado (o peso_kg) es requerido',
 })
 
 export async function GET(req: NextRequest) {
@@ -46,11 +52,15 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const data = ClienteSchema.parse(body)
-    await ensureColumn('clientes', 'veterinaria_id')
-    await ensureColumn('clientes', 'adicionales')
+    await ensureColumns('clientes', [
+      'veterinaria_id', 'adicionales', 'tipo_precios',
+      'peso_declarado', 'peso_ingreso', 'despacho_id',
+      'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
+    ])
     const codigo = await generarCodigo(data.letra_especie, data.codigo_servicio)
     const id = await getNextId('clientes')
-    const now = new Date().toISOString().split('T')[0]
+    const now = todayISO()
+    const pesoDeclarado = data.peso_declarado ?? data.peso_kg ?? 0
     const row = {
       id,
       codigo,
@@ -63,11 +73,15 @@ export async function POST(req: NextRequest) {
       fecha_retiro: data.fecha_retiro,
       especie: data.especie,
       letra_especie: data.letra_especie,
-      peso_kg: String(data.peso_kg),
+      // Escribe ambas columnas: peso_declarado (nueva) y peso_kg (legacy) para compat
+      peso_declarado: String(pesoDeclarado),
+      peso_kg: String(pesoDeclarado),
+      peso_ingreso: data.peso_ingreso !== undefined ? String(data.peso_ingreso) : '',
       tipo_servicio: data.tipo_servicio,
       codigo_servicio: data.codigo_servicio,
       estado: 'pendiente',
       ciclo_id: '',
+      despacho_id: '',
       veterinaria_id: data.veterinaria_id ?? '',
       adicionales: data.adicionales ?? '[]',
       fecha_creacion: now,

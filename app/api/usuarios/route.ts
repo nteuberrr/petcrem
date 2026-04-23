@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/google-sheets'
+import { todayISO } from '@/lib/dates'
 
 const EXPECTED_COLS = ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion']
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Ya existe un usuario con ese email' }, { status: 409 })
     }
     const id = await getNextId('usuarios')
-    const now = new Date().toISOString().split('T')[0]
+    const now = todayISO()
     const row = {
       id,
       nombre: String(body.nombre),

@@ -475,13 +475,29 @@ export default function ConfiguracionPage() {
               ))}</tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              <tr className="bg-indigo-50/40">
-                <td className="px-4 py-3 font-medium text-gray-900">Administrador</td>
-                <td className="px-4 py-3 text-gray-600 text-xs">{process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? '(env)'}</td>
-                <td className="px-4 py-3"><Badge variant="purple">admin</Badge></td>
-                <td className="px-4 py-3"><Badge variant="green">activo</Badge></td>
-                <td className="px-4 py-3 text-xs text-gray-400 italic">protegido</td>
-              </tr>
+              {(() => {
+                const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? ''
+                const adminEnRow = usuarios.find(u => u.email === adminEmail && u.rol === 'admin')
+                // Si no hay admin en la hoja aún, mostrar fila informativa con opción de "inscribirlo"
+                if (!adminEnRow) {
+                  return (
+                    <tr className="bg-indigo-50/40">
+                      <td className="px-4 py-3 font-medium text-gray-900">Administrador</td>
+                      <td className="px-4 py-3 text-gray-600 text-xs">{adminEmail || '(env)'}</td>
+                      <td className="px-4 py-3"><Badge variant="purple">admin</Badge></td>
+                      <td className="px-4 py-3"><Badge variant="green">activo</Badge></td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: 'Administrador', email: adminEmail, password: '', rol: 'admin' }); setShowUsuarioModal(true) }}
+                          className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                          Editar
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                }
+                return null
+              })()}
               {usuarios.map(u => (
                 <tr key={u.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">{u.nombre}</td>

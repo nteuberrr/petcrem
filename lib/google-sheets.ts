@@ -1,8 +1,12 @@
-import { google } from 'googleapis'
+import { google, sheets_v4 } from 'googleapis'
+
+let cachedAuth: InstanceType<typeof google.auth.JWT> | null = null
+let cachedSheets: sheets_v4.Sheets | null = null
 
 function getAuth() {
+  if (cachedAuth) return cachedAuth
   const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
-  return new google.auth.JWT({
+  cachedAuth = new google.auth.JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     key: privateKey,
     scopes: [
@@ -10,10 +14,13 @@ function getAuth() {
       'https://www.googleapis.com/auth/drive',
     ],
   })
+  return cachedAuth
 }
 
 function getSheets() {
-  return google.sheets({ version: 'v4', auth: getAuth() })
+  if (cachedSheets) return cachedSheets
+  cachedSheets = google.sheets({ version: 'v4', auth: getAuth() })
+  return cachedSheets
 }
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
@@ -51,7 +58,6 @@ export async function getSheetData(sheetName: string): Promise<Record<string, st
 
 export async function appendRow(sheetName: string, data: Record<string, unknown>): Promise<void> {
   const sheets = getSheets()
-  const existing = await getSheetData(sheetName)
   const headersRes = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: `${sheetName}!1:1`,
@@ -64,7 +70,6 @@ export async function appendRow(sheetName: string, data: Record<string, unknown>
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [row] },
   })
-  void existing
 }
 
 export async function updateRow(
