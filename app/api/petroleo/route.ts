@@ -20,7 +20,7 @@ export async function GET() {
     const totalConsumido = ciclos.reduce((s, c) => {
       const ini = parseFloat(c.litros_inicio) || 0
       const fin = parseFloat(c.litros_fin) || 0
-      return s + Math.max(0, fin - ini)
+      return s + Math.abs(fin - ini) // se gastan litros sin importar el sentido de la resta
     }, 0)
     const stock = totalCargado - totalConsumido
     return NextResponse.json({

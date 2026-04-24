@@ -1,7 +1,7 @@
 'use client'
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import { fmtLitros, fmtNumero, fmtKg, fmtFecha, fmtPrecio } from '@/lib/format'
-import { todayISO } from '@/lib/dates'
+import { todayISO, formatHora, horaToMinutos, formatDateForSheet } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
 import VehiculoTab from '@/components/VehiculoTab'
 import DespachosTab from '@/components/DespachosTab'
@@ -30,10 +30,10 @@ type CargaPetroleo = {
 type ResumenPetroleo = { total_cargado: number; total_consumido: number; stock_actual: number; ciclos_count: number }
 
 function calcMinutos(ini: string, fin: string): number | null {
-  if (!ini || !fin) return null
-  const [h1, m1] = ini.split(':').map(Number)
-  const [h2, m2] = fin.split(':').map(Number)
-  const total = (h2 * 60 + m2) - (h1 * 60 + m1)
+  const m1 = horaToMinutos(ini)
+  const m2 = horaToMinutos(fin)
+  if (m1 === null || m2 === null) return null
+  const total = m2 - m1
   return total > 0 ? total : null
 }
 
@@ -64,6 +64,9 @@ export default function OperacionesPage() {
   const [resumenPet, setResumenPet] = useState<ResumenPetroleo>({ total_cargado: 0, total_consumido: 0, stock_actual: 0, ciclos_count: 0 })
   const [petForm, setPetForm] = useState({ fecha: todayISO(), litros: '', precio_neto: '', iva: '', especifico: '', notas: '' })
   const [savingPet, setSavingPet] = useState(false)
+  const [editPetId, setEditPetId] = useState<string | null>(null)
+  const [editPetForm, setEditPetForm] = useState({ fecha: '', litros: '', precio_neto: '', iva: '', especifico: '', notas: '' })
+  const [savingEditPet, setSavingEditPet] = useState(false)
 
   const fetchCiclos = useCallback(async () => {
     const res = await fetch('/api/ciclos')
@@ -112,6 +115,47 @@ export default function OperacionesPage() {
     const res = await fetch(`/api/petroleo?id=${id}`, { method: 'DELETE' })
     if (res.ok) await fetchPetroleo()
   }
+
+  function abrirEditarCarga(c: CargaPetroleo) {
+    setEditPetId(c.id)
+    setEditPetForm({
+      fecha: formatDateForSheet(c.fecha), // convierte serial Excel → YYYY-MM-DD
+      litros: c.litros ?? '',
+      precio_neto: c.precio_neto ?? '',
+      iva: c.iva ?? '',
+      especifico: c.especifico ?? '',
+      notas: c.notas ?? '',
+    })
+  }
+
+  async function guardarEdicionCarga(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editPetId) return
+    setSavingEditPet(true)
+    const res = await fetch('/api/petroleo', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editPetId,
+        fecha: editPetForm.fecha,
+        litros: editPetForm.litros,
+        precio_neto: parseFloat(editPetForm.precio_neto) || 0,
+        iva: parseFloat(editPetForm.iva) || 0,
+        especifico: parseFloat(editPetForm.especifico) || 0,
+        notas: editPetForm.notas,
+      }),
+    })
+    if (res.ok) {
+      setEditPetId(null)
+      await fetchPetroleo()
+    } else {
+      const err = await res.json().catch(() => ({}))
+      alert(`Error: ${err.error ?? res.status}`)
+    }
+    setSavingEditPet(false)
+  }
+
+  const totalBrutoEdit = (parseFloat(editPetForm.precio_neto) || 0) + (parseFloat(editPetForm.iva) || 0) + (parseFloat(editPetForm.especifico) || 0)
 
   const totalBrutoPet = (parseFloat(petForm.precio_neto) || 0) + (parseFloat(petForm.iva) || 0) + (parseFloat(petForm.especifico) || 0)
 
@@ -239,7 +283,7 @@ export default function OperacionesPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-5">Nuevo ciclo</h2>
         <form onSubmit={guardarCiclo} className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="text-xs font-medium text-gray-700">Fecha</label>
               <input type="date" required value={fecha} onChange={e => setFecha(e.target.value)}
@@ -258,7 +302,7 @@ export default function OperacionesPage() {
           </div>
 
           {/* Horario */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="text-xs font-medium text-gray-700">Hora inicio</label>
               <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)}
@@ -406,7 +450,7 @@ export default function OperacionesPage() {
                             </div>
                             {ciclo.hora_inicio && ciclo.hora_fin && (
                               <p className="text-xs text-indigo-600 mt-3">
-                                Horario: {ciclo.hora_inicio}–{ciclo.hora_fin}
+                                Horario: {formatHora(ciclo.hora_inicio)}–{formatHora(ciclo.hora_fin)}
                                 {calcMinutos(ciclo.hora_inicio, ciclo.hora_fin) !== null ? ` (${calcMinutos(ciclo.hora_inicio, ciclo.hora_fin)} min)` : ''}
                               </p>
                             )}
@@ -429,7 +473,7 @@ export default function OperacionesPage() {
       {operTab === 'petroleo' && (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Stock actual</p>
               <p className={`text-2xl font-bold mt-1 ${resumenPet.stock_actual < 100 ? 'text-red-600' : 'text-gray-900'}`}>{fmtLitros(resumenPet.stock_actual)}</p>
@@ -451,7 +495,7 @@ export default function OperacionesPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-5">Registrar carga de petróleo</h2>
             <form onSubmit={guardarCarga} className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="text-xs font-medium text-gray-700">Fecha</label>
                   <input type="date" required value={petForm.fecha} onChange={e => setPetForm(f => ({ ...f, fecha: e.target.value }))}
@@ -469,7 +513,7 @@ export default function OperacionesPage() {
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="text-xs font-medium text-gray-700">Precio neto (CLP)</label>
                   <input type="number" min="0" value={petForm.precio_neto} onChange={e => setPetForm(f => ({ ...f, precio_neto: e.target.value }))}
@@ -506,7 +550,8 @@ export default function OperacionesPage() {
             {cargas.length === 0 ? (
               <div className="p-8 text-center text-gray-400 text-sm">Sin cargas registradas</div>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[720px]">
                 <thead className="bg-gray-50">
                   <tr>
                     {['Fecha', 'Litros', 'Neto', 'IVA', 'Específico', 'Total bruto', 'Notas', ''].map(h => (
@@ -525,18 +570,80 @@ export default function OperacionesPage() {
                       <td className="px-4 py-3 font-semibold text-gray-900">{fmtPrecio(c.total_bruto)}</td>
                       <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{c.notas}</td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => eliminarCarga(c.id)}
-                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
-                          Eliminar
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => abrirEditarCarga(c)}
+                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => eliminarCarga(c.id)}
+                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                            Eliminar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
+
+          {/* Modal editar carga de petróleo */}
+          <Modal open={!!editPetId} onClose={() => setEditPetId(null)} title="Editar carga de petróleo">
+            <form onSubmit={guardarEdicionCarga} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Fecha</label>
+                  <input type="date" required value={editPetForm.fecha} onChange={e => setEditPetForm(f => ({ ...f, fecha: e.target.value }))}
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Litros</label>
+                  <input type="number" step="0.1" required value={editPetForm.litros} onChange={e => setEditPetForm(f => ({ ...f, litros: e.target.value }))}
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Precio neto</label>
+                  <input type="number" step="1" value={editPetForm.precio_neto} onChange={e => setEditPetForm(f => ({ ...f, precio_neto: e.target.value }))}
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">IVA</label>
+                  <input type="number" step="1" value={editPetForm.iva} onChange={e => setEditPetForm(f => ({ ...f, iva: e.target.value }))}
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Específico</label>
+                  <input type="number" step="1" value={editPetForm.especifico} onChange={e => setEditPetForm(f => ({ ...f, especifico: e.target.value }))}
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+              </div>
+              <div className="bg-gray-50 border-2 border-gray-200 rounded-lg px-3 py-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-600">Total bruto</span>
+                <span className="text-sm font-bold text-gray-900">{fmtPrecio(totalBrutoEdit)}</span>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700">Notas</label>
+                <textarea rows={2} value={editPetForm.notas} onChange={e => setEditPetForm(f => ({ ...f, notas: e.target.value }))}
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setEditPetId(null)}
+                  className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={savingEditPet}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+                  {savingEditPet ? 'Guardando...' : 'Guardar cambios'}
+                </button>
+              </div>
+            </form>
+          </Modal>
         </>
       )}
 

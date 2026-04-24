@@ -6,6 +6,7 @@ import { ensureSheet, ensureColumns } from '@/lib/google-sheets'
 const SHEETS: Record<string, string[]> = {
   clientes: [
     'id', 'codigo', 'nombre_mascota', 'nombre_tutor',
+    'email', 'telefono',
     'direccion_retiro', 'direccion_despacho', 'misma_direccion', 'comuna',
     'fecha_retiro', 'fecha_defuncion',
     'especie', 'letra_especie',

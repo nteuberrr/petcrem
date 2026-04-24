@@ -29,14 +29,25 @@ function parse(dateStr: string | Date | null | undefined): Date | null {
 
   // Serial de Excel/Sheets: número entre ~1 y ~73050 (años 1900-2100).
   // Google Sheets con UNFORMATTED_VALUE devuelve fechas como este serial.
+  // IMPORTANTE: el serial representa una fecha LOCAL, no UTC. Si usáramos
+  // `new Date(ms)` con ms desde epoch, en zonas UTC- (ej. Chile UTC-3) se
+  // mostraría un día antes. Construimos la fecha local a partir de los
+  // componentes UTC del epoch shifteado.
   if (/^\d+(\.\d+)?$/.test(s)) {
     const serial = parseFloat(s)
     if (serial > 1 && serial < 73050) {
-      // Excel serial 25569 = 1970-01-01 (con bug de 1900 bisiesto que "corrige" esto)
       const ms = Math.round((serial - 25569) * 86400 * 1000)
-      const dt = new Date(ms)
-      if (!isNaN(dt.getTime()) && dt.getFullYear() > 1900 && dt.getFullYear() < 2100) {
-        return dt
+      const utc = new Date(ms)
+      if (!isNaN(utc.getTime())) {
+        const dt = new Date(
+          utc.getUTCFullYear(),
+          utc.getUTCMonth(),
+          utc.getUTCDate(),
+          utc.getUTCHours(),
+          utc.getUTCMinutes(),
+          utc.getUTCSeconds()
+        )
+        if (dt.getFullYear() > 1900 && dt.getFullYear() < 2100) return dt
       }
     }
   }
@@ -92,4 +103,43 @@ export function daysSince(dateStr: string | Date | null | undefined): number | n
   if (!d) return null
   const diffMs = Date.now() - d.getTime()
   return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+}
+
+/**
+ * Formatea una hora como "HH:MM".
+ * Acepta:
+ *   - "HH:MM" (ya formateado) → devuelve igual
+ *   - Serial de Excel (fracción del día: 0.5 = 12:00, 0.4166... = 10:00)
+ *   - Vacío/null → ""
+ */
+export function formatHora(raw: string | number | null | undefined): string {
+  if (raw === null || raw === undefined || raw === '') return ''
+  const s = String(raw).trim()
+  if (!s) return ''
+  // Formato "HH:MM" o "HH:MM:SS"
+  const hhmm = s.match(/^(\d{1,2}):(\d{2})/)
+  if (hhmm) {
+    const h = String(Math.min(23, Math.max(0, Number(hhmm[1])))).padStart(2, '0')
+    return `${h}:${hhmm[2]}`
+  }
+  // Serial de Excel (fracción de día, 0 ≤ x < 1 — pero Sheets puede devolver x ≥ 1 para horas >= 24h, lo limitamos)
+  if (/^-?\d+(\.\d+)?$/.test(s)) {
+    const f = parseFloat(s)
+    if (f >= 0 && f < 2) {
+      const totalMin = Math.round(f * 24 * 60)
+      const h = Math.floor(totalMin / 60) % 24
+      const m = totalMin % 60
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+  }
+  return s
+}
+
+/** Convierte una hora (string "HH:MM" o serial Excel) a minutos desde medianoche. */
+export function horaToMinutos(raw: string | number | null | undefined): number | null {
+  const s = formatHora(raw)
+  if (!s) return null
+  const [h, m] = s.split(':').map(Number)
+  if (Number.isNaN(h) || Number.isNaN(m)) return null
+  return h * 60 + m
 }

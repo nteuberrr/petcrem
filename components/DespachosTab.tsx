@@ -113,7 +113,7 @@ export default function DespachosTab() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-5">Nuevo recorrido</h2>
         <form onSubmit={guardar} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-gray-700">Fecha</label>
               <input type="date" required value={fecha} onChange={e => setFecha(e.target.value)}
@@ -170,7 +170,8 @@ export default function DespachosTab() {
         {despachos.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">Sin recorridos registrados</div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[600px]">
             <thead className="bg-gray-50">
               <tr>
                 {['N° Recorrido', 'Fecha', 'Mascotas', 'Nota', ''].map(h => (
@@ -222,6 +223,7 @@ export default function DespachosTab() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSheetData } from '@/lib/google-sheets'
+import { formatDateForSheet } from '@/lib/dates'
 
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string; veterinaria_id?: string }
 type AdicionalItem = { tipo: string; id: string; nombre?: string; precio?: number; qty?: number }
@@ -66,17 +67,27 @@ export async function GET() {
     const startMesActual = new Date(anioActual, mesActual, 1)
     startMesActual.setHours(0, 0, 0, 0)
 
-    // Cache de fecha por cliente (parseo una sola vez)
+    // Cache de fecha por cliente (parseo una sola vez).
+    // Driver: si el cliente está cremado y tiene ciclo_id, la fecha "del mes" es
+    // la fecha del ciclo (fecha de cremación). Fallback a fecha_retiro / fecha_creacion.
+    const cicloById = new Map(ciclos.map(c => [c.id, c]))
     const fechaCache = new Map<string, Date | null>()
+    function parseDateSafe(raw: string): Date | null {
+      if (!raw) return null
+      const iso = formatDateForSheet(raw) // maneja serial Excel + ISO + DD/MM/YYYY
+      if (!iso) return null
+      const d = new Date(`${iso}T12:00:00`) // mediodía local para evitar UTC shift
+      return isNaN(d.getTime()) ? null : d
+    }
     function fechaCliente(c: Record<string, string>): Date | null {
       const cached = fechaCache.get(c.id)
       if (cached !== undefined) return cached
-      const raw = c.fecha_retiro || c.fecha_creacion
       let d: Date | null = null
-      if (raw) {
-        const parsed = new Date(raw)
-        d = isNaN(parsed.getTime()) ? null : parsed
+      if (c.estado === 'cremado' && c.ciclo_id) {
+        const ciclo = cicloById.get(c.ciclo_id)
+        if (ciclo?.fecha) d = parseDateSafe(ciclo.fecha)
       }
+      if (!d) d = parseDateSafe(c.fecha_retiro || c.fecha_creacion)
       fechaCache.set(c.id, d)
       return d
     }
@@ -142,7 +153,8 @@ export async function GET() {
       return f && !isNaN(f.getTime()) && f >= startMesActual && f <= now
     })
     const litrosMes = ciclosMes.reduce((s, c) => s + Math.abs((parseFloat(c.litros_fin) || 0) - (parseFloat(c.litros_inicio) || 0)), 0)
-    const pendientes = clientes.length - cremadosTodos.length
+    // "Pendientes" = pendientes de cremación (en cámara). Mismo criterio que TimelineStatus.
+    const pendientes = clientes.filter(c => c.estado === 'pendiente').length
 
     const ingresosMes = cremadosMes.reduce((s, c) => s + ingresoCliente(c).total, 0)
 

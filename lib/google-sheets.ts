@@ -136,6 +136,7 @@ export async function ensureColumn(sheetName: string, columnName: string): Promi
 /**
  * Ensures all given columns exist as headers in row 1. Does it in a single
  * write so sequential ensureColumn calls don't each re-read headers.
+ * Also auto-expands the sheet grid if the new columns would fall outside it.
  */
 export async function ensureColumns(sheetName: string, columnNames: string[]): Promise<void> {
   const sheets = getSheets()
@@ -147,8 +148,27 @@ export async function ensureColumns(sheetName: string, columnNames: string[]): P
   const missing = columnNames.filter(c => !headers.includes(c))
   if (missing.length === 0) return
   const startIdx = headers.length
+  const endIdx = startIdx + missing.length - 1
+
+  // Verificar si el grid tiene espacio; si no, expandir antes de escribir
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const sheet = meta.data.sheets?.find(s => s.properties?.title === sheetName)
+  const sheetId = sheet?.properties?.sheetId
+  const currentColCount = sheet?.properties?.gridProperties?.columnCount ?? 26
+  if (sheetId !== undefined && endIdx >= currentColCount) {
+    const extra = endIdx - currentColCount + 1
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        requests: [{
+          appendDimension: { sheetId, dimension: 'COLUMNS', length: extra },
+        }],
+      },
+    })
+  }
+
   const startCol = columnLetter(startIdx)
-  const endCol = columnLetter(startIdx + missing.length - 1)
+  const endCol = columnLetter(endIdx)
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
     range: `${sheetName}!${startCol}1:${endCol}1`,
@@ -166,6 +186,60 @@ function columnLetter(idx: number): string {
     if (n < 26) return s
     n = Math.floor(n / 26) - 1
   }
+}
+
+/**
+ * Reordena las columnas de una hoja para que coincidan con `desiredOrder`.
+ * Columnas presentes en la hoja pero NO en desiredOrder se preservan al final.
+ * Usa FORMATTED_VALUE + USER_ENTERED para preservar fechas/formatos.
+ * Devuelve el nuevo orden aplicado.
+ */
+export async function reorderColumns(sheetName: string, desiredOrder: string[]): Promise<{ applied: boolean; newOrder: string[]; rowsAffected: number }> {
+  const sheets = getSheets()
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: sheetName,
+    valueRenderOption: 'FORMATTED_VALUE',
+  })
+  const rows = (res.data.values ?? []) as string[][]
+  if (rows.length === 0) return { applied: false, newOrder: [], rowsAffected: 0 }
+
+  const oldHeaders = (rows[0] ?? []) as string[]
+  const dataRows = rows.slice(1)
+
+  const inSchema = desiredOrder.filter(name => oldHeaders.includes(name))
+  const extras = oldHeaders.filter(name => !desiredOrder.includes(name))
+  const newOrder = [...inSchema, ...extras]
+
+  const alreadyOrdered = newOrder.length === oldHeaders.length &&
+    newOrder.every((name, i) => oldHeaders[i] === name)
+  if (alreadyOrdered) return { applied: false, newOrder, rowsAffected: dataRows.length }
+
+  const headerIdx = new Map(oldHeaders.map((h, i) => [h, i]))
+  const reorderedRows = [
+    newOrder,
+    ...dataRows.map(row => newOrder.map(name => {
+      const idx = headerIdx.get(name)
+      return idx !== undefined ? (row[idx] ?? '') : ''
+    })),
+  ]
+
+  // Limpiar el rango actual (por si había algo fuera del nuevo ancho)
+  const colsWidth = Math.max(oldHeaders.length, newOrder.length)
+  const lastCol = columnLetter(colsWidth - 1)
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${sheetName}!A1:${lastCol}${rows.length}`,
+  })
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${sheetName}!A1`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: reorderedRows },
+  })
+
+  return { applied: true, newOrder, rowsAffected: dataRows.length }
 }
 
 export async function deleteRow(sheetName: string, rowIndex: number): Promise<void> {

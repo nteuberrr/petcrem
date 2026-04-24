@@ -70,7 +70,7 @@ export default function VehiculoTab() {
   return (
     <>
       {/* KPIs */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total litros" value={fmtLitros(resumen.total_litros)} />
         <KpiCard label="Total km" value={`${fmtNumero(resumen.total_km, 0)} km`} />
         <KpiCard label="Total monto" value={fmtPrecio(resumen.total_monto)} />
@@ -81,7 +81,7 @@ export default function VehiculoTab() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-5">Registrar carga de combustible</h2>
         <form onSubmit={guardar} className="space-y-4">
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="text-xs font-medium text-gray-700">Fecha</label>
               <input type="date" required value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))}
@@ -143,7 +143,8 @@ export default function VehiculoTab() {
         {cargas.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">Sin cargas registradas</div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
             <thead className="bg-gray-50">
               <tr>
                 {['Fecha', 'Km odómetro', 'Litros', 'Monto', 'Km/lt anterior', 'Comentarios', ''].map(h => (
@@ -183,6 +184,7 @@ export default function VehiculoTab() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </>

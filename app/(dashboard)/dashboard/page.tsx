@@ -45,7 +45,7 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-500 text-sm mt-0.5">Cargando…</p>
         </div>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="bg-white rounded-xl border border-gray-100 p-5 animate-pulse h-28" />
           ))}
@@ -101,7 +101,7 @@ export default function DashboardPage() {
       {/* Ratios */}
       <div>
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Ratios de eficiencia</h2>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {ratiosArr.map(r => (
             <div key={r.label} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               <p className="text-xs font-medium text-gray-500">{r.label}</p>
@@ -113,7 +113,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         {/* Ventas por mes */}
         <ChartCard title="Ingresos mensuales (últimos 12 meses)">
           <ResponsiveContainer width="100%" height={240}>
@@ -203,7 +203,7 @@ export default function DashboardPage() {
 
       {/* Top otros servicios (solo si hay datos) */}
       {data.top_otros_servicios.length > 0 && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
           <ChartCard title="Top servicios adicionales vendidos">
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={data.top_otros_servicios} layout="vertical">

@@ -11,6 +11,8 @@ type ClienteDetalle = {
   codigo: string
   nombre_mascota: string
   nombre_tutor: string
+  email: string
+  telefono: string
   direccion_retiro: string
   direccion_despacho: string
   misma_direccion: string
@@ -281,19 +283,39 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         )}
       </div>
 
+      {/* Proceso de cremación — al principio para ver estado primero */}
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 mb-6">
+        <h2 className="text-base font-bold text-gray-900 mb-4">Proceso de cremación</h2>
+        {cliente.ciclo ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <InfoField label="Fecha del ciclo" value={fmtFecha(cliente.ciclo.fecha)} />
+            <InfoField label="Número de ciclo" value={`N° ${cliente.ciclo.numero_ciclo}`} />
+            <InfoField label="Litros utilizados" value={litrosUsados !== null ? fmtLitros(litrosUsados) : '—'} />
+            <InfoField label="Comentarios" value={cliente.ciclo.comentarios || '—'} />
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 text-yellow-800 bg-yellow-50 border-2 border-yellow-300 rounded-lg px-4 py-3 text-sm font-medium">
+            <span>⏳</span>
+            <span>Pendiente de cremación — aún no asignada a ningún ciclo.</span>
+          </div>
+        )}
+      </div>
+
       {/* Datos de ingreso */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-        <h2 className="text-base font-semibold text-gray-900 mb-4">Datos de ingreso</h2>
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 mb-6">
+        <h2 className="text-base font-bold text-gray-900 mb-4">Datos de ingreso</h2>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
-          <Field label="Nombre tutor" value={form.nombre_tutor} onChange={v => setForm(f => ({ ...f, nombre_tutor: v }))} />
-          <Field label="Dirección de retiro" value={form.direccion_retiro} onChange={v => setForm(f => ({ ...f, direccion_retiro: v }))} />
-          <Field label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
-          <Field label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
-          <Field label="Fecha de retiro" type="date" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
+          <Field required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
+          <Field required label="Nombre tutor" value={form.nombre_tutor} onChange={v => setForm(f => ({ ...f, nombre_tutor: v }))} />
+          <Field required type="email" label="Email" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} />
+          <Field required type="tel" label="Teléfono" value={form.telefono} onChange={v => setForm(f => ({ ...f, telefono: v }))} />
+          <Field required label="Dirección de retiro" value={form.direccion_retiro} onChange={v => setForm(f => ({ ...f, direccion_retiro: v }))} />
+          <Field required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
+          <Field required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
+          <Field required label="Fecha de retiro" type="date" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
           <Field label="Fecha de defunción" type="date" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
-          <Field label="Especie" value={form.especie} onChange={v => setForm(f => ({ ...f, especie: v }))} />
-          <Field label="Peso declarado (kg)" type="number" step="0.1" value={form.peso_declarado || form.peso_kg} onChange={v => setForm(f => ({ ...f, peso_declarado: v, peso_kg: v }))} />
+          <Field required label="Especie" value={form.especie} onChange={v => setForm(f => ({ ...f, especie: v }))} />
+          <Field required label="Peso declarado (kg)" type="number" step="0.1" value={form.peso_declarado || form.peso_kg} onChange={v => setForm(f => ({ ...f, peso_declarado: v, peso_kg: v }))} />
           <PesoIngresoField
             value={form.peso_ingreso ?? ''}
             onChange={v => setForm(f => ({ ...f, peso_ingreso: v }))}
@@ -302,11 +324,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             codigoServ={form.codigo_servicio ?? 'CI'}
           />
           <div className="col-span-2">
-            <label className="text-xs font-medium text-gray-500">Tipo de servicio</label>
+            <label className="text-xs font-semibold text-gray-700">
+              Tipo de servicio <span className="text-red-500">*</span>
+            </label>
             <select
               value={form.codigo_servicio}
+              required
               onChange={e => setForm(f => ({ ...f, codigo_servicio: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="CI">Cremación Individual (CI)</option>
               <option value="CP">Cremación Premium (CP)</option>
@@ -331,7 +356,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           </label>
 
           {esVeterinaria && (
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-gray-500">Veterinaria</label>
                 <select
@@ -363,15 +388,20 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
 
         {/* Pago */}
-        <div className="mt-5 pt-5 border-t border-gray-100">
-          <p className="text-sm font-semibold text-gray-900 mb-3">Pago</p>
-          <div className="grid grid-cols-2 gap-3">
+        <div className="mt-5 pt-5 border-t-2 border-gray-200">
+          <p className="text-sm font-bold text-gray-900 mb-3">Pago</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-500">Tipo de pago</label>
+              <label className="text-xs font-semibold text-gray-700">
+                Tipo de pago <span className="text-red-500">*</span>
+              </label>
               <select
                 value={form.tipo_pago ?? ''}
+                required
                 onChange={e => setForm(f => ({ ...f, tipo_pago: e.target.value }))}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                  !form.tipo_pago ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
               >
                 <option value="">—</option>
                 <option value="transferencia">Transferencia</option>
@@ -381,11 +411,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500">Estado de pago</label>
+              <label className="text-xs font-semibold text-gray-700">
+                Estado de pago <span className="text-red-500">*</span>
+              </label>
               <select
                 value={form.estado_pago ?? 'pendiente'}
+                required
                 onChange={e => setForm(f => ({ ...f, estado_pago: e.target.value }))}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="pendiente">Pendiente de pago</option>
                 <option value="pagado">Pagado</option>
@@ -418,7 +451,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       </div>
 
       {/* Adicionales */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 mb-6 overflow-hidden">
         <button
           onClick={() => setShowAdicionales(!showAdicionales)}
           className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
@@ -520,7 +553,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       </div>
 
       {/* Resumen del servicio */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-gray-900">Resumen del servicio</h2>
           <span className="text-xs text-gray-400">{tablaNombre}</span>
@@ -569,39 +602,30 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      {/* Proceso de cremación */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h2 className="text-base font-semibold text-gray-900 mb-4">Proceso de cremación</h2>
-        {cliente.ciclo ? (
-          <div className="grid grid-cols-2 gap-4">
-            <InfoField label="Fecha del ciclo" value={fmtFecha(cliente.ciclo.fecha)} />
-            <InfoField label="Número de ciclo" value={`N° ${cliente.ciclo.numero_ciclo}`} />
-            <InfoField label="Litros utilizados" value={litrosUsados !== null ? fmtLitros(litrosUsados) : '—'} />
-            <InfoField label="Comentarios" value={cliente.ciclo.comentarios || '—'} />
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 text-yellow-700 bg-yellow-50 rounded-lg px-4 py-3 text-sm">
-            <span>⏳</span>
-            <span>Pendiente de cremación — aún no asignada a ningún ciclo.</span>
-          </div>
-        )}
-      </div>
     </div>
   )
 }
 
-function Field({ label, value, onChange, type = 'text', step }: {
-  label: string; value?: string; onChange: (v: string) => void; type?: string; step?: string
+function Field({ label, value, onChange, type = 'text', step, required, placeholder }: {
+  label: string; value?: string; onChange: (v: string) => void
+  type?: string; step?: string; required?: boolean; placeholder?: string
 }) {
+  const faltante = required && !String(value ?? '').trim()
   return (
     <div>
-      <label className="text-xs font-medium text-gray-500">{label}</label>
+      <label className="text-xs font-semibold text-gray-700">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
       <input
         type={type}
         step={step}
         value={value ?? ''}
+        required={required}
+        placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
-        className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+          faltante ? 'border-red-300 bg-red-50' : 'border-gray-300'
+        }`}
       />
     </div>
   )

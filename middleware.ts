@@ -12,8 +12,8 @@ function isOperadorAllowed(pathname: string): boolean {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Rutas públicas: login, NextAuth API, init-sheets (idempotente, no muta datos existentes)
-  if (pathname === '/login' || pathname.startsWith('/api/auth') || pathname === '/api/init-sheets') {
+  // Rutas públicas: login, NextAuth API, init-sheets, reorder-columns (operaciones admin de schema)
+  if (pathname === '/login' || pathname.startsWith('/api/auth') || pathname === '/api/init-sheets' || pathname === '/api/reorder-columns') {
     return NextResponse.next()
   }
 
