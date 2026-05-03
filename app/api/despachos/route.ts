@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/google-sheets'
-import { todayISO } from '@/lib/dates'
+import { todayISO, formatDateForSheet } from '@/lib/dates'
 
 const HOJA = 'despachos'
 const COLS = ['id', 'fecha', 'numero_recorrido', 'mascotas_ids', 'nota', 'fecha_creacion']
@@ -34,10 +34,14 @@ export async function POST(req: NextRequest) {
     }
     await ensure()
 
-    // Número correlativo por día
+    // Número correlativo por día. Las fechas en Sheets vienen como serial Excel
+    // (no string ISO), así que normalizamos con formatDateForSheet antes de comparar.
+    // Usamos max+1 (no length+1) para que un eliminar+crear no colisione con un número existente.
     const existentes = await getSheetData(HOJA)
-    const delDia = existentes.filter(d => d.fecha === body.fecha)
-    const numero = delDia.length + 1
+    const fechaIso = formatDateForSheet(body.fecha) || String(body.fecha)
+    const delDia = existentes.filter(d => (formatDateForSheet(d.fecha) || d.fecha) === fechaIso)
+    const numerosDelDia = delDia.map(d => parseInt(d.numero_recorrido, 10) || 0)
+    const numero = (numerosDelDia.length > 0 ? Math.max(...numerosDelDia) : 0) + 1
 
     const id = await getNextId(HOJA)
     const now = todayISO()

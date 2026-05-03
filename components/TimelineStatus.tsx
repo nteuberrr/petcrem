@@ -47,7 +47,11 @@ export default function TimelineStatus() {
 
   // Estado vacío también cuenta como "en cámara" (mascotas viejas sin estado).
   const enCamara = clientes.filter(c => (c.estado === 'pendiente' || !c.estado) && match(c))
-  const cremadas = clientes.filter(c => c.estado === 'cremado' && match(c))
+  // "Cremadas" = pendientes de despacho. Excluimos SD (Sin Devolución) — esas terminan
+  // su flujo en cremado, no van a recorrido de despacho.
+  const cremadas = clientes.filter(c =>
+    c.estado === 'cremado' && c.codigo_servicio !== 'SD' && match(c)
+  )
 
   return (
     <div className="space-y-4">

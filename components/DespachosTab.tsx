@@ -6,7 +6,7 @@ import { Modal } from '@/components/ui/Modal'
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
-  especie: string; estado: string
+  especie: string; estado: string; codigo_servicio?: string
   direccion_despacho?: string; comuna?: string; telefono?: string
 }
 
@@ -52,10 +52,13 @@ export default function DespachosTab() {
     setShowModal(true)
     setBuscar('')
     setCargando(true)
-    // Disponibles: mascotas cremadas aún no despachadas
+    // Disponibles: mascotas cremadas aún no despachadas. Excluimos las SD (Sin Devolución)
+    // — esas no se despachan, su flujo termina en "cremado".
     const all = await fetch('/api/clientes?estado=cremado').then(r => r.json())
     const seleIds = seleccionadas.map(s => s.id)
-    setDisponibles(Array.isArray(all) ? all.filter((c: Cliente) => !seleIds.includes(c.id)) : [])
+    setDisponibles(Array.isArray(all)
+      ? all.filter((c: Cliente) => !seleIds.includes(c.id) && c.codigo_servicio !== 'SD')
+      : [])
     setCargando(false)
   }
 
@@ -116,7 +119,9 @@ export default function DespachosTab() {
     const byId = new Map(Array.isArray(all) ? all.map((c: Cliente) => [c.id, c]) : [])
     const actuales = d.mascotas_ids.map(id => byId.get(id)).filter((x): x is Cliente => !!x)
     setEditMascotas(actuales)
-    const cremadosLibres = (Array.isArray(all) ? all : []).filter((c: Cliente) => c.estado === 'cremado')
+    // Disponibles para agregar al recorrido: cremados, excluyendo SD (no se despachan)
+    const cremadosLibres = (Array.isArray(all) ? all : [])
+      .filter((c: Cliente) => c.estado === 'cremado' && c.codigo_servicio !== 'SD')
     setEditDisponibles(cremadosLibres)
   }
 
