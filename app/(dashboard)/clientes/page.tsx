@@ -51,7 +51,7 @@ const SERVICIOS = [
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [buscar, setBuscar] = useState('')
-  const [filtro, setFiltro] = useState<'todos' | 'pendiente' | 'cremado' | 'despachado' | 'pago_pendiente' | 'este_mes' | 'esta_semana'>('todos')
+  const [filtro, setFiltro] = useState<'todos' | 'pendiente' | 'cremado' | 'despachado' | 'pago_pendiente' | 'este_mes' | 'esta_semana' | 'datos_pendientes'>('todos')
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [selected, setSelected] = useState<Cliente | null>(null)
@@ -168,6 +168,26 @@ export default function ClientesPage() {
     }
   }, [clientes])
 
+  // Detecta si un cliente tiene campos obligatorios sin completar.
+  // Estos son los mismos campos marcados como `required` en el form de nueva ficha.
+  function tieneDatosPendientes(c: Cliente): boolean {
+    const vacio = (v?: string) => !v || !String(v).trim()
+    if (vacio(c.nombre_mascota)) return true
+    if (vacio(c.nombre_tutor)) return true
+    if (vacio(c.email)) return true
+    if (vacio(c.telefono)) return true
+    if (vacio(c.direccion_retiro)) return true
+    if (vacio(c.direccion_despacho)) return true
+    if (vacio(c.comuna)) return true
+    if (vacio(c.fecha_retiro)) return true
+    if (vacio(c.especie)) return true
+    if (!c.peso_declarado || (parseFloat(c.peso_declarado) || 0) <= 0) return true
+    if (vacio(c.codigo_servicio)) return true
+    if (vacio(c.tipo_pago)) return true
+    if (vacio(c.estado_pago)) return true
+    return false
+  }
+
   // Resultados filtrados por buscador + filtro
   const resultados = useMemo(() => {
     const q = buscar.trim().toLowerCase()
@@ -192,6 +212,7 @@ export default function ClientesPage() {
       if (filtro === 'cremado' && c.estado !== 'cremado') return false
       if (filtro === 'despachado' && c.estado !== 'despachado') return false
       if (filtro === 'pago_pendiente' && c.estado_pago === 'pagado') return false
+      if (filtro === 'datos_pendientes' && !tieneDatosPendientes(c)) return false
       if (filtro === 'este_mes') {
         const f = parseFecha(c.fecha_retiro)
         if (!f || f < startMes) return false
@@ -345,6 +366,7 @@ export default function ClientesPage() {
             { id: 'pago_pendiente', label: '⚠ Pago pendiente' },
             { id: 'este_mes', label: 'Este mes' },
             { id: 'esta_semana', label: 'Esta semana' },
+            { id: 'datos_pendientes', label: '📝 Datos pendientes' },
           ] as const).map(opt => {
             const active = filtro === opt.id
             return (
