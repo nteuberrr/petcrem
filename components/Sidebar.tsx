@@ -5,7 +5,7 @@ import { signOut, useSession } from 'next-auth/react'
 import { useState, useEffect } from 'react'
 
 const nav = [
-  { href: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: true },
+  { href: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: false },
   { href: '/clientes', label: 'Clientes', icon: '🐾', adminOnly: false },
   { href: '/operaciones', label: 'Operaciones', icon: '🔥', adminOnly: false },
   { href: '/asistencia', label: 'Asistencia', icon: '🕐', adminOnly: false },

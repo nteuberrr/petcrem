@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
 // Rutas permitidas para rol 'operador'. Todo lo demás en el dashboard es solo admin.
-const OPERADOR_ALLOWED = ['/clientes', '/operaciones', '/asistencia']
+const OPERADOR_ALLOWED = ['/dashboard', '/clientes', '/operaciones', '/asistencia']
 
 function isOperadorAllowed(pathname: string): boolean {
   return OPERADOR_ALLOWED.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'))
@@ -31,14 +31,15 @@ export async function middleware(req: NextRequest) {
   // Admin tiene acceso total
   if (role === 'admin') return NextResponse.next()
 
-  // Operador: solo clientes y operaciones
+  // Operador: solo dashboard, clientes, operaciones y asistencia
   if (role === 'operador') {
-    if (pathname === '/' || pathname === '/dashboard') {
-      return NextResponse.redirect(new URL('/clientes', req.url))
+    if (pathname === '/') {
+      return NextResponse.redirect(new URL('/dashboard', req.url))
     }
     if (pathname.startsWith('/api/')) {
       // Permitir APIs que las secciones de operador necesitan
       const allowedApis = [
+        '/api/dashboard',
         '/api/clientes', '/api/ciclos', '/api/petroleo',
         '/api/vehiculo', '/api/despachos',
         '/api/especies', '/api/servicios', '/api/productos',
@@ -50,7 +51,7 @@ export async function middleware(req: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
     }
     if (!isOperadorAllowed(pathname)) {
-      return NextResponse.redirect(new URL('/clientes', req.url))
+      return NextResponse.redirect(new URL('/dashboard', req.url))
     }
   }
 
