@@ -73,6 +73,61 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { id, fecha, nota, mascotas_ids } = body as {
+      id: string
+      fecha?: string
+      nota?: string
+      mascotas_ids?: string[]
+    }
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+    await ensure()
+    const rows = await getSheetData(HOJA)
+    const idx = rows.findIndex(r => r.id === id)
+    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+
+    const updated: Record<string, string> = { ...rows[idx] }
+    if (fecha !== undefined) updated.fecha = String(fecha)
+    if (nota !== undefined) updated.nota = String(nota)
+
+    // Diff de mascotas: si vienen, recalcular estados de clientes
+    if (Array.isArray(mascotas_ids)) {
+      let viejas: string[] = []
+      try { viejas = JSON.parse(rows[idx].mascotas_ids || '[]') } catch { viejas = [] }
+      const nuevasSet = new Set(mascotas_ids)
+      const viejasSet = new Set(viejas)
+      const quitadas = viejas.filter(m => !nuevasSet.has(m))
+      const agregadas = mascotas_ids.filter(m => !viejasSet.has(m))
+
+      if (quitadas.length > 0 || agregadas.length > 0) {
+        const clientes = await getSheetData('clientes')
+        const idxById = new Map(clientes.map((c, i) => [c.id, i]))
+        await Promise.all([
+          ...quitadas.map((mid) => {
+            const cIdx = idxById.get(mid)
+            if (cIdx === undefined) return Promise.resolve()
+            return updateRow('clientes', cIdx, { ...clientes[cIdx], estado: 'cremado', despacho_id: '' })
+          }),
+          ...agregadas.map((mid) => {
+            const cIdx = idxById.get(mid)
+            if (cIdx === undefined) return Promise.resolve()
+            return updateRow('clientes', cIdx, { ...clientes[cIdx], estado: 'despachado', despacho_id: id })
+          }),
+        ])
+      }
+
+      updated.mascotas_ids = JSON.stringify(mascotas_ids)
+    }
+
+    await updateRow(HOJA, idx, updated)
+    return NextResponse.json({ ok: true, id })
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 })
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)

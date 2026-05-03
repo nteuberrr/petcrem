@@ -5,11 +5,12 @@ import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { fmtKg, fmtPrecio, fmtFecha } from '@/lib/format'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
+import { parseDecimal, parsePeso } from '@/lib/numbers'
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
   email?: string; telefono?: string
-  especie: string; peso_kg: string; peso_declarado?: string
+  especie: string; peso_declarado?: string; peso_ingreso?: string
   tipo_servicio: string; codigo_servicio: string
   estado: string; estado_pago?: string; tipo_pago?: string
   fecha_retiro: string; fecha_creacion: string; ciclo_id: string
@@ -33,7 +34,7 @@ const FORM_DEFAULT = {
   fecha_retiro: '',
   especie: '',
   letra_especie: '',
-  peso_kg: '',
+  peso_declarado: '',
   tipo_servicio: 'Cremación Individual',
   codigo_servicio: 'CI',
   veterinaria_id: '',
@@ -111,7 +112,7 @@ export default function ClientesPage() {
     const semanaActualKey = semanaKey(hoy)
 
     let delMes = 0, delaSemana = 0
-    let sumaPeso = 0, countPeso = 0
+    let sumaPeso = 0
     const porEspecie: Record<string, number> = {}
     const porServicio: Record<string, number> = {}
     const clientesPendientesPago: Cliente[] = []
@@ -130,8 +131,9 @@ export default function ClientesPage() {
         const wk = semanaKey(fecha)
         if (wk !== semanaActualKey) bucketsSemana[wk] = (bucketsSemana[wk] || 0) + 1
       }
-      const peso = parseFloat(c.peso_declarado || c.peso_kg || '0')
-      if (peso > 0) { sumaPeso += peso; countPeso++ }
+      // Peso real: ingreso primero, declarado fallback. Normaliza escalamiento heredado.
+      const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
+      if (peso > 0) sumaPeso += peso
       const esp = c.especie || 'Sin especie'
       porEspecie[esp] = (porEspecie[esp] || 0) + 1
       const srv = c.codigo_servicio || 'CI'
@@ -141,7 +143,8 @@ export default function ClientesPage() {
       }
     }
 
-    const pesoProm = countPeso > 0 ? sumaPeso / countPeso : 0
+    // Peso promedio: total kilos / total mascotas ingresadas (todas)
+    const pesoProm = total > 0 ? sumaPeso / total : 0
     const topEspecie = Object.entries(porEspecie).sort((a, b) => b[1] - a[1])[0]
     const topServicio = Object.entries(porServicio).sort((a, b) => b[1] - a[1])[0]
     const mesesCerrados = Object.keys(bucketsMes).length
@@ -185,7 +188,7 @@ export default function ClientesPage() {
 
     return ordenados.filter(c => {
       // Filtro por categoría
-      if (filtro === 'pendiente' && c.estado !== 'pendiente') return false
+      if (filtro === 'pendiente' && !(c.estado === 'pendiente' || !c.estado)) return false
       if (filtro === 'cremado' && c.estado !== 'cremado') return false
       if (filtro === 'despachado' && c.estado !== 'despachado') return false
       if (filtro === 'pago_pendiente' && c.estado_pago === 'pagado') return false
@@ -228,10 +231,9 @@ export default function ClientesPage() {
     e.preventDefault()
     setFormError('')
     setSaving(true)
-    const pesoDeclarado = parseFloat(form.peso_kg)
+    const pesoDeclarado = parseDecimal(form.peso_declarado) ?? 0
     const body = {
       ...form,
-      peso_kg: pesoDeclarado,
       peso_declarado: pesoDeclarado,
       misma_direccion: form.misma_direccion,
       direccion_despacho: form.misma_direccion ? form.direccion_retiro : form.direccion_despacho,
@@ -383,14 +385,14 @@ export default function ClientesPage() {
             >
               <div className="flex items-start justify-between mb-2">
                 <span className="font-mono text-xs text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded">{c.codigo}</span>
-                <Badge variant={c.estado === 'cremado' ? 'green' : c.estado === 'despachado' ? 'blue' : 'yellow'}>{c.estado}</Badge>
+                <Badge variant={c.estado === 'cremado' ? 'green' : c.estado === 'despachado' ? 'blue' : 'yellow'}>{c.estado || 'pendiente'}</Badge>
               </div>
               <p className="font-bold text-gray-900 text-base">{c.nombre_mascota}</p>
               <p className="text-sm text-gray-600">{c.nombre_tutor}</p>
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-gray-500">{c.especie}</span>
                 <span className="text-gray-300">·</span>
-                <span className="text-xs text-gray-500">{fmtKg(c.peso_declarado || c.peso_kg || '0')}</span>
+                <span className="text-xs text-gray-500">{fmtKg(parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado))}</span>
                 <span className="text-gray-300">·</span>
                 <span className="text-xs font-semibold text-gray-700">{c.codigo_servicio}</span>
               </div>
@@ -411,7 +413,7 @@ export default function ClientesPage() {
           <div className="space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-xs text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded">{selected.codigo}</span>
-              <Badge variant={selected.estado === 'cremado' ? 'green' : selected.estado === 'despachado' ? 'blue' : 'yellow'}>{selected.estado}</Badge>
+              <Badge variant={selected.estado === 'cremado' ? 'green' : selected.estado === 'despachado' ? 'blue' : 'yellow'}>{selected.estado || 'pendiente'}</Badge>
               {selected.estado_pago === 'pagado' ? (
                 <Badge variant="green">Pagado</Badge>
               ) : (
@@ -424,7 +426,7 @@ export default function ClientesPage() {
               <PreviewField label="Especie" value={selected.especie} />
               <PreviewField label="Email" value={selected.email || '—'} />
               <PreviewField label="Teléfono" value={selected.telefono || '—'} />
-              <PreviewField label="Peso" value={fmtKg(selected.peso_declarado || selected.peso_kg || '0')} />
+              <PreviewField label="Peso" value={fmtKg(parsePeso(selected.peso_ingreso) || parsePeso(selected.peso_declarado))} />
               <PreviewField label="Servicio" value={`${selected.tipo_servicio} (${selected.codigo_servicio})`} />
               <PreviewField label="Fecha de retiro" value={fmtFecha(selected.fecha_retiro)} />
               <PreviewField label="Comuna" value={selected.comuna || '—'} />
@@ -506,7 +508,7 @@ export default function ClientesPage() {
                 {especies.map(e => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
               </select>
             </div>
-            <ModalField required type="number" step="0.1" min="0" label="Peso declarado (kg)" value={form.peso_kg} onChange={v => setForm(f => ({ ...f, peso_kg: v }))} />
+            <ModalField required type="number" step="0.1" min="0" label="Peso declarado (kg)" value={form.peso_declarado} onChange={v => setForm(f => ({ ...f, peso_declarado: v }))} />
           </div>
 
           <div>

@@ -9,7 +9,7 @@ const SCHEMAS: Record<string, string[]> = {
     'direccion_retiro', 'direccion_despacho', 'misma_direccion', 'comuna',
     'fecha_retiro', 'fecha_defuncion',
     'especie', 'letra_especie',
-    'peso_declarado', 'peso_ingreso', 'peso_kg',
+    'peso_declarado', 'peso_ingreso',
     'tipo_servicio', 'codigo_servicio',
     'estado', 'ciclo_id', 'despacho_id',
     'veterinaria_id', 'tipo_precios', 'adicionales',

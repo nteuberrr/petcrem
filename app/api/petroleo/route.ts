@@ -44,14 +44,15 @@ export async function POST(req: NextRequest) {
     const iva = parseFloat(body.iva) || 0
     const esp = parseFloat(body.especifico) || 0
     const total = body.total_bruto !== undefined ? parseFloat(body.total_bruto) || 0 : neto + iva + esp
+    // Números crudos (no String) para que Sheets respete formato decimal del locale es-CL
     const row = {
       id,
       fecha: String(body.fecha),
-      litros: String(body.litros),
-      precio_neto: String(neto),
-      iva: String(iva),
-      especifico: String(esp),
-      total_bruto: String(total),
+      litros: parseFloat(body.litros) || 0,
+      precio_neto: neto,
+      iva: iva,
+      especifico: esp,
+      total_bruto: total,
       notas: body.notas ?? '',
       fecha_creacion: todayISO(),
     }
@@ -70,12 +71,17 @@ export async function PATCH(req: NextRequest) {
     const rows = await getSheetData(HOJA)
     const idx = rows.findIndex(r => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
-    const updated = { ...rows[idx], ...updates }
+    const updated: Record<string, unknown> = { ...rows[idx], ...updates }
+    // Convertir numéricos a number crudo
+    if (updates.litros !== undefined) updated.litros = parseFloat(updates.litros) || 0
+    if (updates.precio_neto !== undefined) updated.precio_neto = parseFloat(updates.precio_neto) || 0
+    if (updates.iva !== undefined) updated.iva = parseFloat(updates.iva) || 0
+    if (updates.especifico !== undefined) updated.especifico = parseFloat(updates.especifico) || 0
     if (updates.precio_neto !== undefined || updates.iva !== undefined || updates.especifico !== undefined) {
-      const neto = parseFloat(updated.precio_neto) || 0
-      const iva = parseFloat(updated.iva) || 0
-      const esp = parseFloat(updated.especifico) || 0
-      updated.total_bruto = String(neto + iva + esp)
+      const neto = parseFloat(String(updated.precio_neto)) || 0
+      const iva = parseFloat(String(updated.iva)) || 0
+      const esp = parseFloat(String(updated.especifico)) || 0
+      updated.total_bruto = neto + iva + esp
     }
     await updateRow(HOJA, idx, updated)
     return NextResponse.json(updated)

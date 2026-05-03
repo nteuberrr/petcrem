@@ -10,7 +10,7 @@ const SHEETS: Record<string, string[]> = {
     'direccion_retiro', 'direccion_despacho', 'misma_direccion', 'comuna',
     'fecha_retiro', 'fecha_defuncion',
     'especie', 'letra_especie',
-    'peso_declarado', 'peso_ingreso', 'peso_kg',
+    'peso_declarado', 'peso_ingreso',
     'tipo_servicio', 'codigo_servicio',
     'estado', 'ciclo_id', 'despacho_id',
     'veterinaria_id', 'tipo_precios', 'adicionales',
@@ -21,6 +21,7 @@ const SHEETS: Record<string, string[]> = {
     'id', 'fecha', 'numero_ciclo', 'litros_inicio', 'litros_fin',
     'mascotas_ids', 'comentarios',
     'hora_inicio', 'hora_fin', 'temperatura_camara',
+    'peso_total', 'lt_kg', 'lt_mascota',
     'fecha_creacion',
   ],
   cargas_petroleo: [
@@ -56,6 +57,15 @@ const SHEETS: Record<string, string[]> = {
   tipos_servicio: ['id', 'nombre', 'codigo', 'activo'],
   otros_servicios: ['id', 'nombre', 'precio', 'activo', 'fecha_creacion'],
   usuarios: ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion'],
+  asistencia: [
+    'id', 'usuario_id', 'usuario_nombre', 'fecha', 'dia_semana', 'es_findesemana',
+    'hora_entrada', 'hora_salida', 'minutos_trabajados', 'minutos_normales', 'minutos_extra',
+    'estado_aprobacion', 'aprobado_por', 'comentario', 'fecha_creacion',
+  ],
+  jornada_config: [
+    'id', 'vigente_desde', 'hora_entrada', 'hora_salida', 'precio_hora_extra',
+    'creado_por', 'fecha_creacion',
+  ],
 }
 
 export async function POST() {

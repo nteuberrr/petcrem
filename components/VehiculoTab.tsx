@@ -1,7 +1,8 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
 import { fmtLitros, fmtPrecio, fmtNumero } from '@/lib/format'
-import { formatDate, todayISO } from '@/lib/dates'
+import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
+import { Modal } from '@/components/ui/Modal'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
@@ -12,7 +13,7 @@ type Carga = {
 }
 
 type Resumen = { total_litros: number; total_km: number; total_monto: number; rendimiento_promedio: number }
-type Mensual = { mes: string; km: number; litros: number; km_por_litro: number }
+type Mensual = { mes: string; mes_label: string; km: number; litros: number; km_por_litro: number }
 
 export default function VehiculoTab() {
   const [cargas, setCargas] = useState<Carga[]>([])
@@ -23,6 +24,13 @@ export default function VehiculoTab() {
     fecha: todayISO(),
     litros: '', km_odometro: '', monto: '', comentarios: '',
   })
+
+  // Edición
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({
+    fecha: '', litros: '', km_odometro: '', monto: '', comentarios: '',
+  })
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const fetchAll = useCallback(async () => {
     const res = await fetch('/api/vehiculo')
@@ -64,6 +72,43 @@ export default function VehiculoTab() {
     await fetchAll()
   }
 
+  function abrirEditar(c: Carga) {
+    setEditId(c.id)
+    setEditForm({
+      fecha: formatDateForSheet(c.fecha),
+      litros: c.litros ?? '',
+      km_odometro: c.km_odometro ?? '',
+      monto: c.monto ?? '',
+      comentarios: c.comentarios ?? '',
+    })
+  }
+
+  async function guardarEdicion(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editId) return
+    setSavingEdit(true)
+    const res = await fetch('/api/vehiculo', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editId,
+        fecha: editForm.fecha,
+        litros: parseFloat(editForm.litros) || 0,
+        km_odometro: parseFloat(editForm.km_odometro) || 0,
+        monto: parseFloat(editForm.monto) || 0,
+        comentarios: editForm.comentarios,
+      }),
+    })
+    if (res.ok) {
+      setEditId(null)
+      await fetchAll()
+    } else {
+      const err = await res.json().catch(() => ({}))
+      alert(`Error: ${err.error ?? res.status}`)
+    }
+    setSavingEdit(false)
+  }
+
   // Cargas en orden cronológico ascendente para calcular km/lt por fila
   const cronologicas = cargas.slice().reverse()
 
@@ -73,7 +118,7 @@ export default function VehiculoTab() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total litros" value={fmtLitros(resumen.total_litros)} />
         <KpiCard label="Total km" value={`${fmtNumero(resumen.total_km, 0)} km`} />
-        <KpiCard label="Total monto" value={fmtPrecio(resumen.total_monto)} />
+        <KpiCard label="Costo total combustible" value={fmtPrecio(resumen.total_monto)} />
         <KpiCard label="Rendimiento promedio" value={`${fmtNumero(resumen.rendimiento_promedio, 2)} km/lt`} />
       </div>
 
@@ -98,9 +143,10 @@ export default function VehiculoTab() {
                 className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-700">Monto ($)</label>
+              <label className="text-xs font-medium text-gray-700">Precio por litro ($)</label>
               <input type="number" min="0" value={form.monto} onChange={e => setForm(f => ({ ...f, monto: e.target.value }))}
                 className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <p className="text-[10px] text-gray-500 mt-0.5">El costo total se calcula automáticamente (precio × litros).</p>
             </div>
           </div>
           <div>
@@ -126,7 +172,7 @@ export default function VehiculoTab() {
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={mensual}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }} />
+              <XAxis dataKey="mes_label" fontSize={11} tick={{ fill: '#6b7280' }} />
               <YAxis fontSize={11} tick={{ fill: '#6b7280' }} />
               <Tooltip formatter={(v) => `${fmtNumero(v as number, 2)} km/lt`} />
               <Line type="monotone" dataKey="km_por_litro" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
@@ -144,10 +190,10 @@ export default function VehiculoTab() {
           <div className="p-8 text-center text-gray-400 text-sm">Sin cargas registradas</div>
         ) : (
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
+          <table className="w-full text-sm min-w-[820px]">
             <thead className="bg-gray-50">
               <tr>
-                {['Fecha', 'Km odómetro', 'Litros', 'Monto', 'Km/lt anterior', 'Comentarios', ''].map(h => (
+                {['Fecha', 'Km odómetro', 'Litros', 'Precio/lt', 'Costo total', 'Km/lt anterior', 'Comentarios', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
                 ))}
               </tr>
@@ -163,21 +209,31 @@ export default function VehiculoTab() {
                   const litros = parseFloat(c.litros) || 0
                   if (litros > 0 && deltaKm > 0) kmPorLt = deltaKm / litros
                 }
+                const litrosNum = parseFloat(c.litros) || 0
+                const precioLt = parseFloat(c.monto) || 0
+                const costoTotal = precioLt * litrosNum
                 return (
                   <tr key={c.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-700">{formatDate(c.fecha)}</td>
                     <td className="px-4 py-3 text-gray-700">{fmtNumero(c.km_odometro, 0)} km</td>
                     <td className="px-4 py-3 text-gray-700">{fmtLitros(c.litros)}</td>
-                    <td className="px-4 py-3 text-gray-700">{fmtPrecio(c.monto)}</td>
+                    <td className="px-4 py-3 text-gray-700">{fmtPrecio(precioLt)}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-900">{fmtPrecio(costoTotal)}</td>
                     <td className="px-4 py-3 font-medium text-gray-900">
                       {kmPorLt !== null ? `${fmtNumero(kmPorLt, 2)} km/lt` : '—'}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{c.comentarios}</td>
                     <td className="px-4 py-3">
-                      <button onClick={() => eliminar(c.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
-                        Eliminar
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => abrirEditar(c)}
+                          className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                          Editar
+                        </button>
+                        <button onClick={() => eliminar(c.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                          Eliminar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -187,6 +243,49 @@ export default function VehiculoTab() {
           </div>
         )}
       </div>
+
+      {/* Modal editar carga vehículo */}
+      <Modal open={!!editId} onClose={() => setEditId(null)} title="Editar carga de combustible">
+        <form onSubmit={guardarEdicion} className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Fecha</label>
+              <input type="date" required value={editForm.fecha} onChange={e => setEditForm(f => ({ ...f, fecha: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Km odómetro</label>
+              <input type="number" step="1" required value={editForm.km_odometro} onChange={e => setEditForm(f => ({ ...f, km_odometro: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Litros</label>
+              <input type="number" step="0.01" required value={editForm.litros} onChange={e => setEditForm(f => ({ ...f, litros: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Precio por litro ($)</label>
+              <input type="number" min="0" value={editForm.monto} onChange={e => setEditForm(f => ({ ...f, monto: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-700">Comentarios</label>
+            <input value={editForm.comentarios} onChange={e => setEditForm(f => ({ ...f, comentarios: e.target.value }))}
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => setEditId(null)}
+              className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={savingEdit}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+              {savingEdit ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </>
   )
 }

@@ -16,9 +16,7 @@ const ClienteSchema = z.object({
   fecha_retiro: z.string().min(1, 'Fecha de retiro requerida'),
   especie: z.string().min(1, 'Especie requerida'),
   letra_especie: z.string().length(1),
-  // Compat: acepta peso_declarado (nuevo) o peso_kg (legacy)
-  peso_declarado: z.number().positive().optional(),
-  peso_kg: z.number().positive().optional(),
+  peso_declarado: z.number().positive(),
   peso_ingreso: z.number().positive().optional(),
   tipo_servicio: z.string().min(1, 'Servicio requerido'),
   codigo_servicio: z.enum(['CI', 'CP', 'SD']),
@@ -26,8 +24,6 @@ const ClienteSchema = z.object({
   estado_pago: z.string().min(1, 'Estado de pago requerido'),
   veterinaria_id: z.string().optional(),
   adicionales: z.string().optional(),
-}).refine(d => d.peso_declarado !== undefined || d.peso_kg !== undefined, {
-  message: 'peso_declarado (o peso_kg) es requerido',
 })
 
 export async function GET(req: NextRequest) {
@@ -65,7 +61,6 @@ export async function POST(req: NextRequest) {
     const codigo = await generarCodigo(data.letra_especie, data.codigo_servicio)
     const id = await getNextId('clientes')
     const now = todayISO()
-    const pesoDeclarado = data.peso_declarado ?? data.peso_kg ?? 0
     const row = {
       id,
       codigo,
@@ -80,10 +75,8 @@ export async function POST(req: NextRequest) {
       fecha_retiro: data.fecha_retiro,
       especie: data.especie,
       letra_especie: data.letra_especie,
-      // Escribe ambas columnas: peso_declarado (nueva) y peso_kg (legacy) para compat
-      peso_declarado: String(pesoDeclarado),
-      peso_kg: String(pesoDeclarado),
-      peso_ingreso: data.peso_ingreso !== undefined ? String(data.peso_ingreso) : '',
+      peso_declarado: data.peso_declarado,
+      peso_ingreso: data.peso_ingreso !== undefined ? data.peso_ingreso : '',
       tipo_servicio: data.tipo_servicio,
       codigo_servicio: data.codigo_servicio,
       estado: 'pendiente',

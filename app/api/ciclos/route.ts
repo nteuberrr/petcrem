@@ -38,29 +38,43 @@ export async function POST(req: NextRequest) {
     const numeros = ciclos.map(c => parseInt(c.numero_ciclo || '0', 10)).filter(n => !isNaN(n))
     const numeroCiclo = (numeros.length ? Math.max(...numeros) : 0) + 1
 
-    await ensureColumns('ciclos', ['hora_inicio', 'hora_fin', 'temperatura_camara'])
+    await ensureColumns('ciclos', ['hora_inicio', 'hora_fin', 'temperatura_camara', 'peso_total', 'lt_kg', 'lt_mascota'])
 
     const id = await getNextId('ciclos')
     const now = todayISO()
 
+    // Calcular peso total + ratios para snapshot en planilla
+    const clientes = await getSheetData('clientes')
+    const idxById = new Map(clientes.map((c, i) => [c.id, i]))
+    const pesoTotal = data.mascotas_ids.reduce((sum, mid) => {
+      const idx = idxById.get(mid)
+      if (idx === undefined) return sum
+      const m = clientes[idx]
+      const peso = parseFloat(m.peso_ingreso) || parseFloat(m.peso_declarado) || 0
+      return sum + peso
+    }, 0)
+    const litrosUsados = Math.abs(data.litros_fin - data.litros_inicio)
+    const ltKg = pesoTotal > 0 ? litrosUsados / pesoTotal : 0
+    const ltMascota = data.mascotas_ids.length > 0 ? litrosUsados / data.mascotas_ids.length : 0
+
     const row = {
       id,
       fecha: data.fecha,
-      numero_ciclo: String(numeroCiclo),
-      litros_inicio: String(data.litros_inicio),
-      litros_fin: String(data.litros_fin),
+      numero_ciclo: numeroCiclo, // number crudo
+      litros_inicio: data.litros_inicio,
+      litros_fin: data.litros_fin,
       mascotas_ids: JSON.stringify(data.mascotas_ids),
       comentarios: data.comentarios,
       hora_inicio: data.hora_inicio ?? '',
       hora_fin: data.hora_fin ?? '',
       temperatura_camara: data.temperatura_camara ?? '',
+      peso_total: pesoTotal,
+      lt_kg: ltKg,
+      lt_mascota: ltMascota,
       fecha_creacion: now,
     }
     await appendRow('ciclos', row)
 
-    // Actualizar clientes incluidos a estado "cremado"
-    const clientes = await getSheetData('clientes')
-    const idxById = new Map(clientes.map((c, i) => [c.id, i]))
     await Promise.all(
       data.mascotas_ids.map((mascotaId) => {
         const idx = idxById.get(mascotaId)

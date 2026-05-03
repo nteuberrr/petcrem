@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/Badge'
+import { Modal } from '@/components/ui/Modal'
 import { fmtLitros, fmtPrecio, fmtFecha } from '@/lib/format'
 
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
@@ -20,7 +21,6 @@ type ClienteDetalle = {
   fecha_retiro: string
   especie: string
   letra_especie: string
-  peso_kg: string
   peso_declarado: string
   peso_ingreso: string
   despacho_id: string
@@ -59,6 +59,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [descargandoCert, setDescargandoCert] = useState(false)
+  const [showCertModal, setShowCertModal] = useState(false)
+  const [certFoto, setCertFoto] = useState<File | null>(null)
+  const [certSinFoto, setCertSinFoto] = useState(false)
+  const [certError, setCertError] = useState('')
+  const certInputRef = useRef<HTMLInputElement>(null)
   const [form, setForm] = useState<Partial<ClienteDetalle>>({})
   const [veterinarias, setVeterinarias] = useState<Veterinario[]>([])
   const [esVeterinaria, setEsVeterinaria] = useState(false)
@@ -76,8 +81,6 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     fetch(`/api/clientes/${id}`)
       .then(r => r.json())
       .then(d => {
-        // Retrocompat: si viene peso_kg pero no peso_declarado, copiar
-        if (!d.peso_declarado && d.peso_kg) d.peso_declarado = d.peso_kg
         setCliente(d)
         setForm(d)
         if (d.veterinaria_id) setEsVeterinaria(true)
@@ -129,22 +132,40 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     }
   }, [form.veterinaria_id, veterinarias])
 
-  async function descargarCertificado() {
+  function abrirModalCertificado() {
+    setCertFoto(null)
+    setCertSinFoto(false)
+    setCertError('')
+    setShowCertModal(true)
+  }
+
+  async function generarCertificado(e: React.FormEvent) {
+    e.preventDefault()
+    setCertError('')
+    if (!certSinFoto && !certFoto) {
+      setCertError('Subí una foto o tildá "Generar sin foto"')
+      return
+    }
     setDescargandoCert(true)
     try {
-      const res = await fetch(`/api/clientes/${id}/certificado`)
+      const fd = new FormData()
+      fd.append('sin_foto', certSinFoto ? 'true' : 'false')
+      if (!certSinFoto && certFoto) fd.append('foto', certFoto)
+
+      const res = await fetch(`/api/clientes/${id}/certificado`, { method: 'POST', body: fd })
       if (!res.ok) {
-        const err = await res.json()
-        alert(err.error ?? 'Error generando el certificado')
+        const err = await res.json().catch(() => ({}))
+        setCertError(err.error ?? 'Error generando el certificado')
         return
       }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `certificado-${cliente?.codigo ?? id}.pdf`
+      a.download = `Certificado_${cliente?.nombre_mascota ?? id}_${cliente?.codigo ?? id}.pdf`
       a.click()
       URL.revokeObjectURL(url)
+      setShowCertModal(false)
     } finally {
       setDescargandoCert(false)
     }
@@ -220,7 +241,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
   // Preferir peso_ingreso (real) sobre peso_declarado para el cálculo del servicio
   const pesoIngreso = parseFloat(form.peso_ingreso || '') || 0
-  const pesoDeclarado = parseFloat(form.peso_declarado || form.peso_kg || '') || 0
+  const pesoDeclarado = parseFloat(form.peso_declarado || '') || 0
   const pesoKg = pesoIngreso > 0 ? pesoIngreso : pesoDeclarado
   const tramoAplicable = encontrarTramo(tablaPrecios, pesoKg)
   const codigoServ = form.codigo_servicio ?? 'CI'
@@ -274,11 +295,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
         {cliente.estado === 'cremado' && (
           <button
-            onClick={descargarCertificado}
+            onClick={abrirModalCertificado}
             disabled={descargandoCert}
             className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
           >
-            {descargandoCert ? '⏳ Generando...' : '📄 Certificado PDF'}
+            📄 Certificado PDF
           </button>
         )}
       </div>
@@ -315,11 +336,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <Field required label="Fecha de retiro" type="date" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
           <Field label="Fecha de defunción" type="date" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
           <Field required label="Especie" value={form.especie} onChange={v => setForm(f => ({ ...f, especie: v }))} />
-          <Field required label="Peso declarado (kg)" type="number" step="0.1" value={form.peso_declarado || form.peso_kg} onChange={v => setForm(f => ({ ...f, peso_declarado: v, peso_kg: v }))} />
+          <Field required label="Peso declarado (kg)" type="number" step="0.1" value={form.peso_declarado} onChange={v => setForm(f => ({ ...f, peso_declarado: v }))} />
           <PesoIngresoField
             value={form.peso_ingreso ?? ''}
             onChange={v => setForm(f => ({ ...f, peso_ingreso: v }))}
-            pesoDeclarado={parseFloat(form.peso_declarado || form.peso_kg || '0') || 0}
+            pesoDeclarado={parseFloat(form.peso_declarado || '0') || 0}
             tabla={tablaPrecios}
             codigoServ={form.codigo_servicio ?? 'CI'}
           />
@@ -601,6 +622,71 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           </div>
         </div>
       </div>
+
+      {/* Modal generar certificado */}
+      <Modal open={showCertModal} onClose={() => setShowCertModal(false)} title="Generar certificado de cremación">
+        <form onSubmit={generarCertificado} className="space-y-4">
+          <div className="text-sm text-gray-600">
+            Mascota: <b>{cliente.nombre_mascota}</b> · {cliente.codigo}
+          </div>
+
+          {!certSinFoto && (
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Foto de la mascota (jpg/png)</label>
+              <div className="mt-1 flex items-center gap-3">
+                <input
+                  ref={certInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png"
+                  onChange={e => setCertFoto(e.target.files?.[0] ?? null)}
+                  className="hidden"
+                />
+                <button type="button" onClick={() => certInputRef.current?.click()}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors">
+                  📷 Subir foto
+                </button>
+                {certFoto ? (
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-xs text-gray-700 truncate">{certFoto.name}</span>
+                    <button type="button" onClick={() => setCertFoto(null)}
+                      className="text-xs text-red-600 hover:text-red-800 font-semibold">Quitar</button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-400">Ninguna foto seleccionada</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 pt-1 border-t-2 border-gray-100">
+            <input
+              type="checkbox"
+              id="cert-sin-foto"
+              checked={certSinFoto}
+              onChange={e => { setCertSinFoto(e.target.checked); if (e.target.checked) setCertFoto(null) }}
+              className="w-4 h-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
+            />
+            <label htmlFor="cert-sin-foto" className="text-sm font-medium text-gray-700">
+              Generar sin foto
+            </label>
+          </div>
+
+          {certError && (
+            <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{certError}</p>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => setShowCertModal(false)}
+              className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={descargandoCert}
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+              {descargandoCert ? '⏳ Generando...' : '📄 Generar PDF'}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
     </div>
   )

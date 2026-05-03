@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateRow, ensureColumns, deleteRow } from '@/lib/google-sheets'
+import { parseDecimal } from '@/lib/numbers'
 
 export async function GET(
   _req: NextRequest,
@@ -49,7 +50,16 @@ export async function PATCH(
       await adjustProductStock(oldAdicionales, newAdicionales)
     }
 
-    const updated = { ...rows[idx], ...body }
+    // Normalizar pesos: aceptar coma decimal y guardar como number
+    const normalizedBody = { ...body }
+    for (const k of ['peso_declarado', 'peso_ingreso']) {
+      if (normalizedBody[k] !== undefined && normalizedBody[k] !== '') {
+        const n = parseDecimal(normalizedBody[k])
+        if (n !== null) normalizedBody[k] = n
+      }
+    }
+
+    const updated = { ...rows[idx], ...normalizedBody }
     await updateRow('clientes', idx, updated)
     return NextResponse.json(updated)
   } catch (e) {

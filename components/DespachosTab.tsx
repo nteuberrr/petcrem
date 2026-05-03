@@ -1,7 +1,7 @@
 'use client'
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { fmtNumero } from '@/lib/format'
-import { formatDate, todayISO } from '@/lib/dates'
+import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
 
 type Cliente = {
@@ -30,6 +30,15 @@ export default function DespachosTab() {
   const [disponibles, setDisponibles] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(false)
   const [buscar, setBuscar] = useState('')
+
+  // Edición
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editFecha, setEditFecha] = useState('')
+  const [editNota, setEditNota] = useState('')
+  const [editMascotas, setEditMascotas] = useState<Cliente[]>([])
+  const [editDisponibles, setEditDisponibles] = useState<Cliente[]>([])
+  const [editBuscar, setEditBuscar] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const fetchDespachos = useCallback(async () => {
     const res = await fetch('/api/despachos')
@@ -96,6 +105,69 @@ export default function DespachosTab() {
       setClientesMap(m => ({ ...m, ...map }))
     }
   }
+
+  async function abrirEditar(d: Despacho) {
+    setEditId(d.id)
+    setEditFecha(formatDateForSheet(d.fecha))
+    setEditNota(d.nota ?? '')
+    setEditBuscar('')
+    // Resolver mascotas actuales + traer disponibles (cremados)
+    const all: Cliente[] = await fetch('/api/clientes').then(r => r.json()).catch(() => [])
+    const byId = new Map(Array.isArray(all) ? all.map((c: Cliente) => [c.id, c]) : [])
+    const actuales = d.mascotas_ids.map(id => byId.get(id)).filter((x): x is Cliente => !!x)
+    setEditMascotas(actuales)
+    const cremadosLibres = (Array.isArray(all) ? all : []).filter((c: Cliente) => c.estado === 'cremado')
+    setEditDisponibles(cremadosLibres)
+  }
+
+  function quitarEdit(id: string) {
+    setEditMascotas(s => s.filter(x => x.id !== id))
+  }
+
+  function agregarEdit(c: Cliente) {
+    setEditMascotas(s => s.some(x => x.id === c.id) ? s : [...s, c])
+  }
+
+  async function guardarEdicion(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editId) return
+    if (editMascotas.length === 0) return alert('El recorrido debe tener al menos una mascota')
+    setSavingEdit(true)
+    const res = await fetch('/api/despachos', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editId,
+        fecha: editFecha,
+        nota: editNota,
+        mascotas_ids: editMascotas.map(m => m.id),
+      }),
+    })
+    if (res.ok) {
+      setEditId(null)
+      await fetchDespachos()
+    } else {
+      const err = await res.json().catch(() => ({}))
+      alert(`Error: ${err.error ?? res.status}`)
+    }
+    setSavingEdit(false)
+  }
+
+  async function eliminar(id: string, numero: string) {
+    if (!confirm(`¿Eliminar el recorrido N°${numero}? Las mascotas vuelven a estado "cremado".`)) return
+    const res = await fetch(`/api/despachos?id=${id}`, { method: 'DELETE' })
+    if (res.ok) await fetchDespachos()
+    else alert('Error al eliminar')
+  }
+
+  const editDisponiblesFiltradas = editDisponibles.filter(p => {
+    if (editMascotas.some(m => m.id === p.id)) return false // ya está en la lista
+    if (!editBuscar) return true
+    const q = editBuscar.toLowerCase()
+    return p.nombre_mascota.toLowerCase().includes(q) ||
+      p.nombre_tutor.toLowerCase().includes(q) ||
+      p.codigo.toLowerCase().includes(q)
+  })
 
   const disponiblesFiltradas = disponibles.filter(p => {
     if (!buscar) return true
@@ -174,7 +246,7 @@ export default function DespachosTab() {
           <table className="w-full text-sm min-w-[600px]">
             <thead className="bg-gray-50">
               <tr>
-                {['N° Recorrido', 'Fecha', 'Mascotas', 'Nota', ''].map(h => (
+                {['N° Recorrido', 'Fecha', 'Mascotas', 'Nota', 'Acciones', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
                 ))}
               </tr>
@@ -182,16 +254,28 @@ export default function DespachosTab() {
             <tbody className="divide-y divide-gray-100">
               {despachos.map(d => (
                 <Fragment key={d.id}>
-                  <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => toggleExpandir(d)}>
-                    <td className="px-4 py-3 font-semibold text-gray-900">N° {d.numero_recorrido}</td>
-                    <td className="px-4 py-3 text-gray-700">{formatDate(d.fecha)}</td>
-                    <td className="px-4 py-3 text-gray-700">{fmtNumero(d.mascotas_ids.length)}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{d.nota || '—'}</td>
-                    <td className="px-4 py-3 text-gray-400">{expandido === d.id ? '▲' : '▼'}</td>
+                  <tr className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-semibold text-gray-900 cursor-pointer" onClick={() => toggleExpandir(d)}>N° {d.numero_recorrido}</td>
+                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(d)}>{formatDate(d.fecha)}</td>
+                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(d)}>{fmtNumero(d.mascotas_ids.length)}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate cursor-pointer" onClick={() => toggleExpandir(d)}>{d.nota || '—'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button onClick={(e) => { e.stopPropagation(); abrirEditar(d) }}
+                          className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                          Editar
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); eliminar(d.id, d.numero_recorrido) }}
+                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-400 cursor-pointer" onClick={() => toggleExpandir(d)}>{expandido === d.id ? '▲' : '▼'}</td>
                   </tr>
                   {expandido === d.id && (
                     <tr>
-                      <td colSpan={5} className="px-6 py-4 bg-gray-50">
+                      <td colSpan={6} className="px-6 py-4 bg-gray-50">
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="text-gray-500">
@@ -274,6 +358,73 @@ export default function DespachosTab() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal editar despacho */}
+      <Modal open={!!editId} onClose={() => setEditId(null)} title="Editar recorrido">
+        <form onSubmit={guardarEdicion} className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-gray-700">Fecha</label>
+            <input type="date" required value={editFecha} onChange={e => setEditFecha(e.target.value)}
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-700">Nota</label>
+            <textarea rows={2} value={editNota} onChange={e => setEditNota(e.target.value)}
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-700">
+              Mascotas asignadas ({editMascotas.length})
+            </label>
+            <div className="mt-1 border-2 border-gray-300 rounded-lg divide-y divide-gray-100 max-h-48 overflow-y-auto">
+              {editMascotas.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-3">Ninguna mascota asignada</p>
+              ) : editMascotas.map(c => (
+                <div key={c.id} className="flex items-center justify-between px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
+                    <span className="ml-2 text-sm text-gray-900">{c.nombre_mascota}</span>
+                    <span className="ml-1 text-xs text-gray-500">({c.nombre_tutor})</span>
+                  </div>
+                  <button type="button" onClick={() => quitarEdit(c.id)}
+                    className="text-red-500 hover:text-red-700 text-lg leading-none w-6 h-6 flex items-center justify-center">×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-700">Agregar mascotas (cremadas disponibles)</label>
+            <input type="text" placeholder="Buscar..." value={editBuscar} onChange={e => setEditBuscar(e.target.value)}
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <div className="mt-2 max-h-48 overflow-y-auto divide-y divide-gray-100 border-2 border-gray-200 rounded-lg">
+              {editDisponiblesFiltradas.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-3">Sin mascotas disponibles</p>
+              ) : editDisponiblesFiltradas.map(c => (
+                <button type="button" key={c.id} onClick={() => agregarEdit(c)}
+                  className="w-full text-left px-3 py-2 hover:bg-emerald-50 transition-colors">
+                  <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
+                  <span className="ml-2 text-sm text-gray-900">{c.nombre_mascota}</span>
+                  <span className="ml-1 text-xs text-gray-500">({c.nombre_tutor})</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => setEditId(null)}
+              className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={savingEdit}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+              {savingEdit ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
       </Modal>
     </>
   )

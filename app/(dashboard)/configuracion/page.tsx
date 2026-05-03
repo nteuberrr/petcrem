@@ -6,7 +6,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 
-const TABS = ['Precios', 'Productos', 'Especies', 'Tipos servicio', 'Otros servicios', 'Usuarios'] as const
+const TABS = ['Precios', 'Productos', 'Especies', 'Tipos servicio', 'Otros servicios', 'Usuarios', 'Jornada', 'Mantenimiento'] as const
 type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
 
@@ -24,6 +24,85 @@ export default function ConfiguracionPage() {
 
   const [tab, setTab] = useState<Tab>('Precios')
   const [precioTab, setPrecioTab] = useState<PrecioSubTab>('general')
+
+  // Jornada (config + histórico)
+  type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number }
+  const [jornadaConfigs, setJornadaConfigs] = useState<JornadaCfg[]>([])
+  const [jornadaVigente, setJornadaVigente] = useState<JornadaCfg | null>(null)
+  const [jornadaForm, setJornadaForm] = useState({ vigente_desde: '', hora_entrada: '09:00', hora_salida: '18:00', precio_hora_extra: '' })
+  const [savingJornada, setSavingJornada] = useState(false)
+  const [jornadaError, setJornadaError] = useState('')
+
+  const fetchJornada = useCallback(async () => {
+    const res = await fetch('/api/jornada-config')
+    const data = await res.json()
+    if (Array.isArray(data?.configs)) setJornadaConfigs(data.configs)
+    setJornadaVigente(data?.vigente ?? null)
+  }, [])
+
+  async function guardarJornada(e: React.FormEvent) {
+    e.preventDefault()
+    setJornadaError('')
+    if (!jornadaForm.vigente_desde) return setJornadaError('Indica desde cuándo aplica esta jornada')
+    setSavingJornada(true)
+    const res = await fetch('/api/jornada-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vigente_desde: jornadaForm.vigente_desde,
+        hora_entrada: jornadaForm.hora_entrada,
+        hora_salida: jornadaForm.hora_salida,
+        precio_hora_extra: parseFloat(jornadaForm.precio_hora_extra) || 0,
+      }),
+    })
+    if (res.ok) {
+      setJornadaForm({ vigente_desde: '', hora_entrada: '09:00', hora_salida: '18:00', precio_hora_extra: '' })
+      await fetchJornada()
+    } else {
+      const err = await res.json().catch(() => ({}))
+      setJornadaError(err?.error ?? 'Error al guardar')
+    }
+    setSavingJornada(false)
+  }
+
+  // Mantenimiento: sync de la planilla — clientes + vehiculo + petroleo
+  type ClientesResult = {
+    total_filas: number
+    filas_actualizadas: number
+    cambios: { id: string; codigo: string; nombre_mascota: string; campos: string[] }[]
+    warnings: { id: string; codigo: string; nombre_mascota: string; aviso: string }[]
+  }
+  type NumberSyncResult = {
+    total_filas: number
+    filas_actualizadas: number
+    cambios: { id: string; fecha: string; campos: string[] }[]
+  }
+  type SyncResult = {
+    ok: boolean
+    clientes: ClientesResult
+    vehiculo: NumberSyncResult
+    petroleo: NumberSyncResult
+  }
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null)
+  const [syncError, setSyncError] = useState('')
+
+  async function ejecutarSync() {
+    if (!confirm('Esto va a normalizar las hojas: clientes (estados vacíos → "pendiente"), vehiculo_cargas y cargas_petroleo (números string → number con coma decimal). ¿Continuar?')) return
+    setSyncing(true)
+    setSyncError('')
+    setSyncResult(null)
+    try {
+      const res = await fetch('/api/sync-database', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) setSyncResult(data)
+      else setSyncError(data?.error ?? `HTTP ${res.status}`)
+    } catch (e) {
+      setSyncError(String(e))
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const [productos, setProductos] = useState<Producto[]>([])
   const [preciosG, setPreciosG] = useState<Tramo[]>([])
@@ -88,6 +167,7 @@ export default function ConfiguracionPage() {
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+  useEffect(() => { fetchJornada() }, [fetchJornada])
 
   const patch = async (url: string, body: object) => {
     const res = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -529,6 +609,224 @@ export default function ConfiguracionPage() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {tab === 'Jornada' && (
+        <div className="space-y-6 max-w-3xl">
+          {/* Vigente */}
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
+            <h2 className="text-base font-bold text-gray-900 mb-3">Jornada vigente</h2>
+            {jornadaVigente ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase">Desde</p>
+                  <p className="text-gray-900 font-medium mt-0.5">{jornadaVigente.vigente_desde}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase">Entrada</p>
+                  <p className="text-gray-900 font-medium mt-0.5">{jornadaVigente.hora_entrada}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase">Salida</p>
+                  <p className="text-gray-900 font-medium mt-0.5">{jornadaVigente.hora_salida}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase">Hora extra</p>
+                  <p className="text-gray-900 font-medium mt-0.5">{fmtPrecio(jornadaVigente.precio_hora_extra)}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-amber-700 bg-amber-50 border-2 border-amber-200 rounded-lg p-3">
+                ⚠ No hay jornada configurada. Los operadores no van a poder fichar hasta que crees una.
+              </p>
+            )}
+          </div>
+
+          {/* Crear nueva */}
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
+            <h2 className="text-base font-bold text-gray-900 mb-1">Nueva configuración</h2>
+            <p className="text-xs text-gray-500 mb-4">Aplica desde la fecha indicada en adelante. Los registros previos mantienen su jornada original.</p>
+            <form onSubmit={guardarJornada} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Vigente desde</label>
+                  <input type="date" required value={jornadaForm.vigente_desde} onChange={e => setJornadaForm(f => ({ ...f, vigente_desde: e.target.value }))}
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Hora entrada</label>
+                  <input type="time" required value={jornadaForm.hora_entrada} onChange={e => setJornadaForm(f => ({ ...f, hora_entrada: e.target.value }))}
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Hora salida</label>
+                  <input type="time" required value={jornadaForm.hora_salida} onChange={e => setJornadaForm(f => ({ ...f, hora_salida: e.target.value }))}
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">$ hora extra</label>
+                  <input type="number" min="0" required value={jornadaForm.precio_hora_extra} onChange={e => setJornadaForm(f => ({ ...f, precio_hora_extra: e.target.value }))}
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+              </div>
+              {jornadaError && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{jornadaError}</p>}
+              <button type="submit" disabled={savingJornada}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+                {savingJornada ? 'Guardando...' : 'Guardar configuración'}
+              </button>
+            </form>
+          </div>
+
+          {/* Histórico */}
+          {jornadaConfigs.length > 0 && (
+            <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b-2 border-gray-200">
+                <h2 className="text-base font-bold text-gray-900">Histórico de configuraciones</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[480px]">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {['Vigente desde', 'Entrada', 'Salida', '$ hora extra'].map(h => (
+                        <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {jornadaConfigs.map(c => (
+                      <tr key={c.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-900 font-medium">{c.vigente_desde}</td>
+                        <td className="px-4 py-3 text-gray-700">{c.hora_entrada}</td>
+                        <td className="px-4 py-3 text-gray-700">{c.hora_salida}</td>
+                        <td className="px-4 py-3 text-gray-700">{fmtPrecio(c.precio_hora_extra)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'Mantenimiento' && (
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 max-w-3xl">
+          <h2 className="text-base font-bold text-gray-900 mb-2">Actualizar base de datos</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Si editaste la hoja de Google Sheets directamente (por ejemplo, agregaste filas
+            nuevas a mano), tocá este botón para que la app rellene los campos por defecto:
+          </p>
+          <ul className="text-xs text-gray-600 mb-5 space-y-1 list-disc pl-5">
+            <li><b>Clientes</b>: estado vacío → <code className="bg-gray-100 px-1 rounded">pendiente</code>, estado_pago vacío → <code className="bg-gray-100 px-1 rounded">pendiente</code>, misma_direccion vacío → <code className="bg-gray-100 px-1 rounded">FALSE</code></li>
+            <li><b>Vehículo</b>: litros, km y monto guardados como texto se convierten a número (decimales con coma en vez de punto)</li>
+            <li><b>Petróleo</b>: litros, neto, IVA, específico y total bruto pasan a número</li>
+          </ul>
+          <p className="text-xs text-amber-700 bg-amber-50 border-2 border-amber-200 rounded-lg p-3 mb-5">
+            ⚠️ Hacé un backup manual de la hoja antes (Archivo → Hacer copia) si tenés muchos datos.
+          </p>
+          <button
+            onClick={ejecutarSync}
+            disabled={syncing}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50"
+          >
+            {syncing ? 'Actualizando...' : '🔄 Actualizar base de datos'}
+          </button>
+
+          {syncError && (
+            <div className="mt-4 rounded-lg border-2 border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 font-medium">
+              Error: {syncError}
+            </div>
+          )}
+
+          {syncResult && (
+            <div className="mt-5 space-y-4">
+              {/* Clientes */}
+              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
+                <p className="text-sm font-bold text-emerald-900">
+                  ✓ Clientes: {syncResult.clientes.filas_actualizadas} de {syncResult.clientes.total_filas} filas actualizadas
+                </p>
+              </div>
+              {syncResult.clientes.cambios.length > 0 && (
+                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
+                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
+                    Detalle clientes ({syncResult.clientes.cambios.length})
+                  </summary>
+                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
+                    {syncResult.clientes.cambios.map(c => (
+                      <li key={c.id} className="text-xs text-gray-700 py-1">
+                        <span className="font-mono text-indigo-700 font-bold">{c.codigo}</span>{' '}
+                        <span className="font-semibold">{c.nombre_mascota}</span>{' '}
+                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {syncResult.clientes.warnings.length > 0 && (
+                <details className="rounded-lg border-2 border-amber-300 bg-amber-50 px-4 py-3">
+                  <summary className="text-sm font-semibold text-amber-900 cursor-pointer">
+                    ⚠ Avisos clientes ({syncResult.clientes.warnings.length}) — revisión manual
+                  </summary>
+                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
+                    {syncResult.clientes.warnings.map((w, i) => (
+                      <li key={i} className="text-xs text-amber-900 py-1">
+                        <span className="font-mono font-bold">{w.codigo}</span>{' '}
+                        <span className="font-semibold">{w.nombre_mascota}</span>{' '}
+                        <span>— {w.aviso}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              {/* Vehículo */}
+              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
+                <p className="text-sm font-bold text-emerald-900">
+                  ✓ Vehículo: {syncResult.vehiculo.filas_actualizadas} de {syncResult.vehiculo.total_filas} filas con números corregidos
+                </p>
+              </div>
+              {syncResult.vehiculo.cambios.length > 0 && (
+                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
+                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
+                    Detalle vehículo ({syncResult.vehiculo.cambios.length})
+                  </summary>
+                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
+                    {syncResult.vehiculo.cambios.map(c => (
+                      <li key={c.id} className="text-xs text-gray-700 py-1">
+                        <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
+                        <span>{c.fecha}</span>{' '}
+                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              {/* Petróleo */}
+              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
+                <p className="text-sm font-bold text-emerald-900">
+                  ✓ Petróleo: {syncResult.petroleo.filas_actualizadas} de {syncResult.petroleo.total_filas} filas con números corregidos
+                </p>
+              </div>
+              {syncResult.petroleo.cambios.length > 0 && (
+                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
+                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
+                    Detalle petróleo ({syncResult.petroleo.cambios.length})
+                  </summary>
+                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
+                    {syncResult.petroleo.cambios.map(c => (
+                      <li key={c.id} className="text-xs text-gray-700 py-1">
+                        <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
+                        <span>{c.fecha}</span>{' '}
+                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
         </div>
       )}
 

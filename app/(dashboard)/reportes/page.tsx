@@ -1,12 +1,21 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { fmtPrecio, fmtNumero as fmtNum, fmtLitros, fmtFecha } from '@/lib/format'
+import { formatDateForSheet } from '@/lib/dates'
 
 type ReporteData = {
-  kpis: { total_cremaciones_mes: number; pendientes: number; ciclos_mes: number; litros_mes: number; ingresos_mes: number }
+  kpis: {
+    total_cremaciones_mes: number; ingresos_clientes_mes: number; pendientes: number
+    ciclos_mes: number; litros_mes: number; ingresos_mes: number
+    litros_cargados_mes: number; costo_petroleo_mes: number
+    costo_vehiculo_mes: number; litros_vehiculo_mes: number
+    pendientes_pago: number; monto_pendiente: number
+  }
+  ratios: { litros_por_mascota: number; litros_por_ciclo: number; costo_vehiculo_por_mascota: number }
   por_especie: Record<string, number>
   por_tipo: Record<string, number>
-  ciclos: Array<{ id: string; fecha: string; numero_ciclo: string; litros_inicio: string; litros_fin: string; mascotas_ids: string[] }>
+  por_estado: Record<string, number>
+  ciclos: Array<{ id: string; fecha: string; numero_ciclo: string; litros_inicio: string; litros_fin: string; mascotas_ids: string[]; consumo: number; peso_total: number; lt_kg: number }>
 }
 
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
@@ -27,7 +36,21 @@ type VetReporteData = {
   totales_historicos: VetRanking[]
 }
 
-const TABS = ['Mensual', 'Configuraciones', 'Veterinarios'] as const
+type RegistroAsistencia = {
+  id: string
+  usuario_id: string
+  usuario_nombre: string
+  fecha: string
+  hora_entrada: string
+  hora_salida: string
+  minutos_trabajados: string
+  minutos_normales: string
+  minutos_extra: string
+  estado_aprobacion: string
+}
+type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number }
+
+const TABS = ['Mensual', 'Configuraciones', 'Veterinarios', 'Asistencia'] as const
 type Tab = typeof TABS[number]
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
@@ -39,6 +62,8 @@ export default function ReportesPage() {
   const [data, setData] = useState<ReporteData | null>(null)
   const [configData, setConfigData] = useState<ConfigData | null>(null)
   const [vetData, setVetData] = useState<VetReporteData | null>(null)
+  const [asistencia, setAsistencia] = useState<RegistroAsistencia[]>([])
+  const [jornadaVigente, setJornadaVigente] = useState<JornadaCfg | null>(null)
   const [loading, setLoading] = useState(false)
 
   const fetchReporte = useCallback(async () => {
@@ -62,11 +87,71 @@ export default function ReportesPage() {
     setLoading(false)
   }, [mes, anio])
 
+  const fetchAsistencia = useCallback(async () => {
+    setLoading(true)
+    const desde = `${anio}-${String(mes).padStart(2, '0')}-01`
+    const lastDay = new Date(anio, mes, 0).getDate()
+    const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    const [resAsist, resCfg] = await Promise.all([
+      fetch(`/api/asistencia?desde=${desde}&hasta=${hasta}`).then(r => r.json()),
+      fetch('/api/jornada-config').then(r => r.json()),
+    ])
+    setAsistencia(Array.isArray(resAsist) ? resAsist : [])
+    setJornadaVigente(resCfg?.vigente ?? null)
+    setLoading(false)
+  }, [mes, anio])
+
   useEffect(() => {
     if (tab === 'Mensual') fetchReporte()
     else if (tab === 'Configuraciones') fetchConfig()
     else if (tab === 'Veterinarios') fetchVets()
-  }, [tab, fetchReporte, fetchConfig, fetchVets])
+    else if (tab === 'Asistencia') fetchAsistencia()
+  }, [tab, fetchReporte, fetchConfig, fetchVets, fetchAsistencia])
+
+  // Resumen asistencia por operador
+  type ResumenOperador = {
+    usuario_id: string; usuario_nombre: string
+    minutos_normales: number; minutos_extra_aprobado: number; minutos_extra_pendiente: number; minutos_extra_rechazado: number
+    costo_extra: number
+    registros: number
+  }
+  const resumenAsistencia = useMemo<ResumenOperador[]>(() => {
+    const precio = jornadaVigente?.precio_hora_extra ?? 0
+    const m = new Map<string, ResumenOperador>()
+    for (const r of asistencia) {
+      let acc = m.get(r.usuario_id)
+      if (!acc) {
+        acc = { usuario_id: r.usuario_id, usuario_nombre: r.usuario_nombre, minutos_normales: 0, minutos_extra_aprobado: 0, minutos_extra_pendiente: 0, minutos_extra_rechazado: 0, costo_extra: 0, registros: 0 }
+        m.set(r.usuario_id, acc)
+      }
+      acc.minutos_normales += parseFloat(r.minutos_normales) || 0
+      const extra = parseFloat(r.minutos_extra) || 0
+      if (r.estado_aprobacion === 'aprobado') acc.minutos_extra_aprobado += extra
+      else if (r.estado_aprobacion === 'rechazado') acc.minutos_extra_rechazado += extra
+      else acc.minutos_extra_pendiente += extra
+      acc.registros += 1
+    }
+    for (const acc of m.values()) {
+      acc.costo_extra = (acc.minutos_extra_aprobado / 60) * precio
+    }
+    return Array.from(m.values()).sort((a, b) => b.minutos_extra_aprobado - a.minutos_extra_aprobado)
+  }, [asistencia, jornadaVigente])
+
+  async function aprobarRegistro(id: string, estado: 'aprobado' | 'rechazado') {
+    const res = await fetch('/api/asistencia', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, estado_aprobacion: estado }),
+    })
+    if (res.ok) await fetchAsistencia()
+  }
+
+  function fmtMinutos(mins: number): string {
+    if (mins <= 0) return '0:00'
+    const h = Math.floor(mins / 60)
+    const m = mins % 60
+    return `${h}:${String(m).padStart(2, '0')}`
+  }
 
   const fmt = fmtPrecio
 
@@ -87,11 +172,13 @@ export default function ReportesPage() {
 
     if (tipo === 'operacional' && data) {
       const rows = [
-        ['Ciclo', 'Fecha', 'Mascotas', 'Litros'],
+        ['Ciclo', 'Fecha', 'Mascotas', 'Peso total (kg)', 'Litros', 'Lt/kg'],
         ...data.ciclos.map(c => [
           `N° ${c.numero_ciclo}`, c.fecha,
           c.mascotas_ids.length,
-          Math.abs(parseFloat(c.litros_fin) - parseFloat(c.litros_inicio)),
+          c.peso_total,
+          c.consumo,
+          c.lt_kg,
         ]),
       ]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Operacional')
@@ -100,17 +187,50 @@ export default function ReportesPage() {
     if (tipo === 'ejecutivo' && data) {
       const resumen = [
         ['KPI', 'Valor'],
+        ['Mascotas ingresadas', data.kpis.ingresos_clientes_mes],
         ['Total cremaciones', data.kpis.total_cremaciones_mes],
-        ['Pendientes', data.kpis.pendientes],
+        ['En cámara', data.kpis.pendientes],
         ['Ciclos realizados', data.kpis.ciclos_mes],
-        ['Litros petróleo', data.kpis.litros_mes],
+        ['Litros consumidos', data.kpis.litros_mes],
+        ['Litros cargados', data.kpis.litros_cargados_mes],
+        ['Costo petróleo', data.kpis.costo_petroleo_mes],
+        ['Costo vehículo', data.kpis.costo_vehiculo_mes],
         ['Ingresos estimados', data.kpis.ingresos_mes],
+        ['Pagos pendientes', data.kpis.pendientes_pago],
+        ['Monto por cobrar', data.kpis.monto_pendiente],
+        [],
+        ['Ratio', 'Valor'],
+        ['Litros / mascota', data.ratios.litros_por_mascota],
+        ['Litros / ciclo', data.ratios.litros_por_ciclo],
+        ['Costo vehículo / mascota', data.ratios.costo_vehiculo_por_mascota],
       ]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Resumen')
       const crema = [['Especie', 'Cantidad'], ...Object.entries(data.por_especie).map(([k, v]) => [k, v])]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(crema), 'Cremaciones')
-      const ciclos = [['Ciclo', 'Fecha', 'Mascotas', 'Litros'], ...data.ciclos.map(c => [`N° ${c.numero_ciclo}`, c.fecha, c.mascotas_ids.length, Math.abs(parseFloat(c.litros_fin) - parseFloat(c.litros_inicio))])]
+      const ciclos = [['Ciclo', 'Fecha', 'Mascotas', 'Peso total (kg)', 'Litros', 'Lt/kg'],
+        ...data.ciclos.map(c => [`N° ${c.numero_ciclo}`, c.fecha, c.mascotas_ids.length, c.peso_total, c.consumo, c.lt_kg])]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ciclos), 'Operacional')
+    }
+
+    if (tipo === 'asistencia') {
+      const resumen = [
+        ['Operador', 'Hs normales', 'Hs extra aprobadas', 'Hs extra pendientes', 'Hs extra rechazadas', 'Costo extra (aprobado)', 'Registros'],
+        ...resumenAsistencia.map(r => [
+          r.usuario_nombre,
+          (r.minutos_normales / 60).toFixed(2),
+          (r.minutos_extra_aprobado / 60).toFixed(2),
+          (r.minutos_extra_pendiente / 60).toFixed(2),
+          (r.minutos_extra_rechazado / 60).toFixed(2),
+          r.costo_extra,
+          r.registros,
+        ]),
+      ]
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Resumen')
+      const detalle = [
+        ['Operador', 'Fecha', 'Entrada', 'Salida', 'Min trabajados', 'Min normales', 'Min extra', 'Estado'],
+        ...asistencia.map(r => [r.usuario_nombre, r.fecha, r.hora_entrada, r.hora_salida, r.minutos_trabajados, r.minutos_normales, r.minutos_extra, r.estado_aprobacion]),
+      ]
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), 'Detalle')
     }
 
     if (tipo === 'vets' && vetData) {
@@ -143,8 +263,8 @@ export default function ReportesPage() {
         ))}
       </div>
 
-      {/* Selector período — compartido para Mensual y Veterinarios */}
-      {(tab === 'Mensual' || tab === 'Veterinarios') && (
+      {/* Selector período — compartido para Mensual, Veterinarios y Asistencia */}
+      {(tab === 'Mensual' || tab === 'Veterinarios' || tab === 'Asistencia') && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Mes</label>
@@ -163,19 +283,39 @@ export default function ReportesPage() {
       )}
 
       {/* ─── TAB MENSUAL ─── */}
-      {tab === 'Mensual' && data && (
+      {tab === 'Mensual' && data && data.kpis && (
         <>
-          <div className="grid grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {[
-              { label: 'Cremaciones', value: data.kpis.total_cremaciones_mes, color: 'text-indigo-700' },
-              { label: 'Pendientes', value: data.kpis.pendientes, color: 'text-yellow-700' },
+              { label: 'Mascotas ingresadas', value: data.kpis.ingresos_clientes_mes, color: 'text-indigo-700' },
+              { label: 'Cremaciones', value: data.kpis.total_cremaciones_mes, color: 'text-rose-700' },
+              { label: 'En cámara', value: data.kpis.pendientes, color: 'text-yellow-700' },
               { label: 'Ciclos', value: data.kpis.ciclos_mes, color: 'text-blue-700' },
-              { label: 'Litros petróleo', value: fmtLitros(data.kpis.litros_mes), color: 'text-orange-700' },
+              { label: 'Litros consumidos', value: fmtLitros(data.kpis.litros_mes), color: 'text-orange-700' },
+              { label: 'Litros cargados', value: fmtLitros(data.kpis.litros_cargados_mes), color: 'text-amber-700' },
+              { label: 'Costo petróleo', value: fmt(data.kpis.costo_petroleo_mes), color: 'text-red-700' },
+              { label: 'Costo vehículo', value: fmt(data.kpis.costo_vehiculo_mes), color: 'text-purple-700' },
               { label: 'Ingresos est.', value: fmt(data.kpis.ingresos_mes), color: 'text-green-700' },
+              { label: 'Pagos pendientes', value: data.kpis.pendientes_pago, color: 'text-amber-700' },
+              { label: 'Monto por cobrar', value: fmt(data.kpis.monto_pendiente), color: 'text-rose-700' },
             ].map(k => (
-              <div key={k.label} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
-                <p className={`text-2xl font-bold ${k.color}`}>{k.value}</p>
+              <div key={k.label} className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-4 text-center">
+                <p className={`text-xl font-bold ${k.color}`}>{k.value}</p>
                 <p className="text-xs text-gray-500 mt-1">{k.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Ratios del período */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[
+              { label: 'Litros / mascota', value: `${data.ratios.litros_por_mascota.toFixed(1)} L` },
+              { label: 'Litros / ciclo', value: `${data.ratios.litros_por_ciclo.toFixed(1)} L` },
+              { label: 'Costo vehículo / mascota', value: fmt(data.ratios.costo_vehiculo_por_mascota) },
+            ].map(r => (
+              <div key={r.label} className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-4">
+                <p className="text-xs font-semibold text-gray-600">{r.label}</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{r.value}</p>
               </div>
             ))}
           </div>
@@ -221,19 +361,23 @@ export default function ReportesPage() {
             {data.ciclos.length === 0 ? (
               <p className="text-sm text-gray-400">Sin ciclos en el período</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead><tr className="border-b border-gray-100">{['Ciclo', 'Fecha', 'Mascotas', 'Litros'].map(h => <th key={h} className="text-left pb-2 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
-                <tbody className="divide-y divide-gray-50">
-                  {data.ciclos.map(c => (
-                    <tr key={c.id}>
-                      <td className="py-2 font-medium">N° {c.numero_ciclo}</td>
-                      <td className="py-2 text-gray-600">{fmtFecha(c.fecha)}</td>
-                      <td className="py-2 text-gray-600">{c.mascotas_ids.length}</td>
-                      <td className="py-2 text-gray-600">{fmtLitros(Math.abs(parseFloat(c.litros_fin) - parseFloat(c.litros_inicio)))}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[640px]">
+                  <thead><tr className="border-b border-gray-100">{['Ciclo', 'Fecha', 'Mascotas', 'Peso total', 'Litros', 'Lt/kg'].map(h => <th key={h} className="text-left pb-2 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {data.ciclos.map(c => (
+                      <tr key={c.id}>
+                        <td className="py-2 font-medium">N° {c.numero_ciclo}</td>
+                        <td className="py-2 text-gray-600">{fmtFecha(c.fecha)}</td>
+                        <td className="py-2 text-gray-600">{c.mascotas_ids.length}</td>
+                        <td className="py-2 text-gray-600">{c.peso_total > 0 ? `${c.peso_total.toFixed(1)} kg` : '—'}</td>
+                        <td className="py-2 text-gray-600">{fmtLitros(c.consumo)}</td>
+                        <td className="py-2 text-gray-700 font-medium">{c.lt_kg > 0 ? c.lt_kg.toFixed(2) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 
@@ -259,6 +403,102 @@ export default function ReportesPage() {
       {tab === 'Veterinarios' && (
         vetData ? <VeterinariosTab data={vetData} mes={mes} anio={anio} meses={MESES} onExcel={() => descargarExcel('vets')} /> :
         loading ? <div className="text-sm text-gray-400 text-center py-12">Cargando...</div> : null
+      )}
+
+      {/* ─── TAB ASISTENCIA ─── */}
+      {tab === 'Asistencia' && (
+        <div className="space-y-6">
+          {!jornadaVigente && (
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+              ⚠ No hay jornada vigente configurada. Los costos no se pueden calcular hasta crear una en Configuración → Jornada.
+            </div>
+          )}
+
+          {/* Resumen por operador */}
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b-2 border-gray-200 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Resumen por operador — {MESES[mes - 1]} {anio}</h2>
+              <button onClick={() => descargarExcel('asistencia')}
+                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">↓ Excel</button>
+            </div>
+            {resumenAsistencia.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 text-sm">Sin registros en el período</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[720px]">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {['Operador', 'Normales', 'Extra aprobadas', 'Extra pendientes', 'Extra rechazadas', 'Costo extra'].map(h => (
+                        <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {resumenAsistencia.map(r => (
+                      <tr key={r.usuario_id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-900">{r.usuario_nombre}</td>
+                        <td className="px-4 py-3 text-blue-700">{fmtMinutos(r.minutos_normales)}</td>
+                        <td className="px-4 py-3 font-semibold text-emerald-700">{fmtMinutos(r.minutos_extra_aprobado)}</td>
+                        <td className="px-4 py-3 text-amber-700">{fmtMinutos(r.minutos_extra_pendiente)}</td>
+                        <td className="px-4 py-3 text-gray-500">{fmtMinutos(r.minutos_extra_rechazado)}</td>
+                        <td className="px-4 py-3 font-bold text-emerald-700">{fmtPrecio(r.costo_extra)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Pendientes de aprobación */}
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b-2 border-gray-200">
+              <h2 className="font-semibold text-gray-900">Horas extra pendientes de aprobación</h2>
+            </div>
+            {(() => {
+              const pendientes = asistencia.filter(r => r.estado_aprobacion === 'pendiente' && (parseFloat(r.minutos_extra) || 0) > 0)
+              if (pendientes.length === 0) {
+                return <div className="p-8 text-center text-gray-400 text-sm">No hay horas extra pendientes en el período</div>
+              }
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[720px]">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {['Operador', 'Fecha', 'Entrada', 'Salida', 'Extra', 'Acciones'].map(h => (
+                          <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {pendientes.map(r => (
+                        <tr key={r.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">{r.usuario_nombre}</td>
+                          <td className="px-4 py-3 text-gray-700">{fmtFecha(r.fecha)}</td>
+                          <td className="px-4 py-3 text-gray-700">{r.hora_entrada}</td>
+                          <td className="px-4 py-3 text-gray-700">{r.hora_salida}</td>
+                          <td className="px-4 py-3 font-bold text-amber-700">{fmtMinutos(parseFloat(r.minutos_extra) || 0)}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => aprobarRegistro(r.id, 'aprobado')}
+                                className="bg-emerald-500 hover:bg-emerald-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                                ✓ Aprobar
+                              </button>
+                              <button onClick={() => aprobarRegistro(r.id, 'rechazado')}
+                                className="bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                                ✗ Rechazar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })()}
+          </div>
+        </div>
       )}
     </div>
   )
@@ -361,8 +601,8 @@ function ConfiguracionesTab({ data, fmt }: { data: ConfigData; fmt: (n: number |
             <tr>{['Producto', 'Precio', 'Stock', 'Ventas históricas'].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {data.productos.map(p => (
-              <tr key={p.id}>
+            {data.productos.map((p, i) => (
+              <tr key={`${p.id}-${i}`}>
                 <td className="px-4 py-3 font-medium text-gray-900">{p.nombre}</td>
                 <td className="px-4 py-3 text-gray-600">{fmt(p.precio)}</td>
                 <td className="px-4 py-3">

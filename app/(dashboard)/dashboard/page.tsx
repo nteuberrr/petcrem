@@ -6,14 +6,20 @@ import {
   PieChart, Pie, Cell, Legend, CartesianGrid,
 } from 'recharts'
 import TimelineStatus from '@/components/TimelineStatus'
+import { Modal } from '@/components/ui/Modal'
+
+type RatioKey = 'litros_por_mascota' | 'litros_por_ciclo' | 'costo_vehiculo_por_mascota' | 'duracion_promedio_ciclo_min'
+type RatioMensual = { mes: string; litros_por_mascota: number; litros_por_ciclo: number; costo_vehiculo_por_mascota: number; duracion_promedio_ciclo_min: number }
 
 type Data = {
   kpis: {
-    cremaciones_mes: number; pendientes: number; ciclos_mes: number
+    mascotas_total: number; mascotas_mes: number; cremaciones_mes: number
+    pendientes: number; ciclos_mes: number
     litros_mes: number; ingresos_mes: number; stock_petroleo: number
     stock_bajo: boolean; pendientes_pago: number; monto_pendiente: number
   }
-  ratios: { ciclos_por_litro: number; litros_por_ciclo: number; litros_por_mascota: number; costo_vehiculo_por_mascota: number }
+  ratios: { litros_por_ciclo: number; litros_por_mascota: number; costo_vehiculo_por_mascota: number; duracion_promedio_ciclo_min: number }
+  ratios_por_mes: RatioMensual[]
   ventas_por_mes: Array<{ mes: string; ingresos: number; mascotas: number }>
   top_servicios: Array<{ codigo: string; count: number }>
   ventas_por_vet: Array<{ vet: string; ingresos: number; mascotas: number }>
@@ -27,6 +33,7 @@ const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444'
 export default function DashboardPage() {
   const [data, setData] = useState<Data | null>(null)
   const [loading, setLoading] = useState(true)
+  const [ratioOpen, setRatioOpen] = useState<RatioKey | null>(null)
 
   useEffect(() => {
     fetch('/api/dashboard')
@@ -55,22 +62,30 @@ export default function DashboardPage() {
   }
 
   const kpis = [
-    { label: `Mascotas ${mesActual}`, value: fmtNumero(data.kpis.cremaciones_mes), icon: '🐾', color: 'text-indigo-700 bg-indigo-50' },
-    { label: 'Ciclos del mes', value: fmtNumero(data.kpis.ciclos_mes), icon: '🔥', color: 'text-orange-700 bg-orange-50' },
+    { label: `Mascotas ${mesActual}`, value: fmtNumero(data.kpis.mascotas_mes), icon: '🐾', color: 'text-indigo-700 bg-indigo-50' },
+    { label: 'Cremaciones del mes', value: fmtNumero(data.kpis.cremaciones_mes), icon: '🔥', color: 'text-rose-700 bg-rose-50' },
+    { label: 'Ciclos del mes', value: fmtNumero(data.kpis.ciclos_mes), icon: '♻️', color: 'text-orange-700 bg-orange-50' },
     { label: 'Ingresos del mes', value: fmtPrecio(data.kpis.ingresos_mes), icon: '💰', color: 'text-emerald-700 bg-emerald-50' },
-    { label: 'Pendientes', value: fmtNumero(data.kpis.pendientes), icon: '⏳', color: 'text-yellow-700 bg-yellow-50' },
+    { label: 'En cámara', value: fmtNumero(data.kpis.pendientes), icon: '⏳', color: 'text-yellow-700 bg-yellow-50' },
     { label: 'Stock petróleo', value: fmtLitros(data.kpis.stock_petroleo), icon: '⛽', color: data.kpis.stock_bajo ? 'text-red-700 bg-red-50' : 'text-blue-700 bg-blue-50', alert: data.kpis.stock_bajo },
     { label: 'Litros del mes', value: fmtLitros(data.kpis.litros_mes), icon: '🛢️', color: 'text-sky-700 bg-sky-50' },
     { label: 'Pagos pendientes', value: fmtNumero(data.kpis.pendientes_pago), icon: '💳', color: 'text-rose-700 bg-rose-50' },
     { label: 'Monto por cobrar', value: fmtPrecio(data.kpis.monto_pendiente), icon: '📋', color: 'text-amber-700 bg-amber-50' },
   ]
 
+  const fmtDuracion = (mins: number): string => {
+    if (mins <= 0) return '—'
+    const h = Math.floor(mins / 60)
+    const m = Math.round(mins % 60)
+    return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m} min`
+  }
+
   const ratiosArr = [
-    { label: 'Litros / mascota', value: data.ratios.litros_por_mascota.toFixed(1) + ' L', sub: 'consumo promedio por mascota' },
-    { label: 'Litros / ciclo', value: data.ratios.litros_por_ciclo.toFixed(1) + ' L', sub: 'consumo promedio por ciclo' },
-    { label: 'Ciclos / litro', value: data.ratios.ciclos_por_litro.toFixed(1), sub: 'ciclos por litro de petróleo' },
-    { label: 'Costo vehículo / mascota', value: fmtPrecio(data.ratios.costo_vehiculo_por_mascota), sub: 'gasto combustible por mascota retirada' },
-  ]
+    { key: 'litros_por_mascota', label: 'Litros / mascota', value: data.ratios.litros_por_mascota.toFixed(1) + ' L', sub: 'consumo promedio por mascota' },
+    { key: 'litros_por_ciclo', label: 'Litros / ciclo', value: data.ratios.litros_por_ciclo.toFixed(1) + ' L', sub: 'consumo promedio por ciclo' },
+    { key: 'duracion_promedio_ciclo_min', label: 'Duración promedio ciclo', value: fmtDuracion(data.ratios.duracion_promedio_ciclo_min), sub: 'tiempo promedio de cada ciclo' },
+    { key: 'costo_vehiculo_por_mascota', label: 'Costo vehículo / mascota', value: fmtPrecio(data.ratios.costo_vehiculo_por_mascota), sub: 'gasto combustible por mascota retirada' },
+  ] as const
 
   return (
     <div className="space-y-8">
@@ -83,7 +98,7 @@ export default function DashboardPage() {
       <TimelineStatus />
 
       {/* KPIs */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {kpis.map(k => (
           <div key={k.label} className={`bg-white rounded-xl shadow-md border-2 p-5 flex items-center gap-4 ${k.alert ? 'border-red-300' : 'border-gray-200'}`}>
             <div className={`shrink-0 inline-flex items-center justify-center w-12 h-12 rounded-xl text-2xl ${k.color}`}>
@@ -103,11 +118,15 @@ export default function DashboardPage() {
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Ratios de eficiencia</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {ratiosArr.map(r => (
-            <div key={r.label} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-              <p className="text-xs font-medium text-gray-500">{r.label}</p>
+            <button key={r.key} type="button" onClick={() => setRatioOpen(r.key)}
+              className="text-left bg-white rounded-xl shadow-md border-2 border-gray-200 hover:border-indigo-400 hover:shadow-lg p-5 transition-all">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-600">{r.label}</p>
+                <span className="text-xs text-indigo-500">📈</span>
+              </div>
               <p className="text-xl font-bold text-gray-900 mt-1">{r.value}</p>
-              <p className="text-xs text-gray-400 mt-1 leading-tight">{r.sub}</p>
-            </div>
+              <p className="text-xs text-gray-500 mt-1 leading-tight">{r.sub}</p>
+            </button>
           ))}
         </div>
       </div>
@@ -217,6 +236,47 @@ export default function DashboardPage() {
           </ChartCard>
         </div>
       )}
+
+      {/* Modal evolución de ratios */}
+      <Modal open={!!ratioOpen} onClose={() => setRatioOpen(null)}
+        title={ratioOpen === 'litros_por_mascota' ? 'Litros / mascota — evolución'
+          : ratioOpen === 'litros_por_ciclo' ? 'Litros / ciclo — evolución'
+          : ratioOpen === 'costo_vehiculo_por_mascota' ? 'Costo vehículo / mascota — evolución'
+          : ratioOpen === 'duracion_promedio_ciclo_min' ? 'Duración promedio del ciclo — evolución'
+          : ''}>
+        {ratioOpen && (
+          <div>
+            <p className="text-xs text-gray-500 mb-3">
+              {ratioOpen === 'costo_vehiculo_por_mascota' ? 'Promedio mensual en pesos. '
+                : ratioOpen === 'duracion_promedio_ciclo_min' ? 'Promedio mensual en minutos. '
+                : 'Promedio mensual. '}
+              Últimos 12 meses con actividad.
+            </p>
+            {data.ratios_por_mes.length === 0 ? (
+              <div className="flex items-center justify-center h-[240px] text-sm text-gray-400">
+                Sin datos históricos
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={data.ratios_por_mes}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }} />
+                  <YAxis fontSize={11} tick={{ fill: '#6b7280' }}
+                    tickFormatter={v => ratioOpen === 'costo_vehiculo_por_mascota' ? `$${(v / 1000).toFixed(0)}k`
+                      : ratioOpen === 'duracion_promedio_ciclo_min' ? `${Math.round(v as number)}m`
+                      : (v as number).toFixed(1)} />
+                  <Tooltip formatter={(v) => ratioOpen === 'costo_vehiculo_por_mascota'
+                    ? fmtPrecio(v as number)
+                    : ratioOpen === 'duracion_promedio_ciclo_min'
+                    ? fmtDuracion(v as number)
+                    : `${(v as number).toFixed(2)}${ratioOpen?.startsWith('litros') ? ' L' : ''}`} />
+                  <Line type="monotone" dataKey={ratioOpen} stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

@@ -8,6 +8,7 @@ const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: true },
   { href: '/clientes', label: 'Clientes', icon: '🐾', adminOnly: false },
   { href: '/operaciones', label: 'Operaciones', icon: '🔥', adminOnly: false },
+  { href: '/asistencia', label: 'Asistencia', icon: '🕐', adminOnly: false },
   { href: '/rendiciones', label: 'Rendiciones', icon: '🧾', adminOnly: true },
   { href: '/bases', label: 'Bases de datos', icon: '🗄️', adminOnly: true },
   { href: '/configuracion', label: 'Configuración', icon: '⚙️', adminOnly: true },

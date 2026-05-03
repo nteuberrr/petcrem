@@ -33,10 +33,11 @@ export type Cliente = {
   fecha_retiro: string
   especie: string
   letra_especie: string
-  peso_kg: number
+  peso_declarado: number
+  peso_ingreso?: number
   tipo_servicio: string
   codigo_servicio: string
-  estado: 'pendiente' | 'cremado'
+  estado: 'pendiente' | 'cremado' | 'despachado'
   ciclo_id: string
   fecha_creacion: string
 }

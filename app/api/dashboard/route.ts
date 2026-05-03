@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSheetData } from '@/lib/google-sheets'
-import { formatDateForSheet } from '@/lib/dates'
+import { formatDateForSheet, horaToMinutos } from '@/lib/dates'
+import { parseDecimalOr0, parsePeso, parseMonto } from '@/lib/numbers'
 
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string; veterinaria_id?: string }
 type AdicionalItem = { tipo: string; id: string; nombre?: string; precio?: number; qty?: number }
@@ -10,8 +11,8 @@ function findTramo(tabla: Tramo[], pesoKg: number): Tramo | null {
   let maxMin = -Infinity
   let top: Tramo | null = null
   for (const t of tabla) {
-    const min = parseFloat(t.peso_min) || 0
-    const max = parseFloat(t.peso_max) || 0
+    const min = parseDecimalOr0(t.peso_min)
+    const max = parseDecimalOr0(t.peso_max)
     if (min > maxMin) { maxMin = min; top = t }
     if (pesoKg >= min && pesoKg <= max) return t
   }
@@ -22,7 +23,7 @@ function findTramo(tabla: Tramo[], pesoKg: number): Tramo | null {
 function precioTramo(tramo: Tramo | null, codigo: string): number {
   if (!tramo) return 0
   const raw = codigo === 'CP' ? tramo.precio_cp : codigo === 'SD' ? tramo.precio_sd : tramo.precio_ci
-  return parseFloat(raw) || 0
+  return parseDecimalOr0(raw)
 }
 
 export async function GET() {
@@ -109,7 +110,9 @@ export async function GET() {
     function ingresoCliente(c: Record<string, string>): Ingreso {
       const cached = ingresoCache.get(c.id)
       if (cached) return cached
-      const peso = parseFloat(c.peso_kg) || 0
+      // Driver: peso_ingreso (real) tiene prioridad. Fallback a peso_declarado si aún no fue pesada.
+      // parsePeso normaliza escalamiento heredado de Sheets es-CL (ej. 12500 → 12.5).
+      const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
       const codigo = c.codigo_servicio || 'CI'
       let tabla: Tramo[] = preciosG
       const explicit = c.tipo_precios
@@ -131,16 +134,20 @@ export async function GET() {
     }
 
     // Stock petróleo
-    const totalCargado = cargas.reduce((s, r) => s + (parseFloat(r.litros) || 0), 0)
+    const totalCargado = cargas.reduce((s, r) => s + parseDecimalOr0(r.litros), 0)
     const totalConsumido = ciclos.reduce((s, c) => {
-      const ini = parseFloat(c.litros_inicio) || 0
-      const fin = parseFloat(c.litros_fin) || 0
+      const ini = parseDecimalOr0(c.litros_inicio)
+      const fin = parseDecimalOr0(c.litros_fin)
       return s + Math.abs(fin - ini)
     }, 0)
     const stock = totalCargado - totalConsumido
 
-    // Total monto gastado en combustible del vehículo
-    const totalMontoVehiculo = cargasVehiculo.reduce((s, r) => s + (parseFloat(r.monto) || 0), 0)
+    // Costo total de combustible del vehículo: monto (precio/litro) × litros, por carga.
+    const totalMontoVehiculo = cargasVehiculo.reduce((s, r) => {
+      const lt = parseDecimalOr0(r.litros)
+      const precioLt = parseMonto(r.monto)
+      return s + precioLt * lt
+    }, 0)
 
     // Filtros base — calculados una sola vez
     const cremadosTodos = clientes.filter(c => c.estado === 'cremado')
@@ -149,21 +156,36 @@ export async function GET() {
       return f && f >= startMesActual && f <= now
     })
     const ciclosMes = ciclos.filter(c => {
-      const f = c.fecha ? new Date(c.fecha) : null
-      return f && !isNaN(f.getTime()) && f >= startMesActual && f <= now
+      const f = parseDateSafe(c.fecha)
+      return f && f >= startMesActual && f <= now
     })
-    const litrosMes = ciclosMes.reduce((s, c) => s + Math.abs((parseFloat(c.litros_fin) || 0) - (parseFloat(c.litros_inicio) || 0)), 0)
+    const litrosMes = ciclosMes.reduce((s, c) => s + Math.abs(parseDecimalOr0(c.litros_fin) - parseDecimalOr0(c.litros_inicio)), 0)
     // "Pendientes" = pendientes de cremación (en cámara). Mismo criterio que TimelineStatus.
-    const pendientes = clientes.filter(c => c.estado === 'pendiente').length
+    // Estado vacío también cuenta como pendiente (mascotas viejas sin estado seteado).
+    const pendientes = clientes.filter(c => c.estado === 'pendiente' || !c.estado).length
 
     const ingresosMes = cremadosMes.reduce((s, c) => s + ingresoCliente(c).total, 0)
 
-    // Ratios
-    const mascotasTotalCremadas = cremadosTodos.length
-    const ciclosPorLitro = totalConsumido > 0 ? ciclos.length / totalConsumido : 0
+    // Ratios — driver: "mascotas" = total de mascotas ingresadas (todas), no solo cremadas
+    const mascotasTotal = clientes.length
     const litrosPorCiclo = ciclos.length > 0 ? totalConsumido / ciclos.length : 0
-    const litrosPorMascota = mascotasTotalCremadas > 0 ? totalConsumido / mascotasTotalCremadas : 0
-    const costoVehiculoPorMascota = mascotasTotalCremadas > 0 ? totalMontoVehiculo / mascotasTotalCremadas : 0
+    const litrosPorMascota = mascotasTotal > 0 ? totalConsumido / mascotasTotal : 0
+    const costoVehiculoPorMascota = mascotasTotal > 0 ? totalMontoVehiculo / mascotasTotal : 0
+
+    // Duración promedio del ciclo (minutos): solo ciclos con ambas horas válidas
+    let sumDuracion = 0
+    let countDuracion = 0
+    for (const c of ciclos) {
+      const ini = horaToMinutos(c.hora_inicio)
+      const fin = horaToMinutos(c.hora_fin)
+      if (ini === null || fin === null) continue
+      const dur = fin - ini
+      if (dur > 0 && dur < 24 * 60) {  // descartar valores absurdos (>24h)
+        sumDuracion += dur
+        countDuracion += 1
+      }
+    }
+    const duracionPromedioCicloMin = countDuracion > 0 ? sumDuracion / countDuracion : 0
 
     // Ventas últimos 12 meses — agrupar en una pasada en vez de 12 filters
     const startVentanas = Array.from({ length: 12 }, (_, k) => {
@@ -188,12 +210,66 @@ export async function GET() {
     }
     const ventasPorMes = buckets
 
-    // Top servicios + ventas por vet + por especie + pendientes pago — un solo loop sobre cremados
+    // Series temporales por ratio — últimos 12 meses
+    type RBucket = { mes: string; litros: number; ciclos: number; mascotas: number; monto_vehiculo: number; sum_duracion: number; count_duracion: number }
+    const rBuckets: RBucket[] = startVentanas.map(d => ({
+      mes: d.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' }),
+      litros: 0, ciclos: 0, mascotas: 0, monto_vehiculo: 0, sum_duracion: 0, count_duracion: 0,
+    }))
+    // Litros consumidos + ciclos del mes (por fecha del ciclo)
+    for (const c of ciclos) {
+      const iso = c.fecha ? formatDateForSheet(c.fecha) : ''
+      if (!iso) continue
+      const f = new Date(`${iso}T12:00:00`)
+      if (isNaN(f.getTime()) || f < limiteIzq) continue
+      const idx = ventanaIdx.get(`${f.getFullYear()}-${f.getMonth()}`)
+      if (idx === undefined) continue
+      const ini = parseDecimalOr0(c.litros_inicio)
+      const fin = parseDecimalOr0(c.litros_fin)
+      rBuckets[idx].litros += Math.abs(fin - ini)
+      rBuckets[idx].ciclos += 1
+      // Duración del ciclo
+      const hi = horaToMinutos(c.hora_inicio)
+      const hf = horaToMinutos(c.hora_fin)
+      if (hi !== null && hf !== null) {
+        const dur = hf - hi
+        if (dur > 0 && dur < 24 * 60) {
+          rBuckets[idx].sum_duracion += dur
+          rBuckets[idx].count_duracion += 1
+        }
+      }
+    }
+    // Mascotas cremadas en el mes (driver: fecha de cremación = fecha del ciclo, ya manejado en fechaCliente)
+    for (const c of cremadosTodos) {
+      const f = fechaCliente(c)
+      if (!f || f < limiteIzq) continue
+      const idx = ventanaIdx.get(`${f.getFullYear()}-${f.getMonth()}`)
+      if (idx === undefined) continue
+      rBuckets[idx].mascotas += 1
+    }
+    // Monto vehículo del mes
+    for (const r of cargasVehiculo) {
+      const iso = r.fecha ? formatDateForSheet(r.fecha) : ''
+      if (!iso) continue
+      const f = new Date(`${iso}T12:00:00`)
+      if (isNaN(f.getTime()) || f < limiteIzq) continue
+      const idx = ventanaIdx.get(`${f.getFullYear()}-${f.getMonth()}`)
+      if (idx === undefined) continue
+      // monto = precio por litro → costo total = monto × litros
+      rBuckets[idx].monto_vehiculo += parseMonto(r.monto) * parseDecimalOr0(r.litros)
+    }
+    const ratiosPorMes = rBuckets.map(b => ({
+      mes: b.mes,
+      litros_por_mascota: b.mascotas > 0 ? b.litros / b.mascotas : 0,
+      litros_por_ciclo: b.ciclos > 0 ? b.litros / b.ciclos : 0,
+      costo_vehiculo_por_mascota: b.mascotas > 0 ? b.monto_vehiculo / b.mascotas : 0,
+      duracion_promedio_ciclo_min: b.count_duracion > 0 ? b.sum_duracion / b.count_duracion : 0,
+    }))
+
+    // Top servicios + ventas por vet + por especie — un solo loop sobre cremados
     const servicioCount: Record<string, number> = { CI: 0, CP: 0, SD: 0 }
     const ventasVet: Record<string, { vet: string; ingresos: number; mascotas: number }> = {}
     const especieCount: Record<string, number> = {}
-    let pendientesPago = 0
-    let montoPendientePago = 0
     for (const c of cremadosTodos) {
       const k = (c.codigo_servicio || 'CI').toUpperCase()
       servicioCount[k] = (servicioCount[k] || 0) + 1
@@ -206,11 +282,23 @@ export async function GET() {
         ventasVet[c.veterinaria_id].ingresos += ingreso
         ventasVet[c.veterinaria_id].mascotas += 1
       }
+    }
+
+    // Pendientes de pago: TODOS los clientes (no solo cremados) con estado_pago != 'pagado'
+    let pendientesPago = 0
+    let montoPendientePago = 0
+    for (const c of clientes) {
       if (c.estado_pago !== 'pagado') {
         pendientesPago += 1
-        montoPendientePago += ingreso
+        montoPendientePago += ingresoCliente(c).total
       }
     }
+
+    // Mascotas del mes: ingresadas en el mes según fecha_retiro (mismo driver que sección clientes)
+    const mascotasMes = clientes.filter(c => {
+      const f = parseDateSafe(c.fecha_retiro || c.fecha_creacion)
+      return f && f >= startMesActual && f <= now
+    }).length
     const topServicios = Object.entries(servicioCount)
       .map(([codigo, count]) => ({ codigo, count }))
       .sort((a, b) => b.count - a.count)
@@ -240,6 +328,8 @@ export async function GET() {
 
     return NextResponse.json({
       kpis: {
+        mascotas_total: mascotasTotal,
+        mascotas_mes: mascotasMes,
         cremaciones_mes: cremadosMes.length,
         pendientes,
         ciclos_mes: ciclosMes.length,
@@ -251,11 +341,12 @@ export async function GET() {
         monto_pendiente: montoPendientePago,
       },
       ratios: {
-        ciclos_por_litro: ciclosPorLitro,
         litros_por_ciclo: litrosPorCiclo,
         litros_por_mascota: litrosPorMascota,
         costo_vehiculo_por_mascota: costoVehiculoPorMascota,
+        duracion_promedio_ciclo_min: duracionPromedioCicloMin,
       },
+      ratios_por_mes: ratiosPorMes,
       ventas_por_mes: ventasPorMes,
       top_servicios: topServicios,
       ventas_por_vet: ventasPorVet,

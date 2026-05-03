@@ -8,7 +8,7 @@ type Cliente = {
   especie: string; estado: string
   fecha_retiro?: string; fecha_creacion?: string; fecha_defuncion?: string
   ciclo_id?: string; despacho_id?: string
-  peso_declarado?: string; peso_ingreso?: string; peso_kg?: string
+  peso_declarado?: string; peso_ingreso?: string
   direccion_retiro?: string; direccion_despacho?: string; comuna?: string
   telefono?: string; tipo_servicio?: string; codigo_servicio?: string
 }
@@ -45,7 +45,8 @@ export default function TimelineStatus() {
     )
   }
 
-  const enCamara = clientes.filter(c => c.estado === 'pendiente' && match(c))
+  // Estado vacío también cuenta como "en cámara" (mascotas viejas sin estado).
+  const enCamara = clientes.filter(c => (c.estado === 'pendiente' || !c.estado) && match(c))
   const cremadas = clientes.filter(c => c.estado === 'cremado' && match(c))
 
   return (
@@ -114,7 +115,7 @@ export default function TimelineStatus() {
             <FichaRow label="Tutor" value={seleccionado.nombre_tutor} />
             <FichaRow label="Teléfono" value={seleccionado.telefono ?? '—'} />
             <FichaRow label="Servicio" value={`${seleccionado.tipo_servicio ?? ''} (${seleccionado.codigo_servicio ?? ''})`} />
-            <FichaRow label="Peso declarado" value={seleccionado.peso_declarado || seleccionado.peso_kg || '—'} />
+            <FichaRow label="Peso declarado" value={seleccionado.peso_declarado || '—'} />
             <FichaRow label="Peso ingreso" value={seleccionado.peso_ingreso || '—'} />
             <FichaRow label="Fecha retiro" value={formatDate(seleccionado.fecha_retiro)} />
             <FichaRow label="Dirección retiro" value={seleccionado.direccion_retiro ?? '—'} />

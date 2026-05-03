@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
 // Rutas permitidas para rol 'operador'. Todo lo demás en el dashboard es solo admin.
-const OPERADOR_ALLOWED = ['/clientes', '/operaciones']
+const OPERADOR_ALLOWED = ['/clientes', '/operaciones', '/asistencia']
 
 function isOperadorAllowed(pathname: string): boolean {
   return OPERADOR_ALLOWED.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'))
@@ -44,6 +44,7 @@ export async function middleware(req: NextRequest) {
         '/api/especies', '/api/servicios', '/api/productos',
         '/api/veterinarios', '/api/precios', '/api/upload',
         '/api/init-sheets',
+        '/api/asistencia', '/api/jornada-config',
       ]
       if (allowedApis.some(p => pathname.startsWith(p))) return NextResponse.next()
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })

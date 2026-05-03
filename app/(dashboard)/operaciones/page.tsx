@@ -8,7 +8,7 @@ import DespachosTab from '@/components/DespachosTab'
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
-  especie: string; peso_kg?: string; peso_declarado?: string; peso_ingreso?: string
+  especie: string; peso_declarado?: string; peso_ingreso?: string
   estado: string
   direccion_despacho?: string; comuna?: string; telefono?: string
 }
@@ -19,6 +19,7 @@ type Ciclo = {
   mascotas_ids: string[]; comentarios: string
   hora_inicio?: string; hora_fin?: string
   temperatura_camara?: string
+  peso_total?: string; lt_kg?: string; lt_mascota?: string
 }
 
 type CargaPetroleo = {
@@ -40,7 +41,6 @@ function calcMinutos(ini: string, fin: string): number | null {
 export default function OperacionesPage() {
   const [operTab, setOperTab] = useState<'ciclos' | 'petroleo' | 'vehiculo' | 'despachos'>('ciclos')
   const [fecha, setFecha] = useState(() => todayISO())
-  const [litrosInicio, setLitrosInicio] = useState('')
   const [litrosFin, setLitrosFin] = useState('')
   const [comentarios, setComentarios] = useState('')
   const [horaInicio, setHoraInicio] = useState('')
@@ -74,6 +74,18 @@ export default function OperacionesPage() {
     setCiclos(Array.isArray(data) ? data : [])
   }, [])
 
+  // Pre-cargar todos los clientes para que pesoTotalCiclo() pueda calcular Lt/kg
+  // sin necesidad de expandir cada fila del historial.
+  const fetchClientesAll = useCallback(async () => {
+    const res = await fetch('/api/clientes')
+    const data = await res.json()
+    if (Array.isArray(data)) {
+      const map: Record<string, Cliente> = {}
+      data.forEach((c: Cliente) => { map[c.id] = c })
+      setClientesMap(map)
+    }
+  }, [])
+
   const fetchPetroleo = useCallback(async () => {
     const res = await fetch('/api/petroleo')
     const data = await res.json()
@@ -83,6 +95,7 @@ export default function OperacionesPage() {
 
   useEffect(() => { fetchCiclos() }, [fetchCiclos])
   useEffect(() => { fetchPetroleo() }, [fetchPetroleo])
+  useEffect(() => { fetchClientesAll() }, [fetchClientesAll])
 
   async function guardarCarga(e: React.FormEvent) {
     e.preventDefault()
@@ -209,7 +222,7 @@ export default function OperacionesPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         fecha,
-        litros_inicio: parseFloat(litrosInicio),
+        litros_inicio: resumenPet.stock_actual, // calculado automáticamente
         litros_fin: parseFloat(litrosFin),
         mascotas_ids: seleccionadas.map(s => s.id),
         comentarios,
@@ -220,13 +233,13 @@ export default function OperacionesPage() {
     })
     if (res.ok) {
       setSeleccionadas([])
-      setLitrosInicio('')
       setLitrosFin('')
       setComentarios('')
       setHoraInicio('')
       setHoraFin('')
       setTemperaturaCamara('')
       await fetchCiclos()
+      await fetchPetroleo() // refresca stock_actual para el siguiente ciclo
     }
     setSaving(false)
   }
@@ -245,16 +258,19 @@ export default function OperacionesPage() {
   }
 
   function pesoTotalCiclo(ciclo: Ciclo): number {
+    // Snapshot del cierre del ciclo (planilla). Tiene prioridad si > 0.
+    const snapshot = parseFloat(ciclo.peso_total ?? '') || 0
+    if (snapshot > 0) return snapshot
     return ciclo.mascotas_ids.reduce((sum, id) => {
       const m = clientesMap[id]
       if (!m) return sum
-      // Preferir peso_ingreso (real) sobre peso_declarado/legacy peso_kg
-      const peso = parseFloat(m.peso_ingreso ?? '') || parseFloat(m.peso_declarado ?? '') || parseFloat(m.peso_kg ?? '') || 0
+      // Peso real: ingreso primero, declarado de fallback
+      const peso = parseFloat(m.peso_ingreso ?? '') || parseFloat(m.peso_declarado ?? '') || 0
       return sum + peso
     }, 0)
   }
 
-  const pesoTotal = seleccionadas.reduce((sum, c) => sum + (parseFloat(c.peso_ingreso || c.peso_declarado || c.peso_kg || "0") || 0), 0)
+  const pesoTotal = seleccionadas.reduce((sum, c) => sum + (parseFloat(c.peso_ingreso || c.peso_declarado || "0") || 0), 0)
   const minutos = calcMinutos(horaInicio, horaFin)
 
   return (
@@ -290,9 +306,18 @@ export default function OperacionesPage() {
                 className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-700">Litros inicio</label>
-              <input type="number" step="0.1" required value={litrosInicio} onChange={e => setLitrosInicio(e.target.value)}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <label className="text-xs font-medium text-gray-700">
+                Litros inicio <span className="text-gray-400 font-normal">(stock disponible)</span>
+              </label>
+              <input type="number" step="0.1" readOnly value={resumenPet.stock_actual}
+                className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm cursor-not-allowed ${
+                  resumenPet.stock_actual < 0
+                    ? 'bg-red-50 border-red-300 text-red-800 font-bold'
+                    : 'bg-gray-100 border-gray-300 text-gray-700 font-semibold'
+                }`} />
+              {resumenPet.stock_actual < 0 && (
+                <p className="text-xs text-red-600 mt-1">⚠ Stock negativo — registrá una carga de petróleo</p>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium text-gray-700">Litros fin</label>
@@ -365,7 +390,7 @@ export default function OperacionesPage() {
                     <div>
                       <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
                       <span className="ml-2 text-sm text-gray-900 font-medium">{c.nombre_mascota}</span>
-                      <span className="ml-2 text-xs text-gray-500">· {c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || c.peso_kg || "0")}</span>
+                      <span className="ml-2 text-xs text-gray-500">· {c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || "0")}</span>
                     </div>
                     <button type="button" onClick={() => quitar(c.id)}
                       className="text-red-400 hover:text-red-600 text-xl leading-none w-6 h-6 flex items-center justify-center">×</button>
@@ -441,7 +466,7 @@ export default function OperacionesPage() {
                                   <div key={mid} className="py-2 flex gap-4 text-sm">
                                     <span className="font-mono text-xs text-indigo-700 font-semibold">{m.codigo}</span>
                                     <span className="text-gray-900">{m.nombre_mascota}</span>
-                                    <span className="text-gray-500">{m.especie} · {fmtKg(m.peso_ingreso || m.peso_declarado || m.peso_kg || "0")}</span>
+                                    <span className="text-gray-500">{m.especie} · {fmtKg(m.peso_ingreso || m.peso_declarado || "0")}</span>
                                   </div>
                                 ) : (
                                   <div key={mid} className="py-2 text-xs text-gray-400">ID: {mid}</div>
@@ -681,7 +706,7 @@ export default function OperacionesPage() {
                       <span className="ml-2 text-sm text-gray-900 font-medium">{c.nombre_mascota}</span>
                       <span className="ml-1 text-xs text-gray-500">({c.nombre_tutor})</span>
                     </div>
-                    <span className="text-xs text-gray-400 shrink-0">{c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || c.peso_kg || "0")}</span>
+                    <span className="text-xs text-gray-400 shrink-0">{c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || "0")}</span>
                   </label>
                 )
               })}
@@ -725,7 +750,7 @@ function InlineSearch({ buscar, excluir, onSelect }: { buscar: string; excluir: 
           <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
           <span className="ml-2 text-sm text-gray-900">{c.nombre_mascota}</span>
           <span className="ml-2 text-xs text-gray-500">({c.nombre_tutor})</span>
-          <span className="ml-2 text-xs text-gray-400">{c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || c.peso_kg || "0")}</span>
+          <span className="ml-2 text-xs text-gray-400">{c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || "0")}</span>
         </button>
       ))}
     </div>

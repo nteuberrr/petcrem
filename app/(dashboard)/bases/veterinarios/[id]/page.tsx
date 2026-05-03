@@ -6,7 +6,7 @@ import { fmtPrecio, fmtFecha } from '@/lib/format'
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
-  especie: string; peso_kg: string; codigo_servicio: string; estado: string; fecha_creacion: string
+  especie: string; peso_declarado?: string; peso_ingreso?: string; codigo_servicio: string; estado: string; fecha_creacion: string
 }
 
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
@@ -57,7 +57,7 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
     const headers = ['Código', 'Mascota', 'Tutor', 'Especie', 'Peso (kg)', 'Servicio', 'Estado', 'Fecha ingreso']
     const rows = [
       headers,
-      ...vet.clientes.map(c => [c.codigo, c.nombre_mascota, c.nombre_tutor, c.especie, c.peso_kg, c.codigo_servicio, c.estado, c.fecha_creacion]),
+      ...vet.clientes.map(c => [c.codigo, c.nombre_mascota, c.nombre_tutor, c.especie, c.peso_ingreso || c.peso_declarado || '', c.codigo_servicio, c.estado, c.fecha_creacion]),
     ]
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Mascotas')
 
