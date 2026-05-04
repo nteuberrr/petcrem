@@ -41,7 +41,7 @@ export default function DespachosTab() {
   const [savingEdit, setSavingEdit] = useState(false)
 
   const fetchDespachos = useCallback(async () => {
-    const res = await fetch('/api/despachos')
+    const res = await fetch('/api/despachos', { cache: 'no-store' })
     const data = await res.json()
     setDespachos(Array.isArray(data) ? data : [])
   }, [])

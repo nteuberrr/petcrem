@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/google-sheets'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 
+// Forzar evaluación dinámica: la planilla cambia fuera de Next, no queremos cache.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 const HOJA = 'despachos'
 const COLS = ['id', 'fecha', 'numero_recorrido', 'mascotas_ids', 'nota', 'fecha_creacion']
 
