@@ -187,6 +187,24 @@ export async function PATCH(req: NextRequest) {
       updated.aprobado_por = session.user?.email ?? 'admin'
     }
 
+    // Normalizar fecha y horas a formato canónico antes de escribir.
+    // CRÍTICO: si la celda guarda un serial como "0.28819..." (string), Sheets en
+    // locale es-CL interpreta el punto como separador de miles → corrompe el valor
+    // (ej. "0.28819" → 28819, mostrado como número enorme). Convertir a "HH:MM" y
+    // "YYYY-MM-DD" evita que Sheets re-parsee con la locale.
+    if (updated.hora_entrada !== undefined && updated.hora_entrada !== '') {
+      updated.hora_entrada = formatHora(String(updated.hora_entrada))
+    }
+    if (updated.hora_salida !== undefined && updated.hora_salida !== '') {
+      updated.hora_salida = formatHora(String(updated.hora_salida))
+    }
+    if (updated.fecha !== undefined && updated.fecha !== '') {
+      updated.fecha = formatDateForSheet(String(updated.fecha)) || String(updated.fecha)
+    }
+    if (updated.fecha_creacion !== undefined && updated.fecha_creacion !== '') {
+      updated.fecha_creacion = formatDateForSheet(String(updated.fecha_creacion)) || String(updated.fecha_creacion)
+    }
+
     await updateRow(HOJA, idx, updated)
     return NextResponse.json(updated)
   } catch (e) {
