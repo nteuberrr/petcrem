@@ -133,27 +133,14 @@ export default function DashboardPage() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        {/* Ventas por mes */}
-        <ChartCard title="Ingresos mensuales (últimos 12 meses)">
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={data.ventas_por_mes}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }} />
-              <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v) => fmtPrecio(v as number)} />
-              <Line type="monotone" dataKey="ingresos" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Mascotas por mes */}
-        <ChartCard title="Mascotas cremadas por mes">
+        {/* Mascotas ingresadas por mes (driver: fecha de retiro) */}
+        <ChartCard title="Mascotas ingresadas por mes">
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={data.ventas_por_mes}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }} />
-              <YAxis fontSize={11} tick={{ fill: '#6b7280' }} />
-              <Tooltip />
+              <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => fmtNumero(v as number)} />
+              <Tooltip formatter={(v) => fmtNumero(v as number)} />
               <Bar dataKey="mascotas" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>

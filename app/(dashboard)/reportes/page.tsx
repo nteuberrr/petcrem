@@ -2,6 +2,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { fmtPrecio, fmtNumero as fmtNum, fmtLitros, fmtFecha } from '@/lib/format'
 import { formatDateForSheet } from '@/lib/dates'
+import {
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, CartesianGrid,
+} from 'recharts'
 
 type ReporteData = {
   kpis: {
@@ -50,9 +54,28 @@ type RegistroAsistencia = {
 }
 type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number }
 
-const TABS = ['Mensual', 'Configuraciones', 'Veterinarios', 'Asistencia'] as const
+const TABS = ['Mensual', 'Ingresos', 'Configuraciones', 'Veterinarios', 'Asistencia'] as const
 type Tab = typeof TABS[number]
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+const CHART_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6', '#f43f5e', '#0ea5e9']
+
+type IngresoBucket = { mes_key: string; mes_label: string; ingresos: number; cantidad: number }
+type IngresoSlice = { ingresos: number; cantidad: number }
+type IngresosData = {
+  resumen: { total: number; cantidad: number; ticket_promedio: number }
+  evolucion_mensual: IngresoBucket[]
+  por_tramo: Array<IngresoSlice & { tramo: string; orden: number }>
+  por_servicio: Array<IngresoSlice & { codigo: string }>
+  por_especie: Array<IngresoSlice & { especie: string }>
+  por_comuna: Array<IngresoSlice & { comuna: string }>
+  por_tipo_precio: Array<IngresoSlice & { tipo: string }>
+}
+
+function fmtPrecioCorto(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toLocaleString('es-CL', { maximumFractionDigits: 1 })}M`
+  if (n >= 1_000) return `$${Math.round(n / 1000).toLocaleString('es-CL')}k`
+  return fmtPrecio(n)
+}
 
 export default function ReportesPage() {
   const now = new Date()
@@ -65,6 +88,9 @@ export default function ReportesPage() {
   const [asistencia, setAsistencia] = useState<RegistroAsistencia[]>([])
   const [jornadaVigente, setJornadaVigente] = useState<JornadaCfg | null>(null)
   const [loading, setLoading] = useState(false)
+  const [ingresosData, setIngresosData] = useState<IngresosData | null>(null)
+  const [ingresosDesde, setIngresosDesde] = useState('')
+  const [ingresosHasta, setIngresosHasta] = useState('')
 
   const fetchReporte = useCallback(async () => {
     setLoading(true)
@@ -87,6 +113,17 @@ export default function ReportesPage() {
     setLoading(false)
   }, [mes, anio])
 
+  const fetchIngresos = useCallback(async () => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (ingresosDesde) params.set('desde', ingresosDesde)
+    if (ingresosHasta) params.set('hasta', ingresosHasta)
+    const qs = params.toString()
+    const res = await fetch(`/api/reportes/ingresos${qs ? `?${qs}` : ''}`, { cache: 'no-store' })
+    setIngresosData(await res.json())
+    setLoading(false)
+  }, [ingresosDesde, ingresosHasta])
+
   const fetchAsistencia = useCallback(async () => {
     setLoading(true)
     const desde = `${anio}-${String(mes).padStart(2, '0')}-01`
@@ -103,10 +140,11 @@ export default function ReportesPage() {
 
   useEffect(() => {
     if (tab === 'Mensual') fetchReporte()
+    else if (tab === 'Ingresos') fetchIngresos()
     else if (tab === 'Configuraciones') fetchConfig()
     else if (tab === 'Veterinarios') fetchVets()
     else if (tab === 'Asistencia') fetchAsistencia()
-  }, [tab, fetchReporte, fetchConfig, fetchVets, fetchAsistencia])
+  }, [tab, fetchReporte, fetchIngresos, fetchConfig, fetchVets, fetchAsistencia])
 
   // Resumen asistencia por operador
   type ResumenOperador = {
@@ -263,7 +301,7 @@ export default function ReportesPage() {
         ))}
       </div>
 
-      {/* Selector período — compartido para Mensual, Veterinarios y Asistencia */}
+      {/* Selector período — compartido para Mensual, Veterinarios y Asistencia (Ingresos tiene su propio rango) */}
       {(tab === 'Mensual' || tab === 'Veterinarios' || tab === 'Asistencia') && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-4">
           <div>
@@ -391,6 +429,19 @@ export default function ReportesPage() {
             </button>
           </div>
         </>
+      )}
+
+      {/* ─── TAB INGRESOS ─── */}
+      {tab === 'Ingresos' && (
+        <IngresosTab
+          data={ingresosData}
+          loading={loading}
+          desde={ingresosDesde}
+          hasta={ingresosHasta}
+          setDesde={setIngresosDesde}
+          setHasta={setIngresosHasta}
+          onAplicar={fetchIngresos}
+        />
       )}
 
       {/* ─── TAB CONFIGURACIONES ─── */}
@@ -720,3 +771,257 @@ function VeterinariosTab({ data, mes, anio, meses, onExcel }: {
 }
 
 function fmtNumero(n: number | string) { return fmtNum(n) }
+
+function IngresosTab({
+  data, loading, desde, hasta, setDesde, setHasta, onAplicar,
+}: {
+  data: IngresosData | null
+  loading: boolean
+  desde: string; hasta: string
+  setDesde: (v: string) => void
+  setHasta: (v: string) => void
+  onAplicar: () => void
+}) {
+  const evolucion = data?.evolucion_mensual ?? []
+  const porTramo = data?.por_tramo ?? []
+  const porServicio = data?.por_servicio ?? []
+  const porEspecie = data?.por_especie ?? []
+  const porComuna = (data?.por_comuna ?? []).slice(0, 10)
+  const porTipoPrecio = data?.por_tipo_precio ?? []
+
+  async function descargarExcel() {
+    if (!data) return
+    const XLSX = await import('xlsx-js-style')
+    const wb = XLSX.utils.book_new()
+    const resumen: (string | number)[][] = [
+      ['Total ingresos', data.resumen.total],
+      ['Mascotas', data.resumen.cantidad],
+      ['Ticket promedio', data.resumen.ticket_promedio],
+      [],
+      ['Evolución mensual', '', ''],
+      ['Mes', 'Ingresos', 'Mascotas'],
+      ...evolucion.map(e => [e.mes_label, e.ingresos, e.cantidad]),
+      [],
+      ['Por tramo de precio', '', ''],
+      ['Tramo', 'Ingresos', 'Mascotas'],
+      ...porTramo.map(t => [t.tramo, t.ingresos, t.cantidad]),
+      [],
+      ['Por tipo de servicio', '', ''],
+      ['Código', 'Ingresos', 'Mascotas'],
+      ...porServicio.map(s => [s.codigo, s.ingresos, s.cantidad]),
+      [],
+      ['Por especie', '', ''],
+      ['Especie', 'Ingresos', 'Mascotas'],
+      ...porEspecie.map(s => [s.especie, s.ingresos, s.cantidad]),
+      [],
+      ['Por comuna', '', ''],
+      ['Comuna', 'Ingresos', 'Mascotas'],
+      ...porComuna.map(s => [s.comuna, s.ingresos, s.cantidad]),
+    ]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Ingresos')
+    const sufijo = desde || hasta ? `${desde || 'inicio'}_${hasta || 'hoy'}` : 'completo'
+    XLSX.writeFile(wb, `petcrem-ingresos-${sufijo}.xlsx`)
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Filtros de período */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-wrap items-end gap-4">
+        <div>
+          <label className="text-xs font-medium text-gray-700">Desde</label>
+          <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
+            className="mt-1 block border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-700">Hasta</label>
+          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
+            className="mt-1 block border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <button onClick={onAplicar}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          Aplicar
+        </button>
+        {(desde || hasta) && (
+          <button onClick={() => { setDesde(''); setHasta(''); setTimeout(onAplicar, 0) }}
+            className="text-sm text-gray-500 hover:text-gray-700 underline">
+            Limpiar
+          </button>
+        )}
+        <div className="ml-auto">
+          <button onClick={descargarExcel} disabled={!data}
+            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-40">
+            ↓ Excel
+          </button>
+        </div>
+        {loading && <span className="text-xs text-gray-400">Cargando...</span>}
+      </div>
+
+      {!data && !loading && (
+        <p className="text-sm text-gray-400 text-center py-12">Sin datos</p>
+      )}
+
+      {data && (
+        <>
+          {/* KPIs resumen */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <KpiBox label="Total ingresos" value={fmtPrecio(data.resumen.total)} color="text-emerald-700" />
+            <KpiBox label="Mascotas" value={fmtNumero(data.resumen.cantidad)} color="text-indigo-700" />
+            <KpiBox label="Ticket promedio" value={fmtPrecio(data.resumen.ticket_promedio)} color="text-amber-700" />
+          </div>
+
+          {/* Evolución mensual */}
+          <ChartBox title="Evolución mensual de ingresos">
+            {evolucion.length === 0 ? (
+              <EmptyChart label="Sin datos en el rango" />
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={evolucion}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="mes_label" fontSize={11} tick={{ fill: '#6b7280' }} />
+                  <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => fmtPrecioCorto(v as number)} />
+                  <Tooltip formatter={(v) => fmtPrecio(v as number)} />
+                  <Line type="monotone" dataKey="ingresos" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </ChartBox>
+
+          {/* Por tramo de precio */}
+          <ChartBox title="Ingresos por tramo de precio">
+            {porTramo.length === 0 ? (
+              <EmptyChart label="Sin datos" />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={porTramo}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="tramo" fontSize={11} tick={{ fill: '#6b7280' }} />
+                  <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => fmtPrecioCorto(v as number)} />
+                  <Tooltip formatter={(v) => fmtPrecio(v as number)} />
+                  <Legend />
+                  <Bar name="Ingresos" dataKey="ingresos" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </ChartBox>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+            {/* Por tipo de servicio */}
+            <ChartBox title="Ingresos por tipo de servicio">
+              {porServicio.length === 0 ? (
+                <EmptyChart label="Sin datos" />
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie data={porServicio} dataKey="ingresos" nameKey="codigo" outerRadius={90}
+                      label={({ name, value }) => `${name}: ${fmtPrecioCorto(value as number)}`}>
+                      {porServicio.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => fmtPrecio(v as number)} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </ChartBox>
+
+            {/* Por especie */}
+            <ChartBox title="Ingresos por tipo de mascota">
+              {porEspecie.length === 0 ? (
+                <EmptyChart label="Sin datos" />
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie data={porEspecie} dataKey="ingresos" nameKey="especie" outerRadius={90}
+                      label={({ name, value }) => `${name}: ${fmtPrecioCorto(value as number)}`}>
+                      {porEspecie.map((_, i) => <Cell key={i} fill={CHART_COLORS[(i + 2) % CHART_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => fmtPrecio(v as number)} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </ChartBox>
+          </div>
+
+          {/* Por comuna */}
+          <ChartBox title="Ingresos por comuna (top 10)">
+            {porComuna.length === 0 ? (
+              <EmptyChart label="Sin datos" />
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(280, porComuna.length * 38)}>
+                <BarChart data={porComuna} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis type="number" fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => fmtPrecioCorto(v as number)} />
+                  <YAxis dataKey="comuna" type="category" fontSize={11} width={140} tick={{ fill: '#6b7280' }} />
+                  <Tooltip formatter={(v) => fmtPrecio(v as number)} />
+                  <Bar dataKey="ingresos" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </ChartBox>
+
+          {/* Por tipo de precio (general/convenio/especial) */}
+          {porTipoPrecio.length > 1 && (
+            <ChartBox title="Ingresos por tipo de precio">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {porTipoPrecio.map(p => (
+                  <div key={p.tipo} className="border border-gray-100 rounded-lg p-4">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">{p.tipo}</p>
+                    <p className="text-xl font-bold text-gray-900 mt-1">{fmtPrecio(p.ingresos)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{fmtNumero(p.cantidad)} mascotas</p>
+                  </div>
+                ))}
+              </div>
+            </ChartBox>
+          )}
+
+          {/* Tabla detalle por tramo */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h2 className="font-semibold text-gray-900 mb-4">Detalle por tramo</h2>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>{['Tramo', 'Ingresos', 'Mascotas', '% del total'].map(h => <th key={h} className="text-left px-4 py-2 text-xs font-semibold text-gray-500">{h}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {porTramo.map(t => (
+                  <tr key={t.tramo}>
+                    <td className="px-4 py-2 font-medium text-gray-900">{t.tramo}</td>
+                    <td className="px-4 py-2 font-semibold text-emerald-700">{fmtPrecio(t.ingresos)}</td>
+                    <td className="px-4 py-2 text-gray-700">{fmtNumero(t.cantidad)}</td>
+                    <td className="px-4 py-2 text-gray-500">
+                      {data.resumen.total > 0 ? `${((t.ingresos / data.resumen.total) * 100).toFixed(1)}%` : '0%'}
+                    </td>
+                  </tr>
+                ))}
+                {porTramo.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-xs text-gray-400">Sin datos</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function KpiBox({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-5 text-center">
+      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+      <p className="text-xs text-gray-500 mt-1">{label}</p>
+    </div>
+  )
+}
+
+function ChartBox({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <h3 className="text-sm font-semibold text-gray-700 mb-4">{title}</h3>
+      {children}
+    </div>
+  )
+}
+
+function EmptyChart({ label }: { label: string }) {
+  return <div className="flex items-center justify-center h-[200px] text-sm text-gray-400">{label}</div>
+}

@@ -269,20 +269,15 @@ export async function GET() {
       mascotas: 0,
     }))
     const limiteIzq = startVentanas[0]
-    // Ingresos mensuales: driver fecha_retiro (TODOS los clientes con fecha de retiro en el mes)
+    // Mascotas ingresadas por mes: driver fecha_retiro (TODOS los clientes con fecha de retiro en el mes).
+    // Mismo driver para ingresos mensuales (cuando se cobra), pero los ingresos ahora viven en
+    // /reportes → tab Ingresos. El dashboard solo muestra el evolutivo de mascotas.
     for (const c of clientes) {
       const f = fechaVenta(c)
       if (!f || f < limiteIzq) continue
       const idx = ventanaIdx.get(`${f.getFullYear()}-${f.getMonth()}`)
       if (idx === undefined) continue
       buckets[idx].ingresos += ingresoCliente(c).total
-    }
-    // Mascotas cremadas por mes: driver fecha del ciclo (solo cremados)
-    for (const c of cremadosTodos) {
-      const f = fechaCremacion(c)
-      if (!f || f < limiteIzq) continue
-      const idx = ventanaIdx.get(`${f.getFullYear()}-${f.getMonth()}`)
-      if (idx === undefined) continue
       buckets[idx].mascotas += 1
     }
     const ventasPorMes = buckets
