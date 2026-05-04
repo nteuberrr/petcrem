@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { google, sheets_v4 } from 'googleapis'
 import { ensureColumns, ensureSheet } from '@/lib/google-sheets'
-import { parseMonto } from '@/lib/numbers'
+import { parseMonto, parsePeso, parseDecimalOr0 } from '@/lib/numbers'
 import { formatDateForSheet } from '@/lib/dates'
 
 /**
@@ -381,6 +381,129 @@ async function syncDespachosNumeros(sheets: sheets_v4.Sheets) {
   return { total_filas: dataRows.length, filas_actualizadas: cambios.length, cambios }
 }
 
+/**
+ * Recalcula peso_total, lt_kg y lt_mascota para todos los ciclos.
+ * - peso_total: suma de pesos de las mascotas del ciclo (peso_ingreso || peso_declarado, normalizado por parsePeso)
+ * - lt_kg: consumo del ciclo / peso_total
+ * - lt_mascota: consumo del ciclo / cantidad de mascotas
+ */
+async function syncCiclosCalculados(sheets: sheets_v4.Sheets) {
+  await ensureSheet('ciclos')
+  await ensureColumns('ciclos', ['peso_total', 'lt_kg', 'lt_mascota'])
+
+  // Leer ciclos y clientes en paralelo
+  const [ciclosRes, clientesRes] = await Promise.all([
+    sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'ciclos',
+      valueRenderOption: 'UNFORMATTED_VALUE',
+    }),
+    sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'clientes',
+      valueRenderOption: 'UNFORMATTED_VALUE',
+    }),
+  ])
+
+  const ciclosMatrix = (ciclosRes.data.values ?? []) as unknown[][]
+  if (ciclosMatrix.length < 2) return { total_filas: 0, filas_actualizadas: 0, cambios: [] as NumberCambio[] }
+
+  const ciclosHeaders = (ciclosMatrix[0] as string[]) ?? []
+  const ciclosIdx = new Map(ciclosHeaders.map((h, i) => [h, i]))
+  const ciclosRows = ciclosMatrix.slice(1)
+
+  const fechaIdx = ciclosIdx.get('fecha')
+  const idIdx = ciclosIdx.get('id')
+  const litIniIdx = ciclosIdx.get('litros_inicio')
+  const litFinIdx = ciclosIdx.get('litros_fin')
+  const mascotasIdsIdx = ciclosIdx.get('mascotas_ids')
+  const pesoTotalIdx = ciclosIdx.get('peso_total')
+  const ltKgIdx = ciclosIdx.get('lt_kg')
+  const ltMascotaIdx = ciclosIdx.get('lt_mascota')
+  if (idIdx === undefined || litIniIdx === undefined || litFinIdx === undefined ||
+      mascotasIdsIdx === undefined || pesoTotalIdx === undefined ||
+      ltKgIdx === undefined || ltMascotaIdx === undefined) {
+    return { total_filas: ciclosRows.length, filas_actualizadas: 0, cambios: [] as NumberCambio[] }
+  }
+
+  // Indexar clientes por id para lookup de pesos
+  const clientesMatrix = (clientesRes.data.values ?? []) as unknown[][]
+  const clientesHeaders = (clientesMatrix[0] as string[]) ?? []
+  const cIdx = new Map(clientesHeaders.map((h, i) => [h, i]))
+  const cIdIdx = cIdx.get('id')
+  const cPesoIngresoIdx = cIdx.get('peso_ingreso')
+  const cPesoDeclaradoIdx = cIdx.get('peso_declarado')
+  const pesosByClienteId = new Map<string, number>()
+  if (cIdIdx !== undefined && (cPesoIngresoIdx !== undefined || cPesoDeclaradoIdx !== undefined)) {
+    for (const row of clientesMatrix.slice(1)) {
+      const cid = String(row[cIdIdx] ?? '')
+      if (!cid) continue
+      const pi = cPesoIngresoIdx !== undefined ? row[cPesoIngresoIdx] : ''
+      const pd = cPesoDeclaradoIdx !== undefined ? row[cPesoDeclaradoIdx] : ''
+      const peso = parsePeso(pi) || parsePeso(pd)
+      pesosByClienteId.set(cid, peso)
+    }
+  }
+
+  const cambios: NumberCambio[] = []
+  for (const row of ciclosRows) {
+    const camposCambiados: string[] = []
+    const consumo = Math.abs(parseDecimalOr0(row[litFinIdx]) - parseDecimalOr0(row[litIniIdx]))
+    let mascotasIds: string[] = []
+    try { mascotasIds = JSON.parse(String(row[mascotasIdsIdx] ?? '[]')) } catch { mascotasIds = [] }
+
+    let pesoTotal = 0
+    for (const mid of mascotasIds) {
+      pesoTotal += pesosByClienteId.get(String(mid)) ?? 0
+    }
+    const ltKg = pesoTotal > 0 ? consumo / pesoTotal : 0
+    const ltMascota = mascotasIds.length > 0 ? consumo / mascotasIds.length : 0
+
+    // Comparar con valor actual y escribir si cambia (con tolerancia para evitar ruido por floats)
+    const equiv = (a: number, b: number) => Math.abs(a - b) < 0.001
+    const actualPeso = parseDecimalOr0(row[pesoTotalIdx])
+    const actualLtKg = parseDecimalOr0(row[ltKgIdx])
+    const actualLtMascota = parseDecimalOr0(row[ltMascotaIdx])
+
+    if (!equiv(actualPeso, pesoTotal)) {
+      row[pesoTotalIdx] = pesoTotal
+      camposCambiados.push('peso_total')
+    }
+    if (!equiv(actualLtKg, ltKg)) {
+      row[ltKgIdx] = ltKg
+      camposCambiados.push('lt_kg')
+    }
+    if (!equiv(actualLtMascota, ltMascota)) {
+      row[ltMascotaIdx] = ltMascota
+      camposCambiados.push('lt_mascota')
+    }
+
+    if (camposCambiados.length > 0) {
+      const fechaIso = fechaIdx !== undefined
+        ? (formatDateForSheet(String(row[fechaIdx] ?? '')) || String(row[fechaIdx] ?? ''))
+        : ''
+      cambios.push({
+        id: String(row[idIdx] ?? ''),
+        fecha: fechaIso,
+        campos: camposCambiados,
+      })
+    }
+  }
+
+  if (cambios.length > 0) {
+    const lastCol = colLetter(ciclosHeaders.length - 1)
+    const writeRange = `ciclos!A2:${lastCol}${ciclosRows.length + 1}`
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: writeRange,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: ciclosRows as (string | number | boolean)[][] },
+    })
+  }
+
+  return { total_filas: ciclosRows.length, filas_actualizadas: cambios.length, cambios }
+}
+
 export async function POST() {
   try {
     const sheets = google.sheets({ version: 'v4', auth: getAuth() })
@@ -389,8 +512,10 @@ export async function POST() {
     const vehiculo = await syncNumericSheet(sheets, 'vehiculo_cargas', ['litros', 'km_odometro'], ['monto'])
     const petroleo = await syncNumericSheet(sheets, 'cargas_petroleo', ['litros'], ['precio_neto', 'iva', 'especifico', 'total_bruto'])
     const despachos = await syncDespachosNumeros(sheets)
+    // Importante: ciclos depende de clientes (lee pesos), corre después del syncClientes que normaliza pesos
+    const ciclos = await syncCiclosCalculados(sheets)
 
-    return NextResponse.json({ ok: true, clientes, vehiculo, petroleo, despachos })
+    return NextResponse.json({ ok: true, clientes, vehiculo, petroleo, despachos, ciclos })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

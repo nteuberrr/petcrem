@@ -83,6 +83,7 @@ export default function ConfiguracionPage() {
     vehiculo: NumberSyncResult
     petroleo: NumberSyncResult
     despachos: NumberSyncResult
+    ciclos: NumberSyncResult
   }
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null)
@@ -843,7 +844,30 @@ export default function ConfiguracionPage() {
                       <li key={c.id} className="text-xs text-gray-700 py-1">
                         <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
                         <span>{c.fecha}</span>{' '}
-                        <span className="text-gray-500">→ N° recorrido reasignado</span>
+                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              {/* Ciclos: peso_total, lt_kg, lt_mascota recalculados */}
+              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
+                <p className="text-sm font-bold text-emerald-900">
+                  ✓ Ciclos: {syncResult.ciclos.filas_actualizadas} de {syncResult.ciclos.total_filas} ciclos con peso total y ratios recalculados
+                </p>
+              </div>
+              {syncResult.ciclos.cambios.length > 0 && (
+                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
+                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
+                    Detalle ciclos ({syncResult.ciclos.cambios.length})
+                  </summary>
+                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
+                    {syncResult.ciclos.cambios.map(c => (
+                      <li key={c.id} className="text-xs text-gray-700 py-1">
+                        <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
+                        <span>{c.fecha}</span>{' '}
+                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
                       </li>
                     ))}
                   </ul>
