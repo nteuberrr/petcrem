@@ -3,6 +3,8 @@ import { getSheetData } from '@/lib/google-sheets'
 import { formatDateForSheet, horaToMinutos } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso, parseMonto } from '@/lib/numbers'
 
+export const dynamic = 'force-dynamic'
+
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string; veterinaria_id?: string }
 type AdicionalItem = { tipo: string; id: string; nombre?: string; precio?: number; qty?: number }
 
@@ -187,11 +189,51 @@ export async function GET() {
     }
     const duracionPromedioCicloMin = countDuracion > 0 ? sumDuracion / countDuracion : 0
 
-    // Ventas últimos 12 meses — agrupar en una pasada en vez de 12 filters
-    const startVentanas = Array.from({ length: 12 }, (_, k) => {
-      const i = 11 - k
-      return new Date(anioActual, mesActual - i, 1)
-    })
+    // Rango adaptativo: desde el mes más antiguo con actividad (o últimos 12 meses si hay menos),
+    // hasta el mes actual. Cap superior de 24 meses para no inflar el chart.
+    function mesKeyOf(d: Date): { y: number; m: number } {
+      return { y: d.getFullYear(), m: d.getMonth() }
+    }
+    const fechasRelevantes: Date[] = []
+    for (const c of cremadosTodos) {
+      const f = fechaCliente(c)
+      if (f) fechasRelevantes.push(f)
+    }
+    for (const c of ciclos) {
+      const f = parseDateSafe(c.fecha)
+      if (f) fechasRelevantes.push(f)
+    }
+    for (const r of cargasVehiculo) {
+      const f = parseDateSafe(r.fecha)
+      if (f) fechasRelevantes.push(f)
+    }
+    for (const r of cargas) {
+      const f = parseDateSafe(r.fecha)
+      if (f) fechasRelevantes.push(f)
+    }
+    for (const c of clientes) {
+      const f = parseDateSafe(c.fecha_retiro || c.fecha_creacion)
+      if (f) fechasRelevantes.push(f)
+    }
+    const masAntigua = fechasRelevantes.length > 0
+      ? new Date(Math.min(...fechasRelevantes.map(d => d.getTime())))
+      : new Date(anioActual, mesActual - 11, 1)
+
+    // Default mínimo: 12 meses; cap máximo: 24 meses
+    const startMin = new Date(anioActual, mesActual - 11, 1)
+    const startCap = new Date(anioActual, mesActual - 23, 1)
+    let startEffective = new Date(masAntigua.getFullYear(), masAntigua.getMonth(), 1)
+    if (startEffective > startMin) startEffective = startMin
+    if (startEffective < startCap) startEffective = startCap
+
+    // Generar buckets desde startEffective hasta mesActual (inclusivo)
+    const startVentanas: Date[] = []
+    let cursor = new Date(startEffective)
+    const endDate = new Date(anioActual, mesActual, 1)
+    while (cursor <= endDate) {
+      startVentanas.push(new Date(cursor))
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+    }
     const ventanaIdx = new Map<string, number>() // key "yyyy-mm" → bucket index
     startVentanas.forEach((d, idx) => ventanaIdx.set(`${d.getFullYear()}-${d.getMonth()}`, idx))
     const buckets = startVentanas.map(d => ({
