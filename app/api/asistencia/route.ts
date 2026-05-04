@@ -5,6 +5,8 @@ import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns
 import { todayISO, formatDateForSheet, formatHora } from '@/lib/dates'
 import { calcularMinutos, configVigente, type JornadaConfig } from '@/lib/asistencia'
 
+export const dynamic = 'force-dynamic'
+
 const HOJA = 'asistencia'
 const COLS = [
   'id', 'usuario_id', 'usuario_nombre', 'fecha', 'dia_semana', 'es_findesemana',
@@ -19,7 +21,7 @@ async function ensure() {
 
 async function getConfigs(): Promise<JornadaConfig[]> {
   await ensureSheet('jornada_config')
-  await ensureColumns('jornada_config', ['id', 'vigente_desde', 'hora_entrada', 'hora_salida', 'precio_hora_extra', 'creado_por', 'fecha_creacion'])
+  await ensureColumns('jornada_config', ['id', 'vigente_desde', 'hora_entrada', 'hora_salida', 'precio_hora_extra', 'tolerancia_minutos', 'creado_por', 'fecha_creacion'])
   const rows = await getSheetData('jornada_config')
   return rows.map(r => ({
     id: r.id,
@@ -27,6 +29,7 @@ async function getConfigs(): Promise<JornadaConfig[]> {
     hora_entrada: formatHora(r.hora_entrada),
     hora_salida: formatHora(r.hora_salida),
     precio_hora_extra: parseFloat(r.precio_hora_extra) || 0,
+    tolerancia_minutos: parseInt(r.tolerancia_minutos || '0', 10) || 0,
   }))
 }
 
@@ -46,7 +49,9 @@ export async function GET(req: NextRequest) {
     // Operador solo ve sus propios registros
     const role = (session.user as { role?: string })?.role
     if (role !== 'admin') {
-      const myId = (session.user as { id?: string })?.id ?? '0'
+      const myId = (session.user as { id?: string })?.id ?? ''
+      // Si el JWT no trae id (sesión vieja), no devolver nada en vez de filtrar por '0'
+      if (!myId) return NextResponse.json([])
       filtered = filtered.filter(r => r.usuario_id === myId)
     } else if (usuarioId) {
       filtered = filtered.filter(r => r.usuario_id === usuarioId)

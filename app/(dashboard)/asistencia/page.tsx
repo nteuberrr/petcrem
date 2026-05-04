@@ -24,13 +24,22 @@ type Registro = {
   fecha_creacion: string
 }
 
-type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number }
+type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number; tolerancia_minutos: number }
 
+/**
+ * Formatea minutos como duración:
+ * - 0 → "0h"
+ * - 30 → "30 min"
+ * - 90 → "1h 30min"
+ * - 1158 → "1158h" (sin minutos cuando son muchas horas, para que no confunda con hora de reloj)
+ */
 function fmtMinutos(mins: number): string {
-  if (mins <= 0) return '0:00'
+  if (mins <= 0) return '0h'
   const h = Math.floor(mins / 60)
-  const m = mins % 60
-  return `${h}:${String(m).padStart(2, '0')}`
+  const m = Math.round(mins % 60)
+  if (h === 0) return `${m} min`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}min`
 }
 
 export default function AsistenciaPage() {
@@ -55,16 +64,16 @@ export default function AsistenciaPage() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [errorEdit, setErrorEdit] = useState('')
 
-  // Filtros admin
-  const [filtroMes, setFiltroMes] = useState(() => todayISO().slice(0, 7))
+  // Filtros admin — mes vacío = mostrar todos los meses por default
+  const [filtroMes, setFiltroMes] = useState('')
   const [filtroUsuario, setFiltroUsuario] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'aprobado' | 'rechazado' | 'abierto'>('todos')
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
     const [resReg, resCfg] = await Promise.all([
-      fetch('/api/asistencia').then(r => r.json()),
-      fetch('/api/jornada-config').then(r => r.json()),
+      fetch('/api/asistencia', { cache: 'no-store' }).then(r => r.json()),
+      fetch('/api/jornada-config', { cache: 'no-store' }).then(r => r.json()),
     ])
     setRegistros(Array.isArray(resReg) ? resReg : [])
     setVigente(resCfg?.vigente ?? null)
@@ -166,14 +175,31 @@ export default function AsistenciaPage() {
     })
   }, [registros, filtroMes, filtroUsuario, filtroEstado])
 
-  const resumen = useMemo(() => {
-    let totalNormales = 0, totalExtra = 0
-    filtrados.forEach(r => {
-      totalNormales += parseFloat(r.minutos_normales) || 0
-      if (r.estado_aprobacion === 'aprobado') totalExtra += parseFloat(r.minutos_extra) || 0
-    })
-    const costoExtra = vigente ? (totalExtra / 60) * vigente.precio_hora_extra : 0
-    return { totalNormales, totalExtra, costoExtra }
+  // Resumen por operador — totales separados por persona
+  type ResumenOperador = {
+    usuario_id: string; usuario_nombre: string
+    minutos_normales: number; minutos_extra_aprobado: number; minutos_extra_pendiente: number
+    costo_extra: number; registros: number
+  }
+  const resumenPorOperador = useMemo<ResumenOperador[]>(() => {
+    const precio = vigente?.precio_hora_extra ?? 0
+    const m = new Map<string, ResumenOperador>()
+    for (const r of filtrados) {
+      let acc = m.get(r.usuario_id)
+      if (!acc) {
+        acc = { usuario_id: r.usuario_id, usuario_nombre: r.usuario_nombre, minutos_normales: 0, minutos_extra_aprobado: 0, minutos_extra_pendiente: 0, costo_extra: 0, registros: 0 }
+        m.set(r.usuario_id, acc)
+      }
+      acc.minutos_normales += parseFloat(r.minutos_normales) || 0
+      const extra = parseFloat(r.minutos_extra) || 0
+      if (r.estado_aprobacion === 'aprobado') acc.minutos_extra_aprobado += extra
+      else if (r.estado_aprobacion === 'pendiente') acc.minutos_extra_pendiente += extra
+      acc.registros += 1
+    }
+    for (const acc of m.values()) {
+      acc.costo_extra = (acc.minutos_extra_aprobado / 60) * precio
+    }
+    return Array.from(m.values()).sort((a, b) => a.usuario_nombre.localeCompare(b.usuario_nombre))
   }, [filtrados, vigente])
 
   const fichajeHoy = useMemo(() => {
@@ -261,7 +287,15 @@ export default function AsistenciaPage() {
         <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-xs font-semibold text-gray-700">Mes</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-gray-700">Mes</label>
+                {filtroMes && (
+                  <button type="button" onClick={() => setFiltroMes('')}
+                    className="text-[10px] text-indigo-600 hover:text-indigo-800 underline">
+                    Limpiar
+                  </button>
+                )}
+              </div>
               <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
                 className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
@@ -285,20 +319,42 @@ export default function AsistenciaPage() {
               </select>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
-              <p className="text-xs font-semibold text-blue-700 uppercase">Horas normales</p>
-              <p className="text-lg font-bold text-blue-900 mt-1">{fmtMinutos(resumen.totalNormales)}</p>
+          {resumenPorOperador.length === 0 && (
+            <p className="text-sm text-gray-400 text-center mt-4">Sin registros para este filtro</p>
+          )}
+        </div>
+      )}
+
+      {/* Totales por operador (solo admin) */}
+      {isAdmin && resumenPorOperador.length > 0 && (
+        <div className="space-y-4">
+          {resumenPorOperador.map(op => (
+            <div key={op.usuario_id} className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-bold text-gray-900">{op.usuario_nombre}</h3>
+                <span className="text-[10px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                  {op.registros} {op.registros === 1 ? 'fichaje' : 'fichajes'}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-blue-700 uppercase">Horas normales</p>
+                  <p className="text-lg font-bold text-blue-900 mt-1">{fmtMinutos(op.minutos_normales)}</p>
+                </div>
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-amber-700 uppercase">Horas extra aprobadas</p>
+                  <p className="text-lg font-bold text-amber-900 mt-1">{fmtMinutos(op.minutos_extra_aprobado)}</p>
+                  {op.minutos_extra_pendiente > 0 && (
+                    <p className="text-[10px] text-amber-600 mt-0.5">+ {fmtMinutos(op.minutos_extra_pendiente)} pendientes</p>
+                  )}
+                </div>
+                <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-emerald-700 uppercase">Costo extra estimado</p>
+                  <p className="text-lg font-bold text-emerald-900 mt-1">{fmtPrecio(op.costo_extra)}</p>
+                </div>
+              </div>
             </div>
-            <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3">
-              <p className="text-xs font-semibold text-amber-700 uppercase">Horas extra (aprobadas)</p>
-              <p className="text-lg font-bold text-amber-900 mt-1">{fmtMinutos(resumen.totalExtra)}</p>
-            </div>
-            <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-3">
-              <p className="text-xs font-semibold text-emerald-700 uppercase">Costo extra estimado</p>
-              <p className="text-lg font-bold text-emerald-900 mt-1">{fmtPrecio(resumen.costoExtra)}</p>
-            </div>
-          </div>
+          ))}
         </div>
       )}
 

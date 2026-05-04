@@ -64,7 +64,7 @@ const SHEETS: Record<string, string[]> = {
   ],
   jornada_config: [
     'id', 'vigente_desde', 'hora_entrada', 'hora_salida', 'precio_hora_extra',
-    'creado_por', 'fecha_creacion',
+    'tolerancia_minutos', 'creado_por', 'fecha_creacion',
   ],
 }
 

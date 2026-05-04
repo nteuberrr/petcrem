@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { google, sheets_v4 } from 'googleapis'
 import { ensureColumns, ensureSheet } from '@/lib/google-sheets'
 import { parseMonto, parsePeso, parseDecimalOr0 } from '@/lib/numbers'
-import { formatDateForSheet } from '@/lib/dates'
+import { formatDateForSheet, formatHora } from '@/lib/dates'
+import { calcularMinutos, configVigente, type JornadaConfig } from '@/lib/asistencia'
 
 /**
  * Normaliza las hojas `clientes`, `vehiculo_cargas` y `cargas_petroleo`.
@@ -31,6 +32,20 @@ function getAuth() {
 }
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
+
+/**
+ * Lee múltiples hojas en una sola llamada API (batchGet) para evitar pegarle
+ * a la quota de 60 lecturas/minuto. Devuelve las matrices en el mismo orden
+ * que los rangos.
+ */
+async function batchGetMatrices(sheets: sheets_v4.Sheets, ranges: string[]): Promise<unknown[][][]> {
+  const res = await sheets.spreadsheets.values.batchGet({
+    spreadsheetId: SPREADSHEET_ID,
+    ranges,
+    valueRenderOption: 'UNFORMATTED_VALUE',
+  })
+  return ranges.map((_r, i) => (res.data.valueRanges?.[i]?.values ?? []) as unknown[][])
+}
 
 function colLetter(idx: number): string {
   let s = ''
@@ -388,24 +403,9 @@ async function syncDespachosNumeros(sheets: sheets_v4.Sheets) {
  * - lt_mascota: consumo del ciclo / cantidad de mascotas
  */
 async function syncCiclosCalculados(sheets: sheets_v4.Sheets) {
-  await ensureSheet('ciclos')
-  await ensureColumns('ciclos', ['peso_total', 'lt_kg', 'lt_mascota'])
+  // ciclos.peso_total/lt_kg/lt_mascota deben existir; si no, init-sheets las crea.
+  const [ciclosMatrix, clientesMatrix] = await batchGetMatrices(sheets, ['ciclos', 'clientes'])
 
-  // Leer ciclos y clientes en paralelo
-  const [ciclosRes, clientesRes] = await Promise.all([
-    sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'ciclos',
-      valueRenderOption: 'UNFORMATTED_VALUE',
-    }),
-    sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'clientes',
-      valueRenderOption: 'UNFORMATTED_VALUE',
-    }),
-  ])
-
-  const ciclosMatrix = (ciclosRes.data.values ?? []) as unknown[][]
   if (ciclosMatrix.length < 2) return { total_filas: 0, filas_actualizadas: 0, cambios: [] as NumberCambio[] }
 
   const ciclosHeaders = (ciclosMatrix[0] as string[]) ?? []
@@ -427,7 +427,6 @@ async function syncCiclosCalculados(sheets: sheets_v4.Sheets) {
   }
 
   // Indexar clientes por id para lookup de pesos
-  const clientesMatrix = (clientesRes.data.values ?? []) as unknown[][]
   const clientesHeaders = (clientesMatrix[0] as string[]) ?? []
   const cIdx = new Map(clientesHeaders.map((h, i) => [h, i]))
   const cIdIdx = cIdx.get('id')
@@ -578,29 +577,8 @@ async function syncIdsUnicos(sheets: sheets_v4.Sheets, sheetName: string) {
  * Si está en múltiples ciclos/despachos, gana el de id más alto (más reciente).
  */
 async function syncCremadosPorCiclos(sheets: sheets_v4.Sheets) {
-  await ensureSheet('clientes')
-  await ensureSheet('ciclos')
-  await ensureSheet('despachos')
+  const [clientesMatrix, ciclosMatrix, despachosMatrix] = await batchGetMatrices(sheets, ['clientes', 'ciclos', 'despachos'])
 
-  const [clientesRes, ciclosRes, despachosRes] = await Promise.all([
-    sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'clientes',
-      valueRenderOption: 'UNFORMATTED_VALUE',
-    }),
-    sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'ciclos',
-      valueRenderOption: 'UNFORMATTED_VALUE',
-    }),
-    sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'despachos',
-      valueRenderOption: 'UNFORMATTED_VALUE',
-    }),
-  ])
-
-  const clientesMatrix = (clientesRes.data.values ?? []) as unknown[][]
   if (clientesMatrix.length < 2) {
     return { total_filas: 0, filas_actualizadas: 0, cambios: [] as ClienteCambio[] }
   }
@@ -641,8 +619,6 @@ async function syncCremadosPorCiclos(sheets: sheets_v4.Sheets) {
     return m
   }
 
-  const ciclosMatrix = (ciclosRes.data.values ?? []) as unknown[][]
-  const despachosMatrix = (despachosRes.data.values ?? []) as unknown[][]
   const cicloDeCliente = mapearMascotas(ciclosMatrix, 'ciclos')
   const despachoDeCliente = mapearMascotas(despachosMatrix, 'despachos')
 
@@ -711,6 +687,187 @@ async function syncCremadosPorCiclos(sheets: sheets_v4.Sheets) {
   return { total_filas: clientesRows.length, filas_actualizadas: cambios.length, cambios }
 }
 
+type AsistenciaCambio = { id: string; fecha: string; usuario_nombre: string; campos: string[] }
+type AsistenciaWarning = { id: string; fecha: string; usuario_nombre: string; aviso: string }
+
+/**
+ * Backfill de la hoja `asistencia`:
+ * - usuario_id: si está vacío o '0', matchear por usuario_nombre contra `usuarios`.
+ * - dia_semana, es_findesemana, minutos_trabajados/normales/extra: recalcular usando
+ *   la jornada vigente al momento de la fecha del registro.
+ * - estado_aprobacion: si está vacío, aplicar default (abierto / pendiente / aprobado).
+ *
+ * Mantiene `estado_aprobacion` y `aprobado_por` si ya estaban seteados manualmente.
+ */
+async function syncAsistencia(sheets: sheets_v4.Sheets) {
+  // Asume que init-sheets ya creó las hojas/columnas. Lectura única vía batchGet.
+  const [matrix, usuariosMatrix, configMatrix] = await batchGetMatrices(sheets, ['asistencia', 'usuarios', 'jornada_config'])
+
+  if (matrix.length < 2) {
+    return { total_filas: 0, filas_actualizadas: 0, cambios: [] as AsistenciaCambio[], warnings: [] as AsistenciaWarning[] }
+  }
+  const headers = (matrix[0] as string[]) ?? []
+  const idxOf = new Map(headers.map((h, i) => [h, i]))
+  const dataRows = matrix.slice(1)
+
+  const idIdx = idxOf.get('id')
+  const usuarioIdIdx = idxOf.get('usuario_id')
+  const usuarioNombreIdx = idxOf.get('usuario_nombre')
+  const fechaIdx = idxOf.get('fecha')
+  const diaSemanaIdx = idxOf.get('dia_semana')
+  const esFindeIdx = idxOf.get('es_findesemana')
+  const horaEntradaIdx = idxOf.get('hora_entrada')
+  const horaSalidaIdx = idxOf.get('hora_salida')
+  const minTrabajadosIdx = idxOf.get('minutos_trabajados')
+  const minNormalesIdx = idxOf.get('minutos_normales')
+  const minExtraIdx = idxOf.get('minutos_extra')
+  const estadoIdx = idxOf.get('estado_aprobacion')
+  const aprobadoPorIdx = idxOf.get('aprobado_por')
+
+  if ([idIdx, usuarioIdIdx, usuarioNombreIdx, fechaIdx, diaSemanaIdx, esFindeIdx,
+       horaEntradaIdx, horaSalidaIdx, minTrabajadosIdx, minNormalesIdx, minExtraIdx,
+       estadoIdx, aprobadoPorIdx].some(v => v === undefined)) {
+    return { total_filas: dataRows.length, filas_actualizadas: 0, cambios: [] as AsistenciaCambio[], warnings: [] as AsistenciaWarning[] }
+  }
+
+  // Mapa nombre normalizado → id desde usuarios
+  const usuariosHeaders = (usuariosMatrix[0] as string[]) ?? []
+  const uIdx = new Map(usuariosHeaders.map((h, i) => [h, i]))
+  const uIdIdx = uIdx.get('id')
+  const uNombreIdx = uIdx.get('nombre')
+  const nombreToId = new Map<string, string>()
+  if (uIdIdx !== undefined && uNombreIdx !== undefined) {
+    for (const row of usuariosMatrix.slice(1)) {
+      const id = String(row[uIdIdx] ?? '')
+      const nombre = String(row[uNombreIdx] ?? '').trim().toLowerCase()
+      if (id && nombre) nombreToId.set(nombre, id)
+    }
+  }
+
+  // Configuraciones de jornada
+  const configs: JornadaConfig[] = []
+  if (configMatrix.length >= 2) {
+    const cHeaders = (configMatrix[0] as string[]) ?? []
+    const cIdx = new Map(cHeaders.map((h, i) => [h, i]))
+    const cId = cIdx.get('id'), cVD = cIdx.get('vigente_desde')
+    const cHE = cIdx.get('hora_entrada'), cHS = cIdx.get('hora_salida')
+    const cPrecio = cIdx.get('precio_hora_extra')
+    const cTol = cIdx.get('tolerancia_minutos')
+    if (cId !== undefined && cVD !== undefined && cHE !== undefined && cHS !== undefined) {
+      for (const row of configMatrix.slice(1)) {
+        configs.push({
+          id: String(row[cId] ?? ''),
+          vigente_desde: formatDateForSheet(String(row[cVD] ?? '')) || String(row[cVD] ?? ''),
+          hora_entrada: formatHora(String(row[cHE] ?? '')),
+          hora_salida: formatHora(String(row[cHS] ?? '')),
+          precio_hora_extra: cPrecio !== undefined ? (parseFloat(String(row[cPrecio] ?? '0')) || 0) : 0,
+          tolerancia_minutos: cTol !== undefined ? (parseInt(String(row[cTol] ?? '0'), 10) || 0) : 0,
+        })
+      }
+    }
+  }
+
+  const cambios: AsistenciaCambio[] = []
+  const warnings: AsistenciaWarning[] = []
+
+  for (const row of dataRows) {
+    const camposCambiados: string[] = []
+    const id = String(row[idIdx!] ?? '')
+    const fechaIso = formatDateForSheet(String(row[fechaIdx!] ?? '')) || String(row[fechaIdx!] ?? '')
+    const usuarioNombre = String(row[usuarioNombreIdx!] ?? '').trim()
+
+    // 1. Backfill usuario_id por nombre si está vacío o '0'
+    const actualUsuarioId = String(row[usuarioIdIdx!] ?? '').trim()
+    if (!actualUsuarioId || actualUsuarioId === '0') {
+      const matched = nombreToId.get(usuarioNombre.toLowerCase())
+      if (matched) {
+        if (matched !== actualUsuarioId) {
+          row[usuarioIdIdx!] = matched
+          camposCambiados.push('usuario_id')
+        }
+      } else if (usuarioNombre) {
+        warnings.push({ id, fecha: fechaIso, usuario_nombre: usuarioNombre, aviso: 'No encontré usuario con ese nombre en hoja "usuarios"' })
+      }
+    }
+
+    // 2. Recalcular minutos según jornada vigente
+    const horaEntradaRaw = formatHora(String(row[horaEntradaIdx!] ?? ''))
+    const horaSalidaRaw = formatHora(String(row[horaSalidaIdx!] ?? ''))
+    const cfg = fechaIso ? configVigente(configs, fechaIso) : null
+
+    if (!cfg) {
+      if (fechaIso) warnings.push({ id, fecha: fechaIso, usuario_nombre: usuarioNombre, aviso: 'No hay jornada vigente para esta fecha' })
+    } else if (horaEntradaRaw) {
+      const tieneSalida = !!horaSalidaRaw
+      const calc = tieneSalida
+        ? calcularMinutos(fechaIso, horaEntradaRaw, horaSalidaRaw, cfg)
+        : { trabajados: 0, normales: 0, extra: 0, esFindesemana: false, diaSemana: '' }
+
+      const expectedFinde = tieneSalida ? (calc.esFindesemana ? 'TRUE' : 'FALSE') : ''
+      const expectedDia = calc.diaSemana
+      const expectedTrab = calc.trabajados
+      const expectedNorm = calc.normales
+      const expectedExtra = calc.extra
+
+      const actualFinde = String(row[esFindeIdx!] ?? '').toUpperCase()
+      const actualDia = String(row[diaSemanaIdx!] ?? '')
+      const actualTrab = parseInt(String(row[minTrabajadosIdx!] ?? '0'), 10) || 0
+      const actualNorm = parseInt(String(row[minNormalesIdx!] ?? '0'), 10) || 0
+      const actualExtra = parseInt(String(row[minExtraIdx!] ?? '0'), 10) || 0
+
+      if (tieneSalida && actualFinde !== expectedFinde) {
+        row[esFindeIdx!] = expectedFinde
+        camposCambiados.push('es_findesemana')
+      }
+      if (actualDia !== expectedDia && expectedDia) {
+        row[diaSemanaIdx!] = expectedDia
+        camposCambiados.push('dia_semana')
+      }
+      if (actualTrab !== expectedTrab) {
+        row[minTrabajadosIdx!] = expectedTrab
+        camposCambiados.push('minutos_trabajados')
+      }
+      if (actualNorm !== expectedNorm) {
+        row[minNormalesIdx!] = expectedNorm
+        camposCambiados.push('minutos_normales')
+      }
+      if (actualExtra !== expectedExtra) {
+        row[minExtraIdx!] = expectedExtra
+        camposCambiados.push('minutos_extra')
+      }
+
+      // 3. Estado de aprobación: solo setear si está vacío. Respeta lo que ya esté.
+      const estadoActual = String(row[estadoIdx!] ?? '').trim().toLowerCase()
+      if (!estadoActual) {
+        const expectedEstado = !tieneSalida ? 'abierto' : (expectedExtra > 0 ? 'pendiente' : 'aprobado')
+        row[estadoIdx!] = expectedEstado
+        camposCambiados.push('estado_aprobacion')
+        if (expectedEstado === 'aprobado') {
+          row[aprobadoPorIdx!] = 'auto'
+          camposCambiados.push('aprobado_por')
+        }
+      }
+    }
+
+    if (camposCambiados.length > 0) {
+      cambios.push({ id, fecha: fechaIso, usuario_nombre: usuarioNombre, campos: camposCambiados })
+    }
+  }
+
+  if (cambios.length > 0) {
+    const lastCol = colLetter(headers.length - 1)
+    const writeRange = `asistencia!A2:${lastCol}${dataRows.length + 1}`
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: writeRange,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: dataRows as (string | number | boolean)[][] },
+    })
+  }
+
+  return { total_filas: dataRows.length, filas_actualizadas: cambios.length, cambios, warnings }
+}
+
 export async function POST() {
   try {
     const sheets = google.sheets({ version: 'v4', auth: getAuth() })
@@ -727,6 +884,7 @@ export async function POST() {
     // y los ciclos asignados para calcular peso_total).
     const cremados = await syncCremadosPorCiclos(sheets)
     const ciclos = await syncCiclosCalculados(sheets)
+    const asistencia = await syncAsistencia(sheets)
 
     return NextResponse.json({
       ok: true,
@@ -734,6 +892,7 @@ export async function POST() {
       productos_ids: productosIds,
       otros_servicios_ids: otrosServiciosIds,
       cremados,
+      asistencia,
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

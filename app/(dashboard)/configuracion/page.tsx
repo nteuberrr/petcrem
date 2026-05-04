@@ -26,12 +26,16 @@ export default function ConfiguracionPage() {
   const [precioTab, setPrecioTab] = useState<PrecioSubTab>('general')
 
   // Jornada (config + histórico)
-  type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number }
+  type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number; tolerancia_minutos: number }
   const [jornadaConfigs, setJornadaConfigs] = useState<JornadaCfg[]>([])
   const [jornadaVigente, setJornadaVigente] = useState<JornadaCfg | null>(null)
-  const [jornadaForm, setJornadaForm] = useState({ vigente_desde: '', hora_entrada: '09:00', hora_salida: '18:00', precio_hora_extra: '' })
+  const [jornadaForm, setJornadaForm] = useState({ vigente_desde: '', hora_entrada: '09:00', hora_salida: '18:00', precio_hora_extra: '', tolerancia_minutos: '0' })
   const [savingJornada, setSavingJornada] = useState(false)
   const [jornadaError, setJornadaError] = useState('')
+  const [editingJornada, setEditingJornada] = useState<JornadaCfg | null>(null)
+  const [editJornadaForm, setEditJornadaForm] = useState({ vigente_desde: '', hora_entrada: '', hora_salida: '', precio_hora_extra: '', tolerancia_minutos: '0' })
+  const [savingEditJornada, setSavingEditJornada] = useState(false)
+  const [editJornadaError, setEditJornadaError] = useState('')
 
   const fetchJornada = useCallback(async () => {
     const res = await fetch('/api/jornada-config')
@@ -53,16 +57,64 @@ export default function ConfiguracionPage() {
         hora_entrada: jornadaForm.hora_entrada,
         hora_salida: jornadaForm.hora_salida,
         precio_hora_extra: parseFloat(jornadaForm.precio_hora_extra) || 0,
+        tolerancia_minutos: parseInt(jornadaForm.tolerancia_minutos, 10) || 0,
       }),
     })
     if (res.ok) {
-      setJornadaForm({ vigente_desde: '', hora_entrada: '09:00', hora_salida: '18:00', precio_hora_extra: '' })
+      setJornadaForm({ vigente_desde: '', hora_entrada: '09:00', hora_salida: '18:00', precio_hora_extra: '', tolerancia_minutos: '0' })
       await fetchJornada()
     } else {
       const err = await res.json().catch(() => ({}))
       setJornadaError(err?.error ?? 'Error al guardar')
     }
     setSavingJornada(false)
+  }
+
+  function abrirEditarJornada(c: JornadaCfg) {
+    setEditingJornada(c)
+    setEditJornadaError('')
+    setEditJornadaForm({
+      vigente_desde: c.vigente_desde,
+      hora_entrada: c.hora_entrada,
+      hora_salida: c.hora_salida,
+      precio_hora_extra: String(c.precio_hora_extra ?? 0),
+      tolerancia_minutos: String(c.tolerancia_minutos ?? 0),
+    })
+  }
+
+  async function guardarEdicionJornada(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingJornada) return
+    setEditJornadaError('')
+    if (!editJornadaForm.vigente_desde) return setEditJornadaError('La fecha es obligatoria')
+    setSavingEditJornada(true)
+    const res = await fetch('/api/jornada-config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingJornada.id,
+        vigente_desde: editJornadaForm.vigente_desde,
+        hora_entrada: editJornadaForm.hora_entrada,
+        hora_salida: editJornadaForm.hora_salida,
+        precio_hora_extra: parseFloat(editJornadaForm.precio_hora_extra) || 0,
+        tolerancia_minutos: parseInt(editJornadaForm.tolerancia_minutos, 10) || 0,
+      }),
+    })
+    if (res.ok) {
+      setEditingJornada(null)
+      await fetchJornada()
+    } else {
+      const err = await res.json().catch(() => ({}))
+      setEditJornadaError(err?.error ?? 'Error al actualizar')
+    }
+    setSavingEditJornada(false)
+  }
+
+  async function eliminarJornada(id: string) {
+    if (!confirm('¿Eliminar esta configuración de jornada? Si era la vigente, los próximos fichajes no van a poder calcular hasta crear otra.')) return
+    const res = await fetch(`/api/jornada-config?id=${id}`, { method: 'DELETE' })
+    if (res.ok) await fetchJornada()
+    else alert('Error al eliminar')
   }
 
   // Mantenimiento: sync de la planilla — clientes + vehiculo + petroleo
@@ -77,6 +129,12 @@ export default function ConfiguracionPage() {
     filas_actualizadas: number
     cambios: { id: string; fecha: string; campos: string[] }[]
   }
+  type AsistenciaResult = {
+    total_filas: number
+    filas_actualizadas: number
+    cambios: { id: string; fecha: string; usuario_nombre: string; campos: string[] }[]
+    warnings: { id: string; fecha: string; usuario_nombre: string; aviso: string }[]
+  }
   type SyncResult = {
     ok: boolean
     clientes: ClientesResult
@@ -87,6 +145,7 @@ export default function ConfiguracionPage() {
     productos_ids: NumberSyncResult
     otros_servicios_ids: NumberSyncResult
     cremados: ClientesResult
+    asistencia: AsistenciaResult
   }
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null)
@@ -653,7 +712,7 @@ export default function ConfiguracionPage() {
           <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
             <h2 className="text-base font-bold text-gray-900 mb-3">Jornada vigente</h2>
             {jornadaVigente ? (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase">Desde</p>
                   <p className="text-gray-900 font-medium mt-0.5">{jornadaVigente.vigente_desde}</p>
@@ -670,6 +729,10 @@ export default function ConfiguracionPage() {
                   <p className="text-xs font-semibold text-gray-500 uppercase">Hora extra</p>
                   <p className="text-gray-900 font-medium mt-0.5">{fmtPrecio(jornadaVigente.precio_hora_extra)}</p>
                 </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase">Tolerancia</p>
+                  <p className="text-gray-900 font-medium mt-0.5">{jornadaVigente.tolerancia_minutos || 0} min</p>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-amber-700 bg-amber-50 border-2 border-amber-200 rounded-lg p-3">
@@ -683,7 +746,7 @@ export default function ConfiguracionPage() {
             <h2 className="text-base font-bold text-gray-900 mb-1">Nueva configuración</h2>
             <p className="text-xs text-gray-500 mb-4">Aplica desde la fecha indicada en adelante. Los registros previos mantienen su jornada original.</p>
             <form onSubmit={guardarJornada} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Vigente desde</label>
                   <input type="date" required value={jornadaForm.vigente_desde} onChange={e => setJornadaForm(f => ({ ...f, vigente_desde: e.target.value }))}
@@ -704,7 +767,20 @@ export default function ConfiguracionPage() {
                   <input type="number" min="0" required value={jornadaForm.precio_hora_extra} onChange={e => setJornadaForm(f => ({ ...f, precio_hora_extra: e.target.value }))}
                     className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Tolerancia</label>
+                  <select value={jornadaForm.tolerancia_minutos} onChange={e => setJornadaForm(f => ({ ...f, tolerancia_minutos: e.target.value }))}
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="0">Sin tolerancia</option>
+                    <option value="30">30 min</option>
+                    <option value="45">45 min</option>
+                    <option value="60">1 hora</option>
+                  </select>
+                </div>
               </div>
+              <p className="text-xs text-gray-500">
+                <b>Tolerancia:</b> los primeros N minutos de horas extras no se cuentan. Si alguien hace 2h extra y la tolerancia es 30 min, solo se aprueban 1h 30min como horas extra.
+              </p>
               {jornadaError && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{jornadaError}</p>}
               <button type="submit" disabled={savingJornada}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
@@ -720,10 +796,10 @@ export default function ConfiguracionPage() {
                 <h2 className="text-base font-bold text-gray-900">Histórico de configuraciones</h2>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[480px]">
+                <table className="w-full text-sm min-w-[680px]">
                   <thead className="bg-gray-50">
                     <tr>
-                      {['Vigente desde', 'Entrada', 'Salida', '$ hora extra'].map(h => (
+                      {['Vigente desde', 'Entrada', 'Salida', '$ hora extra', 'Tolerancia', 'Acciones'].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
                       ))}
                     </tr>
@@ -735,6 +811,19 @@ export default function ConfiguracionPage() {
                         <td className="px-4 py-3 text-gray-700">{c.hora_entrada}</td>
                         <td className="px-4 py-3 text-gray-700">{c.hora_salida}</td>
                         <td className="px-4 py-3 text-gray-700">{fmtPrecio(c.precio_hora_extra)}</td>
+                        <td className="px-4 py-3 text-gray-700">{c.tolerancia_minutos || 0} min</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => abrirEditarJornada(c)}
+                              className="bg-blue-500 hover:bg-blue-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                              Editar
+                            </button>
+                            <button onClick={() => eliminarJornada(c.id)}
+                              className="bg-red-500 hover:bg-red-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                              Eliminar
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -970,12 +1059,108 @@ export default function ConfiguracionPage() {
                   </ul>
                 </details>
               )}
+
+              {/* Asistencia: usuario_id por nombre + recalcular minutos/extra */}
+              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
+                <p className="text-sm font-bold text-emerald-900">
+                  ✓ Asistencia: {syncResult.asistencia.filas_actualizadas} de {syncResult.asistencia.total_filas} fichajes con usuario_id y minutos recalculados
+                </p>
+              </div>
+              {syncResult.asistencia.cambios.length > 0 && (
+                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
+                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
+                    Detalle asistencia ({syncResult.asistencia.cambios.length})
+                  </summary>
+                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
+                    {syncResult.asistencia.cambios.map(c => (
+                      <li key={c.id} className="text-xs text-gray-700 py-1">
+                        <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
+                        <span className="font-semibold">{c.usuario_nombre}</span>{' '}
+                        <span>{c.fecha}</span>{' '}
+                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {syncResult.asistencia.warnings.length > 0 && (
+                <details className="rounded-lg border-2 border-amber-300 bg-amber-50 px-4 py-3">
+                  <summary className="text-sm font-semibold text-amber-800 cursor-pointer">
+                    ⚠ Avisos asistencia ({syncResult.asistencia.warnings.length})
+                  </summary>
+                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
+                    {syncResult.asistencia.warnings.map((w, i) => (
+                      <li key={i} className="text-xs text-amber-900 py-1">
+                        <span className="font-mono font-bold">#{w.id}</span>{' '}
+                        <span className="font-semibold">{w.usuario_nombre || '(sin nombre)'}</span>{' '}
+                        <span>{w.fecha}</span>{' '}
+                        <span>— {w.aviso}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </div>
           )}
         </div>
       )}
 
       {/* ─── MODALES ─── */}
+      <Modal open={!!editingJornada} onClose={() => setEditingJornada(null)} title="Editar configuración de jornada">
+        {editingJornada && (
+          <form onSubmit={guardarEdicionJornada} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-700">Vigente desde</label>
+                <input type="date" required value={editJornadaForm.vigente_desde}
+                  onChange={e => setEditJornadaForm(f => ({ ...f, vigente_desde: e.target.value }))}
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700">Tolerancia</label>
+                <select value={editJornadaForm.tolerancia_minutos}
+                  onChange={e => setEditJornadaForm(f => ({ ...f, tolerancia_minutos: e.target.value }))}
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="0">Sin tolerancia</option>
+                  <option value="30">30 min</option>
+                  <option value="45">45 min</option>
+                  <option value="60">1 hora</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700">Hora entrada</label>
+                <input type="time" required value={editJornadaForm.hora_entrada}
+                  onChange={e => setEditJornadaForm(f => ({ ...f, hora_entrada: e.target.value }))}
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700">Hora salida</label>
+                <input type="time" required value={editJornadaForm.hora_salida}
+                  onChange={e => setEditJornadaForm(f => ({ ...f, hora_salida: e.target.value }))}
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-semibold text-gray-700">$ hora extra</label>
+                <input type="number" min="0" required value={editJornadaForm.precio_hora_extra}
+                  onChange={e => setEditJornadaForm(f => ({ ...f, precio_hora_extra: e.target.value }))}
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+            </div>
+            {editJornadaError && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{editJornadaError}</p>}
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setEditingJornada(null)}
+                className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button type="submit" disabled={savingEditJornada}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md disabled:opacity-50">
+                {savingEditJornada ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
       <Modal open={showProdModal} onClose={() => { setShowProdModal(false); setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '' }) }}
         title={editingProducto ? 'Editar producto' : 'Agregar producto'}>
         <form onSubmit={async e => {

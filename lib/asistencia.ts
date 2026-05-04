@@ -11,6 +11,12 @@ export type JornadaConfig = {
   hora_entrada: string  // "HH:MM"
   hora_salida: string   // "HH:MM"
   precio_hora_extra: number
+  /**
+   * Minutos de tolerancia: las primeras N minutos de horas extras no cuentan.
+   * Si una persona hace 120 min extra y tolerancia=30, el extra final = 90.
+   * Default 0 si no está seteado.
+   */
+  tolerancia_minutos: number
 }
 
 /**
@@ -38,6 +44,9 @@ export function configVigente(configs: JornadaConfig[], fecha: string): JornadaC
  *   - después de hora_salida → extra
  *   - rango [hora_entrada, hora_salida] → normal
  *
+ * Aplica `config.tolerancia_minutos`: las primeras N minutos de extras NO se
+ * cuentan. Esto se descuenta del total de extra (no de normales).
+ *
  * Si los inputs son inválidos devuelve { trabajados: 0, normales: 0, extra: 0 }.
  */
 export function calcularMinutos(
@@ -59,9 +68,11 @@ export function calcularMinutos(
     return { trabajados: 0, normales: 0, extra: 0, esFindesemana: esFinde, diaSemana }
   }
   const trabajados = minSalida - minEntrada
+  const tolerancia = Math.max(0, config.tolerancia_minutos ?? 0)
 
   if (esFinde) {
-    return { trabajados, normales: 0, extra: trabajados, esFindesemana: true, diaSemana }
+    const extra = Math.max(0, trabajados - tolerancia)
+    return { trabajados, normales: 0, extra, esFindesemana: true, diaSemana }
   }
 
   const minBaseEntrada = horaToMinutos(config.hora_entrada) ?? 540  // 9:00 default
@@ -70,7 +81,8 @@ export function calcularMinutos(
   const overlapInicio = Math.max(minEntrada, minBaseEntrada)
   const overlapFin = Math.min(minSalida, minBaseSalida)
   const normales = Math.max(0, overlapFin - overlapInicio)
-  const extra = trabajados - normales
+  const extraBruto = trabajados - normales
+  const extra = Math.max(0, extraBruto - tolerancia)
 
   return { trabajados, normales, extra, esFindesemana: false, diaSemana }
 }
