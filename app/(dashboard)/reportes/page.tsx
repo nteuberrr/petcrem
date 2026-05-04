@@ -52,9 +52,9 @@ type RegistroAsistencia = {
   minutos_extra: string
   estado_aprobacion: string
 }
-type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number }
+type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number; tolerancia_minutos: number; precio_retiro_adicional: number }
 
-const TABS = ['Mensual', 'Ingresos', 'Configuraciones', 'Veterinarios', 'Asistencia'] as const
+const TABS = ['Mensual', 'Ingresos', 'Configuraciones', 'Veterinarios', 'Asistencia', 'Retiros'] as const
 type Tab = typeof TABS[number]
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const CHART_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6', '#f43f5e', '#0ea5e9']
@@ -91,6 +91,11 @@ export default function ReportesPage() {
   const [ingresosData, setIngresosData] = useState<IngresosData | null>(null)
   const [ingresosDesde, setIngresosDesde] = useState('')
   const [ingresosHasta, setIngresosHasta] = useState('')
+
+  type RetiroAdicional = { id: string; usuario_id: string; usuario_nombre: string; fecha: string; hora: string; cliente_nombre: string; comentario: string }
+  const [retiros, setRetiros] = useState<RetiroAdicional[]>([])
+  const [retirosDesde, setRetirosDesde] = useState('')
+  const [retirosHasta, setRetirosHasta] = useState('')
 
   const fetchReporte = useCallback(async () => {
     setLoading(true)
@@ -138,13 +143,29 @@ export default function ReportesPage() {
     setLoading(false)
   }, [mes, anio])
 
+  const fetchRetiros = useCallback(async () => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (retirosDesde) params.set('desde', retirosDesde)
+    if (retirosHasta) params.set('hasta', retirosHasta)
+    const qs = params.toString()
+    const [resRet, resCfg] = await Promise.all([
+      fetch(`/api/retiros-adicionales${qs ? `?${qs}` : ''}`, { cache: 'no-store' }).then(r => r.json()),
+      fetch('/api/jornada-config', { cache: 'no-store' }).then(r => r.json()),
+    ])
+    setRetiros(Array.isArray(resRet) ? resRet : [])
+    setJornadaVigente(resCfg?.vigente ?? null)
+    setLoading(false)
+  }, [retirosDesde, retirosHasta])
+
   useEffect(() => {
     if (tab === 'Mensual') fetchReporte()
     else if (tab === 'Ingresos') fetchIngresos()
     else if (tab === 'Configuraciones') fetchConfig()
     else if (tab === 'Veterinarios') fetchVets()
     else if (tab === 'Asistencia') fetchAsistencia()
-  }, [tab, fetchReporte, fetchIngresos, fetchConfig, fetchVets, fetchAsistencia])
+    else if (tab === 'Retiros') fetchRetiros()
+  }, [tab, fetchReporte, fetchIngresos, fetchConfig, fetchVets, fetchAsistencia, fetchRetiros])
 
   // Resumen asistencia por operador
   type ResumenOperador = {
@@ -551,6 +572,175 @@ export default function ReportesPage() {
           </div>
         </div>
       )}
+
+      {/* ─── TAB RETIROS FUERA DE HORARIO ─── */}
+      {tab === 'Retiros' && (
+        <RetirosTab
+          retiros={retiros}
+          jornadaVigente={jornadaVigente}
+          loading={loading}
+          desde={retirosDesde}
+          hasta={retirosHasta}
+          setDesde={setRetirosDesde}
+          setHasta={setRetirosHasta}
+          onAplicar={fetchRetiros}
+        />
+      )}
+    </div>
+  )
+}
+
+function RetirosTab({
+  retiros, jornadaVigente, loading, desde, hasta, setDesde, setHasta, onAplicar,
+}: {
+  retiros: Array<{ id: string; usuario_id: string; usuario_nombre: string; fecha: string; hora: string; cliente_nombre: string; comentario: string }>
+  jornadaVigente: JornadaCfg | null
+  loading: boolean
+  desde: string; hasta: string
+  setDesde: (v: string) => void
+  setHasta: (v: string) => void
+  onAplicar: () => void
+}) {
+  const precio = jornadaVigente?.precio_retiro_adicional ?? 0
+
+  type ResumenOp = { usuario_id: string; usuario_nombre: string; cantidad: number; pago: number }
+  const resumenPorOperador = useMemo<ResumenOp[]>(() => {
+    const m = new Map<string, ResumenOp>()
+    for (const r of retiros) {
+      let acc = m.get(r.usuario_id)
+      if (!acc) {
+        acc = { usuario_id: r.usuario_id, usuario_nombre: r.usuario_nombre, cantidad: 0, pago: 0 }
+        m.set(r.usuario_id, acc)
+      }
+      acc.cantidad += 1
+      acc.pago += precio
+    }
+    return Array.from(m.values()).sort((a, b) => b.cantidad - a.cantidad)
+  }, [retiros, precio])
+
+  const total = retiros.length
+  const totalPago = total * precio
+
+  async function descargarExcel() {
+    const XLSX = await import('xlsx-js-style')
+    const wb = XLSX.utils.book_new()
+    const resumen: (string | number)[][] = [
+      ['Total retiros', total],
+      ['Pago por retiro', precio],
+      ['Total a pagar', totalPago],
+      [],
+      ['Operador', 'Cantidad', 'Pago'],
+      ...resumenPorOperador.map(r => [r.usuario_nombre, r.cantidad, r.pago]),
+      [],
+      ['Detalle', '', '', '', ''],
+      ['Operador', 'Fecha', 'Hora', 'Cliente', 'Comentario'],
+      ...retiros.map(r => [r.usuario_nombre, r.fecha, r.hora, r.cliente_nombre, r.comentario || '']),
+    ]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Retiros')
+    const sufijo = desde || hasta ? `${desde || 'inicio'}_${hasta || 'hoy'}` : 'completo'
+    XLSX.writeFile(wb, `petcrem-retiros-fuera-horario-${sufijo}.xlsx`)
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Filtros */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-wrap items-end gap-4">
+        <div>
+          <label className="text-xs font-medium text-gray-700">Desde</label>
+          <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
+            className="mt-1 block border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-700">Hasta</label>
+          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
+            className="mt-1 block border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <button onClick={onAplicar}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          Aplicar
+        </button>
+        {(desde || hasta) && (
+          <button onClick={() => { setDesde(''); setHasta(''); setTimeout(onAplicar, 0) }}
+            className="text-sm text-gray-500 hover:text-gray-700 underline">
+            Limpiar
+          </button>
+        )}
+        <div className="ml-auto">
+          <button onClick={descargarExcel} disabled={retiros.length === 0}
+            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-40">
+            ↓ Excel
+          </button>
+        </div>
+        {loading && <span className="text-xs text-gray-400">Cargando...</span>}
+      </div>
+
+      {/* KPIs totales */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-5 text-center">
+          <p className="text-2xl font-bold text-indigo-700">{fmtNum(total)}</p>
+          <p className="text-xs text-gray-500 mt-1">Retiros en el período</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-5 text-center">
+          <p className="text-2xl font-bold text-amber-700">{fmtPrecio(precio)}</p>
+          <p className="text-xs text-gray-500 mt-1">Pago por retiro</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-5 text-center">
+          <p className="text-2xl font-bold text-emerald-700">{fmtPrecio(totalPago)}</p>
+          <p className="text-xs text-gray-500 mt-1">Total a pagar</p>
+        </div>
+      </div>
+
+      {/* Resumen por operador */}
+      {resumenPorOperador.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">Pago por chofer</h2>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>{['Operador', 'Cantidad', 'Pago'].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {resumenPorOperador.map(r => (
+                <tr key={r.usuario_id}>
+                  <td className="px-4 py-3 font-medium text-gray-900">{r.usuario_nombre}</td>
+                  <td className="px-4 py-3 text-gray-700">{r.cantidad}</td>
+                  <td className="px-4 py-3 font-semibold text-emerald-700">{fmtPrecio(r.pago)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Detalle de retiros */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">Detalle de retiros</h2>
+        </div>
+        {retiros.length === 0 ? (
+          <div className="p-8 text-center text-gray-400 text-sm">Sin retiros en el período</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[680px]">
+              <thead className="bg-gray-50">
+                <tr>{['Operador', 'Fecha', 'Hora', 'Cliente', 'Comentario'].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {retiros.map(r => (
+                  <tr key={r.id}>
+                    <td className="px-4 py-3 font-medium text-gray-900">{r.usuario_nombre}</td>
+                    <td className="px-4 py-3 text-gray-700">{fmtFecha(r.fecha)}</td>
+                    <td className="px-4 py-3 text-gray-700">{r.hora || '—'}</td>
+                    <td className="px-4 py-3 text-gray-700">{r.cliente_nombre}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{r.comentario || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

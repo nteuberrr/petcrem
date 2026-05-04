@@ -26,14 +26,14 @@ export default function ConfiguracionPage() {
   const [precioTab, setPrecioTab] = useState<PrecioSubTab>('general')
 
   // Jornada (config + histórico)
-  type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number; tolerancia_minutos: number }
+  type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number; tolerancia_minutos: number; precio_retiro_adicional: number }
   const [jornadaConfigs, setJornadaConfigs] = useState<JornadaCfg[]>([])
   const [jornadaVigente, setJornadaVigente] = useState<JornadaCfg | null>(null)
-  const [jornadaForm, setJornadaForm] = useState({ vigente_desde: '', hora_entrada: '09:00', hora_salida: '18:00', precio_hora_extra: '', tolerancia_minutos: '0' })
+  const [jornadaForm, setJornadaForm] = useState({ vigente_desde: '', hora_entrada: '09:00', hora_salida: '18:00', precio_hora_extra: '', tolerancia_minutos: '0', precio_retiro_adicional: '' })
   const [savingJornada, setSavingJornada] = useState(false)
   const [jornadaError, setJornadaError] = useState('')
   const [editingJornada, setEditingJornada] = useState<JornadaCfg | null>(null)
-  const [editJornadaForm, setEditJornadaForm] = useState({ vigente_desde: '', hora_entrada: '', hora_salida: '', precio_hora_extra: '', tolerancia_minutos: '0' })
+  const [editJornadaForm, setEditJornadaForm] = useState({ vigente_desde: '', hora_entrada: '', hora_salida: '', precio_hora_extra: '', tolerancia_minutos: '0', precio_retiro_adicional: '' })
   const [savingEditJornada, setSavingEditJornada] = useState(false)
   const [editJornadaError, setEditJornadaError] = useState('')
 
@@ -58,10 +58,11 @@ export default function ConfiguracionPage() {
         hora_salida: jornadaForm.hora_salida,
         precio_hora_extra: parseFloat(jornadaForm.precio_hora_extra) || 0,
         tolerancia_minutos: parseInt(jornadaForm.tolerancia_minutos, 10) || 0,
+        precio_retiro_adicional: parseFloat(jornadaForm.precio_retiro_adicional) || 0,
       }),
     })
     if (res.ok) {
-      setJornadaForm({ vigente_desde: '', hora_entrada: '09:00', hora_salida: '18:00', precio_hora_extra: '', tolerancia_minutos: '0' })
+      setJornadaForm({ vigente_desde: '', hora_entrada: '09:00', hora_salida: '18:00', precio_hora_extra: '', tolerancia_minutos: '0', precio_retiro_adicional: '' })
       await fetchJornada()
     } else {
       const err = await res.json().catch(() => ({}))
@@ -79,6 +80,7 @@ export default function ConfiguracionPage() {
       hora_salida: c.hora_salida,
       precio_hora_extra: String(c.precio_hora_extra ?? 0),
       tolerancia_minutos: String(c.tolerancia_minutos ?? 0),
+      precio_retiro_adicional: String(c.precio_retiro_adicional ?? 0),
     })
   }
 
@@ -98,6 +100,7 @@ export default function ConfiguracionPage() {
         hora_salida: editJornadaForm.hora_salida,
         precio_hora_extra: parseFloat(editJornadaForm.precio_hora_extra) || 0,
         tolerancia_minutos: parseInt(editJornadaForm.tolerancia_minutos, 10) || 0,
+        precio_retiro_adicional: parseFloat(editJornadaForm.precio_retiro_adicional) || 0,
       }),
     })
     if (res.ok) {
@@ -712,7 +715,7 @@ export default function ConfiguracionPage() {
           <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
             <h2 className="text-base font-bold text-gray-900 mb-3">Jornada vigente</h2>
             {jornadaVigente ? (
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase">Desde</p>
                   <p className="text-gray-900 font-medium mt-0.5">{jornadaVigente.vigente_desde}</p>
@@ -733,6 +736,10 @@ export default function ConfiguracionPage() {
                   <p className="text-xs font-semibold text-gray-500 uppercase">Tolerancia</p>
                   <p className="text-gray-900 font-medium mt-0.5">{jornadaVigente.tolerancia_minutos || 0} min</p>
                 </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase">Retiro adicional</p>
+                  <p className="text-gray-900 font-medium mt-0.5">{fmtPrecio(jornadaVigente.precio_retiro_adicional || 0)}</p>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-amber-700 bg-amber-50 border-2 border-amber-200 rounded-lg p-3">
@@ -746,7 +753,7 @@ export default function ConfiguracionPage() {
             <h2 className="text-base font-bold text-gray-900 mb-1">Nueva configuración</h2>
             <p className="text-xs text-gray-500 mb-4">Aplica desde la fecha indicada en adelante. Los registros previos mantienen su jornada original.</p>
             <form onSubmit={guardarJornada} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Vigente desde</label>
                   <input type="date" required value={jornadaForm.vigente_desde} onChange={e => setJornadaForm(f => ({ ...f, vigente_desde: e.target.value }))}
@@ -777,9 +784,16 @@ export default function ConfiguracionPage() {
                     <option value="60">1 hora</option>
                   </select>
                 </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">$ retiro adicional</label>
+                  <input type="number" min="0" value={jornadaForm.precio_retiro_adicional} onChange={e => setJornadaForm(f => ({ ...f, precio_retiro_adicional: e.target.value }))}
+                    placeholder="0"
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
               </div>
               <p className="text-xs text-gray-500">
-                <b>Tolerancia:</b> los primeros N minutos de horas extras no se cuentan. Si alguien hace 2h extra y la tolerancia es 30 min, solo se aprueban 1h 30min como horas extra.
+                <b>Tolerancia:</b> los primeros N minutos de horas extras no se cuentan. Si alguien hace 2h extra y la tolerancia es 30 min, solo se aprueban 1h 30min como horas extra.<br />
+                <b>$ retiro adicional:</b> monto fijo que se paga al chofer por cada retiro fuera de horario que registre.
               </p>
               {jornadaError && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{jornadaError}</p>}
               <button type="submit" disabled={savingJornada}
@@ -796,10 +810,10 @@ export default function ConfiguracionPage() {
                 <h2 className="text-base font-bold text-gray-900">Histórico de configuraciones</h2>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[680px]">
+                <table className="w-full text-sm min-w-[800px]">
                   <thead className="bg-gray-50">
                     <tr>
-                      {['Vigente desde', 'Entrada', 'Salida', '$ hora extra', 'Tolerancia', 'Acciones'].map(h => (
+                      {['Vigente desde', 'Entrada', 'Salida', '$ hora extra', 'Tolerancia', '$ retiro adicional', 'Acciones'].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
                       ))}
                     </tr>
@@ -812,6 +826,7 @@ export default function ConfiguracionPage() {
                         <td className="px-4 py-3 text-gray-700">{c.hora_salida}</td>
                         <td className="px-4 py-3 text-gray-700">{fmtPrecio(c.precio_hora_extra)}</td>
                         <td className="px-4 py-3 text-gray-700">{c.tolerancia_minutos || 0} min</td>
+                        <td className="px-4 py-3 text-gray-700">{fmtPrecio(c.precio_retiro_adicional || 0)}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <button onClick={() => abrirEditarJornada(c)}
@@ -1139,10 +1154,16 @@ export default function ConfiguracionPage() {
                   onChange={e => setEditJornadaForm(f => ({ ...f, hora_salida: e.target.value }))}
                   className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
-              <div className="sm:col-span-2">
+              <div>
                 <label className="text-xs font-semibold text-gray-700">$ hora extra</label>
                 <input type="number" min="0" required value={editJornadaForm.precio_hora_extra}
                   onChange={e => setEditJornadaForm(f => ({ ...f, precio_hora_extra: e.target.value }))}
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700">$ retiro adicional</label>
+                <input type="number" min="0" value={editJornadaForm.precio_retiro_adicional}
+                  onChange={e => setEditJornadaForm(f => ({ ...f, precio_retiro_adicional: e.target.value }))}
                   className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
             </div>

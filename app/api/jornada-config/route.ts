@@ -6,7 +6,7 @@ import { todayISO, formatDateForSheet, formatHora } from '@/lib/dates'
 import type { JornadaConfig } from '@/lib/asistencia'
 
 const HOJA = 'jornada_config'
-const COLS = ['id', 'vigente_desde', 'hora_entrada', 'hora_salida', 'precio_hora_extra', 'tolerancia_minutos', 'creado_por', 'fecha_creacion']
+const COLS = ['id', 'vigente_desde', 'hora_entrada', 'hora_salida', 'precio_hora_extra', 'tolerancia_minutos', 'precio_retiro_adicional', 'creado_por', 'fecha_creacion']
 
 async function ensure() {
   await ensureSheet(HOJA)
@@ -27,6 +27,7 @@ export async function GET() {
       hora_salida: formatHora(r.hora_salida),
       precio_hora_extra: isAdmin ? (parseFloat(r.precio_hora_extra) || 0) : 0,
       tolerancia_minutos: parseInt(r.tolerancia_minutos || '0', 10) || 0,
+      precio_retiro_adicional: isAdmin ? (parseFloat(r.precio_retiro_adicional) || 0) : 0,
     }))
     // Ordenar de más reciente a más vieja
     configs.sort((a, b) => b.vigente_desde.localeCompare(a.vigente_desde))
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
     }
     const body = await req.json()
-    const { vigente_desde, hora_entrada, hora_salida, precio_hora_extra, tolerancia_minutos } = body
+    const { vigente_desde, hora_entrada, hora_salida, precio_hora_extra, tolerancia_minutos, precio_retiro_adicional } = body
     if (!vigente_desde || !hora_entrada || !hora_salida || precio_hora_extra === undefined) {
       return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
     }
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
       hora_salida: String(hora_salida),
       precio_hora_extra: parseFloat(precio_hora_extra) || 0,
       tolerancia_minutos: parseInt(String(tolerancia_minutos ?? '0'), 10) || 0,
+      precio_retiro_adicional: parseFloat(String(precio_retiro_adicional ?? '0')) || 0,
       creado_por: session.user?.email ?? '',
       fecha_creacion: todayISO(),
     }
@@ -73,7 +75,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
     }
     const body = await req.json()
-    const { id, vigente_desde, hora_entrada, hora_salida, precio_hora_extra, tolerancia_minutos } = body
+    const { id, vigente_desde, hora_entrada, hora_salida, precio_hora_extra, tolerancia_minutos, precio_retiro_adicional } = body
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
     await ensure()
     const rows = await getSheetData(HOJA)
@@ -85,6 +87,7 @@ export async function PATCH(req: NextRequest) {
     if (hora_salida !== undefined) updates.hora_salida = String(hora_salida)
     if (precio_hora_extra !== undefined) updates.precio_hora_extra = parseFloat(String(precio_hora_extra)) || 0
     if (tolerancia_minutos !== undefined) updates.tolerancia_minutos = parseInt(String(tolerancia_minutos), 10) || 0
+    if (precio_retiro_adicional !== undefined) updates.precio_retiro_adicional = parseFloat(String(precio_retiro_adicional)) || 0
     const updated = { ...rows[idx], ...updates }
     await updateRow(HOJA, idx, updated)
     return NextResponse.json(updated)

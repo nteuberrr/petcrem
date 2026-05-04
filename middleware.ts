@@ -45,7 +45,7 @@ export async function middleware(req: NextRequest) {
         '/api/especies', '/api/servicios', '/api/productos',
         '/api/veterinarios', '/api/precios', '/api/upload',
         '/api/init-sheets',
-        '/api/asistencia', '/api/jornada-config',
+        '/api/asistencia', '/api/jornada-config', '/api/retiros-adicionales',
       ]
       if (allowedApis.some(p => pathname.startsWith(p))) return NextResponse.next()
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })

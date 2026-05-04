@@ -753,6 +753,7 @@ async function syncAsistencia(sheets: sheets_v4.Sheets) {
     const cHE = cIdx.get('hora_entrada'), cHS = cIdx.get('hora_salida')
     const cPrecio = cIdx.get('precio_hora_extra')
     const cTol = cIdx.get('tolerancia_minutos')
+    const cPRA = cIdx.get('precio_retiro_adicional')
     if (cId !== undefined && cVD !== undefined && cHE !== undefined && cHS !== undefined) {
       for (const row of configMatrix.slice(1)) {
         configs.push({
@@ -762,6 +763,7 @@ async function syncAsistencia(sheets: sheets_v4.Sheets) {
           hora_salida: formatHora(String(row[cHS] ?? '')),
           precio_hora_extra: cPrecio !== undefined ? (parseFloat(String(row[cPrecio] ?? '0')) || 0) : 0,
           tolerancia_minutos: cTol !== undefined ? (parseInt(String(row[cTol] ?? '0'), 10) || 0) : 0,
+          precio_retiro_adicional: cPRA !== undefined ? (parseFloat(String(row[cPRA] ?? '0')) || 0) : 0,
         })
       }
     }

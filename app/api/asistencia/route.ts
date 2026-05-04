@@ -21,7 +21,7 @@ async function ensure() {
 
 async function getConfigs(): Promise<JornadaConfig[]> {
   await ensureSheet('jornada_config')
-  await ensureColumns('jornada_config', ['id', 'vigente_desde', 'hora_entrada', 'hora_salida', 'precio_hora_extra', 'tolerancia_minutos', 'creado_por', 'fecha_creacion'])
+  await ensureColumns('jornada_config', ['id', 'vigente_desde', 'hora_entrada', 'hora_salida', 'precio_hora_extra', 'tolerancia_minutos', 'precio_retiro_adicional', 'creado_por', 'fecha_creacion'])
   const rows = await getSheetData('jornada_config')
   return rows.map(r => ({
     id: r.id,
@@ -30,6 +30,7 @@ async function getConfigs(): Promise<JornadaConfig[]> {
     hora_salida: formatHora(r.hora_salida),
     precio_hora_extra: parseFloat(r.precio_hora_extra) || 0,
     tolerancia_minutos: parseInt(r.tolerancia_minutos || '0', 10) || 0,
+    precio_retiro_adicional: parseFloat(r.precio_retiro_adicional) || 0,
   }))
 }
 

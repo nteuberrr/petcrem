@@ -64,7 +64,16 @@ const SHEETS: Record<string, string[]> = {
   ],
   jornada_config: [
     'id', 'vigente_desde', 'hora_entrada', 'hora_salida', 'precio_hora_extra',
-    'tolerancia_minutos', 'creado_por', 'fecha_creacion',
+    'tolerancia_minutos', 'precio_retiro_adicional', 'creado_por', 'fecha_creacion',
+  ],
+  retiros_adicionales: [
+    'id', 'usuario_id', 'usuario_nombre', 'fecha', 'hora',
+    'cliente_nombre', 'comentario', 'pago_id', 'fecha_creacion',
+  ],
+  pagos_retiros: [
+    'id', 'fecha_pago', 'usuario_id', 'usuario_nombre',
+    'retiros_ids', 'cantidad', 'monto_total', 'comentarios',
+    'creado_por', 'fecha_creacion',
   ],
 }
 

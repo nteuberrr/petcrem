@@ -17,6 +17,12 @@ export type JornadaConfig = {
    * Default 0 si no está seteado.
    */
   tolerancia_minutos: number
+  /**
+   * Monto fijo en CLP que se paga al operador por cada retiro adicional fuera
+   * de horario (registrado en la sección "Retiros adicionales" de Asistencia).
+   * Default 0 si no está seteado.
+   */
+  precio_retiro_adicional: number
 }
 
 /**
