@@ -77,12 +77,48 @@ export async function GET() {
     // Construir mapa: mascota_id → array de ciclo_ids donde aparece
     const mascotaEnCiclos = new Map<string, string[]>()
     for (const c of ciclos) {
-      let mascotasIds: string[] = []
+      let mascotasIds: unknown[] = []
       try { mascotasIds = JSON.parse(c.mascotas_ids || '[]') } catch {}
       for (const mid of mascotasIds) {
         const arr = mascotaEnCiclos.get(String(mid)) ?? []
         arr.push(c.id)
         mascotaEnCiclos.set(String(mid), arr)
+      }
+    }
+
+    // Mapa cliente_id → cliente (para verificar existencia y estado)
+    const clientesById = new Map(clientes.map(c => [String(c.id), c]))
+
+    // Auditoría por estado: cuántas mascotas en ciclos según estado del cliente
+    const mascotaEnCicloEstado: Record<string, number> = {
+      cremado: 0, despachado: 0, pendiente: 0, vacio: 0, custom: 0,
+      orphan_id_inexistente: 0,
+    }
+    const orphanIds: string[] = []
+    const noCremadosEjemplos: { mascota_id: string; codigo: string; nombre: string; estado: string; ciclo_id_actual: string; ciclos_donde_aparece: string[] }[] = []
+    for (const [mid, ciclosIds] of mascotaEnCiclos.entries()) {
+      const cli = clientesById.get(mid)
+      if (!cli) {
+        mascotaEnCicloEstado.orphan_id_inexistente += 1
+        if (orphanIds.length < 30) orphanIds.push(mid)
+        continue
+      }
+      const est = cli.estado || ''
+      if (est === 'cremado') mascotaEnCicloEstado.cremado += 1
+      else if (est === 'despachado') mascotaEnCicloEstado.despachado += 1
+      else if (est === 'pendiente') mascotaEnCicloEstado.pendiente += 1
+      else if (est === '') mascotaEnCicloEstado.vacio += 1
+      else mascotaEnCicloEstado.custom += 1
+      // Listar mascotas que están en ciclos pero NO marcadas como cremadas (target del sync)
+      if (est !== 'cremado' && est !== 'despachado' && noCremadosEjemplos.length < 30) {
+        noCremadosEjemplos.push({
+          mascota_id: mid,
+          codigo: cli.codigo,
+          nombre: cli.nombre_mascota,
+          estado: est || 'vacio',
+          ciclo_id_actual: cli.ciclo_id || '',
+          ciclos_donde_aparece: ciclosIds,
+        })
       }
     }
     const enMultiples = Array.from(mascotaEnCiclos.entries())
@@ -102,7 +138,7 @@ export async function GET() {
     let totalMascotasEnCiclos = 0
     const mascotasEnCiclosPorMes: Record<string, number> = {}
     for (const c of ciclos) {
-      let mascotasIds: string[] = []
+      let mascotasIds: unknown[] = []
       try { mascotasIds = JSON.parse(c.mascotas_ids || '[]') } catch {}
       totalMascotasEnCiclos += mascotasIds.length
       const mes = parseISO(c.fecha)
@@ -121,6 +157,8 @@ export async function GET() {
       cremados_por_fecha_retiro: ordenado(cremadosPorFechaRetiro),
       cremados_por_fecha_creacion: ordenado(cremadosPorFechaCreacion),
       clientes_por_fecha_retiro: ordenado(clientesPorFechaRetiro),
+      // 🔑 CLAVE PARA EL BUG: cuántas mascotas en algún ciclo según su estado actual
+      mascotas_en_ciclos_por_estado: mascotaEnCicloEstado,
       problemas: {
         cremados_sin_ciclo_id: cremadosSinCicloId.length,
         cremados_con_ciclo_id_inexistente: cremadosCicloIdNoEncontrado.length,
@@ -128,6 +166,10 @@ export async function GET() {
         ejemplos_sin_ciclo_id: cremadosSinCicloId.slice(0, 10),
         ejemplos_ciclo_id_inexistente: cremadosCicloIdNoEncontrado.slice(0, 10),
         ejemplos_mascotas_en_multiples_ciclos: enMultiples.slice(0, 20),
+        // 🔑 mascotas listadas en mascotas_ids pero NO marcadas como cremado/despachado
+        ejemplos_no_cremados_pese_a_ciclo: noCremadosEjemplos,
+        // mascotas_ids que apuntan a clientes que NO existen
+        orphan_ids: orphanIds,
       },
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
