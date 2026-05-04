@@ -101,11 +101,12 @@ export async function GET() {
       const cached = fechaCremacionCache.get(c.id)
       if (cached !== undefined) return cached
       let d: Date | null = null
-      if (c.estado === 'cremado' && c.ciclo_id) {
+      // Cualquier mascota que pasó por un ciclo (cremado o despachado) debe usar
+      // la fecha de ese ciclo. Solo si no tiene ciclo_id válido cae al fallback.
+      if (c.ciclo_id) {
         const ciclo = cicloById.get(c.ciclo_id)
         if (ciclo?.fecha) d = parseDateSafe(ciclo.fecha)
       }
-      // Fallback: fecha_retiro (para cremados sin ciclo válido)
       if (!d) d = parseDateSafe(c.fecha_retiro || c.fecha_creacion)
       fechaCremacionCache.set(c.id, d)
       return d
@@ -168,7 +169,10 @@ export async function GET() {
     }, 0)
 
     // Filtros base — calculados una sola vez
-    const cremadosTodos = clientes.filter(c => c.estado === 'cremado')
+    // "Cremadas" incluye tanto las que están en cámara (estado='cremado') como las
+    // que ya fueron entregadas al tutor (estado='despachado'). Ambas pasaron por
+    // un ciclo de cremación. Excluir las despachadas hacía que el chart subcontara.
+    const cremadosTodos = clientes.filter(c => c.estado === 'cremado' || c.estado === 'despachado')
     // Cremaciones del mes: driver fecha del ciclo
     const cremadosMes = cremadosTodos.filter(c => {
       const f = fechaCremacion(c)

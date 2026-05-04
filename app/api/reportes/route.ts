@@ -95,7 +95,8 @@ export async function GET(req: NextRequest) {
 
     const cicloById = new Map(ciclos.map(c => [c.id, c]))
     const fechaCliente = (c: Record<string, string>): Date | null => {
-      if (c.estado === 'cremado' && c.ciclo_id) {
+      // Cualquier mascota con ciclo_id válido (cremada o despachada) usa fecha del ciclo
+      if (c.ciclo_id) {
         const ciclo = cicloById.get(c.ciclo_id)
         if (ciclo?.fecha) {
           const d = parseFecha(ciclo.fecha)
@@ -114,7 +115,8 @@ export async function GET(req: NextRequest) {
     const cargasPetMes = cargasPet.filter(r => enMes(r.fecha))
     const cargasVehMes = cargasVeh.filter(r => enMes(r.fecha))
 
-    const cremados = delMes.filter(c => c.estado === 'cremado')
+    // Cremados: incluye también despachados (todos pasaron por un ciclo de cremación)
+    const cremados = delMes.filter(c => c.estado === 'cremado' || c.estado === 'despachado')
     const pendientes = clientes.filter(c => c.estado === 'pendiente' || !c.estado).length
     const litros = ciclosDelMes.reduce(
       (acc, c) => acc + Math.abs(parseDecimalOr0(c.litros_fin) - parseDecimalOr0(c.litros_inicio)),
