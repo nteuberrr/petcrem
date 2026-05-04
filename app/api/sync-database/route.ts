@@ -562,6 +562,155 @@ async function syncIdsUnicos(sheets: sheets_v4.Sheets, sheetName: string) {
   return { total_filas: dataRows.length, filas_actualizadas: cambios.length, cambios }
 }
 
+/**
+ * Sincroniza el estado de las mascotas según ciclos y despachos.
+ *
+ * Recorre SIEMPRE todas las hojas y reasigna estado/ciclo_id/despacho_id de cada
+ * cliente para que reflejen lo que hay en ciclos.mascotas_ids y despachos.mascotas_ids.
+ * Esto significa que cualquier cambio manual en la base (agregar/quitar mascotas
+ * de un ciclo o despacho directo en el sheet) queda reflejado al correr el sync.
+ *
+ * Reglas:
+ * - Si el cliente está en algún despacho.mascotas_ids → estado='despachado', despacho_id=ese
+ * - Sino, si está en algún ciclo.mascotas_ids → estado='cremado', ciclo_id=ese
+ * - Sino, no se toca (puede ser pendiente o tener un estado custom)
+ *
+ * Si está en múltiples ciclos/despachos, gana el de id más alto (más reciente).
+ */
+async function syncCremadosPorCiclos(sheets: sheets_v4.Sheets) {
+  await ensureSheet('clientes')
+  await ensureSheet('ciclos')
+  await ensureSheet('despachos')
+
+  const [clientesRes, ciclosRes, despachosRes] = await Promise.all([
+    sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'clientes',
+      valueRenderOption: 'UNFORMATTED_VALUE',
+    }),
+    sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'ciclos',
+      valueRenderOption: 'UNFORMATTED_VALUE',
+    }),
+    sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'despachos',
+      valueRenderOption: 'UNFORMATTED_VALUE',
+    }),
+  ])
+
+  const clientesMatrix = (clientesRes.data.values ?? []) as unknown[][]
+  if (clientesMatrix.length < 2) {
+    return { total_filas: 0, filas_actualizadas: 0, cambios: [] as ClienteCambio[] }
+  }
+
+  const cHeaders = (clientesMatrix[0] as string[]) ?? []
+  const cIdx = new Map(cHeaders.map((h, i) => [h, i]))
+  const clientesRows = clientesMatrix.slice(1)
+
+  const cIdIdx = cIdx.get('id')
+  const cCodigoIdx = cIdx.get('codigo')
+  const cNombreIdx = cIdx.get('nombre_mascota')
+  const cEstadoIdx = cIdx.get('estado')
+  const cCicloIdIdx = cIdx.get('ciclo_id')
+  const cDespachoIdIdx = cIdx.get('despacho_id')
+  if (cIdIdx === undefined || cEstadoIdx === undefined || cCicloIdIdx === undefined || cDespachoIdIdx === undefined) {
+    return { total_filas: clientesRows.length, filas_actualizadas: 0, cambios: [] as ClienteCambio[] }
+  }
+
+  // Helper: construir mapa cliente_id → último id donde aparece, leyendo una hoja
+  function mapearMascotas(matrix: unknown[][], hoja: string): Map<string, string> {
+    const m = new Map<string, string>()
+    if (matrix.length < 2) return m
+    const headers = (matrix[0] as string[]) ?? []
+    const idCol = headers.indexOf('id')
+    const mascotasCol = headers.indexOf('mascotas_ids')
+    if (idCol === -1 || mascotasCol === -1) return m
+    const ordenadas = matrix.slice(1)
+      .map(r => ({ row: r, id: parseInt(String(r[idCol] ?? '0'), 10) || 0 }))
+      .sort((a, b) => a.id - b.id) // asc → último (id más alto) gana
+    for (const { row, id } of ordenadas) {
+      let mascotasIds: string[] = []
+      try { mascotasIds = JSON.parse(String(row[mascotasCol] ?? '[]')) } catch {}
+      for (const mid of mascotasIds) {
+        m.set(String(mid), String(id))
+      }
+    }
+    void hoja
+    return m
+  }
+
+  const ciclosMatrix = (ciclosRes.data.values ?? []) as unknown[][]
+  const despachosMatrix = (despachosRes.data.values ?? []) as unknown[][]
+  const cicloDeCliente = mapearMascotas(ciclosMatrix, 'ciclos')
+  const despachoDeCliente = mapearMascotas(despachosMatrix, 'despachos')
+
+  const cambios: ClienteCambio[] = []
+  for (const row of clientesRows) {
+    const id = String(row[cIdIdx] ?? '')
+    if (!id) continue
+    const estadoActual = String(row[cEstadoIdx] ?? '')
+    const cicloIdActual = String(row[cCicloIdIdx] ?? '')
+    const despachoIdActual = String(row[cDespachoIdIdx] ?? '')
+
+    const despachoEsperado = despachoDeCliente.get(id)
+    const cicloEsperado = cicloDeCliente.get(id)
+
+    let estadoEsperado: string | null = null
+    let nuevoCicloId = cicloIdActual
+    let nuevoDespachoId = despachoIdActual
+
+    if (despachoEsperado) {
+      estadoEsperado = 'despachado'
+      nuevoDespachoId = despachoEsperado
+      nuevoCicloId = cicloEsperado ?? cicloIdActual // si está en un ciclo, también guardar
+    } else if (cicloEsperado) {
+      estadoEsperado = 'cremado'
+      nuevoCicloId = cicloEsperado
+      nuevoDespachoId = '' // ya no está despachado
+    }
+    // Si no está en ningún ciclo ni despacho, no tocamos (puede ser 'pendiente' o custom)
+
+    if (estadoEsperado === null) continue
+
+    const camposCambiados: string[] = []
+    if (estadoActual !== estadoEsperado) {
+      row[cEstadoIdx] = estadoEsperado
+      camposCambiados.push(`estado: ${estadoActual || 'vacío'} → ${estadoEsperado}`)
+    }
+    if (cicloIdActual !== nuevoCicloId) {
+      row[cCicloIdIdx] = nuevoCicloId
+      camposCambiados.push(`ciclo_id: ${cicloIdActual || 'vacío'} → ${nuevoCicloId || 'vacío'}`)
+    }
+    if (despachoIdActual !== nuevoDespachoId) {
+      row[cDespachoIdIdx] = nuevoDespachoId
+      camposCambiados.push(`despacho_id: ${despachoIdActual || 'vacío'} → ${nuevoDespachoId || 'vacío'}`)
+    }
+    if (camposCambiados.length > 0) {
+      cambios.push({
+        id,
+        codigo: cCodigoIdx !== undefined ? String(row[cCodigoIdx] ?? '') : '',
+        nombre_mascota: cNombreIdx !== undefined ? String(row[cNombreIdx] ?? '') : '',
+        campos: camposCambiados,
+      })
+    }
+  }
+
+  if (cambios.length > 0) {
+    const lastCol = colLetter(cHeaders.length - 1)
+    const writeRange = `clientes!A2:${lastCol}${clientesRows.length + 1}`
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: writeRange,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: clientesRows as (string | number | boolean)[][] },
+    })
+  }
+
+  return { total_filas: clientesRows.length, filas_actualizadas: cambios.length, cambios }
+}
+
 export async function POST() {
   try {
     const sheets = google.sheets({ version: 'v4', auth: getAuth() })
@@ -573,7 +722,10 @@ export async function POST() {
     // Renumerar IDs duplicados ANTES de calcular ciclos (que lee clientes por id)
     const productosIds = await syncIdsUnicos(sheets, 'productos')
     const otrosServiciosIds = await syncIdsUnicos(sheets, 'otros_servicios')
-    // Importante: ciclos depende de clientes (lee pesos), corre después del syncClientes que normaliza pesos
+    // Marcar como cremados los clientes que aparecen en mascotas_ids de ciclos.
+    // Importante: corre ANTES de syncCiclosCalculados (que necesita los pesos correctos
+    // y los ciclos asignados para calcular peso_total).
+    const cremados = await syncCremadosPorCiclos(sheets)
     const ciclos = await syncCiclosCalculados(sheets)
 
     return NextResponse.json({
@@ -581,6 +733,7 @@ export async function POST() {
       clientes, vehiculo, petroleo, despachos, ciclos,
       productos_ids: productosIds,
       otros_servicios_ids: otrosServiciosIds,
+      cremados,
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
