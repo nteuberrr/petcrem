@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { google, sheets_v4 } from 'googleapis'
 import { ensureColumns, ensureSheet } from '@/lib/google-sheets'
 import { parseMonto } from '@/lib/numbers'
+import { formatDateForSheet } from '@/lib/dates'
 
 /**
  * Normaliza las hojas `clientes`, `vehiculo_cargas` y `cargas_petroleo`.
@@ -285,6 +286,76 @@ async function syncNumericSheet(
   return { total_filas: dataRows.length, filas_actualizadas: cambios.length, cambios }
 }
 
+/**
+ * Reasigna `numero_recorrido` en la hoja `despachos`: 1, 2, 3... por día,
+ * según orden de creación (id ascendente). Corrige el bug histórico que
+ * dejaba a todos los recorridos con número 1 (porque el filtro por fecha
+ * comparaba serial Excel contra ISO string y nunca encontraba duplicados).
+ */
+async function syncDespachosNumeros(sheets: sheets_v4.Sheets) {
+  await ensureSheet('despachos')
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'despachos',
+    valueRenderOption: 'UNFORMATTED_VALUE',
+  })
+  const matrix = (res.data.values ?? []) as unknown[][]
+  if (matrix.length < 2) return { total_filas: 0, filas_actualizadas: 0, cambios: [] as NumberCambio[] }
+
+  const headers = (matrix[0] as string[]) ?? []
+  const idxOf = new Map(headers.map((h, i) => [h, i]))
+  const dataRows = matrix.slice(1)
+
+  const idIdx = idxOf.get('id')
+  const fechaIdx = idxOf.get('fecha')
+  const numeroIdx = idxOf.get('numero_recorrido')
+  if (idIdx === undefined || fechaIdx === undefined || numeroIdx === undefined) {
+    return { total_filas: dataRows.length, filas_actualizadas: 0, cambios: [] as NumberCambio[] }
+  }
+
+  // Indexar filas por fecha normalizada manteniendo orden ascendente por id
+  type Bucket = { fechaIso: string; rows: { row: unknown[]; id: number; sheetIdx: number }[] }
+  const buckets = new Map<string, Bucket>()
+  dataRows.forEach((row, sheetIdx) => {
+    const rawFecha = row[fechaIdx]
+    const fechaIso = formatDateForSheet(String(rawFecha ?? '')) || String(rawFecha ?? '')
+    const id = parseInt(String(row[idIdx] ?? '0'), 10) || 0
+    let b = buckets.get(fechaIso)
+    if (!b) { b = { fechaIso, rows: [] }; buckets.set(fechaIso, b) }
+    b.rows.push({ row, id, sheetIdx })
+  })
+
+  const cambios: NumberCambio[] = []
+  for (const bucket of buckets.values()) {
+    bucket.rows.sort((a, b) => a.id - b.id)
+    bucket.rows.forEach((entry, i) => {
+      const expected = i + 1
+      const actual = parseInt(String(entry.row[numeroIdx] ?? '0'), 10) || 0
+      if (actual !== expected) {
+        entry.row[numeroIdx] = expected
+        cambios.push({
+          id: String(entry.row[idIdx] ?? ''),
+          fecha: bucket.fechaIso,
+          campos: ['numero_recorrido'],
+        })
+      }
+    })
+  }
+
+  if (cambios.length > 0) {
+    const lastCol = colLetter(headers.length - 1)
+    const writeRange = `despachos!A2:${lastCol}${dataRows.length + 1}`
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: writeRange,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: dataRows as (string | number | boolean)[][] },
+    })
+  }
+
+  return { total_filas: dataRows.length, filas_actualizadas: cambios.length, cambios }
+}
+
 export async function POST() {
   try {
     const sheets = google.sheets({ version: 'v4', auth: getAuth() })
@@ -292,8 +363,9 @@ export async function POST() {
     const clientes = await syncClientes(sheets)
     const vehiculo = await syncNumericSheet(sheets, 'vehiculo_cargas', ['litros', 'km_odometro'], ['monto'])
     const petroleo = await syncNumericSheet(sheets, 'cargas_petroleo', ['litros'], ['precio_neto', 'iva', 'especifico', 'total_bruto'])
+    const despachos = await syncDespachosNumeros(sheets)
 
-    return NextResponse.json({ ok: true, clientes, vehiculo, petroleo })
+    return NextResponse.json({ ok: true, clientes, vehiculo, petroleo, despachos })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
