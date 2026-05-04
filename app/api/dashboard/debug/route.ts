@@ -71,10 +71,51 @@ export async function GET() {
       return Object.entries(obj).sort(([a], [b]) => a.localeCompare(b))
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // Mascotas en múltiples ciclos (causa del subconteo en el chart)
+    // ─────────────────────────────────────────────────────────────────
+    // Construir mapa: mascota_id → array de ciclo_ids donde aparece
+    const mascotaEnCiclos = new Map<string, string[]>()
+    for (const c of ciclos) {
+      let mascotasIds: string[] = []
+      try { mascotasIds = JSON.parse(c.mascotas_ids || '[]') } catch {}
+      for (const mid of mascotasIds) {
+        const arr = mascotaEnCiclos.get(String(mid)) ?? []
+        arr.push(c.id)
+        mascotaEnCiclos.set(String(mid), arr)
+      }
+    }
+    const enMultiples = Array.from(mascotaEnCiclos.entries())
+      .filter(([_, ciclosIds]) => ciclosIds.length > 1)
+      .map(([mid, ciclosIds]) => {
+        const cliente = clientes.find(c => c.id === mid)
+        return {
+          mascota_id: mid,
+          codigo: cliente?.codigo ?? '?',
+          nombre: cliente?.nombre_mascota ?? '?',
+          ciclos_ids: ciclosIds,
+          ciclo_id_actual: cliente?.ciclo_id ?? '',
+        }
+      })
+
+    // Conteo total de mascotas en cada ciclo (suma de longitudes mascotas_ids)
+    let totalMascotasEnCiclos = 0
+    const mascotasEnCiclosPorMes: Record<string, number> = {}
+    for (const c of ciclos) {
+      let mascotasIds: string[] = []
+      try { mascotasIds = JSON.parse(c.mascotas_ids || '[]') } catch {}
+      totalMascotasEnCiclos += mascotasIds.length
+      const mes = parseISO(c.fecha)
+      if (mes) mascotasEnCiclosPorMes[mes] = (mascotasEnCiclosPorMes[mes] ?? 0) + mascotasIds.length
+    }
+
     return NextResponse.json({
       total_clientes: clientes.length,
       total_cremados: clientes.filter(c => c.estado === 'cremado').length,
       total_ciclos: ciclos.length,
+      total_mascotas_en_ciclos: totalMascotasEnCiclos,
+      total_mascotas_unicas_en_ciclos: mascotaEnCiclos.size,
+      mascotas_en_ciclos_por_mes: ordenado(mascotasEnCiclosPorMes),
       ciclos_por_fecha: ordenado(ciclosPorFecha),
       cremados_por_fecha_ciclo: ordenado(cremadosPorFechaCiclo),
       cremados_por_fecha_retiro: ordenado(cremadosPorFechaRetiro),
@@ -83,8 +124,10 @@ export async function GET() {
       problemas: {
         cremados_sin_ciclo_id: cremadosSinCicloId.length,
         cremados_con_ciclo_id_inexistente: cremadosCicloIdNoEncontrado.length,
+        mascotas_en_multiples_ciclos: enMultiples.length,
         ejemplos_sin_ciclo_id: cremadosSinCicloId.slice(0, 10),
         ejemplos_ciclo_id_inexistente: cremadosCicloIdNoEncontrado.slice(0, 10),
+        ejemplos_mascotas_en_multiples_ciclos: enMultiples.slice(0, 20),
       },
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
