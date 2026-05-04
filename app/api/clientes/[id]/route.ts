@@ -19,7 +19,13 @@ export async function GET(
       ciclo = ciclos.find((c) => c.id === cliente.ciclo_id) ?? null
     }
 
-    return NextResponse.json({ ...cliente, ciclo })
+    let despacho = null
+    if (cliente.despacho_id) {
+      const despachos = await getSheetData('despachos')
+      despacho = despachos.find((d) => d.id === cliente.despacho_id) ?? null
+    }
+
+    return NextResponse.json({ ...cliente, ciclo, despacho })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

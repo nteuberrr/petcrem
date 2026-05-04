@@ -202,7 +202,8 @@ export default function AsistenciaPage() {
         </div>
         {vigente ? (
           <p className="text-xs text-gray-500 mb-4">
-            Jornada base: <b>{vigente.hora_entrada}–{vigente.hora_salida}</b> · ${fmtNumero(vigente.precio_hora_extra)}/hr extra
+            Jornada base: <b>{vigente.hora_entrada}–{vigente.hora_salida}</b>
+            {isAdmin && <> · ${fmtNumero(vigente.precio_hora_extra)}/hr extra</>}
           </p>
         ) : (
           <p className="text-xs text-amber-700 bg-amber-50 border-2 border-amber-200 rounded-lg p-2 mb-4">

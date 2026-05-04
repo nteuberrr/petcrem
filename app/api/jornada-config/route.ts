@@ -16,14 +16,16 @@ async function ensure() {
 export async function GET() {
   try {
     await ensure()
+    const session = await getServerSession(authOptions)
+    const isAdmin = session?.user?.role === 'admin'
     const rows = await getSheetData(HOJA)
-    // Normalizar fechas y números
+    // Normalizar fechas y números. Operadores no deben ver precio_hora_extra.
     const configs: JornadaConfig[] = rows.map(r => ({
       id: r.id,
       vigente_desde: formatDateForSheet(r.vigente_desde) || r.vigente_desde,
       hora_entrada: formatHora(r.hora_entrada),
       hora_salida: formatHora(r.hora_salida),
-      precio_hora_extra: parseFloat(r.precio_hora_extra) || 0,
+      precio_hora_extra: isAdmin ? (parseFloat(r.precio_hora_extra) || 0) : 0,
     }))
     // Ordenar de más reciente a más vieja
     configs.sort((a, b) => b.vigente_desde.localeCompare(a.vigente_desde))

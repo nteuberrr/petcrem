@@ -45,6 +45,13 @@ type ClienteDetalle = {
     litros_fin: string
     comentarios: string
   } | null
+  despacho?: {
+    id: string
+    fecha: string
+    numero_recorrido: string
+    numero_global: string
+    nota: string
+  } | null
 }
 
 type Veterinario = { id: string; nombre: string; activo: string; tipo_precios: string }
@@ -342,6 +349,23 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           </div>
         )}
       </div>
+
+      {/* Despacho — solo si fue despachada */}
+      {cliente.estado === 'despachado' && (
+        <div className="bg-white rounded-xl shadow-md border-2 border-emerald-200 p-6 mb-6">
+          <h2 className="text-base font-bold text-gray-900 mb-4">Despacho</h2>
+          {cliente.despacho ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <InfoField label="Fecha del despacho" value={fmtFecha(cliente.despacho.fecha)} />
+              <InfoField label="N° de recorrido" value={cliente.despacho.numero_recorrido ? `N° ${cliente.despacho.numero_recorrido}` : '—'} />
+              <InfoField label="N° global" value={cliente.despacho.numero_global ? `N° ${cliente.despacho.numero_global}` : '—'} />
+              <InfoField label="Nota" value={cliente.despacho.nota || '—'} />
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">Despacho no encontrado (id: {cliente.despacho_id || '—'}).</p>
+          )}
+        </div>
+      )}
 
       {/* Datos de ingreso */}
       <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 mb-6">
