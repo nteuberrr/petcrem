@@ -20,7 +20,7 @@ type Data = {
   }
   ratios: { litros_por_ciclo: number; litros_por_mascota: number; costo_vehiculo_por_mascota: number; duracion_promedio_ciclo_min: number }
   ratios_por_mes: RatioMensual[]
-  ventas_por_mes: Array<{ mes: string; ingresos: number; mascotas: number }>
+  ventas_por_mes: Array<{ mes: string; ingresos: number; mascotas: number; ciclos: number }>
   top_servicios: Array<{ codigo: string; count: number }>
   ventas_por_vet: Array<{ vet: string; ingresos: number; mascotas: number }>
   top_productos: Array<{ nombre: string; qty: number }>
@@ -142,6 +142,19 @@ export default function DashboardPage() {
               <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => fmtNumero(v as number)} />
               <Tooltip formatter={(v) => fmtNumero(v as number)} />
               <Bar dataKey="mascotas" fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        {/* Ciclos por mes (driver: fecha del ciclo) */}
+        <ChartCard title="Ciclos por mes">
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={data.ventas_por_mes}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }} />
+              <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => fmtNumero(v as number)} />
+              <Tooltip formatter={(v) => fmtNumero(v as number)} />
+              <Bar dataKey="ciclos" fill="#f59e0b" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>

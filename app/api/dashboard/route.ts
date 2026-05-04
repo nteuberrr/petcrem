@@ -171,10 +171,13 @@ export async function GET() {
     // Filtros base — calculados una sola vez
     // "Cremadas" incluye tanto las que están en cámara (estado='cremado') como las
     // que ya fueron entregadas al tutor (estado='despachado'). Ambas pasaron por
-    // un ciclo de cremación. Excluir las despachadas hacía que el chart subcontara.
+    // un ciclo de cremación; usado para charts/ratios históricos.
     const cremadosTodos = clientes.filter(c => c.estado === 'cremado' || c.estado === 'despachado')
-    // Cremaciones del mes: driver fecha del ciclo
-    const cremadosMes = cremadosTodos.filter(c => {
+    // KPI "Cremaciones del mes" = mascotas pendientes de despacho (estado='cremado' actual)
+    // cuya fecha de cremación cae en el mes. Las despachadas ya pasaron por aquí pero
+    // ahora viven en el flujo de despachos, no acá.
+    const cremadosMes = clientes.filter(c => {
+      if (c.estado !== 'cremado') return false
       const f = fechaCremacion(c)
       return f && f >= startMesActual && f <= now
     })
@@ -267,11 +270,12 @@ export async function GET() {
       mes: d.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' }),
       ingresos: 0,
       mascotas: 0,
+      ciclos: 0,
     }))
     const limiteIzq = startVentanas[0]
     // Mascotas ingresadas por mes: driver fecha_retiro (TODOS los clientes con fecha de retiro en el mes).
     // Mismo driver para ingresos mensuales (cuando se cobra), pero los ingresos ahora viven en
-    // /reportes → tab Ingresos. El dashboard solo muestra el evolutivo de mascotas.
+    // /reportes → tab Ingresos. El dashboard solo muestra evolutivos.
     for (const c of clientes) {
       const f = fechaVenta(c)
       if (!f || f < limiteIzq) continue
@@ -279,6 +283,14 @@ export async function GET() {
       if (idx === undefined) continue
       buckets[idx].ingresos += ingresoCliente(c).total
       buckets[idx].mascotas += 1
+    }
+    // Ciclos por mes: driver fecha del ciclo
+    for (const c of ciclos) {
+      const f = parseDateSafe(c.fecha)
+      if (!f || f < limiteIzq) continue
+      const idx = ventanaIdx.get(`${f.getFullYear()}-${f.getMonth()}`)
+      if (idx === undefined) continue
+      buckets[idx].ciclos += 1
     }
     const ventasPorMes = buckets
 
