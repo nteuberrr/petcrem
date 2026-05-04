@@ -33,7 +33,7 @@ const SHEETS: Record<string, string[]> = {
     'comentarios', 'fecha_creacion',
   ],
   despachos: [
-    'id', 'fecha', 'numero_recorrido', 'mascotas_ids', 'nota', 'fecha_creacion',
+    'id', 'fecha', 'numero_recorrido', 'numero_global', 'mascotas_ids', 'nota', 'fecha_creacion',
   ],
   rendiciones: [
     'id', 'usuario', 'descripcion', 'fecha', 'monto', 'tipo_documento',

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 const HOJA = 'despachos'
-const COLS = ['id', 'fecha', 'numero_recorrido', 'mascotas_ids', 'nota', 'fecha_creacion']
+const COLS = ['id', 'fecha', 'numero_recorrido', 'numero_global', 'mascotas_ids', 'nota', 'fecha_creacion']
 
 async function ensure() {
   await ensureSheet(HOJA)
@@ -47,6 +47,10 @@ export async function POST(req: NextRequest) {
     const numerosDelDia = delDia.map(d => parseInt(d.numero_recorrido, 10) || 0)
     const numero = (numerosDelDia.length > 0 ? Math.max(...numerosDelDia) : 0) + 1
 
+    // Número global: correlativo total entre todos los recorridos (max + 1).
+    const globales = existentes.map(d => parseInt(d.numero_global, 10) || 0)
+    const numeroGlobal = (globales.length > 0 ? Math.max(...globales) : 0) + 1
+
     const id = await getNextId(HOJA)
     const now = todayISO()
 
@@ -54,6 +58,7 @@ export async function POST(req: NextRequest) {
       id,
       fecha: String(body.fecha),
       numero_recorrido: String(numero),
+      numero_global: String(numeroGlobal),
       mascotas_ids: JSON.stringify(body.mascotas_ids),
       nota: body.nota ?? '',
       fecha_creacion: now,

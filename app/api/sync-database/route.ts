@@ -287,13 +287,16 @@ async function syncNumericSheet(
 }
 
 /**
- * Reasigna `numero_recorrido` en la hoja `despachos`: 1, 2, 3... por día,
- * según orden de creación (id ascendente). Corrige el bug histórico que
- * dejaba a todos los recorridos con número 1 (porque el filtro por fecha
- * comparaba serial Excel contra ISO string y nunca encontraba duplicados).
+ * Reasigna `numero_recorrido` (correlativo por día) y `numero_global`
+ * (correlativo total) en la hoja `despachos`. Corrige los datos viejos
+ * que tenían todos los recorridos con número 1.
+ *
+ * - numero_recorrido: 1, 2, 3... reiniciando por cada día
+ * - numero_global: 1, 2, 3... sin reiniciar nunca (orden de creación = id asc)
  */
 async function syncDespachosNumeros(sheets: sheets_v4.Sheets) {
   await ensureSheet('despachos')
+  await ensureColumns('despachos', ['id', 'fecha', 'numero_recorrido', 'numero_global', 'mascotas_ids', 'nota', 'fecha_creacion'])
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: 'despachos',
@@ -309,37 +312,59 @@ async function syncDespachosNumeros(sheets: sheets_v4.Sheets) {
   const idIdx = idxOf.get('id')
   const fechaIdx = idxOf.get('fecha')
   const numeroIdx = idxOf.get('numero_recorrido')
-  if (idIdx === undefined || fechaIdx === undefined || numeroIdx === undefined) {
+  const globalIdx = idxOf.get('numero_global')
+  if (idIdx === undefined || fechaIdx === undefined || numeroIdx === undefined || globalIdx === undefined) {
     return { total_filas: dataRows.length, filas_actualizadas: 0, cambios: [] as NumberCambio[] }
   }
 
-  // Indexar filas por fecha normalizada manteniendo orden ascendente por id
-  type Bucket = { fechaIso: string; rows: { row: unknown[]; id: number; sheetIdx: number }[] }
-  const buckets = new Map<string, Bucket>()
-  dataRows.forEach((row, sheetIdx) => {
+  // Pre-calcular id e iso por fila (mantenemos referencia a la fila para escribir in-place)
+  const annotated = dataRows.map((row) => {
     const rawFecha = row[fechaIdx]
     const fechaIso = formatDateForSheet(String(rawFecha ?? '')) || String(rawFecha ?? '')
     const id = parseInt(String(row[idIdx] ?? '0'), 10) || 0
-    let b = buckets.get(fechaIso)
-    if (!b) { b = { fechaIso, rows: [] }; buckets.set(fechaIso, b) }
-    b.rows.push({ row, id, sheetIdx })
+    return { row, id, fechaIso }
   })
 
+  // numero_global: ordenar por id ascendente, asignar 1, 2, 3...
+  const ordenadosGlobal = [...annotated].sort((a, b) => a.id - b.id)
+  const globalByRow = new Map<unknown[], number>()
+  ordenadosGlobal.forEach((entry, i) => globalByRow.set(entry.row, i + 1))
+
+  // numero_recorrido: agrupar por fecha, asignar 1, 2, 3... dentro de cada bucket (orden id asc)
+  const buckets = new Map<string, typeof annotated>()
+  for (const entry of annotated) {
+    const arr = buckets.get(entry.fechaIso) ?? []
+    arr.push(entry)
+    buckets.set(entry.fechaIso, arr)
+  }
+  const recorridoByRow = new Map<unknown[], number>()
+  for (const arr of buckets.values()) {
+    arr.sort((a, b) => a.id - b.id)
+    arr.forEach((entry, i) => recorridoByRow.set(entry.row, i + 1))
+  }
+
   const cambios: NumberCambio[] = []
-  for (const bucket of buckets.values()) {
-    bucket.rows.sort((a, b) => a.id - b.id)
-    bucket.rows.forEach((entry, i) => {
-      const expected = i + 1
-      const actual = parseInt(String(entry.row[numeroIdx] ?? '0'), 10) || 0
-      if (actual !== expected) {
-        entry.row[numeroIdx] = expected
-        cambios.push({
-          id: String(entry.row[idIdx] ?? ''),
-          fecha: bucket.fechaIso,
-          campos: ['numero_recorrido'],
-        })
-      }
-    })
+  for (const entry of annotated) {
+    const camposCambiados: string[] = []
+    const expectedRecorrido = recorridoByRow.get(entry.row) ?? 1
+    const actualRecorrido = parseInt(String(entry.row[numeroIdx] ?? '0'), 10) || 0
+    if (actualRecorrido !== expectedRecorrido) {
+      entry.row[numeroIdx] = expectedRecorrido
+      camposCambiados.push('numero_recorrido')
+    }
+    const expectedGlobal = globalByRow.get(entry.row) ?? 0
+    const actualGlobal = parseInt(String(entry.row[globalIdx] ?? '0'), 10) || 0
+    if (actualGlobal !== expectedGlobal) {
+      entry.row[globalIdx] = expectedGlobal
+      camposCambiados.push('numero_global')
+    }
+    if (camposCambiados.length > 0) {
+      cambios.push({
+        id: String(entry.row[idIdx] ?? ''),
+        fecha: entry.fechaIso,
+        campos: camposCambiados,
+      })
+    }
   }
 
   if (cambios.length > 0) {

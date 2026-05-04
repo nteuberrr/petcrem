@@ -11,7 +11,7 @@ type Cliente = {
 }
 
 type Despacho = {
-  id: string; fecha: string; numero_recorrido: string
+  id: string; fecha: string; numero_recorrido: string; numero_global?: string
   mascotas_ids: string[]; nota: string; fecha_creacion: string
 }
 
@@ -248,10 +248,10 @@ export default function DespachosTab() {
           <div className="p-8 text-center text-gray-400 text-sm">Sin recorridos registrados</div>
         ) : (
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[600px]">
+          <table className="w-full text-sm min-w-[680px]">
             <thead className="bg-gray-50">
               <tr>
-                {['N° Recorrido', 'Fecha', 'Mascotas', 'Nota', 'Acciones', ''].map(h => (
+                {['N° Global', 'N° Recorrido', 'Fecha', 'Mascotas', 'Nota', 'Acciones', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
                 ))}
               </tr>
@@ -260,6 +260,7 @@ export default function DespachosTab() {
               {despachos.map(d => (
                 <Fragment key={d.id}>
                   <tr className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-mono text-xs text-indigo-700 font-bold cursor-pointer" onClick={() => toggleExpandir(d)}>#{d.numero_global || '—'}</td>
                     <td className="px-4 py-3 font-semibold text-gray-900 cursor-pointer" onClick={() => toggleExpandir(d)}>N° {d.numero_recorrido}</td>
                     <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(d)}>{formatDate(d.fecha)}</td>
                     <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(d)}>{fmtNumero(d.mascotas_ids.length)}</td>
@@ -280,7 +281,7 @@ export default function DespachosTab() {
                   </tr>
                   {expandido === d.id && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-4 bg-gray-50">
+                      <td colSpan={7} className="px-6 py-4 bg-gray-50">
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="text-gray-500">
