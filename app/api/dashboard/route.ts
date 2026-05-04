@@ -71,8 +71,8 @@ export async function GET() {
     startMesActual.setHours(0, 0, 0, 0)
 
     // Cache de fecha por cliente (parseo una sola vez).
-    // Driver: si el cliente está cremado y tiene ciclo_id, la fecha "del mes" es
-    // la fecha del ciclo (fecha de cremación). Fallback a fecha_retiro / fecha_creacion.
+    // Driver: fecha_retiro = momento en que se cobra e inicia el ciclo de venta.
+    // Fallback a fecha_creacion si fecha_retiro está vacía.
     const cicloById = new Map(ciclos.map(c => [c.id, c]))
     const fechaCache = new Map<string, Date | null>()
     function parseDateSafe(raw: string): Date | null {
@@ -85,12 +85,7 @@ export async function GET() {
     function fechaCliente(c: Record<string, string>): Date | null {
       const cached = fechaCache.get(c.id)
       if (cached !== undefined) return cached
-      let d: Date | null = null
-      if (c.estado === 'cremado' && c.ciclo_id) {
-        const ciclo = cicloById.get(c.ciclo_id)
-        if (ciclo?.fecha) d = parseDateSafe(ciclo.fecha)
-      }
-      if (!d) d = parseDateSafe(c.fecha_retiro || c.fecha_creacion)
+      const d = parseDateSafe(c.fecha_retiro || c.fecha_creacion)
       fechaCache.set(c.id, d)
       return d
     }
