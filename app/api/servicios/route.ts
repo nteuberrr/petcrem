@@ -33,6 +33,21 @@ export async function POST(req: NextRequest) {
   }
 }
 
+function findUniqueIndex(rows: Record<string, string>[], id: string, hoja: string): { idx: number; error?: string } {
+  const matches: number[] = []
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].id === id) matches.push(i)
+  }
+  if (matches.length === 0) return { idx: -1, error: 'No encontrado' }
+  if (matches.length > 1) {
+    return {
+      idx: -1,
+      error: `Hay ${matches.length} filas con id="${id}" en ${hoja}. Andá a Configuración → Mantenimiento → Actualizar base de datos para renumerar IDs duplicados.`,
+    }
+  }
+  return { idx: matches[0] }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
@@ -41,8 +56,8 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
     const hoja = tipo === 'otros' ? 'otros_servicios' : 'tipos_servicio'
     const rows = await getSheetData(hoja)
-    const idx = rows.findIndex(r => r.id === id)
-    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    const { idx, error } = findUniqueIndex(rows, id, hoja)
+    if (error) return NextResponse.json({ error }, { status: error === 'No encontrado' ? 404 : 409 })
     await deleteRow(hoja, idx)
     return NextResponse.json({ ok: true })
   } catch (e) {
@@ -58,8 +73,8 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json()
     const { id, ...updates } = body
     const rows = await getSheetData(hoja)
-    const idx = rows.findIndex((r) => r.id === id)
-    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    const { idx, error } = findUniqueIndex(rows, id, hoja)
+    if (error) return NextResponse.json({ error }, { status: error === 'No encontrado' ? 404 : 409 })
     const updated = { ...rows[idx], ...updates }
     await updateRow(hoja, idx, updated)
     return NextResponse.json(updated)

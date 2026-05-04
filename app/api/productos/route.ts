@@ -33,14 +33,29 @@ export async function POST(req: NextRequest) {
   }
 }
 
+function findUniqueIndex(rows: Record<string, string>[], id: string): { idx: number; error?: string } {
+  const matches: number[] = []
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].id === id) matches.push(i)
+  }
+  if (matches.length === 0) return { idx: -1, error: 'No encontrado' }
+  if (matches.length > 1) {
+    return {
+      idx: -1,
+      error: `Hay ${matches.length} productos con id="${id}" en la planilla. Andá a Configuración → Mantenimiento → Actualizar base de datos para renumerar IDs duplicados.`,
+    }
+  }
+  return { idx: matches[0] }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
     const rows = await getSheetData('productos')
-    const idx = rows.findIndex(r => r.id === id)
-    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    const { idx, error } = findUniqueIndex(rows, id)
+    if (error) return NextResponse.json({ error }, { status: idx === -1 && error === 'No encontrado' ? 404 : 409 })
     await deleteRow('productos', idx)
     return NextResponse.json({ ok: true })
   } catch (e) {
@@ -54,8 +69,8 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json()
     const { id, delta_stock, ...updates } = body
     const rows = await getSheetData('productos')
-    const idx = rows.findIndex((r) => r.id === id)
-    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    const { idx, error } = findUniqueIndex(rows, id)
+    if (error) return NextResponse.json({ error }, { status: idx === -1 && error === 'No encontrado' ? 404 : 409 })
     let updated = { ...rows[idx], ...updates }
     // delta_stock: positive = add units, negative = remove
     if (delta_stock !== undefined) {

@@ -504,6 +504,64 @@ async function syncCiclosCalculados(sheets: sheets_v4.Sheets) {
   return { total_filas: ciclosRows.length, filas_actualizadas: cambios.length, cambios }
 }
 
+/**
+ * Detecta IDs duplicados en una hoja y le da nuevos IDs únicos a los duplicados
+ * (preserva el primer registro con cada id, renumera los siguientes con max+1).
+ *
+ * Esto resuelve el bug donde editar/eliminar un registro cambia accidentalmente
+ * a otro distinto (porque findIndex(r => r.id === X) encuentra el primero).
+ */
+async function syncIdsUnicos(sheets: sheets_v4.Sheets, sheetName: string) {
+  await ensureSheet(sheetName)
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: sheetName,
+    valueRenderOption: 'UNFORMATTED_VALUE',
+  })
+  const matrix = (res.data.values ?? []) as unknown[][]
+  if (matrix.length < 2) return { total_filas: 0, filas_actualizadas: 0, cambios: [] as NumberCambio[] }
+
+  const headers = (matrix[0] as string[]) ?? []
+  const idIdx = headers.indexOf('id')
+  if (idIdx === -1) return { total_filas: matrix.length - 1, filas_actualizadas: 0, cambios: [] as NumberCambio[] }
+  const dataRows = matrix.slice(1)
+
+  const ids = dataRows.map(r => parseInt(String(r[idIdx] ?? '0'), 10) || 0)
+  let maxId = ids.reduce((m, n) => Math.max(m, n), 0)
+  const visto = new Set<number>()
+  const cambios: NumberCambio[] = []
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const id = ids[i]
+    if (id > 0 && !visto.has(id)) {
+      visto.add(id)
+      continue
+    }
+    // Duplicado o id 0/inválido → asignar nuevo id
+    maxId += 1
+    dataRows[i][idIdx] = maxId
+    visto.add(maxId)
+    cambios.push({
+      id: String(maxId),
+      fecha: '',
+      campos: [`id: ${id || 'vacío'} → ${maxId}`],
+    })
+  }
+
+  if (cambios.length > 0) {
+    const lastCol = colLetter(headers.length - 1)
+    const writeRange = `${sheetName}!A2:${lastCol}${dataRows.length + 1}`
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: writeRange,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: dataRows as (string | number | boolean)[][] },
+    })
+  }
+
+  return { total_filas: dataRows.length, filas_actualizadas: cambios.length, cambios }
+}
+
 export async function POST() {
   try {
     const sheets = google.sheets({ version: 'v4', auth: getAuth() })
@@ -512,10 +570,18 @@ export async function POST() {
     const vehiculo = await syncNumericSheet(sheets, 'vehiculo_cargas', ['litros', 'km_odometro'], ['monto'])
     const petroleo = await syncNumericSheet(sheets, 'cargas_petroleo', ['litros'], ['precio_neto', 'iva', 'especifico', 'total_bruto'])
     const despachos = await syncDespachosNumeros(sheets)
+    // Renumerar IDs duplicados ANTES de calcular ciclos (que lee clientes por id)
+    const productosIds = await syncIdsUnicos(sheets, 'productos')
+    const otrosServiciosIds = await syncIdsUnicos(sheets, 'otros_servicios')
     // Importante: ciclos depende de clientes (lee pesos), corre después del syncClientes que normaliza pesos
     const ciclos = await syncCiclosCalculados(sheets)
 
-    return NextResponse.json({ ok: true, clientes, vehiculo, petroleo, despachos, ciclos })
+    return NextResponse.json({
+      ok: true,
+      clientes, vehiculo, petroleo, despachos, ciclos,
+      productos_ids: productosIds,
+      otros_servicios_ids: otrosServiciosIds,
+    })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

@@ -84,6 +84,8 @@ export default function ConfiguracionPage() {
     petroleo: NumberSyncResult
     despachos: NumberSyncResult
     ciclos: NumberSyncResult
+    productos_ids: NumberSyncResult
+    otros_servicios_ids: NumberSyncResult
   }
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null)
@@ -875,6 +877,47 @@ export default function ConfiguracionPage() {
                         <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
                         <span>{c.fecha}</span>{' '}
                         <span className="text-gray-500">→ {c.campos.join(', ')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              {/* Productos / otros servicios: IDs únicos */}
+              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
+                <p className="text-sm font-bold text-emerald-900">
+                  ✓ Productos: {syncResult.productos_ids.filas_actualizadas} IDs duplicados renumerados (de {syncResult.productos_ids.total_filas} filas)
+                </p>
+              </div>
+              {syncResult.productos_ids.cambios.length > 0 && (
+                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
+                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
+                    Detalle ({syncResult.productos_ids.cambios.length})
+                  </summary>
+                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
+                    {syncResult.productos_ids.cambios.map((c, i) => (
+                      <li key={i} className="text-xs text-gray-700 py-1">
+                        <span className="text-gray-500">{c.campos.join(', ')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
+                <p className="text-sm font-bold text-emerald-900">
+                  ✓ Otros servicios: {syncResult.otros_servicios_ids.filas_actualizadas} IDs duplicados renumerados (de {syncResult.otros_servicios_ids.total_filas} filas)
+                </p>
+              </div>
+              {syncResult.otros_servicios_ids.cambios.length > 0 && (
+                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
+                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
+                    Detalle ({syncResult.otros_servicios_ids.cambios.length})
+                  </summary>
+                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
+                    {syncResult.otros_servicios_ids.cambios.map((c, i) => (
+                      <li key={i} className="text-xs text-gray-700 py-1">
+                        <span className="text-gray-500">{c.campos.join(', ')}</span>
                       </li>
                     ))}
                   </ul>
