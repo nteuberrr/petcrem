@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { fmtLitros, fmtPrecio, fmtFecha } from '@/lib/format'
+import { formatDateForSheet } from '@/lib/dates'
 
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
 
@@ -81,8 +82,16 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     fetch(`/api/clientes/${id}`)
       .then(r => r.json())
       .then(d => {
-        setCliente(d)
-        setForm(d)
+        // Normalizar fechas: el sheet las devuelve como serial Excel (ej. "46141"),
+        // pero los <input type="date"> requieren formato "YYYY-MM-DD" para mostrarlas.
+        const normalized = {
+          ...d,
+          fecha_retiro: formatDateForSheet(d.fecha_retiro) || d.fecha_retiro || '',
+          fecha_defuncion: formatDateForSheet(d.fecha_defuncion) || d.fecha_defuncion || '',
+          fecha_creacion: formatDateForSheet(d.fecha_creacion) || d.fecha_creacion || '',
+        }
+        setCliente(normalized)
+        setForm(normalized)
         if (d.veterinaria_id) setEsVeterinaria(true)
         if (d.adicionales) {
           try { setAdicionales(JSON.parse(d.adicionales)) } catch {}
@@ -94,10 +103,22 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       .then(d => setVeterinarias(Array.isArray(d) ? d : []))
     fetch('/api/productos')
       .then(r => r.json())
-      .then(d => setProductosDisp(Array.isArray(d) ? d.filter((p: Producto) => p.activo === 'TRUE') : []))
+      .then(d => {
+        if (!Array.isArray(d)) return setProductosDisp([])
+        // Deduplicar por id: si hay duplicados en la planilla, el toggle se "contagia"
+        // a los hermanos y los activa/desactiva todos juntos. Nos quedamos con el primero.
+        const vistos = new Set<string>()
+        const unicos = d.filter((p: Producto) => p.activo === 'TRUE' && !vistos.has(p.id) && (vistos.add(p.id), true))
+        setProductosDisp(unicos)
+      })
     fetch('/api/servicios?tipo=otros')
       .then(r => r.json())
-      .then(d => setOtrosServicios(Array.isArray(d) ? d.filter((s: OtroServicio) => s.activo === 'TRUE') : []))
+      .then(d => {
+        if (!Array.isArray(d)) return setOtrosServicios([])
+        const vistos = new Set<string>()
+        const unicos = d.filter((s: OtroServicio) => s.activo === 'TRUE' && !vistos.has(s.id) && (vistos.add(s.id), true))
+        setOtrosServicios(unicos)
+      })
     fetch('/api/precios?tipo=general')
       .then(r => r.json())
       .then(d => setPreciosGenerales(Array.isArray(d) ? d : []))

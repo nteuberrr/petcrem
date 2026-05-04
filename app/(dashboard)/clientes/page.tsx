@@ -79,8 +79,16 @@ export default function ClientesPage() {
   useEffect(() => {
     fetch('/api/especies').then(r => r.json()).then(d => setEspecies(Array.isArray(d) ? d.filter((e: Especie) => e.activo === 'TRUE') : []))
     fetch('/api/veterinarios?activo=true').then(r => r.json()).then(d => setVeterinarias(Array.isArray(d) ? d : []))
-    fetch('/api/productos').then(r => r.json()).then(d => setProductosDisp(Array.isArray(d) ? d.filter((p: Producto) => p.activo === 'TRUE') : []))
-    fetch('/api/servicios?tipo=otros').then(r => r.json()).then(d => setOtrosServicios(Array.isArray(d) ? d.filter((s: OtroServicio) => s.activo === 'TRUE') : []))
+    fetch('/api/productos').then(r => r.json()).then(d => {
+      if (!Array.isArray(d)) return setProductosDisp([])
+      const vistos = new Set<string>()
+      setProductosDisp(d.filter((p: Producto) => p.activo === 'TRUE' && !vistos.has(p.id) && (vistos.add(p.id), true)))
+    })
+    fetch('/api/servicios?tipo=otros').then(r => r.json()).then(d => {
+      if (!Array.isArray(d)) return setOtrosServicios([])
+      const vistos = new Set<string>()
+      setOtrosServicios(d.filter((s: OtroServicio) => s.activo === 'TRUE' && !vistos.has(s.id) && (vistos.add(s.id), true)))
+    })
   }, [])
 
   // KPIs derivados

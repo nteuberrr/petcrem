@@ -145,46 +145,76 @@ export default function ConfiguracionPage() {
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const fetchAll = useCallback(async () => {
-    const [p, pg, pc, pe, e, ts, os, v, u] = await Promise.all([
-      fetch('/api/productos').then(r => r.json()),
-      fetch('/api/precios?tipo=general').then(r => r.json()),
-      fetch('/api/precios?tipo=convenio').then(r => r.json()),
-      fetch('/api/precios/especiales').then(r => r.json()),
-      fetch('/api/especies').then(r => r.json()),
-      fetch('/api/servicios').then(r => r.json()),
-      fetch('/api/servicios?tipo=otros').then(r => r.json()),
-      fetch('/api/veterinarios').then(r => r.json()),
-      fetch('/api/usuarios').then(r => r.json()),
-    ])
-    setProductos(Array.isArray(p) ? p : [])
-    setPreciosG(Array.isArray(pg) ? pg : [])
-    setPreciosC(Array.isArray(pc) ? pc : [])
-    setPreciosE(Array.isArray(pe) ? pe : [])
-    setEspecies(Array.isArray(e) ? e : [])
-    setTiposServicio(Array.isArray(ts) ? ts : [])
-    setOtros(Array.isArray(os) ? os : [])
-    setVets(Array.isArray(v) ? v : [])
-    setUsuarios(Array.isArray(u) ? u : [])
+  // Fetchers individuales — para refrescar solo lo que cambió y evitar quota exceeded.
+  type RefreshKey = 'productos' | 'precios' | 'especies' | 'servicios' | 'veterinarios' | 'usuarios' | 'all'
+
+  const refresh = useCallback(async (key: RefreshKey = 'all') => {
+    if (key === 'productos' || key === 'all') {
+      const p = await fetch('/api/productos').then(r => r.json())
+      setProductos(Array.isArray(p) ? p : [])
+    }
+    if (key === 'precios' || key === 'all') {
+      const [pg, pc, pe] = await Promise.all([
+        fetch('/api/precios?tipo=general').then(r => r.json()),
+        fetch('/api/precios?tipo=convenio').then(r => r.json()),
+        fetch('/api/precios/especiales').then(r => r.json()),
+      ])
+      setPreciosG(Array.isArray(pg) ? pg : [])
+      setPreciosC(Array.isArray(pc) ? pc : [])
+      setPreciosE(Array.isArray(pe) ? pe : [])
+    }
+    if (key === 'especies' || key === 'all') {
+      const e = await fetch('/api/especies').then(r => r.json())
+      setEspecies(Array.isArray(e) ? e : [])
+    }
+    if (key === 'servicios' || key === 'all') {
+      const [ts, os] = await Promise.all([
+        fetch('/api/servicios').then(r => r.json()),
+        fetch('/api/servicios?tipo=otros').then(r => r.json()),
+      ])
+      setTiposServicio(Array.isArray(ts) ? ts : [])
+      setOtros(Array.isArray(os) ? os : [])
+    }
+    if (key === 'veterinarios' || key === 'all') {
+      const v = await fetch('/api/veterinarios').then(r => r.json())
+      setVets(Array.isArray(v) ? v : [])
+    }
+    if (key === 'usuarios' || key === 'all') {
+      const u = await fetch('/api/usuarios').then(r => r.json())
+      setUsuarios(Array.isArray(u) ? u : [])
+    }
   }, [])
+
+  const fetchAll = useCallback(() => refresh('all'), [refresh])
 
   useEffect(() => { fetchAll() }, [fetchAll])
   useEffect(() => { fetchJornada() }, [fetchJornada])
 
+  // Detecta a partir de la URL qué hoja refrescar después de mutar (evita refetchear todo)
+  function refreshKeyForUrl(url: string): RefreshKey {
+    if (url.includes('/api/productos')) return 'productos'
+    if (url.includes('/api/precios')) return 'precios'
+    if (url.includes('/api/especies')) return 'especies'
+    if (url.includes('/api/servicios')) return 'servicios'
+    if (url.includes('/api/veterinarios')) return 'veterinarios'
+    if (url.includes('/api/usuarios')) return 'usuarios'
+    return 'all'
+  }
+
   const patch = async (url: string, body: object) => {
     const res = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al actualizar: ${err.error ?? res.status}`); return }
-    await fetchAll()
+    await refresh(refreshKeyForUrl(url))
   }
   const post = async (url: string, body: object) => {
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al guardar: ${err.error ?? res.status}`); return }
-    await fetchAll()
+    await refresh(refreshKeyForUrl(url))
   }
   const del = async (url: string) => {
     const res = await fetch(url, { method: 'DELETE' })
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al eliminar: ${err.error ?? res.status}`); return }
-    await fetchAll()
+    await refresh(refreshKeyForUrl(url))
   }
   const reorder = async (tipo: PrecioSubTab, id: string, direction: 'up' | 'down') => {
     await fetch(`/api/precios/reorder?tipo=${tipo}`, {
@@ -192,7 +222,7 @@ export default function ConfiguracionPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, direction }),
     })
-    await fetchAll()
+    await refresh('precios')
   }
   const normalizarIds = async () => {
     if (!confirm('¿Renumerar IDs de todos los tramos (general, convenio y especiales)? Los IDs quedarán secuenciales 1, 2, 3...')) return

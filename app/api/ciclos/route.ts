@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSheetData, appendRow, updateRow, getNextId, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, getNextId, ensureColumns, deleteRow } from '@/lib/google-sheets'
 import { todayISO } from '@/lib/dates'
+import { parsePeso } from '@/lib/numbers'
+
+export const dynamic = 'force-dynamic'
 
 const CicloSchema = z.object({
   fecha: z.string().min(1),
@@ -90,5 +93,94 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(row, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })
+  }
+}
+
+/**
+ * PATCH: edita un ciclo existente. No cambia las mascotas asociadas (eso requiere
+ * recalcular estados de clientes); solo metadatos: fecha, litros, hora, temp, comentarios.
+ * Si cambian los litros, recalcula peso_total/lt_kg/lt_mascota.
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { id, ...updates } = body
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+    await ensureColumns('ciclos', ['hora_inicio', 'hora_fin', 'temperatura_camara', 'peso_total', 'lt_kg', 'lt_mascota'])
+
+    const rows = await getSheetData('ciclos')
+    const idx = rows.findIndex(r => r.id === id)
+    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+
+    const updated: Record<string, unknown> = { ...rows[idx], ...updates }
+    // Convertir numéricos
+    if (updates.litros_inicio !== undefined) updated.litros_inicio = typeof updates.litros_inicio === 'number' ? updates.litros_inicio : parseFloat(updates.litros_inicio) || 0
+    if (updates.litros_fin !== undefined) updated.litros_fin = typeof updates.litros_fin === 'number' ? updates.litros_fin : parseFloat(updates.litros_fin) || 0
+
+    // Recalcular ratios si cambiaron los litros
+    if (updates.litros_inicio !== undefined || updates.litros_fin !== undefined) {
+      const lInicio = parseFloat(String(updated.litros_inicio)) || 0
+      const lFin = parseFloat(String(updated.litros_fin)) || 0
+      const litrosUsados = Math.abs(lInicio - lFin)
+
+      // Recalcular peso_total leyendo clientes de las mascotas asociadas
+      let mascotasIds: string[] = []
+      try { mascotasIds = JSON.parse(String(updated.mascotas_ids || '[]')) } catch {}
+      const clientes = await getSheetData('clientes')
+      const clienteById = new Map(clientes.map(c => [c.id, c]))
+      let pesoTotal = 0
+      for (const mid of mascotasIds) {
+        const c = clienteById.get(mid)
+        if (c) pesoTotal += parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
+      }
+      updated.peso_total = pesoTotal
+      updated.lt_kg = pesoTotal > 0 ? litrosUsados / pesoTotal : 0
+      updated.lt_mascota = mascotasIds.length > 0 ? litrosUsados / mascotasIds.length : 0
+    }
+
+    await updateRow('ciclos', idx, updated)
+    return NextResponse.json(updated)
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 400 })
+  }
+}
+
+/**
+ * DELETE: elimina un ciclo y revierte las mascotas asociadas a estado='pendiente'
+ * con ciclo_id=''. Si las mascotas ya fueron despachadas, NO las toca.
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+
+    const rows = await getSheetData('ciclos')
+    const idx = rows.findIndex(r => r.id === id)
+    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+
+    // Revertir mascotas asociadas: las que sigan en 'cremado' vuelven a 'pendiente'
+    let mascotasIds: string[] = []
+    try { mascotasIds = JSON.parse(rows[idx].mascotas_ids || '[]') } catch {}
+    if (mascotasIds.length > 0) {
+      const clientes = await getSheetData('clientes')
+      const idxById = new Map(clientes.map((c, i) => [c.id, i]))
+      await Promise.all(
+        mascotasIds.map((mid) => {
+          const cIdx = idxById.get(mid)
+          if (cIdx === undefined) return Promise.resolve()
+          // Solo revertir si seguía en cremado vinculada a este ciclo
+          if (clientes[cIdx].estado === 'cremado' && clientes[cIdx].ciclo_id === id) {
+            return updateRow('clientes', cIdx, { ...clientes[cIdx], estado: 'pendiente', ciclo_id: '' })
+          }
+          return Promise.resolve()
+        })
+      )
+    }
+
+    await deleteRow('ciclos', idx)
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }

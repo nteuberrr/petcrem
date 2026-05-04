@@ -53,6 +53,14 @@ export default function OperacionesPage() {
   const [expandido, setExpandido] = useState<string | null>(null)
   const [clientesMap, setClientesMap] = useState<Record<string, Cliente>>({})
 
+  // Edición de ciclo
+  const [editCicloId, setEditCicloId] = useState<string | null>(null)
+  const [editCicloForm, setEditCicloForm] = useState({
+    fecha: '', litros_inicio: '', litros_fin: '',
+    hora_inicio: '', hora_fin: '', temperatura_camara: '', comentarios: '',
+  })
+  const [savingEditCiclo, setSavingEditCiclo] = useState(false)
+
   // Modal de selección de mascotas
   const [showModal, setShowModal] = useState(false)
   const [pendientes, setPendientes] = useState<Cliente[]>([])
@@ -257,6 +265,60 @@ export default function OperacionesPage() {
     }
   }
 
+  function abrirEditarCiclo(ciclo: Ciclo) {
+    setEditCicloId(ciclo.id)
+    setEditCicloForm({
+      fecha: formatDateForSheet(ciclo.fecha) || ciclo.fecha,
+      litros_inicio: ciclo.litros_inicio ?? '',
+      litros_fin: ciclo.litros_fin ?? '',
+      hora_inicio: formatHora(ciclo.hora_inicio) || '',
+      hora_fin: formatHora(ciclo.hora_fin) || '',
+      temperatura_camara: ciclo.temperatura_camara ?? '',
+      comentarios: ciclo.comentarios ?? '',
+    })
+  }
+
+  async function guardarEdicionCiclo(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editCicloId) return
+    setSavingEditCiclo(true)
+    const res = await fetch('/api/ciclos', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editCicloId,
+        fecha: editCicloForm.fecha,
+        litros_inicio: parseFloat(editCicloForm.litros_inicio) || 0,
+        litros_fin: parseFloat(editCicloForm.litros_fin) || 0,
+        hora_inicio: editCicloForm.hora_inicio,
+        hora_fin: editCicloForm.hora_fin,
+        temperatura_camara: editCicloForm.temperatura_camara,
+        comentarios: editCicloForm.comentarios,
+      }),
+    })
+    if (res.ok) {
+      setEditCicloId(null)
+      await fetchCiclos()
+      await fetchPetroleo()
+    } else {
+      const err = await res.json().catch(() => ({}))
+      alert(`Error: ${err.error ?? res.status}`)
+    }
+    setSavingEditCiclo(false)
+  }
+
+  async function eliminarCiclo(ciclo: Ciclo) {
+    if (!confirm(`¿Eliminar el ciclo N°${ciclo.numero_ciclo}? Las mascotas asociadas vuelven a estado "pendiente".`)) return
+    const res = await fetch(`/api/ciclos?id=${ciclo.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      await fetchCiclos()
+      await fetchPetroleo()
+    } else {
+      const err = await res.json().catch(() => ({}))
+      alert(`Error al eliminar: ${err.error ?? res.status}`)
+    }
+  }
+
   function pesoTotalCiclo(ciclo: Ciclo): number {
     // Snapshot del cierre del ciclo (planilla). Tiene prioridad si > 0.
     const snapshot = parseFloat(ciclo.peso_total ?? '') || 0
@@ -429,7 +491,7 @@ export default function OperacionesPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  {['N° Ciclo', 'Fecha', 'Mascotas', 'Litros inicio', 'Litros fin', 'Litros usados', 'Lt/kg', 'Lt/mascota', 'Temp. cámara', ''].map(h => (
+                  {['N° Ciclo', 'Fecha', 'Mascotas', 'Litros inicio', 'Litros fin', 'Litros usados', 'Lt/kg', 'Lt/mascota', 'Temp. cámara', 'Acciones', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -444,21 +506,33 @@ export default function OperacionesPage() {
                   const ltPorMascota = ciclo.mascotas_ids.length > 0 ? litrosUsados / ciclo.mascotas_ids.length : 0
                   return (
                     <Fragment key={ciclo.id}>
-                      <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>
-                        <td className="px-4 py-3 font-semibold text-gray-900">N° {ciclo.numero_ciclo}</td>
-                        <td className="px-4 py-3 text-gray-700">{fmtFecha(ciclo.fecha)}</td>
-                        <td className="px-4 py-3 text-gray-700">{fmtNumero(ciclo.mascotas_ids.length)}</td>
-                        <td className="px-4 py-3 text-gray-700">{fmtNumero(lInicio, 0)} L</td>
-                        <td className="px-4 py-3 text-gray-700">{fmtNumero(lFin, 0)} L</td>
-                        <td className="px-4 py-3 font-medium text-gray-900">{fmtNumero(litrosUsados, 0)} L</td>
-                        <td className="px-4 py-3 text-gray-700">{pesoTotal > 0 ? fmtNumero(ltPorKg, 1) : '—'}</td>
-                        <td className="px-4 py-3 text-gray-700">{ciclo.mascotas_ids.length > 0 ? fmtNumero(ltPorMascota, 1) : '—'}</td>
-                        <td className="px-4 py-3 text-gray-700">{ciclo.temperatura_camara ? `${ciclo.temperatura_camara}°C` : '—'}</td>
-                        <td className="px-4 py-3 text-gray-400 text-sm">{expandido === ciclo.id ? '▲' : '▼'}</td>
+                      <tr className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-semibold text-gray-900 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>N° {ciclo.numero_ciclo}</td>
+                        <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtFecha(ciclo.fecha)}</td>
+                        <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(ciclo.mascotas_ids.length)}</td>
+                        <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(lInicio, 0)} L</td>
+                        <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(lFin, 0)} L</td>
+                        <td className="px-4 py-3 font-medium text-gray-900 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(litrosUsados, 0)} L</td>
+                        <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{pesoTotal > 0 ? fmtNumero(ltPorKg, 1) : '—'}</td>
+                        <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{ciclo.mascotas_ids.length > 0 ? fmtNumero(ltPorMascota, 1) : '—'}</td>
+                        <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{ciclo.temperatura_camara ? `${ciclo.temperatura_camara}°C` : '—'}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button onClick={(e) => { e.stopPropagation(); abrirEditarCiclo(ciclo) }}
+                              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                              Editar
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); eliminarCiclo(ciclo) }}
+                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                              Eliminar
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-gray-400 text-sm cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{expandido === ciclo.id ? '▲' : '▼'}</td>
                       </tr>
                       {expandido === ciclo.id && (
                         <tr>
-                          <td colSpan={10} className="px-6 py-4 bg-gray-50 border-b border-gray-100">
+                          <td colSpan={11} className="px-6 py-4 bg-gray-50 border-b border-gray-100">
                             <div className="divide-y divide-gray-100">
                               {ciclo.mascotas_ids.map(mid => {
                                 const m = clientesMap[mid]
@@ -491,6 +565,69 @@ export default function OperacionesPage() {
           </div>
         )}
       </div>
+
+      {/* Modal editar ciclo */}
+      <Modal open={!!editCicloId} onClose={() => setEditCicloId(null)} title="Editar ciclo">
+        <form onSubmit={guardarEdicionCiclo} className="space-y-3">
+          <p className="text-xs text-amber-700 bg-amber-50 border-2 border-amber-200 rounded-lg p-2">
+            ⚠ Editar litros recalcula automáticamente Lt/kg y Lt/mascota. Las mascotas asociadas no cambian; para cambiar mascotas, eliminá el ciclo y volvelo a crear.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Fecha</label>
+              <input type="date" required value={editCicloForm.fecha}
+                onChange={e => setEditCicloForm(f => ({ ...f, fecha: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Hora inicio</label>
+              <input type="time" value={editCicloForm.hora_inicio}
+                onChange={e => setEditCicloForm(f => ({ ...f, hora_inicio: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Hora fin</label>
+              <input type="time" value={editCicloForm.hora_fin}
+                onChange={e => setEditCicloForm(f => ({ ...f, hora_fin: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Litros inicio</label>
+              <input type="number" step="0.1" required value={editCicloForm.litros_inicio}
+                onChange={e => setEditCicloForm(f => ({ ...f, litros_inicio: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Litros fin</label>
+              <input type="number" step="0.1" required value={editCicloForm.litros_fin}
+                onChange={e => setEditCicloForm(f => ({ ...f, litros_fin: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Temp. cámara (°C)</label>
+              <input type="number" value={editCicloForm.temperatura_camara}
+                onChange={e => setEditCicloForm(f => ({ ...f, temperatura_camara: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-700">Comentarios</label>
+            <input value={editCicloForm.comentarios}
+              onChange={e => setEditCicloForm(f => ({ ...f, comentarios: e.target.value }))}
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => setEditCicloId(null)}
+              className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={savingEditCiclo}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+              {savingEditCiclo ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
         </>
       )}
