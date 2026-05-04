@@ -70,11 +70,17 @@ export async function GET() {
     const startMesActual = new Date(anioActual, mesActual, 1)
     startMesActual.setHours(0, 0, 0, 0)
 
-    // Cache de fecha por cliente (parseo una sola vez).
-    // Driver: fecha_retiro = momento en que se cobra e inicia el ciclo de venta.
-    // Fallback a fecha_creacion si fecha_retiro está vacía.
+    // Caches de fechas por cliente (parseo una sola vez).
+    //
+    // Dos drivers distintos según la métrica:
+    // - fechaVenta:     fecha_retiro (cuando se cobra e inicia el ciclo de venta)
+    //                   → ingresos, mascotas del mes, costo vehículo / mascota
+    // - fechaCremacion: fecha del ciclo asociado (cuando se ejecutó la cremación)
+    //                   → mascotas cremadas por mes, litros / mascota
     const cicloById = new Map(ciclos.map(c => [c.id, c]))
-    const fechaCache = new Map<string, Date | null>()
+    const fechaVentaCache = new Map<string, Date | null>()
+    const fechaCremacionCache = new Map<string, Date | null>()
+
     function parseDateSafe(raw: string): Date | null {
       if (!raw) return null
       const iso = formatDateForSheet(raw) // maneja serial Excel + ISO + DD/MM/YYYY
@@ -82,11 +88,26 @@ export async function GET() {
       const d = new Date(`${iso}T12:00:00`) // mediodía local para evitar UTC shift
       return isNaN(d.getTime()) ? null : d
     }
-    function fechaCliente(c: Record<string, string>): Date | null {
-      const cached = fechaCache.get(c.id)
+
+    function fechaVenta(c: Record<string, string>): Date | null {
+      const cached = fechaVentaCache.get(c.id)
       if (cached !== undefined) return cached
       const d = parseDateSafe(c.fecha_retiro || c.fecha_creacion)
-      fechaCache.set(c.id, d)
+      fechaVentaCache.set(c.id, d)
+      return d
+    }
+
+    function fechaCremacion(c: Record<string, string>): Date | null {
+      const cached = fechaCremacionCache.get(c.id)
+      if (cached !== undefined) return cached
+      let d: Date | null = null
+      if (c.estado === 'cremado' && c.ciclo_id) {
+        const ciclo = cicloById.get(c.ciclo_id)
+        if (ciclo?.fecha) d = parseDateSafe(ciclo.fecha)
+      }
+      // Fallback: fecha_retiro (para cremados sin ciclo válido)
+      if (!d) d = parseDateSafe(c.fecha_retiro || c.fecha_creacion)
+      fechaCremacionCache.set(c.id, d)
       return d
     }
 
@@ -148,8 +169,14 @@ export async function GET() {
 
     // Filtros base — calculados una sola vez
     const cremadosTodos = clientes.filter(c => c.estado === 'cremado')
+    // Cremaciones del mes: driver fecha del ciclo
     const cremadosMes = cremadosTodos.filter(c => {
-      const f = fechaCliente(c)
+      const f = fechaCremacion(c)
+      return f && f >= startMesActual && f <= now
+    })
+    // Ingresos del mes: driver fecha_retiro (cuando se cobra)
+    const ingresoClientesMes = clientes.filter(c => {
+      const f = fechaVenta(c)
       return f && f >= startMesActual && f <= now
     })
     const ciclosMes = ciclos.filter(c => {
@@ -161,7 +188,8 @@ export async function GET() {
     // Estado vacío también cuenta como pendiente (mascotas viejas sin estado seteado).
     const pendientes = clientes.filter(c => c.estado === 'pendiente' || !c.estado).length
 
-    const ingresosMes = cremadosMes.reduce((s, c) => s + ingresoCliente(c).total, 0)
+    // Ingresos del mes: suma todos los clientes (cremados o no) cuya fecha_retiro cae en el mes
+    const ingresosMes = ingresoClientesMes.reduce((s, c) => s + ingresoCliente(c).total, 0)
 
     // Ratios — driver: "mascotas" = total de mascotas ingresadas (todas), no solo cremadas
     const mascotasTotal = clientes.length
@@ -190,8 +218,12 @@ export async function GET() {
       return { y: d.getFullYear(), m: d.getMonth() }
     }
     const fechasRelevantes: Date[] = []
+    for (const c of clientes) {
+      const f = fechaVenta(c)
+      if (f) fechasRelevantes.push(f)
+    }
     for (const c of cremadosTodos) {
-      const f = fechaCliente(c)
+      const f = fechaCremacion(c)
       if (f) fechasRelevantes.push(f)
     }
     for (const c of ciclos) {
@@ -204,10 +236,6 @@ export async function GET() {
     }
     for (const r of cargas) {
       const f = parseDateSafe(r.fecha)
-      if (f) fechasRelevantes.push(f)
-    }
-    for (const c of clientes) {
-      const f = parseDateSafe(c.fecha_retiro || c.fecha_creacion)
       if (f) fechasRelevantes.push(f)
     }
     const masAntigua = fechasRelevantes.length > 0
@@ -237,21 +265,37 @@ export async function GET() {
       mascotas: 0,
     }))
     const limiteIzq = startVentanas[0]
-    for (const c of cremadosTodos) {
-      const f = fechaCliente(c)
+    // Ingresos mensuales: driver fecha_retiro (TODOS los clientes con fecha de retiro en el mes)
+    for (const c of clientes) {
+      const f = fechaVenta(c)
       if (!f || f < limiteIzq) continue
       const idx = ventanaIdx.get(`${f.getFullYear()}-${f.getMonth()}`)
       if (idx === undefined) continue
       buckets[idx].ingresos += ingresoCliente(c).total
+    }
+    // Mascotas cremadas por mes: driver fecha del ciclo (solo cremados)
+    for (const c of cremadosTodos) {
+      const f = fechaCremacion(c)
+      if (!f || f < limiteIzq) continue
+      const idx = ventanaIdx.get(`${f.getFullYear()}-${f.getMonth()}`)
+      if (idx === undefined) continue
       buckets[idx].mascotas += 1
     }
     const ventasPorMes = buckets
 
     // Series temporales por ratio — últimos 12 meses
-    type RBucket = { mes: string; litros: number; ciclos: number; mascotas: number; monto_vehiculo: number; sum_duracion: number; count_duracion: number }
+    // Notar: dos drivers distintos para "mascotas":
+    // - mascotas_cremadas (por fecha del ciclo) → para litros/mascota
+    // - mascotas_retiradas (por fecha_retiro)   → para costo_vehiculo/mascota
+    type RBucket = {
+      mes: string; litros: number; ciclos: number;
+      mascotas_cremadas: number; mascotas_retiradas: number;
+      monto_vehiculo: number; sum_duracion: number; count_duracion: number;
+    }
     const rBuckets: RBucket[] = startVentanas.map(d => ({
       mes: d.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' }),
-      litros: 0, ciclos: 0, mascotas: 0, monto_vehiculo: 0, sum_duracion: 0, count_duracion: 0,
+      litros: 0, ciclos: 0, mascotas_cremadas: 0, mascotas_retiradas: 0,
+      monto_vehiculo: 0, sum_duracion: 0, count_duracion: 0,
     }))
     // Litros consumidos + ciclos del mes (por fecha del ciclo)
     for (const c of ciclos) {
@@ -276,13 +320,21 @@ export async function GET() {
         }
       }
     }
-    // Mascotas cremadas en el mes (driver: fecha de cremación = fecha del ciclo, ya manejado en fechaCliente)
+    // Mascotas cremadas en el mes (driver: fecha del ciclo) — usado para litros/mascota
     for (const c of cremadosTodos) {
-      const f = fechaCliente(c)
+      const f = fechaCremacion(c)
       if (!f || f < limiteIzq) continue
       const idx = ventanaIdx.get(`${f.getFullYear()}-${f.getMonth()}`)
       if (idx === undefined) continue
-      rBuckets[idx].mascotas += 1
+      rBuckets[idx].mascotas_cremadas += 1
+    }
+    // Mascotas retiradas en el mes (driver: fecha_retiro) — usado para costo_vehiculo/mascota
+    for (const c of clientes) {
+      const f = fechaVenta(c)
+      if (!f || f < limiteIzq) continue
+      const idx = ventanaIdx.get(`${f.getFullYear()}-${f.getMonth()}`)
+      if (idx === undefined) continue
+      rBuckets[idx].mascotas_retiradas += 1
     }
     // Monto vehículo del mes
     for (const r of cargasVehiculo) {
@@ -297,9 +349,9 @@ export async function GET() {
     }
     const ratiosPorMes = rBuckets.map(b => ({
       mes: b.mes,
-      litros_por_mascota: b.mascotas > 0 ? b.litros / b.mascotas : 0,
+      litros_por_mascota: b.mascotas_cremadas > 0 ? b.litros / b.mascotas_cremadas : 0,
       litros_por_ciclo: b.ciclos > 0 ? b.litros / b.ciclos : 0,
-      costo_vehiculo_por_mascota: b.mascotas > 0 ? b.monto_vehiculo / b.mascotas : 0,
+      costo_vehiculo_por_mascota: b.mascotas_retiradas > 0 ? b.monto_vehiculo / b.mascotas_retiradas : 0,
       duracion_promedio_ciclo_min: b.count_duracion > 0 ? b.sum_duracion / b.count_duracion : 0,
     }))
 
