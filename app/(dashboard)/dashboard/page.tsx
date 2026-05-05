@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { fmtPrecio, fmtLitros, fmtNumero } from '@/lib/format'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -31,6 +32,8 @@ type Data = {
 const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6']
 
 export default function DashboardPage() {
+  const { data: session } = useSession()
+  const isAdmin = (session?.user as { role?: string })?.role === 'admin'
   const [data, setData] = useState<Data | null>(null)
   const [loading, setLoading] = useState(true)
   const [ratioOpen, setRatioOpen] = useState<RatioKey | null>(null)
@@ -65,7 +68,7 @@ export default function DashboardPage() {
     { label: `Mascotas ${mesActual}`, value: fmtNumero(data.kpis.mascotas_mes), icon: '🐾', color: 'text-indigo-700 bg-indigo-50' },
     { label: 'Cremaciones del mes', value: fmtNumero(data.kpis.cremaciones_mes), icon: '🔥', color: 'text-rose-700 bg-rose-50' },
     { label: 'Ciclos del mes', value: fmtNumero(data.kpis.ciclos_mes), icon: '♻️', color: 'text-orange-700 bg-orange-50' },
-    { label: 'Ingresos del mes', value: fmtPrecio(data.kpis.ingresos_mes), icon: '💰', color: 'text-emerald-700 bg-emerald-50' },
+    ...(isAdmin ? [{ label: 'Ingresos del mes', value: fmtPrecio(data.kpis.ingresos_mes), icon: '💰', color: 'text-emerald-700 bg-emerald-50' }] : []),
     { label: 'En cámara', value: fmtNumero(data.kpis.pendientes), icon: '⏳', color: 'text-yellow-700 bg-yellow-50' },
     { label: 'Stock petróleo', value: fmtLitros(data.kpis.stock_petroleo), icon: '⛽', color: data.kpis.stock_bajo ? 'text-red-700 bg-red-50' : 'text-blue-700 bg-blue-50', alert: data.kpis.stock_bajo },
     { label: 'Litros del mes', value: fmtLitros(data.kpis.litros_mes), icon: '🛢️', color: 'text-sky-700 bg-sky-50' },
