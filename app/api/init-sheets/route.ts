@@ -54,7 +54,7 @@ const SHEETS: Record<string, string[]> = {
   precios_especiales: ['id', 'veterinaria_id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd'],
   productos: ['id', 'nombre', 'precio', 'foto_url', 'stock', 'activo', 'fecha_creacion'],
   especies: ['id', 'nombre', 'letra', 'activo'],
-  tipos_servicio: ['id', 'nombre', 'codigo', 'activo'],
+  tipos_servicio: ['id', 'nombre', 'codigo', 'plazo_entrega_dias', 'activo'],
   otros_servicios: ['id', 'nombre', 'precio', 'activo', 'fecha_creacion'],
   usuarios: ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion'],
   asistencia: [

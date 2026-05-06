@@ -1,13 +1,18 @@
 'use client'
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { fmtNumero } from '@/lib/format'
 import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
+import { proximosDiasHabiles, agregarDiasHabiles, isoFecha } from '@/lib/dias-habiles'
+
+type TipoServicio = { id: string; codigo: string; plazo_entrega_dias: string; activo: string }
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
   especie: string; estado: string; codigo_servicio?: string
   direccion_despacho?: string; comuna?: string; telefono?: string
+  fecha_retiro?: string
 }
 
 type Despacho = {
@@ -47,6 +52,54 @@ export default function DespachosTab() {
   }, [])
 
   useEffect(() => { fetchDespachos() }, [fetchDespachos])
+
+  // ─── Calendario de entregas ───
+  const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([])
+  const [cremadosCal, setCremadosCal] = useState<Cliente[]>([])
+  const [despachadosCal, setDespachadosCal] = useState<Cliente[]>([])
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/servicios', { cache: 'no-store' }).then(r => r.json()).catch(() => []),
+      fetch('/api/clientes?estado=cremado', { cache: 'no-store' }).then(r => r.json()).catch(() => []),
+      fetch('/api/clientes?estado=despachado', { cache: 'no-store' }).then(r => r.json()).catch(() => []),
+    ]).then(([ts, crem, desp]) => {
+      setTiposServicio(Array.isArray(ts) ? ts : [])
+      setCremadosCal(Array.isArray(crem) ? crem : [])
+      setDespachadosCal(Array.isArray(desp) ? desp : [])
+    })
+  }, [])
+
+  const calendario = useMemo(() => {
+    const plazoMap = new Map<string, number>()
+    for (const t of tiposServicio) {
+      const n = parseInt(t.plazo_entrega_dias || '0', 10)
+      plazoMap.set((t.codigo || '').toUpperCase(), Number.isFinite(n) && n > 0 ? n : 3)
+    }
+    const dias = proximosDiasHabiles(new Date(), 5)
+    const buckets = new Map<string, { fecha: Date; pendientes: Cliente[]; entregadas: Cliente[] }>()
+    for (const d of dias) buckets.set(isoFecha(d), { fecha: d, pendientes: [], entregadas: [] })
+
+    function procesar(c: Cliente, lista: 'pendientes' | 'entregadas') {
+      const codigo = (c.codigo_servicio || 'CI').toUpperCase()
+      // SD = Sin Devolución, no se entregan
+      if (codigo === 'SD') return
+      const isoRetiro = c.fecha_retiro ? formatDateForSheet(c.fecha_retiro) : ''
+      if (!isoRetiro) return
+      const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
+      if (isNaN(fechaRetiro.getTime())) return
+      const plazo = plazoMap.get(codigo) ?? 3
+      const fechaObjetivo = agregarDiasHabiles(fechaRetiro, plazo)
+      const isoObj = isoFecha(fechaObjetivo)
+      const bucket = buckets.get(isoObj)
+      if (bucket) bucket[lista].push(c)
+    }
+
+    for (const c of cremadosCal) procesar(c, 'pendientes')
+    for (const c of despachadosCal) procesar(c, 'entregadas')
+
+    return dias.map(d => buckets.get(isoFecha(d))!)
+  }, [tiposServicio, cremadosCal, despachadosCal])
 
   async function abrirModal() {
     setShowModal(true)
@@ -186,6 +239,59 @@ export default function DespachosTab() {
 
   return (
     <>
+      {/* Calendario de entregas — próximos 5 días hábiles */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-base font-semibold text-gray-900">Calendario de entregas</h2>
+          <div className="flex items-center gap-3 text-[11px] text-gray-500">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm bg-yellow-300 border border-yellow-400" /> Pendiente
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm bg-emerald-300 border border-emerald-400" /> Entregada
+            </span>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {calendario.map(col => {
+            const total = col.pendientes.length + col.entregadas.length
+            const esHoy = isoFecha(col.fecha) === isoFecha(new Date())
+            return (
+              <div key={isoFecha(col.fecha)} className={`rounded-lg border-2 ${esHoy ? 'border-indigo-300 bg-indigo-50/30' : 'border-gray-200 bg-gray-50/30'} p-3`}>
+                <div className="text-center pb-2 border-b border-gray-200 mb-2">
+                  <p className="text-[10px] uppercase font-semibold text-gray-500 tracking-wide">
+                    {col.fecha.toLocaleDateString('es-CL', { weekday: 'long' })}
+                  </p>
+                  <p className={`text-base font-bold ${esHoy ? 'text-indigo-700' : 'text-gray-900'}`}>
+                    {String(col.fecha.getDate()).padStart(2, '0')}/{String(col.fecha.getMonth() + 1).padStart(2, '0')}
+                  </p>
+                  <p className="text-[10px] text-gray-400">{total} {total === 1 ? 'mascota' : 'mascotas'}</p>
+                </div>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {col.pendientes.map(c => (
+                    <Link href={`/clientes/${c.id}`} key={`p-${c.id}`}
+                      className="block bg-yellow-50 border border-yellow-300 rounded-md px-2 py-1 text-xs hover:bg-yellow-100 transition-colors">
+                      <div className="font-semibold text-yellow-900 truncate">{c.nombre_mascota}</div>
+                      <div className="text-yellow-700 text-[10px] truncate">{c.codigo} · {c.nombre_tutor}</div>
+                    </Link>
+                  ))}
+                  {col.entregadas.map(c => (
+                    <Link href={`/clientes/${c.id}`} key={`e-${c.id}`}
+                      className="block bg-emerald-50 border border-emerald-300 rounded-md px-2 py-1 text-xs hover:bg-emerald-100 transition-colors">
+                      <div className="font-semibold text-emerald-900 truncate">✓ {c.nombre_mascota}</div>
+                      <div className="text-emerald-700 text-[10px] truncate">{c.codigo} · {c.nombre_tutor}</div>
+                    </Link>
+                  ))}
+                  {total === 0 && (
+                    <p className="text-[10px] text-gray-400 text-center py-3">Sin entregas</p>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Form */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-5">Nuevo recorrido</h2>

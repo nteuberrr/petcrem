@@ -13,7 +13,7 @@ type PrecioSubTab = 'general' | 'convenio' | 'especial'
 type Producto = { id: string; nombre: string; precio: string; foto_url: string; stock: string; activo: string }
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string; veterinaria_id?: string }
 type Especie = { id: string; nombre: string; letra: string; activo: string }
-type TipoServicio = { id: string; nombre: string; codigo: string; activo: string }
+type TipoServicio = { id: string; nombre: string; codigo: string; plazo_entrega_dias: string; activo: string }
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
 type Vet = { id: string; nombre: string; activo: string; tipo_precios: string }
 type Usuario = { id: string; nombre: string; email: string; rol: string; activo: string }
@@ -189,7 +189,7 @@ export default function ConfiguracionPage() {
   const [editingEspecie, setEditingEspecie] = useState<Especie | null>(null)
   const [showTipoServicioModal, setShowTipoServicioModal] = useState(false)
   const [editingTipoServicio, setEditingTipoServicio] = useState<TipoServicio | null>(null)
-  const [tipoServicioForm, setTipoServicioForm] = useState({ nombre: '', codigo: '' })
+  const [tipoServicioForm, setTipoServicioForm] = useState({ nombre: '', codigo: '', plazo_entrega_dias: '3' })
   const [showOtroModal, setShowOtroModal] = useState(false)
   const [editingOtro, setEditingOtro] = useState<OtroServicio | null>(null)
   const [showTramoModal, setShowTramoModal] = useState<{ tipo: PrecioSubTab } | null>(null)
@@ -564,21 +564,22 @@ export default function ConfiguracionPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-900">Tipos de servicio</h2>
-            <button onClick={() => { setEditingTipoServicio(null); setTipoServicioForm({ nombre: '', codigo: '' }); setShowTipoServicioModal(true) }}
+            <button onClick={() => { setEditingTipoServicio(null); setTipoServicioForm({ nombre: '', codigo: '', plazo_entrega_dias: '3' }); setShowTipoServicioModal(true) }}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
-            <thead className="bg-gray-50"><tr>{['Nombre', 'Código', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
+            <thead className="bg-gray-50"><tr>{['Nombre', 'Código', 'Plazo entrega', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
             <tbody className="divide-y divide-gray-100">
               {tiposServicio.map(t => (
                 <tr key={t.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">{t.nombre}</td>
                   <td className="px-4 py-3"><span className="font-mono font-semibold text-gray-700">{t.codigo}</span></td>
+                  <td className="px-4 py-3 text-gray-700">{t.plazo_entrega_dias ? `${t.plazo_entrega_dias} días hábiles` : '—'}</td>
                   <td className="px-4 py-3"><Toggle checked={t.activo === 'TRUE'} onChange={val => patch('/api/servicios', { id: t.id, activo: val ? 'TRUE' : 'FALSE' })} /></td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => { setEditingTipoServicio(t); setTipoServicioForm({ nombre: t.nombre, codigo: t.codigo }); setShowTipoServicioModal(true) }}
+                        onClick={() => { setEditingTipoServicio(t); setTipoServicioForm({ nombre: t.nombre, codigo: t.codigo, plazo_entrega_dias: t.plazo_entrega_dias || '3' }); setShowTipoServicioModal(true) }}
                         className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Editar</button>
                       {isAdmin && (
                         <button
@@ -590,7 +591,7 @@ export default function ConfiguracionPage() {
                 </tr>
               ))}
               {tiposServicio.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400">Sin tipos de servicio</td></tr>
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">Sin tipos de servicio</td></tr>
               )}
             </tbody>
           </table>
@@ -1277,7 +1278,7 @@ export default function ConfiguracionPage() {
           }
           setShowTipoServicioModal(false)
           setEditingTipoServicio(null)
-          setTipoServicioForm({ nombre: '', codigo: '' })
+          setTipoServicioForm({ nombre: '', codigo: '', plazo_entrega_dias: '3' })
         }} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>
@@ -1286,6 +1287,13 @@ export default function ConfiguracionPage() {
           <div>
             <label className="text-xs font-medium text-gray-700">Código (ej: CI, CP, SD)</label>
             <input required value={tipoServicioForm.codigo} onChange={e => setTipoServicioForm(f => ({ ...f, codigo: e.target.value.toUpperCase() }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700">Plazo máximo de entrega (días hábiles)</label>
+            <input type="number" min="0" required value={tipoServicioForm.plazo_entrega_dias}
+              onChange={e => setTipoServicioForm(f => ({ ...f, plazo_entrega_dias: e.target.value }))}
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <p className="text-[10px] text-gray-500 mt-1">Cantidad de días hábiles desde la fecha de retiro hasta la entrega objetivo. Usado para el calendario de entregas en Despachos.</p>
           </div>
           <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingTipoServicio ? 'Guardar cambios' : 'Guardar'}</button>
         </form>
