@@ -55,18 +55,15 @@ export default function DespachosTab() {
 
   // ─── Calendario de entregas ───
   const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([])
-  const [cremadosCal, setCremadosCal] = useState<Cliente[]>([])
-  const [despachadosCal, setDespachadosCal] = useState<Cliente[]>([])
+  const [allClientes, setAllClientes] = useState<Cliente[]>([])
 
   useEffect(() => {
     Promise.all([
       fetch('/api/servicios', { cache: 'no-store' }).then(r => r.json()).catch(() => []),
-      fetch('/api/clientes?estado=cremado', { cache: 'no-store' }).then(r => r.json()).catch(() => []),
-      fetch('/api/clientes?estado=despachado', { cache: 'no-store' }).then(r => r.json()).catch(() => []),
-    ]).then(([ts, crem, desp]) => {
+      fetch('/api/clientes', { cache: 'no-store' }).then(r => r.json()).catch(() => []),
+    ]).then(([ts, all]) => {
       setTiposServicio(Array.isArray(ts) ? ts : [])
-      setCremadosCal(Array.isArray(crem) ? crem : [])
-      setDespachadosCal(Array.isArray(desp) ? desp : [])
+      setAllClientes(Array.isArray(all) ? all : [])
     })
   }, [])
 
@@ -77,29 +74,42 @@ export default function DespachosTab() {
       plazoMap.set((t.codigo || '').toUpperCase(), Number.isFinite(n) && n > 0 ? n : 3)
     }
     const dias = proximosDiasHabiles(new Date(), 5)
-    const buckets = new Map<string, { fecha: Date; pendientes: Cliente[]; entregadas: Cliente[] }>()
-    for (const d of dias) buckets.set(isoFecha(d), { fecha: d, pendientes: [], entregadas: [] })
+    type ClienteEnFecha = Cliente & { fecha_objetivo_iso: string }
+    const buckets = new Map<string, { fecha: Date; pendientes: ClienteEnFecha[]; atrasadas: ClienteEnFecha[] }>()
+    for (const d of dias) buckets.set(isoFecha(d), { fecha: d, pendientes: [], atrasadas: [] })
+    const hoyIso = isoFecha(new Date())
+    const hoyBucket = buckets.get(hoyIso) ?? buckets.get(isoFecha(dias[0]))
 
-    function procesar(c: Cliente, lista: 'pendientes' | 'entregadas') {
+    // Procesa todas las mascotas con fecha_retiro que aún NO están despachadas.
+    // fecha_objetivo = fecha_retiro + plazo_entrega_dias hábiles del tipo de servicio.
+    // No depende del estado (pendiente / cremado): toda mascota tiene fecha de entrega
+    // desde el momento del retiro.
+    for (const c of allClientes) {
+      if (c.estado === 'despachado') continue // ya salió, no la mostramos
       const codigo = (c.codigo_servicio || 'CI').toUpperCase()
-      // SD = Sin Devolución, no se entregan
-      if (codigo === 'SD') return
+      if (codigo === 'SD') continue // Sin Devolución, no se entrega
       const isoRetiro = c.fecha_retiro ? formatDateForSheet(c.fecha_retiro) : ''
-      if (!isoRetiro) return
+      if (!isoRetiro) continue
       const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
-      if (isNaN(fechaRetiro.getTime())) return
+      if (isNaN(fechaRetiro.getTime())) continue
       const plazo = plazoMap.get(codigo) ?? 3
       const fechaObjetivo = agregarDiasHabiles(fechaRetiro, plazo)
       const isoObj = isoFecha(fechaObjetivo)
+      const enriched: ClienteEnFecha = { ...c, fecha_objetivo_iso: isoObj }
+
       const bucket = buckets.get(isoObj)
-      if (bucket) bucket[lista].push(c)
+      if (bucket) {
+        bucket.pendientes.push(enriched)
+        continue
+      }
+      // Fuera del rango: si el objetivo ya pasó → atrasada en la columna de hoy
+      if (isoObj < hoyIso && hoyBucket) {
+        hoyBucket.atrasadas.push(enriched)
+      }
     }
 
-    for (const c of cremadosCal) procesar(c, 'pendientes')
-    for (const c of despachadosCal) procesar(c, 'entregadas')
-
     return dias.map(d => buckets.get(isoFecha(d))!)
-  }, [tiposServicio, cremadosCal, despachadosCal])
+  }, [tiposServicio, allClientes])
 
   async function abrirModal() {
     setShowModal(true)
@@ -248,13 +258,13 @@ export default function DespachosTab() {
               <span className="inline-block w-3 h-3 rounded-sm bg-yellow-300 border border-yellow-400" /> Pendiente
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-3 rounded-sm bg-emerald-300 border border-emerald-400" /> Entregada
+              <span className="inline-block w-3 h-3 rounded-sm bg-red-300 border border-red-400" /> Atrasada
             </span>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {calendario.map(col => {
-            const total = col.pendientes.length + col.entregadas.length
+            const total = col.pendientes.length + col.atrasadas.length
             const esHoy = isoFecha(col.fecha) === isoFecha(new Date())
             return (
               <div key={isoFecha(col.fecha)} className={`rounded-lg border-2 ${esHoy ? 'border-indigo-300 bg-indigo-50/30' : 'border-gray-200 bg-gray-50/30'} p-3`}>
@@ -265,21 +275,25 @@ export default function DespachosTab() {
                   <p className={`text-base font-bold ${esHoy ? 'text-indigo-700' : 'text-gray-900'}`}>
                     {String(col.fecha.getDate()).padStart(2, '0')}/{String(col.fecha.getMonth() + 1).padStart(2, '0')}
                   </p>
-                  <p className="text-[10px] text-gray-400">{total} {total === 1 ? 'mascota' : 'mascotas'}</p>
+                  <p className="text-[10px] text-gray-400">
+                    {total} {total === 1 ? 'mascota' : 'mascotas'}
+                    {col.atrasadas.length > 0 && <span className="text-red-600 font-semibold"> · {col.atrasadas.length} atrasadas</span>}
+                  </p>
                 </div>
-                <div className="space-y-1 max-h-48 overflow-y-auto">
+                <div className="space-y-1 max-h-72 overflow-y-auto">
+                  {col.atrasadas.map(c => (
+                    <Link href={`/clientes/${c.id}`} key={`a-${c.id}`}
+                      className="block bg-red-50 border border-red-300 rounded-md px-2 py-1 text-xs hover:bg-red-100 transition-colors">
+                      <div className="font-semibold text-red-900 truncate">⚠ {c.nombre_mascota}</div>
+                      <div className="text-red-700 text-[10px] truncate">{c.codigo} · {c.nombre_tutor}</div>
+                      <div className="text-red-600 text-[10px] truncate">objetivo: {c.fecha_objetivo_iso}</div>
+                    </Link>
+                  ))}
                   {col.pendientes.map(c => (
                     <Link href={`/clientes/${c.id}`} key={`p-${c.id}`}
                       className="block bg-yellow-50 border border-yellow-300 rounded-md px-2 py-1 text-xs hover:bg-yellow-100 transition-colors">
                       <div className="font-semibold text-yellow-900 truncate">{c.nombre_mascota}</div>
                       <div className="text-yellow-700 text-[10px] truncate">{c.codigo} · {c.nombre_tutor}</div>
-                    </Link>
-                  ))}
-                  {col.entregadas.map(c => (
-                    <Link href={`/clientes/${c.id}`} key={`e-${c.id}`}
-                      className="block bg-emerald-50 border border-emerald-300 rounded-md px-2 py-1 text-xs hover:bg-emerald-100 transition-colors">
-                      <div className="font-semibold text-emerald-900 truncate">✓ {c.nombre_mascota}</div>
-                      <div className="text-emerald-700 text-[10px] truncate">{c.codigo} · {c.nombre_tutor}</div>
                     </Link>
                   ))}
                   {total === 0 && (
