@@ -282,6 +282,19 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     : 0
   const totalServicio = precioServicio + totalAdicionales
 
+  // Cuando aplica un precio de convenio o especial, mostramos también el
+  // precio normal (tabla de precios generales) para tener a la vista cuánto
+  // se cobraría si fuera una venta normal sin veterinaria.
+  const tramoNormal = encontrarTramo(preciosGenerales, pesoKg)
+  const precioNormal = tramoNormal
+    ? parseFloat(
+        codigoServ === 'CI' ? tramoNormal.precio_ci :
+        codigoServ === 'CP' ? tramoNormal.precio_cp :
+        tramoNormal.precio_sd
+      ) || 0
+    : 0
+  const mostrarPrecioNormal = form.tipo_precios !== 'general' && precioNormal > 0
+
   const rangoTramo = tramoAplicable
     ? (() => {
         const maxPesoMin = Math.max(...tablaPrecios.map(t => parseFloat(t.peso_min) || 0))
@@ -374,7 +387,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <Field required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
           <Field required label="Nombre tutor" value={form.nombre_tutor} onChange={v => setForm(f => ({ ...f, nombre_tutor: v }))} />
           <Field required type="email" label="Email" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} />
-          <Field required type="tel" label="Teléfono" value={form.telefono} onChange={v => setForm(f => ({ ...f, telefono: v }))} />
+          <Field required type="tel" label="Teléfono" value={form.telefono} onChange={v => setForm(f => ({ ...f, telefono: v.replace(/\D/g, '').slice(0, 9) }))} placeholder="9 dígitos" />
           <Field required label="Dirección de retiro" value={form.direccion_retiro} onChange={v => setForm(f => ({ ...f, direccion_retiro: v }))} />
           <Field required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
           <Field required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
@@ -639,7 +652,12 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 )}
               </p>
             </div>
-            <p className="text-sm font-semibold text-gray-900">{fmtPrecio(precioServicio)}</p>
+            <div className="text-right">
+              <p className="text-sm font-semibold text-gray-900">{fmtPrecio(precioServicio)}</p>
+              {mostrarPrecioNormal && (
+                <p className="text-xs text-gray-500 mt-0.5">(precio normal: {fmtPrecio(precioNormal)})</p>
+              )}
+            </div>
           </div>
 
           {adicionales.length > 0 && (

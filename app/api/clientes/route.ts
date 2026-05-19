@@ -8,7 +8,7 @@ const ClienteSchema = z.object({
   nombre_mascota: z.string().min(1, 'Nombre de mascota requerido'),
   nombre_tutor: z.string().min(1, 'Nombre de tutor requerido'),
   email: z.string().email('Email inválido'),
-  telefono: z.string().min(1, 'Teléfono requerido'),
+  telefono: z.string().regex(/^\d{9}$/, 'Teléfono debe tener exactamente 9 dígitos'),
   direccion_retiro: z.string().min(1, 'Dirección de retiro requerida'),
   direccion_despacho: z.string().min(1, 'Dirección de despacho requerida'),
   misma_direccion: z.boolean(),

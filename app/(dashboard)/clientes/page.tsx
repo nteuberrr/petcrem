@@ -18,10 +18,27 @@ type Cliente = {
   adicionales?: string
 }
 type Especie = { id: string; nombre: string; letra: string; activo: string }
-type Veterinario = { id: string; nombre: string; activo: string }
+type Veterinario = { id: string; nombre: string; activo: string; tipo_precios?: string }
 type Producto = { id: string; nombre: string; precio: string; stock: string; activo: string }
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
+type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
+type TramoEspecial = Tramo & { veterinaria_id: string }
+type FichaCreada = {
+  codigo: string
+  nombre_mascota: string
+  nombre_tutor: string
+  codigo_servicio: string
+  precio_servicio: number
+  precio_normal: number
+  mostrar_precio_normal: boolean
+  tabla_nombre: string
+  rango_tramo: string | null
+  peso_kg: number
+  adicionales: AdicionalItem[]
+  total_adicionales: number
+  total: number
+}
 
 const FORM_DEFAULT = {
   nombre_mascota: '',
@@ -66,6 +83,10 @@ export default function ClientesPage() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(FORM_DEFAULT)
   const [formError, setFormError] = useState('')
+  const [preciosGenerales, setPreciosGenerales] = useState<Tramo[]>([])
+  const [preciosConvenio, setPreciosConvenio] = useState<Tramo[]>([])
+  const [tramosEspeciales, setTramosEspeciales] = useState<TramoEspecial[]>([])
+  const [fichaCreada, setFichaCreada] = useState<FichaCreada | null>(null)
 
   const fetchClientes = useCallback(async () => {
     setLoading(true)
@@ -90,7 +111,23 @@ export default function ClientesPage() {
       const vistos = new Set<string>()
       setOtrosServicios(d.filter((s: OtroServicio) => s.activo === 'TRUE' && !vistos.has(s.id) && (vistos.add(s.id), true)))
     })
+    fetch('/api/precios?tipo=general').then(r => r.json()).then(d => setPreciosGenerales(Array.isArray(d) ? d : []))
+    fetch('/api/precios?tipo=convenio').then(r => r.json()).then(d => setPreciosConvenio(Array.isArray(d) ? d : []))
   }, [])
+
+  // Cargar precios especiales cuando se selecciona una veterinaria con esa modalidad.
+  useEffect(() => {
+    const vetId = form.veterinaria_id
+    if (!vetId || noEsVeterinaria) { setTramosEspeciales([]); return }
+    const vet = veterinarias.find(v => v.id === vetId)
+    if (vet?.tipo_precios === 'precios_especiales') {
+      fetch(`/api/precios/especiales?veterinaria_id=${vetId}`)
+        .then(r => r.json())
+        .then(d => setTramosEspeciales(Array.isArray(d) ? d : []))
+    } else {
+      setTramosEspeciales([])
+    }
+  }, [form.veterinaria_id, noEsVeterinaria, veterinarias])
 
   // KPIs derivados
   const kpis = useMemo(() => {
@@ -276,6 +313,23 @@ export default function ClientesPage() {
       body: JSON.stringify(body),
     })
     if (res.ok) {
+      const created = await res.json().catch(() => null) as { codigo?: string } | null
+      // Snapshot del resumen para mostrarlo en el modal de éxito (el form se resetea acto seguido)
+      setFichaCreada({
+        codigo: created?.codigo ?? '',
+        nombre_mascota: form.nombre_mascota,
+        nombre_tutor: form.nombre_tutor,
+        codigo_servicio: codigoServForm,
+        precio_servicio: precioServicio,
+        precio_normal: precioNormal,
+        mostrar_precio_normal: mostrarPrecioNormal,
+        tabla_nombre: tablaNombre,
+        rango_tramo: rangoTramo,
+        peso_kg: pesoKgForm,
+        adicionales: [...adicionales],
+        total_adicionales: totalAdicionales,
+        total: totalServicio,
+      })
       setShowModal(false)
       setForm(FORM_DEFAULT)
       setNoEsVeterinaria(false)
@@ -290,6 +344,43 @@ export default function ClientesPage() {
   }
 
   const totalAdicionales = adicionales.reduce((sum, a) => sum + a.precio * a.qty, 0)
+
+  // Resumen del servicio en vivo: tabla aplicable según veterinaria y cálculo del tramo
+  function encontrarTramo(tabla: Tramo[], peso: number): Tramo | null {
+    if (!tabla.length || !isFinite(peso) || peso <= 0) return null
+    const maxPesoMin = Math.max(...tabla.map(t => parseFloat(t.peso_min) || 0))
+    const tramoTope = tabla.find(t => (parseFloat(t.peso_min) || 0) === maxPesoMin)
+    if (tramoTope && peso >= maxPesoMin) return tramoTope
+    return tabla.find(t => {
+      const min = parseFloat(t.peso_min) || 0
+      const max = parseFloat(t.peso_max) || 0
+      return peso >= min && peso <= max
+    }) ?? null
+  }
+  function precioDelTramo(t: Tramo | null, codigo: string): number {
+    if (!t) return 0
+    const raw = codigo === 'CP' ? t.precio_cp : codigo === 'SD' ? t.precio_sd : t.precio_ci
+    return parseFloat(raw) || 0
+  }
+  const vetSeleccionada = !noEsVeterinaria ? veterinarias.find(v => v.id === form.veterinaria_id) : undefined
+  const tipoPrecios: 'general' | 'convenio' | 'especial' = !vetSeleccionada
+    ? 'general'
+    : vetSeleccionada.tipo_precios === 'precios_especiales' ? 'especial' : 'convenio'
+  const tablaPrecios: Tramo[] = tipoPrecios === 'especial' ? tramosEspeciales : tipoPrecios === 'convenio' ? preciosConvenio : preciosGenerales
+  const tablaNombre = tipoPrecios === 'especial' ? 'Precios especiales' : tipoPrecios === 'convenio' ? 'Precios convenio' : 'Precios generales'
+  const pesoKgForm = parsePeso(form.peso_declarado)
+  const tramoAplicable = encontrarTramo(tablaPrecios, pesoKgForm)
+  const codigoServForm = form.codigo_servicio || 'CI'
+  const precioServicio = precioDelTramo(tramoAplicable, codigoServForm)
+  const tramoNormal = encontrarTramo(preciosGenerales, pesoKgForm)
+  const precioNormal = precioDelTramo(tramoNormal, codigoServForm)
+  const mostrarPrecioNormal = tipoPrecios !== 'general' && precioNormal > 0
+  const totalServicio = precioServicio + totalAdicionales
+  const rangoTramo = tramoAplicable ? (() => {
+    const maxPesoMin = Math.max(...tablaPrecios.map(t => parseFloat(t.peso_min) || 0))
+    const min = parseFloat(tramoAplicable.peso_min) || 0
+    return min === maxPesoMin ? `${min} kg o más` : `${tramoAplicable.peso_min} – ${tramoAplicable.peso_max} kg`
+  })() : null
 
   return (
     <div>
@@ -553,7 +644,7 @@ export default function ClientesPage() {
             <ModalField required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
             <ModalField required label="Nombre tutor" value={form.nombre_tutor} onChange={v => setForm(f => ({ ...f, nombre_tutor: v }))} />
             <ModalField required type="email" label="Email" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} placeholder="ejemplo@correo.cl" />
-            <ModalField required type="tel" label="Teléfono" value={form.telefono} onChange={v => setForm(f => ({ ...f, telefono: v }))} placeholder="+56 9 xxxx xxxx" />
+            <ModalField required type="tel" label="Teléfono" value={form.telefono} onChange={v => setForm(f => ({ ...f, telefono: v.replace(/\D/g, '').slice(0, 9) }))} placeholder="9 dígitos · ej: 912345678" />
           </div>
 
           <ModalField required label="Dirección de retiro" value={form.direccion_retiro}
@@ -714,6 +805,59 @@ export default function ClientesPage() {
             </div>
           )}
 
+          {/* Resumen del servicio en vivo: se actualiza con peso, servicio, veterinaria y adicionales */}
+          <div className="border-t-2 border-gray-200 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-bold text-gray-900">Resumen del servicio</p>
+              <span className="text-[11px] text-gray-400">{tablaNombre}</span>
+            </div>
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-3 space-y-2">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">
+                    Cremación {codigoServForm}
+                    {rangoTramo && <span className="text-gray-500 font-normal"> · {rangoTramo}</span>}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {pesoKgForm > 0 ? `${pesoKgForm} kg` : 'Ingresá el peso para calcular'}
+                    {pesoKgForm > 0 && !tramoAplicable && (
+                      <span className="text-red-500 ml-2">⚠ Sin tramo de precio aplicable</span>
+                    )}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{fmtPrecio(precioServicio)}</p>
+                  {mostrarPrecioNormal && (
+                    <p className="text-xs text-gray-500 mt-0.5">(precio normal: {fmtPrecio(precioNormal)})</p>
+                  )}
+                </div>
+              </div>
+
+              {adicionales.length > 0 && (
+                <div className="border-t border-gray-200 pt-2 space-y-1">
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Adicionales</p>
+                  {adicionales.map(a => (
+                    <div key={`${a.tipo}-${a.id}`} className="flex items-center justify-between text-sm">
+                      <span className="text-gray-700">
+                        {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
+                      </span>
+                      <span className="text-gray-700">{fmtPrecio(a.precio * a.qty)}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between pt-1 border-t border-gray-200">
+                    <span className="text-xs text-gray-500">Subtotal adicionales</span>
+                    <span className="text-sm font-medium text-gray-700">{fmtPrecio(totalAdicionales)}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between border-t-2 border-gray-300 pt-2 mt-1">
+                <span className="text-base font-bold text-gray-900">Total</span>
+                <span className="text-lg font-bold text-indigo-700">{fmtPrecio(totalServicio)}</span>
+              </div>
+            </div>
+          </div>
+
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => { setShowModal(false); setAdicionales([]); setShowAdicionales(false); setFormError('') }} className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors">
               Cancelar
@@ -723,6 +867,73 @@ export default function ClientesPage() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal de éxito post-guardar: muestra código generado + resumen para el operador */}
+      <Modal open={!!fichaCreada} onClose={() => setFichaCreada(null)} title="Ficha creada ✓">
+        {fichaCreada && (
+          <div className="space-y-4">
+            <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Código generado</p>
+              <p className="font-mono text-2xl font-bold text-emerald-900 mt-1">{fichaCreada.codigo}</p>
+              <p className="text-sm text-emerald-800 mt-2">{fichaCreada.nombre_mascota} · {fichaCreada.nombre_tutor}</p>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-bold text-gray-900">Resumen del servicio</p>
+                <span className="text-[11px] text-gray-400">{fichaCreada.tabla_nombre}</span>
+              </div>
+              <div className="bg-gray-50 rounded-lg border border-gray-200 p-3 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">
+                      Cremación {fichaCreada.codigo_servicio}
+                      {fichaCreada.rango_tramo && <span className="text-gray-500 font-normal"> · {fichaCreada.rango_tramo}</span>}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">{fichaCreada.peso_kg} kg</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-gray-900">{fmtPrecio(fichaCreada.precio_servicio)}</p>
+                    {fichaCreada.mostrar_precio_normal && (
+                      <p className="text-xs text-gray-500 mt-0.5">(precio normal: {fmtPrecio(fichaCreada.precio_normal)})</p>
+                    )}
+                  </div>
+                </div>
+
+                {fichaCreada.adicionales.length > 0 && (
+                  <div className="border-t border-gray-200 pt-2 space-y-1">
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Adicionales</p>
+                    {fichaCreada.adicionales.map(a => (
+                      <div key={`${a.tipo}-${a.id}`} className="flex items-center justify-between text-sm">
+                        <span className="text-gray-700">
+                          {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
+                        </span>
+                        <span className="text-gray-700">{fmtPrecio(a.precio * a.qty)}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between pt-1 border-t border-gray-200">
+                      <span className="text-xs text-gray-500">Subtotal adicionales</span>
+                      <span className="text-sm font-medium text-gray-700">{fmtPrecio(fichaCreada.total_adicionales)}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between border-t-2 border-gray-300 pt-2 mt-1">
+                  <span className="text-base font-bold text-gray-900">Total a cobrar</span>
+                  <span className="text-xl font-bold text-indigo-700">{fmtPrecio(fichaCreada.total)}</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setFichaCreada(null)}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2.5 text-sm font-semibold shadow-md transition-colors"
+            >
+              Listo
+            </button>
+          </div>
+        )}
       </Modal>
     </div>
   )

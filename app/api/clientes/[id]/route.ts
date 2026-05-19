@@ -64,6 +64,10 @@ export async function PATCH(
         if (n !== null) normalizedBody[k] = n
       }
     }
+    // Normalizar teléfono: solo dígitos, máximo 9
+    if (typeof normalizedBody.telefono === 'string') {
+      normalizedBody.telefono = normalizedBody.telefono.replace(/\D/g, '').slice(-9)
+    }
 
     const updated = { ...rows[idx], ...normalizedBody }
     await updateRow('clientes', idx, updated)
