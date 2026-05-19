@@ -15,6 +15,7 @@ type Cliente = {
   estado: string; estado_pago?: string; tipo_pago?: string
   fecha_retiro: string; fecha_creacion: string; ciclo_id: string
   direccion_retiro?: string; direccion_despacho?: string; comuna?: string
+  adicionales?: string
 }
 type Especie = { id: string; nombre: string; letra: string; activo: string }
 type Veterinario = { id: string; nombre: string; activo: string }
@@ -471,6 +472,55 @@ export default function ClientesPage() {
                 </div>
               )}
             </div>
+
+            {(() => {
+              let items: AdicionalItem[] = []
+              try { items = JSON.parse(selected.adicionales || '[]') } catch {}
+              if (!Array.isArray(items) || items.length === 0) return null
+              const total = items.reduce((s, a) => s + (a.precio || 0) * (a.qty || 1), 0)
+              const productos = items.filter(a => a.tipo === 'producto')
+              const servicios = items.filter(a => a.tipo === 'servicio')
+              return (
+                <div className="border-t-2 border-gray-100 pt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Adicionales</p>
+                    <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                      {items.length} ítem(s) · {fmtPrecio(total)}
+                    </span>
+                  </div>
+                  {productos.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Productos</p>
+                      <div className="space-y-1">
+                        {productos.map(a => (
+                          <div key={`p-${a.id}`} className="flex items-center justify-between text-sm">
+                            <span className="text-gray-800">
+                              {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
+                            </span>
+                            <span className="text-gray-700">{fmtPrecio(a.precio * (a.qty || 1))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {servicios.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Otros servicios</p>
+                      <div className="space-y-1">
+                        {servicios.map(a => (
+                          <div key={`s-${a.id}`} className="flex items-center justify-between text-sm">
+                            <span className="text-gray-800">
+                              {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
+                            </span>
+                            <span className="text-gray-700">{fmtPrecio(a.precio * (a.qty || 1))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             <div className="flex gap-3 pt-2">
               <button

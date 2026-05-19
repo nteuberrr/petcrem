@@ -321,7 +321,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             {vetSeleccionada && <Badge variant="blue">{vetSeleccionada.nombre}</Badge>}
           </div>
         </div>
-        {cliente.estado === 'cremado' && (
+        {(cliente.estado === 'cremado' || cliente.estado === 'despachado') && (
           <button
             onClick={abrirModalCertificado}
             disabled={descargandoCert}

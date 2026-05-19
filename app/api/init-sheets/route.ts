@@ -75,6 +75,14 @@ const SHEETS: Record<string, string[]> = {
     'retiros_ids', 'cantidad', 'monto_total', 'comentarios',
     'creado_por', 'fecha_creacion',
   ],
+  certificados: [
+    'id', 'cliente_id', 'codigo_mascota', 'nombre_mascota',
+    'version',
+    'fecha_emision', 'hora_emision',
+    'emitido_por_id', 'emitido_por_nombre',
+    'sin_foto', 'pdf_key', 'pdf_url',
+    'fecha_creacion',
+  ],
 }
 
 export async function POST() {

@@ -10,19 +10,22 @@ function getAuth() {
   })
 }
 
-export async function uploadImage(
+export type UploadResult = { fileId: string; viewUrl: string; downloadUrl: string }
+
+export async function uploadFile(
   buffer: Buffer,
   filename: string,
-  mimeType: string
-): Promise<string> {
+  mimeType: string,
+  folderId?: string,
+): Promise<UploadResult> {
   const drive = google.drive({ version: 'v3', auth: getAuth() })
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID
+  const parent = folderId ?? process.env.GOOGLE_DRIVE_FOLDER_ID
 
   const stream = Readable.from(buffer)
   const res = await drive.files.create({
     requestBody: {
       name: filename,
-      parents: folderId ? [folderId] : undefined,
+      parents: parent ? [parent] : undefined,
     },
     media: { mimeType, body: stream },
     fields: 'id,webViewLink,webContentLink',
@@ -34,5 +37,18 @@ export async function uploadImage(
     requestBody: { role: 'reader', type: 'anyone' },
   })
 
-  return `https://drive.google.com/uc?id=${fileId}`
+  return {
+    fileId,
+    viewUrl: res.data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`,
+    downloadUrl: `https://drive.google.com/uc?id=${fileId}`,
+  }
+}
+
+export async function uploadImage(
+  buffer: Buffer,
+  filename: string,
+  mimeType: string
+): Promise<string> {
+  const { downloadUrl } = await uploadFile(buffer, filename, mimeType)
+  return downloadUrl
 }
