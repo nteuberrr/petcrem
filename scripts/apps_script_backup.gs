@@ -1,45 +1,21 @@
 /**
  * PetCrem — Backup automático del Google Sheet
  * -----------------------------------------------------------
- * Guarda una copia completa del Sheet en una carpeta "Database"
- * los días: 5, 10, 15, 20, 25 y último día del mes.
- * Si el mes tiene 31 días, corre el día 30 Y el 31.
+ * Guarda una copia completa del Sheet en una carpeta
+ * "DataBase AlmaAnimal Systems" cada 48 horas a las 00:00 (hora Chile).
  * -----------------------------------------------------------
- * Instalación: ver README debajo del código.
+ * Instalación: ver README debajo del código (1 click, una sola vez).
  */
 
 const SPREADSHEET_ID = '1VRYE3ngbH4hIbXp1Cd9hXJrlAr5Ru1HGRtv3v_YrFeE'
-const FOLDER_NAME = 'Database'
+const FOLDER_NAME = 'DataBase AlmaAnimal Systems'
 const TIMEZONE = 'America/Santiago'
 // Si querés mantener solo los últimos N backups, poné un número. 0 = sin límite.
 const MAX_BACKUPS_A_CONSERVAR = 0
 
 /**
- * Función que se ejecuta diariamente vía trigger.
- * Decide si hoy corresponde hacer backup.
- */
-function crearBackupSiCorresponde() {
-  const now = new Date()
-  const day = now.getDate()
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  const fixedDays = [5, 10, 15, 20, 25]
-
-  const shouldRun =
-    fixedDays.includes(day) ||
-    day === lastDay ||                           // último día del mes (28/29/30/31)
-    (lastDay === 31 && day === 30)               // también el 30 si el mes tiene 31
-
-  if (!shouldRun) {
-    Logger.log('Hoy es ' + day + '. No corresponde backup (días: 5, 10, 15, 20, 25, 30 y fin de mes).')
-    return
-  }
-
-  crearBackup()
-  if (MAX_BACKUPS_A_CONSERVAR > 0) rotarBackups()
-}
-
-/**
- * Crea la copia del Sheet en la carpeta Database.
+ * Crea la copia del Sheet en la carpeta destino.
+ * Esta es la función que dispara el trigger cada 48h.
  */
 function crearBackup() {
   const folder = getOrCreateFolder(FOLDER_NAME)
@@ -52,6 +28,8 @@ function crearBackup() {
 
   const copy = original.makeCopy(nombre, folder)
   Logger.log('✓ Backup creado: ' + copy.getName() + ' (' + copy.getId() + ')')
+
+  if (MAX_BACKUPS_A_CONSERVAR > 0) rotarBackups()
   return copy
 }
 
@@ -64,7 +42,7 @@ function rotarBackups() {
   const backups = []
   while (files.hasNext()) {
     const f = files.next()
-    if (f.getName().startsWith('petcrem_backup_')) {
+    if (f.getName().indexOf('petcrem_backup_') === 0) {
       backups.push({ file: f, date: f.getDateCreated() })
     }
   }
@@ -83,30 +61,34 @@ function getOrCreateFolder(name) {
 }
 
 /**
- * EJECUTAR UNA SOLA VEZ para programar el trigger diario.
- * Después de esto, queda corriendo solo.
+ * EJECUTAR UNA SOLA VEZ para programar el trigger automático.
+ * Después de esto, queda corriendo solo cada 48h.
+ *
+ * Esquema: cada 2 días, en la ventana de 00:00 a 01:00 hora Chile.
+ * Apps Script no garantiza el minuto exacto — la ventana es de ~1 hora.
  */
 function setupTrigger() {
-  // Limpiar triggers previos
+  // Limpiar triggers previos para evitar duplicados
   const triggers = ScriptApp.getProjectTriggers()
   for (let i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === 'crearBackupSiCorresponde') {
+    const h = triggers[i].getHandlerFunction()
+    if (h === 'crearBackup' || h === 'crearBackupSiCorresponde') {
       ScriptApp.deleteTrigger(triggers[i])
     }
   }
 
-  ScriptApp.newTrigger('crearBackupSiCorresponde')
+  ScriptApp.newTrigger('crearBackup')
     .timeBased()
-    .atHour(3)         // 03:00 hora local
-    .everyDays(1)
+    .atHour(0)         // 00:00 hora local
+    .everyDays(2)      // cada 2 días = cada 48h
     .create()
 
-  Logger.log('✓ Trigger programado: diario a las 03:00 AM (' + TIMEZONE + ')')
+  Logger.log('✓ Trigger programado: cada 48 horas a las 00:00 (' + TIMEZONE + ')')
 }
 
 /**
  * Sirve para testear manualmente que el backup funciona.
- * Ignora la lógica de fechas y crea backup inmediato.
+ * Crea backup inmediato sin esperar al trigger.
  */
 function backupManualDePrueba() {
   crearBackup()
@@ -128,36 +110,39 @@ function listarTriggers() {
 }
 
 /* ============================================================
-   INSTALACIÓN (hacer una sola vez):
+   INSTALACIÓN (hacer una sola vez — toma ~30 segundos):
 
-   1. Abre tu Google Sheet:
+   1. Abrí tu Google Sheet:
       https://docs.google.com/spreadsheets/d/1VRYE3ngbH4hIbXp1Cd9hXJrlAr5Ru1HGRtv3v_YrFeE
 
    2. Menú: Extensiones → Apps Script
       Se abre un editor en pestaña nueva (script.google.com)
 
-   3. Borra el código que aparece por defecto. Pega TODO este archivo.
+   3. Borrá lo que aparece por defecto. Pegá TODO este archivo.
 
-   4. Dale nombre al proyecto: "PetCrem Backup" (arriba a la izquierda).
+   4. (Importante) Configurá el TZ del proyecto:
+      Engranaje ⚙ "Configuración del proyecto" → "Zona horaria" → America/Santiago.
 
-   5. Arriba, seleccioná la función "setupTrigger" del dropdown y clic en "Ejecutar".
+   5. Dale nombre al proyecto: "PetCrem Backup" (arriba a la izquierda).
+      Click "Guardar" (ícono disquete o Ctrl+S).
+
+   6. Arriba, seleccioná la función "setupTrigger" del dropdown y clic en "Ejecutar".
       La primera vez te va a pedir permisos:
         - "Revisar permisos" → elegí tu cuenta Google
         - "Avanzada → Ir a PetCrem Backup (no seguro)" → Permitir
-      Esto es porque el script no está verificado por Google, pero es tu propio código.
+      Es porque el script no está verificado por Google, pero es tu propio código.
 
-   6. Ya quedó programado. Para verificar:
-        - Vas al ícono de reloj ⏰ (Disparadores) en la barra izquierda
-        - Debería aparecer "crearBackupSiCorresponde — Basado en tiempo — Cada día 03:00"
+   7. Listo. Para verificar que quedó:
+        - Ícono de reloj ⏰ (Disparadores) en la barra izquierda
+        - Tiene que aparecer: "crearBackup — Basado en tiempo — Cada 2 días 0am-1am"
 
-   7. (Opcional) Probar que funciona ahora mismo:
-        - Seleccioná la función "backupManualDePrueba" → Ejecutar
-        - En Drive debe aparecer la carpeta "Database" con un archivo "petcrem_backup_YYYY-MM-DD_HH-mm"
+   8. (Opcional) Probar AHORA sin esperar 2 días:
+        - Seleccioná "backupManualDePrueba" → Ejecutar
+        - En Drive aparece la carpeta "DataBase AlmaAnimal Systems" con el archivo
 
    CRONOGRAMA:
-     - Se ejecuta todos los días a las 3:00 AM hora Chile
-     - Sólo crea backup si el día es: 5, 10, 15, 20, 25, o último del mes
-     - Si el mes tiene 31 días, crea backup el 30 y el 31
+     - Cada 48 horas, en la ventana de 00:00 a 01:00 hora Chile.
+     - Apps Script triggers no son al minuto exacto — la ventana es de ~1h.
 
    DESACTIVAR:
      - Extensiones → Apps Script → Disparadores (ícono reloj)
