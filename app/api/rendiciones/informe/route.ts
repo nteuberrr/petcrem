@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSheetData } from '@/lib/google-sheets'
+import { formatDate } from '@/lib/dates'
 import * as XLSX from 'xlsx-js-style'
 
 type CellStyle = {
@@ -49,7 +50,7 @@ export async function GET() {
       const row: Cell[] = [
         cell(r.usuario ?? '', { fill: { fgColor: { rgb: color } } }),
         cell(r.descripcion ?? '', { fill: { fgColor: { rgb: color } } }),
-        cell(r.fecha ?? '', { fill: { fgColor: { rgb: color } }, alignment: { horizontal: 'center' } }),
+        cell(formatDate(r.fecha) || '', { fill: { fgColor: { rgb: color } }, alignment: { horizontal: 'center' } }),
         cell(monto, { fill: { fgColor: { rgb: color } }, alignment: { horizontal: 'right' } }),
         cell(r.tipo_documento ?? '', { fill: { fgColor: { rgb: color } }, alignment: { horizontal: 'center' } }),
         cell(r.estado ?? 'pendiente', {

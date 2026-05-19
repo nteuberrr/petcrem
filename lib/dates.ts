@@ -3,7 +3,7 @@
  *
  * Regla general del proyecto:
  * - En Google Sheets y en inputs HTML date: formato ISO (YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss)
- * - En la UI visible al usuario: DD/MM/YYYY
+ * - En la UI visible al usuario: DD-MM-YYYY
  */
 
 function parse(dateStr: string | Date | null | undefined): Date | null {
@@ -65,17 +65,17 @@ export function todayISO(): string {
   return `${yyyy}-${mm}-${dd}`
 }
 
-/** Para mostrar: "15/01/2025" */
+/** Para mostrar: "15-01-2025" */
 export function formatDate(dateStr: string | Date | null | undefined): string {
   const d = parse(dateStr)
   if (!d) return ''
   const dd = String(d.getDate()).padStart(2, '0')
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const yyyy = d.getFullYear()
-  return `${dd}/${mm}/${yyyy}`
+  return `${dd}-${mm}-${yyyy}`
 }
 
-/** Para mostrar: "15/01/2025 14:30" */
+/** Para mostrar: "15-01-2025 14:30" */
 export function formatDateTime(dateStr: string | Date | null | undefined): string {
   const d = parse(dateStr)
   if (!d) return ''
@@ -84,7 +84,7 @@ export function formatDateTime(dateStr: string | Date | null | undefined): strin
   const yyyy = d.getFullYear()
   const hh = String(d.getHours()).padStart(2, '0')
   const mi = String(d.getMinutes()).padStart(2, '0')
-  return `${dd}/${mm}/${yyyy} ${hh}:${mi}`
+  return `${dd}-${mm}-${yyyy} ${hh}:${mi}`
 }
 
 /** Para guardar en Sheets / usar en inputs HTML: "2025-01-15" */

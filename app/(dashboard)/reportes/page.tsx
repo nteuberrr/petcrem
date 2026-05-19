@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { fmtPrecio, fmtNumero as fmtNum, fmtLitros, fmtFecha } from '@/lib/format'
+import { formatHora } from '@/lib/dates'
 import { formatDateForSheet } from '@/lib/dates'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -233,7 +234,7 @@ export default function ReportesPage() {
       const rows = [
         ['Ciclo', 'Fecha', 'Mascotas', 'Peso total (kg)', 'Litros', 'Lt/kg'],
         ...data.ciclos.map(c => [
-          `N° ${c.numero_ciclo}`, c.fecha,
+          `N° ${c.numero_ciclo}`, fmtFecha(c.fecha),
           c.mascotas_ids.length,
           c.peso_total,
           c.consumo,
@@ -267,7 +268,7 @@ export default function ReportesPage() {
       const crema = [['Especie', 'Cantidad'], ...Object.entries(data.por_especie).map(([k, v]) => [k, v])]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(crema), 'Cremaciones')
       const ciclos = [['Ciclo', 'Fecha', 'Mascotas', 'Peso total (kg)', 'Litros', 'Lt/kg'],
-        ...data.ciclos.map(c => [`N° ${c.numero_ciclo}`, c.fecha, c.mascotas_ids.length, c.peso_total, c.consumo, c.lt_kg])]
+        ...data.ciclos.map(c => [`N° ${c.numero_ciclo}`, fmtFecha(c.fecha), c.mascotas_ids.length, c.peso_total, c.consumo, c.lt_kg])]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ciclos), 'Operacional')
     }
 
@@ -287,7 +288,7 @@ export default function ReportesPage() {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Resumen')
       const detalle = [
         ['Operador', 'Fecha', 'Entrada', 'Salida', 'Min trabajados', 'Min normales', 'Min extra', 'Estado'],
-        ...asistencia.map(r => [r.usuario_nombre, r.fecha, r.hora_entrada, r.hora_salida, r.minutos_trabajados, r.minutos_normales, r.minutos_extra, r.estado_aprobacion]),
+        ...asistencia.map(r => [r.usuario_nombre, fmtFecha(r.fecha), formatHora(r.hora_entrada), formatHora(r.hora_salida), r.minutos_trabajados, r.minutos_normales, r.minutos_extra, r.estado_aprobacion]),
       ]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), 'Detalle')
     }
@@ -634,7 +635,7 @@ function RetirosTab({
       [],
       ['Detalle', '', '', '', ''],
       ['Operador', 'Fecha', 'Hora', 'Cliente', 'Comentario'],
-      ...retiros.map(r => [r.usuario_nombre, r.fecha, r.hora, r.cliente_nombre, r.comentario || '']),
+      ...retiros.map(r => [r.usuario_nombre, fmtFecha(r.fecha), formatHora(r.hora), r.cliente_nombre, r.comentario || '']),
     ]
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Retiros')
     const sufijo = desde || hasta ? `${desde || 'inicio'}_${hasta || 'hoy'}` : 'completo'
