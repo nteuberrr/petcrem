@@ -9,7 +9,7 @@ function isOperadorAllowed(pathname: string): boolean {
   return OPERADOR_ALLOWED.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'))
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // Rutas públicas: login, NextAuth API, init-sheets, reorder-columns (operaciones admin de schema)

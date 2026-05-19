@@ -19,9 +19,11 @@ npm run lint    # eslint
 
 There is no test suite. Type errors surface via `tsc` during `next build`.
 
+Key deps worth knowing: **`zod`** for runtime validation (use this instead of hand-rolled checks), **`xlsx-js-style`** (not vanilla `xlsx`) for Excel exports — required for the colored-cell styling in rendiciones/reportes. **`date-fns`** is available but most date handling goes through [lib/dates.ts](lib/dates.ts).
+
 ## Database: Google Sheets, not SQL
 
-The "database" is a single Google Sheet (`GOOGLE_SPREADSHEET_ID`) accessed via a Service Account JWT. There are ~16 sheets, one per entity (`clientes`, `ciclos`, `cargas_petroleo`, `vehiculo_cargas`, `despachos`, `rendiciones`, `pagos_rendicion`, `veterinarios`, `precios_generales`/`precios_convenio`/`precios_especiales`, `productos`, `especies`, `tipos_servicio`, `otros_servicios`, `usuarios`). The canonical schema lives in [app/api/init-sheets/route.ts](app/api/init-sheets/route.ts) — when adding a column or sheet, update that map and the consuming API route together.
+The "database" is a single Google Sheet (`GOOGLE_SPREADSHEET_ID`) accessed via a Service Account JWT. Sheets, one per entity: `clientes`, `ciclos`, `cargas_petroleo`, `vehiculo_cargas`, `despachos`, `rendiciones`, `pagos_rendicion`, `veterinarios`, `precios_generales` / `precios_convenio` / `precios_especiales`, `productos`, `especies`, `tipos_servicio`, `otros_servicios`, `usuarios`, plus the asistencia cluster (`asistencia`, `jornada_config`, `retiros_adicionales`, `pagos_retiros`). The canonical schema lives in [app/api/init-sheets/route.ts](app/api/init-sheets/route.ts) — when adding a column or sheet, update that map and the consuming API route together.
 
 All Sheets I/O goes through [lib/google-sheets.ts](lib/google-sheets.ts). Key conventions:
 
@@ -35,16 +37,16 @@ There is no migration system. Schema changes happen by editing the `init-sheets`
 
 ## Auth & route access
 
-[middleware.ts](middleware.ts) gates everything. Two roles:
+[proxy.ts](proxy.ts) gates everything (renamed from `middleware.ts` in Next 16; the file convention is `proxy.ts` now, named export `proxy`). Two roles:
 
 - **`admin`** — full access.
-- **`operador`** — only `/clientes`, `/operaciones`, and a hardcoded allowlist of `/api/*` prefixes (clientes, ciclos, petroleo, vehiculo, despachos, especies, servicios, productos, veterinarios, precios, upload, init-sheets). Visiting `/` or `/dashboard` redirects to `/clientes`.
+- **`operador`** — only `/dashboard`, `/clientes`, `/operaciones`, `/asistencia`, and a hardcoded allowlist of `/api/*` prefixes (dashboard, clientes, ciclos, petroleo, vehiculo, despachos, especies, servicios, productos, veterinarios, precios, upload, init-sheets, asistencia, jornada-config, retiros-adicionales). Visiting `/` redirects to `/dashboard`.
 
-Public routes: `/login`, `/api/auth/*`, `/api/init-sheets`.
+Public routes: `/login`, `/api/auth/*`, `/api/init-sheets`, `/api/reorder-columns`.
 
 Auth uses NextAuth v4 with `CredentialsProvider` + JWT strategy. The `admin` user is **not stored in `usuarios`** — it falls back to `ADMIN_EMAIL` / `ADMIN_PASSWORD` env vars. The `configuracion` page detects this and offers an "Editar" row that materializes admin into the `usuarios` sheet on first save.
 
-When adding a new `/api/*` route, decide whether operators need it and update the allowlist in [middleware.ts](middleware.ts).
+When adding a new `/api/*` route, decide whether operators need it and update the allowlist in [proxy.ts](proxy.ts).
 
 ## App layout
 
@@ -54,20 +56,26 @@ app/
     dashboard/        # KPIs + charts (admin)
     clientes/[id]/    # mascota fichas — peso_declarado vs peso_ingreso (price-tier delta alert)
     operaciones/      # tabs: ciclos | petroleo | vehiculo | despachos
+    asistencia/       # operator-accessible: jornada + retiros-adicionales
     rendiciones/      # admin gastos + pagos (xlsx export, colored cells)
     bases/            # veterinarios
     configuracion/    # precios (3 tablas), productos, especies, tipos_servicio, usuarios
+    servicios/        # otros_servicios management
     reportes/         # xlsx export
-  api/                # one folder per sheet/entity
+  api/                # one folder per sheet/entity (incl. sync-database, pagos-retiros, usuarios)
   login/
 lib/
   google-sheets.ts    # the only place that calls googleapis
+  auth.ts             # NextAuth `authOptions` (admin env-fallback + usuarios sheet lookup)
   dates.ts            # canonical date formatting (Excel serial aware)
+  dias-habiles.ts     # business-day math — drives the despachos delivery calendar
   format.ts           # CLP/kg/L formatting; re-exports formatDate as fmtFecha
+  numbers.ts          # numeric parsing/coercion helpers
   price-calculator.ts # tramo lookup across precios_generales/convenio/especiales
+  asistencia.ts       # jornada + retiros-adicionales calculations
   certificate-generator.ts  # pdf-lib certificates
   google-drive.ts     # photo uploads
-  codigo-generator.ts # cliente código generator
+  codigo-generator.ts # cliente código generator (max(codigo)+1 within tipo)
 components/
   Sidebar.tsx · TimelineStatus.tsx · VehiculoTab.tsx · DespachosTab.tsx · ui/
 scripts/
