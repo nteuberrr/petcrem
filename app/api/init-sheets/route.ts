@@ -95,6 +95,34 @@ const SHEETS: Record<string, string[]> = {
     'web', 'instagram', 'facebook',
     'fecha_actualizacion',
   ],
+  mailing_veterinarios: [
+    'id', 'nombre', 'email',
+    'veterinaria', 'comuna', 'telefono',
+    'categoria', 'suscrito', 'notas',
+    'fecha_creacion',
+  ],
+  mailing_campanas: [
+    'id', 'asunto',
+    'html_key', 'html_url',
+    'preview_text', 'reply_to',
+    'fecha_envio',
+    'total_destinatarios',
+    'enviados', 'entregados', 'aperturas', 'clicks',
+    'rebotes', 'spam', 'fallidos',
+    'estado', 'filtros_json',
+    'creado_por', 'fecha_creacion',
+  ],
+  mailing_logs: [
+    'id', 'campana_id',
+    'vet_email', 'vet_nombre',
+    'resend_message_id',
+    'estado',
+    'fecha_envio', 'fecha_entrega',
+    'fecha_apertura', 'fecha_click', 'fecha_rebote',
+    'motivo_rebote', 'url_clickeada',
+    'error_msg',
+    'fecha_creacion',
+  ],
 }
 
 export async function POST() {

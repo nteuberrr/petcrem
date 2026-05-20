@@ -19,11 +19,11 @@ npm run lint    # eslint
 
 There is no test suite. Type errors surface via `tsc` during `next build`.
 
-Key deps worth knowing: **`zod`** for runtime validation (use this instead of hand-rolled checks), **`xlsx-js-style`** (not vanilla `xlsx`) for Excel exports — required for the colored-cell styling in rendiciones/reportes, **`@aws-sdk/client-s3`** for the Cloudflare R2 client in [lib/cloudflare-r2.ts](lib/cloudflare-r2.ts) (R2 is S3-compatible), **`@signpdf/signpdf` + `@signpdf/signer-p12` + `@signpdf/placeholder-pdf-lib` + `node-forge`** for PKCS#7 (PAdES) digital signing of cremation certificates in [lib/sign-pdf.ts](lib/sign-pdf.ts). **`date-fns`** is available but most date handling goes through [lib/dates.ts](lib/dates.ts).
+Key deps worth knowing: **`zod`** for runtime validation (use this instead of hand-rolled checks), **`xlsx-js-style`** (not vanilla `xlsx`) for Excel exports — required for the colored-cell styling in rendiciones/reportes, **`@aws-sdk/client-s3`** for the Cloudflare R2 client in [lib/cloudflare-r2.ts](lib/cloudflare-r2.ts) (R2 is S3-compatible), **`@signpdf/signpdf` + `@signpdf/signer-p12` + `@signpdf/placeholder-pdf-lib` + `node-forge`** for PKCS#7 (PAdES) digital signing of cremation certificates in [lib/sign-pdf.ts](lib/sign-pdf.ts), **`resend`** for the mailing module (HTML campaigns, batch send capped at 100) and **`standardwebhooks`** for verifying Resend's signed webhook events. **`date-fns`** is available but most date handling goes through [lib/dates.ts](lib/dates.ts).
 
 ## Database: Google Sheets, not SQL
 
-The "database" is a single Google Sheet (`GOOGLE_SPREADSHEET_ID`) accessed via a Service Account JWT. Sheets, one per entity: `clientes`, `ciclos`, `cargas_petroleo`, `vehiculo_cargas`, `despachos`, `rendiciones`, `pagos_rendicion`, `veterinarios`, `precios_generales` / `precios_convenio` / `precios_especiales`, `productos`, `especies`, `tipos_servicio`, `otros_servicios`, `usuarios`, `certificados` (audit log of emitted PDFs — `pdf_key` / `pdf_url` point at R2), plus the asistencia cluster (`asistencia`, `jornada_config`, `retiros_adicionales`, `pagos_retiros`). The canonical schema lives in [app/api/init-sheets/route.ts](app/api/init-sheets/route.ts) — when adding a column or sheet, update that map and the consuming API route together.
+The "database" is a single Google Sheet (`GOOGLE_SPREADSHEET_ID`) accessed via a Service Account JWT. Sheets, one per entity: `clientes`, `ciclos`, `cargas_petroleo`, `vehiculo_cargas`, `despachos`, `rendiciones`, `pagos_rendicion`, `veterinarios`, `precios_generales` / `precios_convenio` / `precios_especiales`, `productos`, `especies`, `tipos_servicio`, `otros_servicios`, `usuarios`, `certificados` (audit log of emitted PDFs — `pdf_key` / `pdf_url` point at R2), the asistencia cluster (`asistencia`, `jornada_config`, `retiros_adicionales`, `pagos_retiros`), the mailing cluster (`mailing_veterinarios`, `mailing_campanas`, `mailing_logs` — `mailing_logs.resend_message_id` is the join key the Resend webhook uses to reconcile open/click/bounce events back to a campaign), `geocoding_cache` and `empresa_config`. The canonical schema lives in [app/api/init-sheets/route.ts](app/api/init-sheets/route.ts) — when adding a column or sheet, update that map and the consuming API route together.
 
 All Sheets I/O goes through [lib/google-sheets.ts](lib/google-sheets.ts). Key conventions:
 
@@ -40,9 +40,9 @@ There is no migration system. Schema changes happen by editing the `init-sheets`
 [proxy.ts](proxy.ts) gates everything (renamed from `middleware.ts` in Next 16; the file convention is `proxy.ts` now, named export `proxy`). Two roles:
 
 - **`admin`** — full access.
-- **`operador`** — only `/dashboard`, `/clientes`, `/operaciones`, `/asistencia`, and a hardcoded allowlist of `/api/*` prefixes (dashboard, clientes, ciclos, petroleo, vehiculo, despachos, especies, servicios, productos, veterinarios, precios, upload, init-sheets, asistencia, jornada-config, retiros-adicionales). Visiting `/` redirects to `/dashboard`.
+- **`operador`** — only `/dashboard`, `/clientes`, `/operaciones`, `/asistencia`, and a hardcoded allowlist of `/api/*` prefixes (dashboard, clientes, ciclos, petroleo, vehiculo, despachos, especies, servicios, productos, veterinarios, precios, upload, init-sheets, places, asistencia, jornada-config, retiros-adicionales). Visiting `/` redirects to `/dashboard`. The mailing routes are **not** in the operator allowlist — `/mailing` and `/api/mailing/*` are admin-only.
 
-Public routes: `/login`, `/api/auth/*`, `/api/init-sheets`, `/api/reorder-columns`.
+Public routes: `/login`, `/api/auth/*`, `/api/init-sheets`, `/api/reorder-columns`, `/api/mailing/webhooks/resend` (this last one is called by Resend, not a user — authenticity is verified via the `svix-*` headers against `RESEND_WEBHOOK_SECRET`; if the secret is unset the route logs a warning and accepts unverified payloads for dev).
 
 Auth uses NextAuth v4 with `CredentialsProvider` + JWT strategy. The `admin` user is **not stored in `usuarios`** — it falls back to `ADMIN_EMAIL` / `ADMIN_PASSWORD` env vars. The `configuracion` page detects this and offers an "Editar" row that materializes admin into the `usuarios` sheet on first save.
 
@@ -61,8 +61,10 @@ app/
     bases/            # veterinarios
     configuracion/    # precios (3 tablas), productos, especies, tipos_servicio, usuarios
     servicios/        # otros_servicios management
+    mailing/          # admin: email campaigns to veterinarios (HTML editor, segmenting, send, metrics)
     reportes/         # xlsx export
   api/                # one folder per sheet/entity (incl. sync-database, pagos-retiros, usuarios)
+    mailing/          # campanas/ + veterinarios/ + webhooks/resend (HTML lives in R2 under mailing/campanas/<id>.html, not in the Sheet)
   login/
 lib/
   google-sheets.ts    # the only place that calls googleapis
@@ -76,8 +78,10 @@ lib/
   certificate-generator.ts  # pdf-lib certificates (visible "sello formal" + optional PKCS#7 placeholder)
   sign-pdf.ts         # PAdES digital signing — loads .p12 from env, signs buffers, exposes signer info (CN)
   google-drive.ts     # photo uploads for cliente fichas (mascota photos) → Drive `downloadUrl`
-  cloudflare-r2.ts    # certificate PDF uploads → R2 (S3-compatible). Used only by /api/clientes/[id]/certificado
+  cloudflare-r2.ts    # certificate PDF + mailing-campaign HTML uploads → R2 (S3-compatible)
   codigo-generator.ts # cliente código generator (max(codigo)+1 within tipo)
+  resend-mailer.ts    # Resend client wrapper — sendEmail / sendBatch (≤100), reads MAILING_FROM_* env, tags for webhook correlation
+  mailing-render.ts   # {{var}} template substitution for campaign HTML; vars derived from a vet row (nombre, primer_nombre, email, veterinaria, comuna, telefono, categoria)
 components/
   Sidebar.tsx · TimelineStatus.tsx · VehiculoTab.tsx · DespachosTab.tsx · SessionProvider.tsx (NextAuth client wrapper in root layout) · ui/
 scripts/
@@ -104,5 +108,7 @@ Required (see [README.md](README.md) for the full table): `GOOGLE_SERVICE_ACCOUN
 Cloudflare R2 (required only if certificate emission is exercised): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`. The certificate route throws "R2 no configurado" if any are missing; the rest of the app keeps working.
 
 Digital signing of certificates (optional but recommended): `CERT_P12_BASE64` (the `.p12` / `.pfx` file as base64 — produce with `base64 -w 0 firma.p12` on Linux/macOS, or `[Convert]::ToBase64String([IO.File]::ReadAllBytes('firma.p12'))` on PowerShell), `CERT_P12_PASSWORD` (passphrase of the .p12). Optional: `CERT_SIGNER_NAME` to override the CN that appears on the visible seal — if omitted, the CN read from the cert is used. **If `CERT_P12_BASE64` is not set, the cert generator falls back to the visible-seal-only mode (no PKCS#7 signature, no "FIRMADO DIGITALMENTE" header — the seal degrades to a generic block).** Signing flow: route reserves the next `certificados` ID via `getNextId` → passes it as `firma_info.cert_id` to the generator so it appears inside the seal → generator adds a PKCS#7 placeholder → [lib/sign-pdf.ts](lib/sign-pdf.ts) fills the placeholder with the actual signature → R2 upload → sheet append. Signing failures hard-fail the request (because the visible seal already claims the doc is signed).
+
+Mailing (required only if the `/mailing` module is exercised): `RESEND_API_KEY` — without it `sendEmail`/`sendBatch` throw "RESEND_API_KEY no configurada". Optional: `MAILING_FROM_EMAIL` (defaults to `onboarding@resend.dev`, the sandbox sender — use a verified domain for prod), `MAILING_FROM_NAME` (defaults to `Alma Animal`), `RESEND_WEBHOOK_SECRET` for verifying the `svix-*`-signed webhook payload that Resend POSTs to `/api/mailing/webhooks/resend`. Campaign HTML is stored in R2 (not in the Sheet — the Sheet only holds `html_key` / `html_url`); the webhook joins events back to campaigns via `mailing_logs.resend_message_id` and increments the aggregate counters on `mailing_campanas`.
 
 Deploy target is Vercel; backups are handled out-of-band by the Apps Script in [scripts/apps_script_backup.gs](scripts/apps_script_backup.gs) (every 48h at 00:00 America/Santiago → Drive folder "DataBase AlmaAnimal Systems"), not by Vercel cron.

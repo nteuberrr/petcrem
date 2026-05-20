@@ -12,8 +12,15 @@ function isOperadorAllowed(pathname: string): boolean {
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Rutas públicas: login, NextAuth API, init-sheets, reorder-columns (operaciones admin de schema)
-  if (pathname === '/login' || pathname.startsWith('/api/auth') || pathname === '/api/init-sheets' || pathname === '/api/reorder-columns') {
+  // Rutas públicas: login, NextAuth API, init-sheets, reorder-columns (operaciones admin de schema),
+  // y webhook de Resend (lo llama Resend, no un usuario; se valida por signature).
+  if (
+    pathname === '/login' ||
+    pathname.startsWith('/api/auth') ||
+    pathname === '/api/init-sheets' ||
+    pathname === '/api/reorder-columns' ||
+    pathname === '/api/mailing/webhooks/resend'
+  ) {
     return NextResponse.next()
   }
 

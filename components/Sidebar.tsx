@@ -11,6 +11,7 @@ const nav = [
   { href: '/asistencia', label: 'Asistencia', icon: '🕐', adminOnly: false },
   { href: '/rendiciones', label: 'Rendiciones', icon: '🧾', adminOnly: true },
   { href: '/bases', label: 'Bases de datos', icon: '🗄️', adminOnly: true },
+  { href: '/mailing', label: 'Mailing', icon: '✉️', adminOnly: true },
   { href: '/configuracion', label: 'Configuración', icon: '⚙️', adminOnly: true },
   { href: '/reportes', label: 'Reportes', icon: '📈', adminOnly: true },
 ]

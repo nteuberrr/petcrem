@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { fmtNumero } from '@/lib/format'
 import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
+import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { proximosDiasHabiles, agregarDiasHabiles, isoFecha } from '@/lib/dias-habiles'
 
 type TipoServicio = { id: string; codigo: string; plazo_entrega_dias: string; activo: string }
@@ -685,20 +686,18 @@ export default function DespachosTab() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Dirección de origen</label>
-              <input
-                type="text"
+              <AddressAutocomplete
                 value={optimOrigin}
-                onChange={e => setOptimOrigin(e.target.value)}
+                onChange={setOptimOrigin}
                 placeholder="Ej. Av. Apoquindo 4700, Las Condes"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Dirección de fin (opcional)</label>
-              <input
-                type="text"
+              <AddressAutocomplete
                 value={optimDest}
-                onChange={e => setOptimDest(e.target.value)}
+                onChange={setOptimDest}
                 placeholder="Vacío = vuelve al origen"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
               />

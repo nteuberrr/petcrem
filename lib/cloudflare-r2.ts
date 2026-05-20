@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 
 let cachedClient: S3Client | null = null
 
@@ -39,4 +39,31 @@ export async function uploadToR2(
   }))
 
   return { key, url: `${publicBase}/${key}` }
+}
+
+export async function getFromR2(key: string): Promise<Buffer | null> {
+  const bucket = process.env.R2_BUCKET_NAME
+  if (!bucket) throw new Error('R2 no configurado: falta R2_BUCKET_NAME')
+  try {
+    const client = getClient()
+    const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+    if (!res.Body) return null
+    const stream = res.Body as { transformToByteArray: () => Promise<Uint8Array> }
+    const bytes = await stream.transformToByteArray()
+    return Buffer.from(bytes)
+  } catch {
+    return null
+  }
+}
+
+export async function deleteFromR2(key: string): Promise<boolean> {
+  const bucket = process.env.R2_BUCKET_NAME
+  if (!bucket) throw new Error('R2 no configurado: falta R2_BUCKET_NAME')
+  try {
+    const client = getClient()
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+    return true
+  } catch {
+    return false
+  }
 }
