@@ -44,7 +44,7 @@ export async function proxy(req: NextRequest) {
         '/api/vehiculo', '/api/despachos',
         '/api/especies', '/api/servicios', '/api/productos',
         '/api/veterinarios', '/api/precios', '/api/upload',
-        '/api/init-sheets',
+        '/api/init-sheets', '/api/places',
         '/api/asistencia', '/api/jornada-config', '/api/retiros-adicionales',
       ]
       if (allowedApis.some(p => pathname.startsWith(p))) return NextResponse.next()

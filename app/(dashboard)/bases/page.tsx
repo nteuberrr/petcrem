@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { Toggle } from '@/components/ui/Toggle'
+import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 
@@ -132,9 +133,18 @@ export default function BasesPage() {
           {([['Nombre', 'nombre'], ['RUT', 'rut'], ['Razón social', 'razon_social'], ['Giro', 'giro'], ['Dirección', 'direccion'], ['Comuna', 'comuna'], ['Teléfono', 'telefono'], ['Correo', 'correo'], ['Nombre contacto', 'nombre_contacto'], ['Cargo contacto', 'cargo_contacto']] as [string, string][]).map(([label, key]) => (
             <div key={key}>
               <label className="text-xs font-medium text-gray-700">{label}</label>
-              <input value={(vetForm as Record<string, string>)[key]}
-                onChange={e => setVetForm(f => ({ ...f, [key]: e.target.value }))}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              {key === 'direccion' ? (
+                <AddressAutocomplete
+                  value={(vetForm as Record<string, string>)[key]}
+                  onChange={v => setVetForm(f => ({ ...f, [key]: v }))}
+                  placeholder="Empieza a escribir la dirección…"
+                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              ) : (
+                <input value={(vetForm as Record<string, string>)[key]}
+                  onChange={e => setVetForm(f => ({ ...f, [key]: e.target.value }))}
+                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              )}
             </div>
           ))}
           <div>

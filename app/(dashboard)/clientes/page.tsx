@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
+import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtKg, fmtPrecio, fmtFecha } from '@/lib/format'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseDecimal, parsePeso } from '@/lib/numbers'
@@ -647,7 +648,7 @@ export default function ClientesPage() {
             <ModalField required type="tel" label="Teléfono" value={form.telefono} onChange={v => setForm(f => ({ ...f, telefono: v.replace(/\D/g, '').slice(0, 9) }))} placeholder="9 dígitos · ej: 912345678" />
           </div>
 
-          <ModalField required label="Dirección de retiro" value={form.direccion_retiro}
+          <ModalAddressField required label="Dirección de retiro" value={form.direccion_retiro}
             onChange={v => setForm(f => ({ ...f, direccion_retiro: v, direccion_despacho: f.misma_direccion ? v : f.direccion_despacho }))} />
 
           <div className="flex items-center gap-2">
@@ -658,7 +659,7 @@ export default function ClientesPage() {
           </div>
 
           {!form.misma_direccion && (
-            <ModalField required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
+            <ModalAddressField required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
           )}
 
           <div className="grid grid-cols-2 gap-3">
@@ -1016,6 +1017,31 @@ function ModalField({ label, value, onChange, type = 'text', step, min, required
           faltante ? 'border-red-300 bg-red-50' : 'border-gray-300'
         }`}
       />
+    </div>
+  )
+}
+
+function ModalAddressField({ label, value, onChange, required, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void
+  required?: boolean; placeholder?: string
+}) {
+  const faltante = required && !value.trim()
+  return (
+    <div>
+      <label className="text-xs font-semibold text-gray-700">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      <div className="mt-1">
+        <AddressAutocomplete
+          value={value}
+          onChange={onChange}
+          required={required}
+          placeholder={placeholder ?? 'Empieza a escribir la dirección…'}
+          className={`w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+            faltante ? 'border-red-300 bg-red-50' : 'border-gray-300'
+          }`}
+        />
+      </div>
     </div>
   )
 }

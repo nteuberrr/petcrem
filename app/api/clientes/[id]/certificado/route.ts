@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
-import { generarCertificadoBuffer, checkCertificateAssets } from '@/lib/certificate-generator'
+import { generarCertificadoBuffer, checkCertificateAssets, type FirmaInfo } from '@/lib/certificate-generator'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
+import { firmarPDF, getSignerInfo, isSigningEnabled } from '@/lib/sign-pdf'
 import { todayISO } from '@/lib/dates'
 
 const CERT_COLS = [
@@ -62,14 +63,27 @@ function pdfResponse(buffer: Buffer, filename: string): Response {
   })
 }
 
+async function reservarIdCertificado(): Promise<string> {
+  await ensureSheet('certificados')
+  await ensureColumns('certificados', CERT_COLS)
+  return getNextId('certificados')
+}
+
+function construirFirmaInfo(certId: string): FirmaInfo | null {
+  const signer = getSignerInfo()
+  if (!signer) return null
+  return { signer_name: signer.name, fecha: new Date(), cert_id: certId }
+}
+
 async function persistirCertificado(opts: {
+  certId: string
   cliente: Record<string, string>
   buffer: Buffer
   sinFoto: boolean
   filename: string
   version: number
 }) {
-  const { cliente, buffer, sinFoto, filename, version } = opts
+  const { certId, cliente, buffer, sinFoto, filename, version } = opts
   try {
     const session = await getServerSession(authOptions)
     const emitidoPorId = (session?.user as { id?: string })?.id ?? ''
@@ -81,13 +95,12 @@ async function persistirCertificado(opts: {
       return null
     })
 
-    const id = await getNextId('certificados')
     const now = new Date()
     const hh = String(now.getHours()).padStart(2, '0')
     const mm = String(now.getMinutes()).padStart(2, '0')
 
     await appendRow('certificados', {
-      id,
+      id: certId,
       cliente_id: cliente.id,
       codigo_mascota: cliente.codigo,
       nombre_mascota: cliente.nombre_mascota,
@@ -107,6 +120,43 @@ async function persistirCertificado(opts: {
   }
 }
 
+async function generarYFirmar(
+  cliente: Record<string, string>,
+  ciclo: Record<string, string>,
+  opts: { fotoBytes?: Uint8Array; sinFoto: boolean },
+): Promise<{ buffer: Buffer; certId: string; version: number; filename: string; firmado: boolean }> {
+  const certId = await reservarIdCertificado()
+  const version = await calcularVersion(cliente.id)
+  const filename = nombreArchivo(cliente, version)
+  const firmaActiva = isSigningEnabled()
+  const firmaInfo = firmaActiva ? construirFirmaInfo(certId) : null
+
+  let buffer = await generarCertificadoBuffer({
+    nombre_mascota:           cliente.nombre_mascota,
+    especie:                  cliente.especie,
+    fecha_cremacion_raw:      ciclo.fecha,
+    nombre_tutor:             cliente.nombre_tutor,
+    codigo:                   cliente.codigo,
+    foto_bytes:               opts.fotoBytes,
+    sin_foto:                 opts.sinFoto,
+    firma_info:               firmaInfo ?? undefined,
+    agregar_placeholder_firma: firmaActiva,
+  })
+
+  if (firmaActiva) {
+    try {
+      buffer = await firmarPDF(buffer)
+    } catch (err) {
+      // Si el sello visual ya dice "FIRMADO DIGITALMENTE" pero falla la firma cripto,
+      // emitir el PDF sería engañoso. Cortamos.
+      console.error('[certificado] firmarPDF falló:', err)
+      throw Object.assign(new Error('Firma digital falló'), { status: 500 })
+    }
+  }
+
+  return { buffer, certId, version, filename, firmado: firmaActiva }
+}
+
 /**
  * GET → genera certificado SIN foto. Mantenido por compatibilidad.
  */
@@ -118,19 +168,9 @@ export async function GET(
     const { id } = await params
     const { cliente, ciclo } = await obtenerDatosCliente(id)
 
-    const version = await calcularVersion(cliente.id)
-    const filename = nombreArchivo(cliente, version)
+    const { buffer, certId, version, filename } = await generarYFirmar(cliente, ciclo, { sinFoto: true })
 
-    const buffer = await generarCertificadoBuffer({
-      nombre_mascota:      cliente.nombre_mascota,
-      especie:             cliente.especie,
-      fecha_cremacion_raw: ciclo.fecha,
-      nombre_tutor:        cliente.nombre_tutor,
-      codigo:              cliente.codigo,
-      sin_foto:            true,
-    })
-
-    await persistirCertificado({ cliente, buffer, sinFoto: true, filename, version })
+    await persistirCertificado({ certId, cliente, buffer, sinFoto: true, filename, version })
 
     return pdfResponse(buffer, filename)
   } catch (e: unknown) {
@@ -164,20 +204,13 @@ export async function POST(
     }
 
     const efectivoSinFoto = sinFoto || !fotoBytes
-    const version = await calcularVersion(cliente.id)
-    const filename = nombreArchivo(cliente, version)
 
-    const buffer = await generarCertificadoBuffer({
-      nombre_mascota:      cliente.nombre_mascota,
-      especie:             cliente.especie,
-      fecha_cremacion_raw: ciclo.fecha,
-      nombre_tutor:        cliente.nombre_tutor,
-      codigo:              cliente.codigo,
-      foto_bytes:          fotoBytes,
-      sin_foto:            efectivoSinFoto,
+    const { buffer, certId, version, filename } = await generarYFirmar(cliente, ciclo, {
+      fotoBytes,
+      sinFoto: efectivoSinFoto,
     })
 
-    await persistirCertificado({ cliente, buffer, sinFoto: efectivoSinFoto, filename, version })
+    await persistirCertificado({ certId, cliente, buffer, sinFoto: efectivoSinFoto, filename, version })
 
     return pdfResponse(buffer, filename)
   } catch (e: unknown) {

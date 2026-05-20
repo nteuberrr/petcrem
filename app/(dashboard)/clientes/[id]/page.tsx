@@ -3,6 +3,7 @@ import { useState, useEffect, use, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
+import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtLitros, fmtPrecio, fmtFecha } from '@/lib/format'
 import { formatDateForSheet } from '@/lib/dates'
 
@@ -388,8 +389,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <Field required label="Nombre tutor" value={form.nombre_tutor} onChange={v => setForm(f => ({ ...f, nombre_tutor: v }))} />
           <Field required type="email" label="Email" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} />
           <Field required type="tel" label="Teléfono" value={form.telefono} onChange={v => setForm(f => ({ ...f, telefono: v.replace(/\D/g, '').slice(0, 9) }))} placeholder="9 dígitos" />
-          <Field required label="Dirección de retiro" value={form.direccion_retiro} onChange={v => setForm(f => ({ ...f, direccion_retiro: v }))} />
-          <Field required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
+          <AddressField required label="Dirección de retiro" value={form.direccion_retiro} onChange={v => setForm(f => ({ ...f, direccion_retiro: v }))} />
+          <AddressField required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
           <Field required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
           <Field required label="Fecha de retiro" type="date" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
           <Field label="Fecha de defunción" type="date" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
@@ -776,6 +777,31 @@ function Field({ label, value, onChange, type = 'text', step, required, placehol
           faltante ? 'border-red-300 bg-red-50' : 'border-gray-300'
         }`}
       />
+    </div>
+  )
+}
+
+function AddressField({ label, value, onChange, required, placeholder }: {
+  label: string; value?: string; onChange: (v: string) => void
+  required?: boolean; placeholder?: string
+}) {
+  const faltante = required && !String(value ?? '').trim()
+  return (
+    <div>
+      <label className="text-xs font-semibold text-gray-700">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      <div className="mt-1">
+        <AddressAutocomplete
+          value={value ?? ''}
+          onChange={onChange}
+          required={required}
+          placeholder={placeholder ?? 'Empieza a escribir la dirección…'}
+          className={`w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+            faltante ? 'border-red-300 bg-red-50' : 'border-gray-300'
+          }`}
+        />
+      </div>
     </div>
   )
 }

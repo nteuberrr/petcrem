@@ -1,0 +1,182 @@
+import { getSheetData, appendRow, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { todayISO } from '@/lib/dates'
+
+const CACHE_SHEET = 'geocoding_cache'
+const CACHE_COLS = ['id', 'direccion_normalizada', 'direccion_original', 'lat', 'lng', 'formatted_address', 'fecha_creacion']
+
+function getApiKey(): string {
+  const k = process.env.GOOGLE_MAPS_API_KEY
+  if (!k) throw new Error('GOOGLE_MAPS_API_KEY no configurada')
+  return k
+}
+
+export function normalizarDireccion(d: string): string {
+  return d.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.,;]/g, '')
+}
+
+export interface GeocodeResult {
+  lat: number
+  lng: number
+  formatted_address: string
+  from_cache: boolean
+}
+
+let cacheMemoMap: Map<string, { lat: number; lng: number; formatted_address: string }> | null = null
+let cacheMaxId = 0
+
+async function loadCache(): Promise<Map<string, { lat: number; lng: number; formatted_address: string }>> {
+  if (cacheMemoMap) return cacheMemoMap
+  await ensureSheet(CACHE_SHEET)
+  await ensureColumns(CACHE_SHEET, CACHE_COLS)
+  const rows = await getSheetData(CACHE_SHEET)
+  const m = new Map<string, { lat: number; lng: number; formatted_address: string }>()
+  let maxId = 0
+  for (const r of rows) {
+    const norm = r.direccion_normalizada
+    const lat = parseFloat(r.lat)
+    const lng = parseFloat(r.lng)
+    if (norm && Number.isFinite(lat) && Number.isFinite(lng)) {
+      m.set(norm, { lat, lng, formatted_address: r.formatted_address || '' })
+    }
+    const id = parseInt(r.id || '0', 10)
+    if (Number.isFinite(id) && id > maxId) maxId = id
+  }
+  cacheMemoMap = m
+  cacheMaxId = maxId
+  return m
+}
+
+export function invalidarCacheMemo() {
+  cacheMemoMap = null
+  cacheMaxId = 0
+}
+
+export async function geocodeAddress(direccion: string): Promise<GeocodeResult | null> {
+  if (!direccion || !direccion.trim()) return null
+  const norm = normalizarDireccion(direccion)
+  const cache = await loadCache()
+  const hit = cache.get(norm)
+  if (hit) {
+    return { lat: hit.lat, lng: hit.lng, formatted_address: hit.formatted_address, from_cache: true }
+  }
+
+  const url = new URL('https://maps.googleapis.com/maps/api/geocode/json')
+  url.searchParams.set('address', direccion)
+  url.searchParams.set('region', 'cl')
+  url.searchParams.set('language', 'es')
+  url.searchParams.set('key', getApiKey())
+  const res = await fetch(url.toString())
+  const j = await res.json()
+  if (j.status !== 'OK' || !j.results?.[0]) {
+    console.warn('[maps] geocode no encontró:', direccion, '→', j.status, j.error_message ?? '')
+    return null
+  }
+  const loc = j.results[0].geometry.location
+  const formatted = j.results[0].formatted_address
+  const lat = loc.lat
+  const lng = loc.lng
+
+  try {
+    cacheMaxId += 1
+    const id = String(cacheMaxId)
+    await appendRow(CACHE_SHEET, {
+      id,
+      direccion_normalizada: norm,
+      direccion_original: direccion,
+      lat,
+      lng,
+      formatted_address: formatted,
+      fecha_creacion: todayISO(),
+    })
+    cache.set(norm, { lat, lng, formatted_address: formatted })
+  } catch (err) {
+    console.error('[maps] error guardando en cache:', err)
+  }
+
+  return { lat, lng, formatted_address: formatted, from_cache: false }
+}
+
+export interface LatLng {
+  lat: number
+  lng: number
+}
+
+export interface RouteResult {
+  /** Distancia total en metros */
+  distance_meters: number
+  /** Duración total en segundos */
+  duration_seconds: number
+  /** Polyline codificada (formato Google) */
+  encoded_polyline: string
+  /** Orden de los waypoints intermedios optimizados (índices del input original) */
+  optimized_order: number[]
+}
+
+export interface RouteOptions {
+  origin: LatLng
+  destination: LatLng
+  /** Waypoints intermedios. Si optimize=true, la API decide el orden */
+  intermediates?: LatLng[]
+  optimize?: boolean
+  /** ISO timestamp de salida (para tráfico). Si vacío, usa "ahora" */
+  departure_time?: string
+}
+
+export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
+  const url = 'https://routes.googleapis.com/directions/v2:computeRoutes'
+  const body: Record<string, unknown> = {
+    origin:      { location: { latLng: { latitude: opts.origin.lat, longitude: opts.origin.lng } } },
+    destination: { location: { latLng: { latitude: opts.destination.lat, longitude: opts.destination.lng } } },
+    travelMode: 'DRIVE',
+    routingPreference: 'TRAFFIC_AWARE',
+    languageCode: 'es-CL',
+    units: 'METRIC',
+  }
+  if (opts.intermediates && opts.intermediates.length > 0) {
+    body.intermediates = opts.intermediates.map(w => ({ location: { latLng: { latitude: w.lat, longitude: w.lng } } }))
+    if (opts.optimize) body.optimizeWaypointOrder = true
+  }
+  if (opts.departure_time) {
+    body.departureTime = opts.departure_time
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': getApiKey(),
+      'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex',
+    },
+    body: JSON.stringify(body),
+  })
+  const j = await res.json()
+  if (res.status !== 200 || !j.routes?.[0]) {
+    const msg = j.error?.message ?? JSON.stringify(j).slice(0, 300)
+    throw new Error(`Routes API ${res.status}: ${msg}`)
+  }
+  const r = j.routes[0]
+  const durationStr: string = r.duration ?? '0s'
+  const duration_seconds = parseInt(durationStr.replace('s', ''), 10)
+
+  return {
+    distance_meters: r.distanceMeters ?? 0,
+    duration_seconds: Number.isFinite(duration_seconds) ? duration_seconds : 0,
+    encoded_polyline: r.polyline?.encodedPolyline ?? '',
+    optimized_order: r.optimizedIntermediateWaypointIndex ?? [],
+  }
+}
+
+/** Construye una URL de Google Maps que abre la ruta con todos los waypoints en orden. */
+export function buildGoogleMapsUrl(origin: LatLng, destination: LatLng, waypoints: LatLng[]): string {
+  const fmt = (p: LatLng) => `${p.lat},${p.lng}`
+  const base = 'https://www.google.com/maps/dir/?api=1'
+  const params = new URLSearchParams({
+    origin: fmt(origin),
+    destination: fmt(destination),
+    travelmode: 'driving',
+  })
+  if (waypoints.length > 0) {
+    params.set('waypoints', waypoints.map(fmt).join('|'))
+  }
+  return `${base}&${params.toString()}`
+}

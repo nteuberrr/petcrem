@@ -19,11 +19,11 @@ npm run lint    # eslint
 
 There is no test suite. Type errors surface via `tsc` during `next build`.
 
-Key deps worth knowing: **`zod`** for runtime validation (use this instead of hand-rolled checks), **`xlsx-js-style`** (not vanilla `xlsx`) for Excel exports — required for the colored-cell styling in rendiciones/reportes. **`date-fns`** is available but most date handling goes through [lib/dates.ts](lib/dates.ts).
+Key deps worth knowing: **`zod`** for runtime validation (use this instead of hand-rolled checks), **`xlsx-js-style`** (not vanilla `xlsx`) for Excel exports — required for the colored-cell styling in rendiciones/reportes, **`@aws-sdk/client-s3`** for the Cloudflare R2 client in [lib/cloudflare-r2.ts](lib/cloudflare-r2.ts) (R2 is S3-compatible), **`@signpdf/signpdf` + `@signpdf/signer-p12` + `@signpdf/placeholder-pdf-lib` + `node-forge`** for PKCS#7 (PAdES) digital signing of cremation certificates in [lib/sign-pdf.ts](lib/sign-pdf.ts). **`date-fns`** is available but most date handling goes through [lib/dates.ts](lib/dates.ts).
 
 ## Database: Google Sheets, not SQL
 
-The "database" is a single Google Sheet (`GOOGLE_SPREADSHEET_ID`) accessed via a Service Account JWT. Sheets, one per entity: `clientes`, `ciclos`, `cargas_petroleo`, `vehiculo_cargas`, `despachos`, `rendiciones`, `pagos_rendicion`, `veterinarios`, `precios_generales` / `precios_convenio` / `precios_especiales`, `productos`, `especies`, `tipos_servicio`, `otros_servicios`, `usuarios`, plus the asistencia cluster (`asistencia`, `jornada_config`, `retiros_adicionales`, `pagos_retiros`). The canonical schema lives in [app/api/init-sheets/route.ts](app/api/init-sheets/route.ts) — when adding a column or sheet, update that map and the consuming API route together.
+The "database" is a single Google Sheet (`GOOGLE_SPREADSHEET_ID`) accessed via a Service Account JWT. Sheets, one per entity: `clientes`, `ciclos`, `cargas_petroleo`, `vehiculo_cargas`, `despachos`, `rendiciones`, `pagos_rendicion`, `veterinarios`, `precios_generales` / `precios_convenio` / `precios_especiales`, `productos`, `especies`, `tipos_servicio`, `otros_servicios`, `usuarios`, `certificados` (audit log of emitted PDFs — `pdf_key` / `pdf_url` point at R2), plus the asistencia cluster (`asistencia`, `jornada_config`, `retiros_adicionales`, `pagos_retiros`). The canonical schema lives in [app/api/init-sheets/route.ts](app/api/init-sheets/route.ts) — when adding a column or sheet, update that map and the consuming API route together.
 
 All Sheets I/O goes through [lib/google-sheets.ts](lib/google-sheets.ts). Key conventions:
 
@@ -73,13 +73,20 @@ lib/
   numbers.ts          # numeric parsing/coercion helpers
   price-calculator.ts # tramo lookup across precios_generales/convenio/especiales
   asistencia.ts       # jornada + retiros-adicionales calculations
-  certificate-generator.ts  # pdf-lib certificates
-  google-drive.ts     # photo uploads
+  certificate-generator.ts  # pdf-lib certificates (visible "sello formal" + optional PKCS#7 placeholder)
+  sign-pdf.ts         # PAdES digital signing — loads .p12 from env, signs buffers, exposes signer info (CN)
+  google-drive.ts     # photo uploads for cliente fichas (mascota photos) → Drive `downloadUrl`
+  cloudflare-r2.ts    # certificate PDF uploads → R2 (S3-compatible). Used only by /api/clientes/[id]/certificado
   codigo-generator.ts # cliente código generator (max(codigo)+1 within tipo)
 components/
-  Sidebar.tsx · TimelineStatus.tsx · VehiculoTab.tsx · DespachosTab.tsx · ui/
+  Sidebar.tsx · TimelineStatus.tsx · VehiculoTab.tsx · DespachosTab.tsx · SessionProvider.tsx (NextAuth client wrapper in root layout) · ui/
 scripts/
-  apps_script_backup.gs   # Google Apps Script — daily 03:00 trigger, copies Sheet to Drive "Database" folder on days 5/10/15/20/25 + last (and 30 if month has 31)
+  apps_script_backup.gs   # Google Apps Script — runs every 48h at 00:00 (America/Santiago), copies the Sheet into Drive folder "DataBase AlmaAnimal Systems"
+  *.mjs                   # ad-hoc Node maintenance scripts run manually (`node scripts/<name>.mjs`), not wired into npm scripts:
+                          #   format-fechas-sheet / format-numeros-sheet — reformat existing cells in the Sheet
+                          #   normalize-telefonos — normalize phone column to 9-digit form
+                          #   inspect-clientes-headers / check-peso-kg-unique / delete-col-peso-kg — one-off schema audits
+                          #   verify-r2 — R2 PUT/HEAD/public-URL/DELETE health check
 ```
 
 ## Cross-cutting conventions
@@ -92,6 +99,10 @@ scripts/
 
 ## Environment variables
 
-Required (see [README.md](README.md) for the full table): `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY` (with `\n` escaped), `GOOGLE_SPREADSHEET_ID`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`. Optional: `GOOGLE_DRIVE_FOLDER_ID` (photo uploads), `NEXT_PUBLIC_ADMIN_EMAIL` (UI hint for the admin-as-user row).
+Required (see [README.md](README.md) for the full table): `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY` (with `\n` escaped), `GOOGLE_SPREADSHEET_ID`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`. Optional: `GOOGLE_DRIVE_FOLDER_ID` (mascota photo uploads), `NEXT_PUBLIC_ADMIN_EMAIL` (UI hint for the admin-as-user row).
 
-Deploy target is Vercel; backups are handled out-of-band by the Apps Script in [scripts/apps_script_backup.gs](scripts/apps_script_backup.gs), not by Vercel cron.
+Cloudflare R2 (required only if certificate emission is exercised): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`. The certificate route throws "R2 no configurado" if any are missing; the rest of the app keeps working.
+
+Digital signing of certificates (optional but recommended): `CERT_P12_BASE64` (the `.p12` / `.pfx` file as base64 — produce with `base64 -w 0 firma.p12` on Linux/macOS, or `[Convert]::ToBase64String([IO.File]::ReadAllBytes('firma.p12'))` on PowerShell), `CERT_P12_PASSWORD` (passphrase of the .p12). Optional: `CERT_SIGNER_NAME` to override the CN that appears on the visible seal — if omitted, the CN read from the cert is used. **If `CERT_P12_BASE64` is not set, the cert generator falls back to the visible-seal-only mode (no PKCS#7 signature, no "FIRMADO DIGITALMENTE" header — the seal degrades to a generic block).** Signing flow: route reserves the next `certificados` ID via `getNextId` → passes it as `firma_info.cert_id` to the generator so it appears inside the seal → generator adds a PKCS#7 placeholder → [lib/sign-pdf.ts](lib/sign-pdf.ts) fills the placeholder with the actual signature → R2 upload → sheet append. Signing failures hard-fail the request (because the visible seal already claims the doc is signed).
+
+Deploy target is Vercel; backups are handled out-of-band by the Apps Script in [scripts/apps_script_backup.gs](scripts/apps_script_backup.gs) (every 48h at 00:00 America/Santiago → Drive folder "DataBase AlmaAnimal Systems"), not by Vercel cron.

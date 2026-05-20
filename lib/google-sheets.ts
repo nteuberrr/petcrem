@@ -25,6 +25,28 @@ function getSheets() {
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
 
+// Cache de headers por hoja para evitar 1 read extra en cada appendRow/updateRow.
+// Se invalida automáticamente cuando ensureColumns agrega columnas.
+const headersCache = new Map<string, string[]>()
+
+export function invalidateHeadersCache(sheetName?: string) {
+  if (sheetName) headersCache.delete(sheetName)
+  else headersCache.clear()
+}
+
+async function getHeaders(sheetName: string): Promise<string[]> {
+  const cached = headersCache.get(sheetName)
+  if (cached) return cached
+  const sheets = getSheets()
+  const headersRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${sheetName}!1:1`,
+  })
+  const headers = (headersRes.data.values?.[0] as string[]) ?? []
+  headersCache.set(sheetName, headers)
+  return headers
+}
+
 function normalizeCell(v: unknown): string {
   if (v === null || v === undefined) return ''
   if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE'
@@ -58,11 +80,7 @@ export async function getSheetData(sheetName: string): Promise<Record<string, st
 
 export async function appendRow(sheetName: string, data: Record<string, unknown>): Promise<void> {
   const sheets = getSheets()
-  const headersRes = await sheets.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${sheetName}!1:1`,
-  })
-  const headers = headersRes.data.values?.[0] as string[] ?? []
+  const headers = await getHeaders(sheetName)
   const row = headers.map((h) => data[h] ?? '')
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
@@ -78,11 +96,7 @@ export async function updateRow(
   data: Record<string, unknown>
 ): Promise<void> {
   const sheets = getSheets()
-  const headersRes = await sheets.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${sheetName}!1:1`,
-  })
-  const headers = headersRes.data.values?.[0] as string[] ?? []
+  const headers = await getHeaders(sheetName)
   const row = headers.map((h) => data[h] ?? '')
   // rowIndex is 0-based from data rows; sheet row = rowIndex + 2 (header is row 1)
   const sheetRow = rowIndex + 2
@@ -175,6 +189,7 @@ export async function ensureColumns(sheetName: string, columnNames: string[]): P
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [missing] },
   })
+  invalidateHeadersCache(sheetName)
 }
 
 function columnLetter(idx: number): string {

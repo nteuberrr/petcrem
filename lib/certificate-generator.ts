@@ -4,8 +4,18 @@ import {
   PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb,
   pushGraphicsState, popGraphicsState, rectangle, clip, endPath,
 } from 'pdf-lib'
+import { pdflibAddPlaceholder } from '@signpdf/placeholder-pdf-lib'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+
+export interface FirmaInfo {
+  /** Nombre que aparece en el sello (típicamente el CN del cert) */
+  signer_name: string
+  /** Fecha+hora de la firma para mostrar en el sello */
+  fecha: Date
+  /** ID del registro en la hoja `certificados` */
+  cert_id: string | number
+}
 
 export interface CertificadoData {
   nombre_mascota: string
@@ -17,6 +27,10 @@ export interface CertificadoData {
   foto_bytes?: Uint8Array
   /** Forzar versión sin foto aunque haya bytes presentes */
   sin_foto?: boolean
+  /** Datos del firmante para el sello visual. Si está ausente, se dibuja una versión genérica. */
+  firma_info?: FirmaInfo
+  /** Si true, agrega el placeholder PKCS#7 para que después `firmarPDF` lo complete. */
+  agregar_placeholder_firma?: boolean
 }
 
 // =============================================================================
@@ -301,22 +315,57 @@ export async function generarCertificadoBuffer(data: CertificadoData): Promise<B
     })
   })
 
-  // --- Firma central ---
-  const footerY = 115
-  const cx = PAGE_W / 2
-  const firmaTexto = 'Crematorio Alma Animal'
-  const firmaW = serifItalic.widthOfTextAtSize(firmaTexto, 16)
-  page.drawText(firmaTexto, {
-    x: cx - firmaW / 2,
-    y: footerY + 8,
-    size: 16, font: serifItalic, color: NAVY,
+  // --- Sello formal de firma digital ---
+  const sealW = 240
+  const sealH = 70
+  const sealX = (PAGE_W - sealW) / 2
+  const sealY = 105
+
+  // Caja con fondo crema y borde navy fino
+  page.drawRectangle({
+    x: sealX, y: sealY, width: sealW, height: sealH,
+    color: PAPER_TINT, borderColor: NAVY, borderWidth: 0.8,
   })
+  // Acento dorado debajo del header
   page.drawLine({
-    start: { x: cx - 70, y: footerY },
-    end:   { x: cx + 70, y: footerY },
-    color: NAVY, thickness: 0.5,
+    start: { x: sealX + 18, y: sealY + sealH - 18 },
+    end:   { x: sealX + sealW - 18, y: sealY + sealH - 18 },
+    color: GOLD, thickness: 0.4,
   })
-  drawTrackedCentered(page, 'FIRMA AUTORIZADA', cx, footerY - 11, serif, 8, 1.5, SUBTLE)
+
+  // Header "FIRMADO DIGITALMENTE"
+  drawTrackedCentered(page, 'FIRMADO DIGITALMENTE', PAGE_W / 2, sealY + sealH - 13, serifBold, 8, 2.2, GOLD)
+
+  // Nombre del firmante
+  const signerName = data.firma_info?.signer_name ?? 'Crematorio Alma Animal'
+  const signerW = serifBold.widthOfTextAtSize(signerName, 11)
+  page.drawText(signerName, {
+    x: (PAGE_W - signerW) / 2,
+    y: sealY + sealH - 33,
+    size: 11, font: serifBold, color: NAVY,
+  })
+
+  // Fecha + hora
+  const fechaFirma = data.firma_info?.fecha
+    ? format(data.firma_info.fecha, "dd/MM/yyyy HH:mm 'h'", { locale: es })
+    : format(new Date(), "dd/MM/yyyy", { locale: es })
+  const fechaW = serif.widthOfTextAtSize(fechaFirma, 9)
+  page.drawText(fechaFirma, {
+    x: (PAGE_W - fechaW) / 2,
+    y: sealY + sealH - 48,
+    size: 9, font: serif, color: SUBTLE,
+  })
+
+  // ID del registro (en Courier para que se distinga como identificador)
+  if (data.firma_info?.cert_id !== undefined && data.firma_info?.cert_id !== null) {
+    const idStr = `ID: ${data.firma_info.cert_id}`
+    const idW = courierBold.widthOfTextAtSize(idStr, 8)
+    page.drawText(idStr, {
+      x: (PAGE_W - idW) / 2,
+      y: sealY + sealH - 61,
+      size: 8, font: courierBold, color: SUBTLE,
+    })
+  }
 
   // --- Logo marca de agua en esquina inferior derecha (alpha 0.18) ---
   const wmSize = 55
@@ -327,7 +376,21 @@ export async function generarCertificadoBuffer(data: CertificadoData): Promise<B
   // --- Footer con lema ---
   drawTrackedCentered(page, 'ALMA ANIMAL  ·  HUELLAS QUE NO SE BORRAN', PAGE_W / 2, 38, serif, 8, 3, GOLD)
 
-  const bytes = await pdfDoc.save()
+  // --- Placeholder PKCS#7 (invisible) que `firmarPDF` rellenará después ---
+  if (data.agregar_placeholder_firma) {
+    pdflibAddPlaceholder({
+      pdfDoc,
+      reason: 'Certificado de cremación emitido por Alma Animal',
+      contactInfo: 'crematorio@almaanimal.cl',
+      name: data.firma_info?.signer_name ?? 'Alma Animal',
+      location: 'Chile',
+      signatureLength: 8192,
+    })
+  }
+
+  // signpdf requiere object streams desactivados para poder firmar
+  const saveOpts = data.agregar_placeholder_firma ? { useObjectStreams: false } : undefined
+  const bytes = await pdfDoc.save(saveOpts)
   return Buffer.from(bytes)
 }
 

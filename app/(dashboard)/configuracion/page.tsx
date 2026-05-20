@@ -4,9 +4,10 @@ import { useSession } from 'next-auth/react'
 import { Toggle } from '@/components/ui/Toggle'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
+import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 
-const TABS = ['Precios', 'Productos', 'Especies', 'Tipos servicio', 'Otros servicios', 'Usuarios', 'Jornada', 'Mantenimiento'] as const
+const TABS = ['Precios', 'Productos', 'Especies', 'Tipos servicio', 'Otros servicios', 'Usuarios', 'Jornada', 'Datos personales', 'Mantenimiento'] as const
 type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
 
@@ -850,6 +851,8 @@ export default function ConfiguracionPage() {
         </div>
       )}
 
+      {tab === 'Datos personales' && <DatosPersonalesPanel />}
+
       {tab === 'Mantenimiento' && (
         <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 max-w-3xl">
           <h2 className="text-base font-bold text-gray-900 mb-2">Actualizar base de datos</h2>
@@ -1510,5 +1513,158 @@ function TramoRow({ tramo, isLast, tipo, onDelete, onEdit, onUpdate, isAdmin, ca
         </div>
       </td>
     </tr>
+  )
+}
+
+type EmpresaCfg = {
+  nombre: string; rut: string; giro: string
+  direccion: string; comuna: string
+  telefono: string; correo: string
+  web: string; instagram: string; facebook: string
+  fecha_actualizacion?: string
+}
+
+const EMPRESA_EMPTY: EmpresaCfg = {
+  nombre: '', rut: '', giro: '',
+  direccion: '', comuna: '',
+  telefono: '', correo: '',
+  web: '', instagram: '', facebook: '',
+}
+
+function DatosPersonalesPanel() {
+  const [form, setForm] = useState<EmpresaCfg>(EMPRESA_EMPTY)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [savedMsg, setSavedMsg] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/empresa-config').then(r => r.json()).then(d => {
+      if (cancelled) return
+      if (d && typeof d === 'object' && !d.error) {
+        setForm({
+          nombre: d.nombre || '', rut: d.rut || '', giro: d.giro || '',
+          direccion: d.direccion || '', comuna: d.comuna || '',
+          telefono: d.telefono || '', correo: d.correo || '',
+          web: d.web || '', instagram: d.instagram || '', facebook: d.facebook || '',
+          fecha_actualizacion: d.fecha_actualizacion || '',
+        })
+      }
+      setLoading(false)
+    }).catch(() => setLoading(false))
+    return () => { cancelled = true }
+  }, [])
+
+  async function guardar(e: React.FormEvent) {
+    e.preventDefault()
+    setError(''); setSavedMsg(''); setSaving(true)
+    const res = await fetch('/api/empresa-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    })
+    if (res.ok) {
+      const j = await res.json()
+      setForm(f => ({ ...f, fecha_actualizacion: j.data?.fecha_actualizacion || '' }))
+      setSavedMsg('Guardado')
+      setTimeout(() => setSavedMsg(''), 2500)
+    } else {
+      const e = await res.json().catch(() => ({}))
+      setError(e.error || 'Error al guardar')
+    }
+    setSaving(false)
+  }
+
+  if (loading) {
+    return <div className="text-sm text-gray-500">Cargando…</div>
+  }
+
+  return (
+    <form onSubmit={guardar} className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 max-w-3xl space-y-4">
+      <div>
+        <h2 className="text-base font-bold text-gray-900">Datos de la empresa</h2>
+        <p className="text-xs text-gray-500">Estos datos están disponibles para mostrarlos en certificados, facturas y reportes.</p>
+      </div>
+
+      <Section title="Identidad">
+        <Row>
+          <Field label="Nombre / Razón social" value={form.nombre} onChange={v => setForm(f => ({ ...f, nombre: v }))} />
+          <Field label="RUT" value={form.rut} onChange={v => setForm(f => ({ ...f, rut: v }))} placeholder="76.xxx.xxx-x" />
+        </Row>
+        <Field label="Giro" value={form.giro} onChange={v => setForm(f => ({ ...f, giro: v }))} />
+      </Section>
+
+      <Section title="Ubicación">
+        <div>
+          <label className="text-xs font-semibold text-gray-700">Dirección</label>
+          <div className="mt-1">
+            <AddressAutocomplete
+              value={form.direccion}
+              onChange={v => setForm(f => ({ ...f, direccion: v }))}
+              placeholder="Empieza a escribir la dirección…"
+              className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        </div>
+        <Field label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
+      </Section>
+
+      <Section title="Contacto">
+        <Row>
+          <Field label="Teléfono" value={form.telefono} onChange={v => setForm(f => ({ ...f, telefono: v }))} placeholder="+56 9 xxxx xxxx" />
+          <Field label="Correo" value={form.correo} onChange={v => setForm(f => ({ ...f, correo: v }))} type="email" placeholder="contacto@almaanimal.cl" />
+        </Row>
+        <Field label="Página web" value={form.web} onChange={v => setForm(f => ({ ...f, web: v }))} placeholder="https://almaanimal.cl" />
+      </Section>
+
+      <Section title="Redes sociales">
+        <Row>
+          <Field label="Instagram" value={form.instagram} onChange={v => setForm(f => ({ ...f, instagram: v }))} placeholder="@almaanimal" />
+          <Field label="Facebook" value={form.facebook} onChange={v => setForm(f => ({ ...f, facebook: v }))} placeholder="facebook.com/almaanimal" />
+        </Row>
+      </Section>
+
+      {error && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{error}</div>}
+
+      <div className="flex items-center gap-3 pt-2">
+        <button type="submit" disabled={saving}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg px-5 py-2 text-sm shadow-md disabled:opacity-50 transition-colors">
+          {saving ? 'Guardando…' : 'Guardar'}
+        </button>
+        {savedMsg && <span className="text-sm text-green-600 font-medium">✓ {savedMsg}</span>}
+        {form.fecha_actualizacion && (
+          <span className="text-xs text-gray-500 ml-auto">
+            Última actualización: {form.fecha_actualizacion}
+          </span>
+        )}
+      </div>
+    </form>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border-t border-gray-100 pt-3 space-y-2">
+      <div className="text-[11px] uppercase tracking-wider font-semibold text-gray-500">{title}</div>
+      {children}
+    </div>
+  )
+}
+
+function Row({ children }: { children: React.ReactNode }) {
+  return <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{children}</div>
+}
+
+function Field({ label, value, onChange, type = 'text', placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string
+}) {
+  return (
+    <div>
+      <label className="text-xs font-semibold text-gray-700">{label}</label>
+      <input type={type} value={value} placeholder={placeholder}
+        onChange={e => onChange(e.target.value)}
+        className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+    </div>
   )
 }

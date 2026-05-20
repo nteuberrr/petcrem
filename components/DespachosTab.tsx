@@ -20,6 +20,26 @@ type Despacho = {
   mascotas_ids: string[]; nota: string; fecha_creacion: string
 }
 
+type ParadaOptim = {
+  cliente_id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
+  direccion: string; formatted_address: string; lat: number; lng: number
+  fecha_objetivo_iso: string; fecha_objetivo_dmy: string; atrasada: boolean
+  veterinaria: string; telefono: string
+}
+type ParadaObligatoria = ParadaOptim & { order: number }
+type ParadaCandidata = ParadaOptim & { detour_minutes: number; recommended: boolean }
+type OptimResult = {
+  origin: { address: string; lat: number; lng: number }
+  destination: { address: string; lat: number; lng: number }
+  obligatorias: ParadaObligatoria[]
+  candidatas: ParadaCandidata[]
+  baseline: { distance_km: number; duration_minutes: number; google_maps_url: string }
+  skipped: Array<{ cliente_id: string; codigo: string; motivo: string }>
+}
+
+const LS_ORIGIN = 'petcrem.optimizer.origin'
+const LS_DEST = 'petcrem.optimizer.destination'
+
 export default function DespachosTab() {
   const [despachos, setDespachos] = useState<Despacho[]>([])
   const [clientesMap, setClientesMap] = useState<Record<string, Cliente>>({})
@@ -35,6 +55,26 @@ export default function DespachosTab() {
   const [disponibles, setDisponibles] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(false)
   const [buscar, setBuscar] = useState('')
+
+  // Optimizador de ruta
+  const [optimOpen, setOptimOpen] = useState(false)
+  const [optimOrigin, setOptimOrigin] = useState('')
+  const [optimDest, setOptimDest] = useState('')
+  const [optimFechaBase, setOptimFechaBase] = useState(() => todayISO())
+  const [optimMaxDetour, setOptimMaxDetour] = useState(10)
+  const [optimDiasRec, setOptimDiasRec] = useState(3)
+  const [optimLoading, setOptimLoading] = useState(false)
+  const [optimResult, setOptimResult] = useState<OptimResult | null>(null)
+  const [optimError, setOptimError] = useState<string | null>(null)
+  const [optimPicks, setOptimPicks] = useState<Set<string>>(new Set())
+  const [optimPromovidosFijos, setOptimPromovidosFijos] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setOptimOrigin(window.localStorage.getItem(LS_ORIGIN) || '')
+      setOptimDest(window.localStorage.getItem(LS_DEST) || '')
+    }
+  }, [])
 
   // Edición
   const [editId, setEditId] = useState<string | null>(null)
@@ -228,6 +268,79 @@ export default function DespachosTab() {
     else alert('Error al eliminar')
   }
 
+  function optimToggle(id: string) {
+    setOptimPicks(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  async function optimCalcular(opts?: { incluir_extras_ids?: string[] }) {
+    if (!optimOrigin.trim()) { setOptimError('Falta la dirección de origen'); return }
+    setOptimLoading(true)
+    setOptimError(null)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(LS_ORIGIN, optimOrigin)
+      window.localStorage.setItem(LS_DEST, optimDest)
+    }
+    try {
+      const res = await fetch('/api/despachos/optimizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          origin_address: optimOrigin,
+          destination_address: optimDest || undefined,
+          max_detour_minutes: optimMaxDetour,
+          dias_recomendadas: optimDiasRec,
+          fecha_base: optimFechaBase,
+          incluir_extras_ids: opts?.incluir_extras_ids ?? [],
+        }),
+      })
+      const j = await res.json()
+      if (!res.ok) {
+        setOptimError(j.error || `Error ${res.status}`)
+      } else {
+        const r = j as OptimResult
+        setOptimResult(r)
+        if (opts?.incluir_extras_ids && opts.incluir_extras_ids.length > 0) {
+          setOptimPromovidosFijos(new Set(opts.incluir_extras_ids))
+          setOptimPicks(new Set())
+        } else {
+          setOptimPromovidosFijos(new Set())
+          setOptimPicks(new Set())
+        }
+      }
+    } catch (e) {
+      setOptimError(String(e))
+    } finally {
+      setOptimLoading(false)
+    }
+  }
+
+  async function optimReoptimizarConSugeridas() {
+    const ids = Array.from(optimPicks)
+    if (ids.length === 0) return
+    await optimCalcular({ incluir_extras_ids: [...Array.from(optimPromovidosFijos), ...ids] })
+  }
+
+  function optimGmapsUrl(): string {
+    if (!optimResult) return ''
+    const all = [
+      ...optimResult.obligatorias.map(o => ({ lat: o.lat, lng: o.lng })),
+      ...optimResult.candidatas.filter(c => optimPicks.has(c.cliente_id)).map(c => ({ lat: c.lat, lng: c.lng })),
+    ]
+    const fmt = (p: { lat: number; lng: number }) => `${p.lat},${p.lng}`
+    const u = new URLSearchParams({
+      api: '1',
+      origin: fmt(optimResult.origin),
+      destination: fmt(optimResult.destination),
+      travelmode: 'driving',
+    })
+    if (all.length > 0) u.set('waypoints', all.map(fmt).join('|'))
+    return `https://www.google.com/maps/dir/?${u.toString()}`
+  }
+
   const editDisponiblesFiltradas = editDisponibles.filter(p => {
     if (editMascotas.some(m => m.id === p.id)) return false // ya está en la lista
     if (!editBuscar) return true
@@ -251,8 +364,20 @@ export default function DespachosTab() {
     <>
       {/* Calendario de entregas — próximos 5 días hábiles */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4">
-        <div className="flex items-baseline justify-between mb-3">
-          <h2 className="text-base font-semibold text-gray-900">Calendario de entregas</h2>
+        <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <h2 className="text-base font-semibold text-gray-900">Calendario de entregas</h2>
+            <button
+              type="button"
+              onClick={() => setOptimOpen(true)}
+              className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg px-3 py-1.5 shadow-sm transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+              </svg>
+              Optimizar ruta
+            </button>
+          </div>
           <div className="flex items-center gap-3 text-[11px] text-gray-500">
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-3 h-3 rounded-sm bg-yellow-300 border border-yellow-400" /> Pendiente
@@ -551,6 +676,203 @@ export default function DespachosTab() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal: Optimizador de ruta */}
+      <Modal open={optimOpen} onClose={() => setOptimOpen(false)} title="Optimizar ruta de despachos">
+        <div className="space-y-4">
+          {/* Form */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Dirección de origen</label>
+              <input
+                type="text"
+                value={optimOrigin}
+                onChange={e => setOptimOrigin(e.target.value)}
+                placeholder="Ej. Av. Apoquindo 4700, Las Condes"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Dirección de fin (opcional)</label>
+              <input
+                type="text"
+                value={optimDest}
+                onChange={e => setOptimDest(e.target.value)}
+                placeholder="Vacío = vuelve al origen"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Fecha de la ruta</label>
+              <input
+                type="date"
+                value={optimFechaBase}
+                onChange={e => setOptimFechaBase(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+              />
+              <p className="text-[10px] text-gray-500 mt-0.5">Obligatorias = entregas que vencen hasta esta fecha</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Máximo desvío para sugeridas: <span className="font-bold text-indigo-700">{optimMaxDetour} min</span>
+              </label>
+              <input
+                type="range" min={0} max={30} step={1}
+                value={optimMaxDetour}
+                onChange={e => setOptimMaxDetour(parseInt(e.target.value))}
+                className="w-full"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Días hábiles a futuro para buscar sugeridas: <span className="font-bold text-indigo-700">{optimDiasRec}</span>
+              </label>
+              <input
+                type="range" min={1} max={5} step={1}
+                value={optimDiasRec}
+                onChange={e => setOptimDiasRec(parseInt(e.target.value))}
+                className="w-full"
+              />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => optimCalcular()}
+            disabled={optimLoading || !optimOrigin.trim()}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg py-2.5 text-sm shadow-md transition-colors disabled:opacity-50"
+          >
+            {optimLoading ? 'Calculando ruta…' : 'Calcular ruta'}
+          </button>
+
+          {optimError && (
+            <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">
+              {optimError}
+            </div>
+          )}
+
+          {optimResult && (
+            <div className="space-y-3">
+              {/* Origen/destino formateados */}
+              <div className="text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+                <div><span className="font-semibold text-gray-700">Origen:</span> {optimResult.origin.address}</div>
+                <div><span className="font-semibold text-gray-700">Destino:</span> {optimResult.destination.address}</div>
+              </div>
+
+              {/* Ruta obligatoria */}
+              <div className="border border-indigo-200 rounded-lg overflow-hidden">
+                <div className="bg-indigo-50 px-3 py-2 flex items-center justify-between">
+                  <div className="font-semibold text-indigo-900 text-sm">
+                    Ruta obligatoria · {optimResult.obligatorias.length} {optimResult.obligatorias.length === 1 ? 'parada' : 'paradas'}
+                  </div>
+                  <div className="text-xs text-indigo-700">
+                    {optimResult.baseline.distance_km} km · {optimResult.baseline.duration_minutes} min
+                  </div>
+                </div>
+                {optimResult.obligatorias.length === 0 ? (
+                  <div className="px-3 py-4 text-center text-sm text-gray-500">Sin entregas pendientes para hoy</div>
+                ) : (
+                  <ul className="divide-y divide-gray-100">
+                    {optimResult.obligatorias.map(o => (
+                      <li key={o.cliente_id} className="px-3 py-2 flex items-start gap-3">
+                        <span className="shrink-0 w-6 h-6 bg-indigo-600 text-white text-xs font-bold rounded-full flex items-center justify-center">{o.order}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm text-gray-900">{o.nombre_mascota}</span>
+                            <span className="text-xs text-gray-500">{o.codigo}</span>
+                            {o.atrasada && <span className="text-[10px] uppercase font-bold bg-red-100 text-red-800 rounded px-1.5 py-0.5">Atrasada</span>}
+                          </div>
+                          <div className="text-xs text-gray-600 truncate">{o.nombre_tutor} · {o.telefono || 'sin teléfono'}</div>
+                          <div className="text-xs text-gray-500 truncate">{o.formatted_address}</div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Candidatas */}
+              {optimResult.candidatas.length > 0 ? (
+                <div className="border border-amber-200 rounded-lg overflow-hidden">
+                  <div className="bg-amber-50 px-3 py-2 font-semibold text-amber-900 text-sm flex items-center justify-between">
+                    <span>Sugeridas para sumar · {optimResult.candidatas.length} (desvío ≤ {optimMaxDetour} min)</span>
+                  </div>
+                  <ul className="divide-y divide-gray-100">
+                    {optimResult.candidatas.map(c => (
+                      <li key={c.cliente_id} className="px-3 py-2 flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={optimPicks.has(c.cliente_id)}
+                          onChange={() => optimToggle(c.cliente_id)}
+                          className="mt-1 w-4 h-4 text-indigo-600 rounded"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm text-gray-900">{c.nombre_mascota}</span>
+                            <span className="text-xs text-gray-500">{c.codigo}</span>
+                            <span className="text-[10px] uppercase font-medium bg-gray-100 text-gray-700 rounded px-1.5 py-0.5">
+                              objetivo: {c.fecha_objetivo_dmy}
+                            </span>
+                            <span className="text-[10px] uppercase font-bold rounded px-1.5 py-0.5 bg-green-100 text-green-800">
+                              +{c.detour_minutes} min
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-600 truncate">{c.nombre_tutor} · {c.telefono || 'sin teléfono'}</div>
+                          <div className="text-xs text-gray-500 truncate">{c.formatted_address}</div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  {optimPicks.size > 0 && (
+                    <div className="bg-amber-50/50 border-t border-amber-200 px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={optimReoptimizarConSugeridas}
+                        disabled={optimLoading}
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg py-2 disabled:opacity-50 transition-colors"
+                      >
+                        {optimLoading ? 'Re-optimizando…' : `Re-optimizar incluyendo ${optimPicks.size} sugerida${optimPicks.size === 1 ? '' : 's'} marcada${optimPicks.size === 1 ? '' : 's'}`}
+                      </button>
+                      <p className="text-[10px] text-amber-700 mt-1 text-center">Las sugeridas marcadas se promueven a obligatorias y la ruta se recalcula en orden óptimo.</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600">
+                  No hay sugeridas dentro del umbral de {optimMaxDetour} min de desvío. Subí el slider para considerar más opciones.
+                </div>
+              )}
+
+              {/* Skipped */}
+              {optimResult.skipped.length > 0 && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-3 py-2 font-semibold text-gray-700 text-sm">
+                    No procesadas · {optimResult.skipped.length}
+                  </div>
+                  <ul className="divide-y divide-gray-100">
+                    {optimResult.skipped.map((s, i) => (
+                      <li key={i} className="px-3 py-2 text-xs">
+                        <span className="font-semibold text-gray-700">{s.codigo || '(sin código)'}</span>
+                        <span className="text-gray-500"> — {s.motivo}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Acción final */}
+              <a
+                href={optimGmapsUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full text-center bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg py-2.5 text-sm shadow-md transition-colors"
+              >
+                Abrir en Google Maps ({optimResult.obligatorias.length + optimPicks.size} {optimResult.obligatorias.length + optimPicks.size === 1 ? 'parada' : 'paradas'})
+              </a>
+            </div>
+          )}
+        </div>
       </Modal>
     </>
   )

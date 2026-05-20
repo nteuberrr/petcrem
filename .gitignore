@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Claude Code local state
+/.claude
+
+# preview/temp PDFs generados localmente
+tmp_*.pdf
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

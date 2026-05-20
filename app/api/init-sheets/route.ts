@@ -83,6 +83,18 @@ const SHEETS: Record<string, string[]> = {
     'sin_foto', 'pdf_key', 'pdf_url',
     'fecha_creacion',
   ],
+  geocoding_cache: [
+    'id', 'direccion_normalizada', 'direccion_original',
+    'lat', 'lng', 'formatted_address',
+    'fecha_creacion',
+  ],
+  empresa_config: [
+    'id', 'nombre', 'rut', 'giro',
+    'direccion', 'comuna',
+    'telefono', 'correo',
+    'web', 'instagram', 'facebook',
+    'fecha_actualizacion',
+  ],
 }
 
 export async function POST() {
