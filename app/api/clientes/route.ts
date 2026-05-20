@@ -24,6 +24,11 @@ const ClienteSchema = z.object({
   estado_pago: z.string().min(1, 'Estado de pago requerido'),
   veterinaria_id: z.string().optional(),
   adicionales: z.string().optional(),
+  descuento_id: z.string().optional(),
+  descuento_nombre: z.string().optional(),
+  descuento_tipo: z.string().optional(),
+  descuento_valor: z.union([z.number(), z.string()]).optional(),
+  descuento_monto: z.union([z.number(), z.string()]).optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -56,6 +61,7 @@ export async function POST(req: NextRequest) {
       'email', 'telefono',
       'veterinaria_id', 'adicionales', 'tipo_precios',
       'peso_declarado', 'peso_ingreso', 'despacho_id',
+      'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
       'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
     ])
     const codigo = await generarCodigo(data.letra_especie, data.codigo_servicio)
@@ -84,6 +90,11 @@ export async function POST(req: NextRequest) {
       despacho_id: '',
       veterinaria_id: data.veterinaria_id ?? '',
       adicionales: data.adicionales ?? '[]',
+      descuento_id: data.descuento_id ?? '',
+      descuento_nombre: data.descuento_nombre ?? '',
+      descuento_tipo: data.descuento_tipo ?? '',
+      descuento_valor: data.descuento_valor !== undefined ? String(data.descuento_valor) : '',
+      descuento_monto: data.descuento_monto !== undefined ? String(data.descuento_monto) : '',
       tipo_pago: data.tipo_pago,
       estado_pago: data.estado_pago,
       fecha_creacion: now,

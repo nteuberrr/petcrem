@@ -9,6 +9,8 @@ import { formatDateForSheet } from '@/lib/dates'
 
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
 
+type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
+
 type ClienteDetalle = {
   id: string
   codigo: string
@@ -33,6 +35,11 @@ type ClienteDetalle = {
   veterinaria_id: string
   tipo_precios: string
   adicionales: string
+  descuento_id?: string
+  descuento_nombre?: string
+  descuento_tipo?: string
+  descuento_valor?: string
+  descuento_monto?: string
   fecha_creacion: string
   fecha_defuncion: string
   notas: string
@@ -86,6 +93,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [productosDisp, setProductosDisp] = useState<Producto[]>([])
   const [otrosServicios, setOtrosServicios] = useState<OtroServicio[]>([])
 
+  // Descuento
+  const [descuentosDisp, setDescuentosDisp] = useState<Descuento[]>([])
+  const [aplicarDescuento, setAplicarDescuento] = useState(false)
+  const [descuentoId, setDescuentoId] = useState('')
+
   useEffect(() => {
     fetch(`/api/clientes/${id}`)
       .then(r => r.json())
@@ -103,6 +115,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         if (d.veterinaria_id) setEsVeterinaria(true)
         if (d.adicionales) {
           try { setAdicionales(JSON.parse(d.adicionales)) } catch {}
+        }
+        if (d.descuento_id) {
+          setAplicarDescuento(true)
+          setDescuentoId(String(d.descuento_id))
         }
         setLoading(false)
       })
@@ -133,6 +149,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     fetch('/api/precios?tipo=convenio')
       .then(r => r.json())
       .then(d => setPreciosConvenio(Array.isArray(d) ? d : []))
+    fetch('/api/descuentos')
+      .then(r => r.json())
+      .then(d => setDescuentosDisp(Array.isArray(d) ? d.filter((x: Descuento) => x.activo === 'TRUE') : []))
   }, [id])
 
   // Load special pricing when vet changes
@@ -202,11 +221,25 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
   async function handleSave() {
     setSaving(true)
+    // Calcular snapshot del descuento al momento de guardar.
+    // Si no aplica descuento o el descuento ya no existe, limpiamos las columnas.
+    const desc = aplicarDescuento && descuentoId ? descuentosDisp.find(d => d.id === descuentoId) : null
+    const subtotal = precioServicio + totalAdicionales
+    const monto = !desc
+      ? 0
+      : desc.tipo === 'fijo'
+        ? Math.min(parseFloat(desc.valor) || 0, subtotal)
+        : Math.round((subtotal * (parseFloat(desc.valor) || 0)) / 100)
     const payload = {
       ...form,
       veterinaria_id: esVeterinaria ? (form.veterinaria_id ?? '') : '',
       tipo_precios: esVeterinaria ? form.tipo_precios : 'general',
       adicionales: JSON.stringify(adicionales),
+      descuento_id: desc ? desc.id : '',
+      descuento_nombre: desc ? desc.nombre : '',
+      descuento_tipo: desc ? desc.tipo : '',
+      descuento_valor: desc ? String(parseFloat(desc.valor) || 0) : '',
+      descuento_monto: desc ? String(monto) : '',
     }
     const res = await fetch(`/api/clientes/${id}`, {
       method: 'PATCH',
@@ -281,7 +314,25 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         tramoAplicable.precio_sd
       ) || 0
     : 0
-  const totalServicio = precioServicio + totalAdicionales
+  const subtotalServicio = precioServicio + totalAdicionales
+
+  // Descuento (aplica sobre subtotal = servicio + adicionales).
+  // Si el usuario seleccionó un descuento pero ya no está en la lista activa
+  // (porque lo desactivaron en Configuración), recurrimos al snapshot guardado.
+  const descuentoActivo = aplicarDescuento && descuentoId
+    ? descuentosDisp.find(d => d.id === descuentoId)
+    : null
+  const descuentoSnapshot: Descuento | null = aplicarDescuento && descuentoId && !descuentoActivo && cliente?.descuento_id === descuentoId
+    ? { id: cliente.descuento_id, nombre: cliente.descuento_nombre || '', tipo: cliente.descuento_tipo || '', valor: cliente.descuento_valor || '0', activo: 'FALSE' }
+    : null
+  const descuentoElegido = descuentoActivo ?? descuentoSnapshot
+  const descuentoValorNum = descuentoElegido ? parseFloat(descuentoElegido.valor) || 0 : 0
+  const montoDescuento = !descuentoElegido
+    ? 0
+    : descuentoElegido.tipo === 'fijo'
+      ? Math.min(descuentoValorNum, subtotalServicio)
+      : Math.round((subtotalServicio * descuentoValorNum) / 100)
+  const totalServicio = Math.max(0, subtotalServicio - montoDescuento)
 
   // Cuando aplica un precio de convenio o especial, mostramos también el
   // precio normal (tabla de precios generales) para tener a la vista cuánto
@@ -679,6 +730,62 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               </div>
             </>
           )}
+
+          {/* Descuento */}
+          <div className="border-t border-gray-100 pt-3 mt-2">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={aplicarDescuento}
+                onChange={e => {
+                  setAplicarDescuento(e.target.checked)
+                  if (!e.target.checked) setDescuentoId('')
+                }}
+                className="w-4 h-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-sm font-medium text-gray-700">Aplicar descuento</span>
+            </label>
+            {aplicarDescuento && (
+              <div className="mt-2 space-y-2">
+                <select
+                  value={descuentoId}
+                  onChange={e => setDescuentoId(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">— Seleccionar descuento —</option>
+                  {/* Si el cliente quedó con un descuento que ya no está activo, lo mostramos igual para no perderlo silenciosamente */}
+                  {cliente?.descuento_id && !descuentosDisp.some(d => d.id === cliente.descuento_id) && (
+                    <option value={cliente.descuento_id}>
+                      {cliente.descuento_nombre || `Descuento #${cliente.descuento_id}`} (inactivo)
+                    </option>
+                  )}
+                  {descuentosDisp.map(d => {
+                    const v = parseFloat(d.valor) || 0
+                    const etiquetaValor = d.tipo === 'fijo' ? fmtPrecio(v) : `${v}%`
+                    return (
+                      <option key={d.id} value={d.id}>
+                        {d.nombre} — {etiquetaValor}
+                      </option>
+                    )
+                  })}
+                </select>
+                {descuentoElegido && montoDescuento > 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-700">
+                      {descuentoElegido.nombre}
+                      <span className="text-gray-400 ml-1">
+                        ({descuentoElegido.tipo === 'fijo' ? 'fijo' : `${descuentoValorNum}%`})
+                      </span>
+                    </span>
+                    <span className="font-semibold text-red-600">− {fmtPrecio(montoDescuento)}</span>
+                  </div>
+                )}
+                {descuentosDisp.length === 0 && !cliente?.descuento_id && (
+                  <p className="text-xs text-gray-400">No hay descuentos activos. Andá a Configuración → Descuentos para crear uno.</p>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="flex items-center justify-between pt-3 mt-2 border-t-2 border-gray-200">
             <p className="text-base font-bold text-gray-900">Total</p>

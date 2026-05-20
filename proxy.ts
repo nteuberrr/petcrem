@@ -50,7 +50,7 @@ export async function proxy(req: NextRequest) {
         '/api/clientes', '/api/ciclos', '/api/petroleo',
         '/api/vehiculo', '/api/despachos',
         '/api/especies', '/api/servicios', '/api/productos',
-        '/api/veterinarios', '/api/precios', '/api/upload',
+        '/api/veterinarios', '/api/precios', '/api/descuentos', '/api/upload',
         '/api/init-sheets', '/api/places',
         '/api/asistencia', '/api/jornada-config', '/api/retiros-adicionales',
       ]

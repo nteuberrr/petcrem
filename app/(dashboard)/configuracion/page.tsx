@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 
-const TABS = ['Precios', 'Productos', 'Especies', 'Tipos servicio', 'Otros servicios', 'Usuarios', 'Jornada', 'Datos personales', 'Mantenimiento'] as const
+const TABS = ['Precios', 'Productos', 'Especies', 'Tipos servicio', 'Otros servicios', 'Descuentos', 'Usuarios', 'Jornada', 'Datos personales', 'Mantenimiento'] as const
 type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
 
@@ -16,6 +16,7 @@ type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string
 type Especie = { id: string; nombre: string; letra: string; activo: string }
 type TipoServicio = { id: string; nombre: string; codigo: string; plazo_entrega_dias: string; activo: string }
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
+type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
 type Vet = { id: string; nombre: string; activo: string; tipo_precios: string }
 type Usuario = { id: string; nombre: string; email: string; rol: string; activo: string }
 
@@ -179,6 +180,7 @@ export default function ConfiguracionPage() {
   const [especies, setEspecies] = useState<Especie[]>([])
   const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([])
   const [otros, setOtros] = useState<OtroServicio[]>([])
+  const [descuentos, setDescuentos] = useState<Descuento[]>([])
   const [vets, setVets] = useState<Vet[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
 
@@ -193,6 +195,9 @@ export default function ConfiguracionPage() {
   const [tipoServicioForm, setTipoServicioForm] = useState({ nombre: '', codigo: '', plazo_entrega_dias: '3' })
   const [showOtroModal, setShowOtroModal] = useState(false)
   const [editingOtro, setEditingOtro] = useState<OtroServicio | null>(null)
+  const [showDescuentoModal, setShowDescuentoModal] = useState(false)
+  const [editingDescuento, setEditingDescuento] = useState<Descuento | null>(null)
+  const [descuentoForm, setDescuentoForm] = useState({ nombre: '', tipo: 'variable' as 'fijo' | 'variable', valor: '' })
   const [showTramoModal, setShowTramoModal] = useState<{ tipo: PrecioSubTab } | null>(null)
   const [showEspecialModal, setShowEspecialModal] = useState(false)
   const [editingEspecial, setEditingEspecial] = useState<Tramo | null>(null)
@@ -212,7 +217,7 @@ export default function ConfiguracionPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Fetchers individuales — para refrescar solo lo que cambió y evitar quota exceeded.
-  type RefreshKey = 'productos' | 'precios' | 'especies' | 'servicios' | 'veterinarios' | 'usuarios' | 'all'
+  type RefreshKey = 'productos' | 'precios' | 'especies' | 'servicios' | 'descuentos' | 'veterinarios' | 'usuarios' | 'all'
 
   const refresh = useCallback(async (key: RefreshKey = 'all') => {
     if (key === 'productos' || key === 'all') {
@@ -241,6 +246,10 @@ export default function ConfiguracionPage() {
       setTiposServicio(Array.isArray(ts) ? ts : [])
       setOtros(Array.isArray(os) ? os : [])
     }
+    if (key === 'descuentos' || key === 'all') {
+      const d = await fetch('/api/descuentos').then(r => r.json())
+      setDescuentos(Array.isArray(d) ? d : [])
+    }
     if (key === 'veterinarios' || key === 'all') {
       const v = await fetch('/api/veterinarios').then(r => r.json())
       setVets(Array.isArray(v) ? v : [])
@@ -262,6 +271,7 @@ export default function ConfiguracionPage() {
     if (url.includes('/api/precios')) return 'precios'
     if (url.includes('/api/especies')) return 'especies'
     if (url.includes('/api/servicios')) return 'servicios'
+    if (url.includes('/api/descuentos')) return 'descuentos'
     if (url.includes('/api/veterinarios')) return 'veterinarios'
     if (url.includes('/api/usuarios')) return 'usuarios'
     return 'all'
@@ -631,6 +641,53 @@ export default function ConfiguracionPage() {
               ))}
               {otros.length === 0 && (
                 <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400">Sin servicios adicionales</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ─── DESCUENTOS ─── */}
+      {tab === 'Descuentos' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div>
+              <h2 className="font-semibold text-gray-900">Descuentos</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Variable (%) o Fijo (monto en CLP) · Aplica sobre el total del servicio (cremación + adicionales)</p>
+            </div>
+            <button onClick={() => { setEditingDescuento(null); setDescuentoForm({ nombre: '', tipo: 'variable', valor: '' }); setShowDescuentoModal(true) }}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr>{['Nombre', 'Tipo', 'Valor', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
+            <tbody className="divide-y divide-gray-100">
+              {descuentos.map(d => {
+                const valorNum = parseFloat(d.valor) || 0
+                return (
+                  <tr key={d.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-900">{d.nombre}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant={d.tipo === 'fijo' ? 'blue' : 'purple'}>{d.tipo === 'fijo' ? 'Fijo' : 'Variable'}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-gray-700">{d.tipo === 'fijo' ? fmtPrecio(valorNum) : `${valorNum}%`}</td>
+                    <td className="px-4 py-3"><Toggle checked={d.activo === 'TRUE'} onChange={val => patch('/api/descuentos', { id: d.id, activo: val ? 'TRUE' : 'FALSE' })} /></td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => { setEditingDescuento(d); setDescuentoForm({ nombre: d.nombre, tipo: d.tipo === 'fijo' ? 'fijo' : 'variable', valor: d.valor }); setShowDescuentoModal(true) }}
+                          className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Editar</button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => { if (confirm(`¿Eliminar "${d.nombre}"?`)) del(`/api/descuentos?id=${d.id}`) }}
+                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Eliminar</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+              {descuentos.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">Sin descuentos registrados</td></tr>
               )}
             </tbody>
           </table>
@@ -1324,6 +1381,56 @@ export default function ConfiguracionPage() {
             <input required type="number" min="0" value={otroForm.precio} onChange={e => setOtroForm(f => ({ ...f, precio: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
           <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingOtro ? 'Guardar cambios' : 'Guardar'}</button>
+        </form>
+      </Modal>
+
+      <Modal open={showDescuentoModal} onClose={() => { setShowDescuentoModal(false); setEditingDescuento(null) }}
+        title={editingDescuento ? 'Editar descuento' : 'Agregar descuento'}>
+        <form onSubmit={async e => {
+          e.preventDefault()
+          const valorNum = parseFloat(descuentoForm.valor) || 0
+          const payload = { nombre: descuentoForm.nombre.trim(), tipo: descuentoForm.tipo, valor: valorNum }
+          if (editingDescuento) {
+            await patch('/api/descuentos', { id: editingDescuento.id, ...payload })
+          } else {
+            await post('/api/descuentos', payload)
+          }
+          setShowDescuentoModal(false)
+          setEditingDescuento(null)
+          setDescuentoForm({ nombre: '', tipo: 'variable', valor: '' })
+        }} className="space-y-4">
+          <div>
+            <label className="text-xs font-medium text-gray-700">Nombre</label>
+            <input required value={descuentoForm.nombre}
+              onChange={e => setDescuentoForm(f => ({ ...f, nombre: e.target.value }))}
+              placeholder="Ej: Descuento Municipalidad de Recoleta"
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700">Tipo</label>
+            <select value={descuentoForm.tipo}
+              onChange={e => setDescuentoForm(f => ({ ...f, tipo: e.target.value as 'fijo' | 'variable' }))}
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="variable">Variable (% del total)</option>
+              <option value="fijo">Fijo (monto en CLP)</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700">
+              {descuentoForm.tipo === 'fijo' ? 'Monto (CLP)' : 'Porcentaje (%)'}
+            </label>
+            <input required type="number" min="0" max={descuentoForm.tipo === 'variable' ? 100 : undefined}
+              step={descuentoForm.tipo === 'variable' ? '0.1' : '1'}
+              value={descuentoForm.valor}
+              onChange={e => setDescuentoForm(f => ({ ...f, valor: e.target.value }))}
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <p className="mt-1 text-xs text-gray-400">
+              {descuentoForm.tipo === 'variable'
+                ? 'Se aplica como porcentaje sobre el total (servicio + adicionales).'
+                : 'Se descuenta este monto del total. Si el total es menor, se descuenta el total completo.'}
+            </p>
+          </div>
+          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingDescuento ? 'Guardar cambios' : 'Guardar'}</button>
         </form>
       </Modal>
 

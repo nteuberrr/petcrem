@@ -23,6 +23,7 @@ type Veterinario = { id: string; nombre: string; activo: string; tipo_precios?: 
 type Producto = { id: string; nombre: string; precio: string; stock: string; activo: string }
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
+type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
 type TramoEspecial = Tramo & { veterinaria_id: string }
 type FichaCreada = {
@@ -38,6 +39,9 @@ type FichaCreada = {
   peso_kg: number
   adicionales: AdicionalItem[]
   total_adicionales: number
+  descuento_nombre: string
+  descuento_etiqueta: string
+  descuento_monto: number
   total: number
 }
 
@@ -81,6 +85,9 @@ export default function ClientesPage() {
   const [noEsVeterinaria, setNoEsVeterinaria] = useState(false)
   const [adicionales, setAdicionales] = useState<AdicionalItem[]>([])
   const [showAdicionales, setShowAdicionales] = useState(false)
+  const [descuentosDisp, setDescuentosDisp] = useState<Descuento[]>([])
+  const [aplicarDescuento, setAplicarDescuento] = useState(false)
+  const [descuentoId, setDescuentoId] = useState('')
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(FORM_DEFAULT)
   const [formError, setFormError] = useState('')
@@ -114,6 +121,7 @@ export default function ClientesPage() {
     })
     fetch('/api/precios?tipo=general').then(r => r.json()).then(d => setPreciosGenerales(Array.isArray(d) ? d : []))
     fetch('/api/precios?tipo=convenio').then(r => r.json()).then(d => setPreciosConvenio(Array.isArray(d) ? d : []))
+    fetch('/api/descuentos').then(r => r.json()).then(d => setDescuentosDisp(Array.isArray(d) ? d.filter((x: Descuento) => x.activo === 'TRUE') : []))
   }, [])
 
   // Cargar precios especiales cuando se selecciona una veterinaria con esa modalidad.
@@ -307,6 +315,11 @@ export default function ClientesPage() {
       direccion_despacho: form.misma_direccion ? form.direccion_retiro : form.direccion_despacho,
       veterinaria_id: noEsVeterinaria ? '' : form.veterinaria_id,
       adicionales: JSON.stringify(adicionales),
+      descuento_id: descuentoElegido ? descuentoElegido.id : '',
+      descuento_nombre: descuentoElegido ? descuentoElegido.nombre : '',
+      descuento_tipo: descuentoElegido ? descuentoElegido.tipo : '',
+      descuento_valor: descuentoElegido ? String(descuentoValorNum) : '',
+      descuento_monto: descuentoElegido ? String(montoDescuento) : '',
     }
     const res = await fetch('/api/clientes', {
       method: 'POST',
@@ -329,6 +342,9 @@ export default function ClientesPage() {
         peso_kg: pesoKgForm,
         adicionales: [...adicionales],
         total_adicionales: totalAdicionales,
+        descuento_nombre: descuentoElegido ? descuentoElegido.nombre : '',
+        descuento_etiqueta: descuentoEtiqueta,
+        descuento_monto: montoDescuento,
         total: totalServicio,
       })
       setShowModal(false)
@@ -336,6 +352,8 @@ export default function ClientesPage() {
       setNoEsVeterinaria(false)
       setAdicionales([])
       setShowAdicionales(false)
+      setAplicarDescuento(false)
+      setDescuentoId('')
       await fetchClientes()
     } else {
       const err = await res.json().catch(() => ({}))
@@ -376,7 +394,20 @@ export default function ClientesPage() {
   const tramoNormal = encontrarTramo(preciosGenerales, pesoKgForm)
   const precioNormal = precioDelTramo(tramoNormal, codigoServForm)
   const mostrarPrecioNormal = tipoPrecios !== 'general' && precioNormal > 0
-  const totalServicio = precioServicio + totalAdicionales
+  const subtotalServicio = precioServicio + totalAdicionales
+  const descuentoElegido = aplicarDescuento && descuentoId
+    ? descuentosDisp.find(d => d.id === descuentoId) ?? null
+    : null
+  const descuentoValorNum = descuentoElegido ? parseFloat(descuentoElegido.valor) || 0 : 0
+  const montoDescuento = !descuentoElegido
+    ? 0
+    : descuentoElegido.tipo === 'fijo'
+      ? Math.min(descuentoValorNum, subtotalServicio)
+      : Math.round((subtotalServicio * descuentoValorNum) / 100)
+  const totalServicio = Math.max(0, subtotalServicio - montoDescuento)
+  const descuentoEtiqueta = descuentoElegido
+    ? descuentoElegido.tipo === 'fijo' ? fmtPrecio(descuentoValorNum) : `${descuentoValorNum}%`
+    : ''
   const rangoTramo = tramoAplicable ? (() => {
     const maxPesoMin = Math.max(...tablaPrecios.map(t => parseFloat(t.peso_min) || 0))
     const min = parseFloat(tramoAplicable.peso_min) || 0
@@ -852,6 +883,51 @@ export default function ClientesPage() {
                 </div>
               )}
 
+              <div className="border-t border-gray-200 pt-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={aplicarDescuento}
+                    onChange={e => {
+                      setAplicarDescuento(e.target.checked)
+                      if (!e.target.checked) setDescuentoId('')
+                    }}
+                    className="w-4 h-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Aplicar descuento</span>
+                </label>
+                {aplicarDescuento && (
+                  <div className="mt-2 space-y-2">
+                    <select
+                      value={descuentoId}
+                      onChange={e => setDescuentoId(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">— Seleccionar descuento —</option>
+                      {descuentosDisp.map(d => {
+                        const v = parseFloat(d.valor) || 0
+                        const etiqueta = d.tipo === 'fijo' ? fmtPrecio(v) : `${v}%`
+                        return (
+                          <option key={d.id} value={d.id}>{d.nombre} — {etiqueta}</option>
+                        )
+                      })}
+                    </select>
+                    {descuentoElegido && montoDescuento > 0 && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-700">
+                          {descuentoElegido.nombre}
+                          <span className="text-gray-400 ml-1">({descuentoEtiqueta})</span>
+                        </span>
+                        <span className="font-semibold text-red-600">− {fmtPrecio(montoDescuento)}</span>
+                      </div>
+                    )}
+                    {descuentosDisp.length === 0 && (
+                      <p className="text-xs text-gray-400">No hay descuentos activos. Andá a Configuración → Descuentos para crear uno.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between border-t-2 border-gray-300 pt-2 mt-1">
                 <span className="text-base font-bold text-gray-900">Total</span>
                 <span className="text-lg font-bold text-indigo-700">{fmtPrecio(totalServicio)}</span>
@@ -860,7 +936,7 @@ export default function ClientesPage() {
           </div>
 
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => { setShowModal(false); setAdicionales([]); setShowAdicionales(false); setFormError('') }} className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors">
+            <button type="button" onClick={() => { setShowModal(false); setAdicionales([]); setShowAdicionales(false); setAplicarDescuento(false); setDescuentoId(''); setFormError('') }} className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors">
               Cancelar
             </button>
             <button type="submit" disabled={saving} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
@@ -917,6 +993,16 @@ export default function ClientesPage() {
                       <span className="text-xs text-gray-500">Subtotal adicionales</span>
                       <span className="text-sm font-medium text-gray-700">{fmtPrecio(fichaCreada.total_adicionales)}</span>
                     </div>
+                  </div>
+                )}
+
+                {fichaCreada.descuento_monto > 0 && (
+                  <div className="flex items-center justify-between border-t border-gray-200 pt-2 text-sm">
+                    <span className="text-gray-700">
+                      {fichaCreada.descuento_nombre}
+                      <span className="text-gray-400 ml-1">({fichaCreada.descuento_etiqueta})</span>
+                    </span>
+                    <span className="font-semibold text-red-600">− {fmtPrecio(fichaCreada.descuento_monto)}</span>
                   </div>
                 )}
 

@@ -14,6 +14,7 @@ const SHEETS: Record<string, string[]> = {
     'tipo_servicio', 'codigo_servicio',
     'estado', 'ciclo_id', 'despacho_id',
     'veterinaria_id', 'tipo_precios', 'adicionales',
+    'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
     'notas', 'tipo_pago', 'estado_pago',
     'fecha_creacion',
   ],
@@ -56,6 +57,7 @@ const SHEETS: Record<string, string[]> = {
   especies: ['id', 'nombre', 'letra', 'activo'],
   tipos_servicio: ['id', 'nombre', 'codigo', 'plazo_entrega_dias', 'activo'],
   otros_servicios: ['id', 'nombre', 'precio', 'activo', 'fecha_creacion'],
+  descuentos: ['id', 'nombre', 'tipo', 'valor', 'activo', 'fecha_creacion'],
   usuarios: ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion'],
   asistencia: [
     'id', 'usuario_id', 'usuario_nombre', 'fecha', 'dia_semana', 'es_findesemana',
