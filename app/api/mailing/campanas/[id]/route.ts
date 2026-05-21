@@ -8,9 +8,9 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
 const SHEET = 'mailing_campanas'
 const COLS = [
   'id', 'asunto', 'html_key', 'html_url', 'preview_text', 'reply_to',
-  'fecha_envio', 'total_destinatarios',
+  'fecha_envio', 'hora_envio', 'total_destinatarios',
   'enviados', 'entregados', 'aperturas', 'clicks', 'rebotes', 'spam', 'fallidos',
-  'estado', 'filtros_json',
+  'estado', 'filtros_json', 'attachments_json',
   'creado_por', 'fecha_creacion',
 ]
 

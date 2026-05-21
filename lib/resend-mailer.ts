@@ -80,7 +80,13 @@ function inyectarPreviewText(html: string, previewText: string): string {
  */
 function inyectarTracking(html: string, ids: TrackingIds): string {
   const baseUrl = getPublicBaseUrl()
-  if (!baseUrl) return html  // sin baseUrl no podemos hacer tracking propio
+  if (!baseUrl) {
+    console.warn('[resend-mailer] PUBLIC_APP_URL/NEXTAUTH_URL vacíos — tracking propio deshabilitado (pixel + clicks no se inyectan)')
+    return html
+  }
+  if (/localhost|127\.0\.0\.1/i.test(baseUrl)) {
+    console.warn(`[resend-mailer] baseUrl apunta a localhost (${baseUrl}) — Gmail/Outlook no podrán cargar el pixel ni resolver clicks. Configurá PUBLIC_APP_URL al dominio público.`)
+  }
 
   let resultado = html
 

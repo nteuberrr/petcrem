@@ -107,7 +107,7 @@ const SHEETS: Record<string, string[]> = {
     'id', 'asunto',
     'html_key', 'html_url',
     'preview_text', 'reply_to',
-    'fecha_envio',
+    'fecha_envio', 'hora_envio',
     'total_destinatarios',
     'enviados', 'entregados', 'aperturas', 'clicks',
     'rebotes', 'spam', 'fallidos',

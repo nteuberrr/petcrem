@@ -32,6 +32,7 @@ type Campana = {
   preview_text: string
   reply_to: string
   fecha_envio: string
+  hora_envio: string
   total_destinatarios: string
   enviados: string
   entregados: string
@@ -47,6 +48,19 @@ type Campana = {
   fecha_creacion: string
 }
 
+type Diagnostics = {
+  resend_ok: boolean
+  supabase_ok: boolean
+  tracking_ok: boolean
+  base_url: string | null
+  is_dev: boolean
+  base_missing: boolean
+  base_localhost: boolean
+  from_email: string
+  sandbox_from: boolean
+  webhook_secret: boolean
+}
+
 type Prefilled = { asunto: string; html: string; preview_text: string; reply_to: string; categoria: string } | null
 
 const TABS = ['Campañas', 'Base', 'Nueva campaña'] as const
@@ -58,6 +72,7 @@ export default function MailingPage() {
   const [tab, setTab] = useState<Tab>('Campañas')
   const [prefilled, setPrefilled] = useState<Prefilled>(null)
   const [campanasRefreshKey, setCampanasRefreshKey] = useState(0)
+  const [diag, setDiag] = useState<Diagnostics | null>(null)
 
   function abrirDuplicar(p: Exclude<Prefilled, null>) {
     setPrefilled(p)
@@ -70,12 +85,20 @@ export default function MailingPage() {
     setTab('Campañas')
   }
 
+  useEffect(() => {
+    fetch('/api/mailing/diagnostics').then(r => r.ok ? r.json() : null).then(d => {
+      if (d && typeof d === 'object') setDiag(d as Diagnostics)
+    }).catch(() => {})
+  }, [])
+
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Mailing</h1>
         <p className="text-sm text-gray-500">Campañas de email a la base de veterinarios.</p>
       </div>
+
+      {diag && <DiagBanner d={diag} />}
 
       <div className="inline-flex gap-1 bg-gray-100 border border-gray-200 rounded-xl p-1.5 shadow-sm overflow-x-auto">
         {TABS.map(t => (
@@ -96,6 +119,53 @@ export default function MailingPage() {
       {tab === 'Campañas' && <CampanasPanel refreshKey={campanasRefreshKey} onDuplicar={abrirDuplicar} />}
       {tab === 'Base' && <BasePanel />}
       {tab === 'Nueva campaña' && <NuevaCampanaPanel initial={prefilled} onCreada={onCampanaCreada} />}
+    </div>
+  )
+}
+
+function DiagBanner({ d }: { d: Diagnostics }) {
+  // Solo dev local con localhost: banner informativo amarillo claro, no rojo de error
+  if (d.is_dev && d.base_localhost && d.resend_ok && d.supabase_ok && !d.sandbox_from) {
+    return (
+      <div className="bg-sky-50 border border-sky-200 rounded-lg px-4 py-2.5 text-sm text-sky-900 flex items-start gap-2">
+        <span className="inline-flex w-2 h-2 rounded-full bg-sky-500 mt-1.5 shrink-0"></span>
+        <div>
+          <b>Modo desarrollo local</b> — el tracking de aperturas y clicks no funcionará desde acá porque Gmail no puede llegar a <code className="bg-sky-100 rounded px-1 text-[12px]">{d.base_url}</code>. En producción funciona automáticamente si configurás <code className="bg-sky-100 rounded px-1 text-[12px]">PUBLIC_APP_URL</code> en Vercel.
+        </div>
+      </div>
+    )
+  }
+
+  const problemas: string[] = []
+  if (!d.resend_ok) problemas.push('RESEND_API_KEY no configurada')
+  if (!d.supabase_ok) problemas.push('Supabase no configurada (no se guardan logs de envío)')
+  if (!d.tracking_ok && !d.is_dev) problemas.push(`URL pública inválida (${d.base_url || 'vacía'}). El tracking de aperturas y clicks NO va a funcionar — configurá PUBLIC_APP_URL en Vercel.`)
+  if (d.sandbox_from) problemas.push(`Remitente está usando el sandbox de Resend (${d.from_email}). Configurá MAILING_FROM_EMAIL con tu dominio verificado.`)
+
+  if (problemas.length === 0) {
+    return (
+      <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5 text-sm text-emerald-800 flex items-center gap-2">
+        <span className="inline-flex w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span><b>Mailing OK</b> — Resend conectado · tracking activo · logs persistidos en Supabase.</span>
+      </div>
+    )
+  }
+
+  const critico = !d.resend_ok || (!d.tracking_ok && !d.is_dev)
+  const cls = critico
+    ? 'bg-red-50 border-red-200 text-red-800'
+    : 'bg-amber-50 border-amber-200 text-amber-900'
+  const dot = critico ? 'bg-red-500' : 'bg-amber-500'
+
+  return (
+    <div className={`border rounded-lg px-4 py-2.5 text-sm ${cls}`}>
+      <div className="flex items-center gap-2 font-semibold">
+        <span className={`inline-flex w-2 h-2 rounded-full ${dot}`}></span>
+        Mailing con problemas de configuración
+      </div>
+      <ul className="mt-1 ml-5 list-disc text-[13px] space-y-0.5">
+        {problemas.map((p, i) => <li key={i}>{p}</li>)}
+      </ul>
     </div>
   )
 }
@@ -679,18 +749,31 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[920px]">
-              <thead className="bg-gray-50 text-xs text-gray-600 uppercase tracking-wide">
-                <tr>
-                  <th className="px-3 py-2 text-left font-semibold">Asunto</th>
-                  <th className="px-3 py-2 text-left font-semibold">Estado</th>
-                  <th className="px-3 py-2 text-right font-semibold">Dest.</th>
-                  <th className="px-3 py-2 text-right font-semibold">Enviados</th>
-                  <th className="px-3 py-2 text-right font-semibold">Aperturas</th>
-                  <th className="px-3 py-2 text-right font-semibold">Clicks</th>
-                  <th className="px-3 py-2 text-right font-semibold">Rebotes</th>
-                  <th className="px-3 py-2 text-left font-semibold">Fecha envío</th>
-                  <th className="px-3 py-2 text-left font-semibold w-32">Acciones</th>
+            <table className="w-full text-sm min-w-[1080px] table-fixed">
+              <colgroup>
+                <col className="w-[26%]" />{/* Asunto */}
+                <col className="w-[80px]" />{/* Estado */}
+                <col className="w-[70px]" />{/* Dest. */}
+                <col className="w-[80px]" />{/* Enviados */}
+                <col className="w-[110px]" />{/* Aperturas */}
+                <col className="w-[100px]" />{/* Clicks */}
+                <col className="w-[100px]" />{/* Rebotes */}
+                <col className="w-[110px]" />{/* Fecha */}
+                <col className="w-[70px]" />{/* Hora */}
+                <col className="w-[180px]" />{/* Acciones */}
+              </colgroup>
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr className="text-[11px] text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left font-semibold">Asunto</th>
+                  <th className="px-2 py-3 text-center font-semibold">Estado</th>
+                  <th className="px-2 py-3 text-right font-semibold">Dest.</th>
+                  <th className="px-2 py-3 text-right font-semibold">Enviados</th>
+                  <th className="px-2 py-3 text-right font-semibold">Aperturas</th>
+                  <th className="px-2 py-3 text-right font-semibold">Clicks</th>
+                  <th className="px-2 py-3 text-right font-semibold">Rebotes</th>
+                  <th className="px-3 py-3 text-left font-semibold">Fecha envío</th>
+                  <th className="px-2 py-3 text-left font-semibold">Hora</th>
+                  <th className="px-3 py-3 text-center font-semibold">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -698,33 +781,39 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                   const total = parseInt(c.enviados || '0', 10)
                   const aperturas = parseInt(c.aperturas || '0', 10)
                   const clicks = parseInt(c.clicks || '0', 10)
-                  const tasaApertura = total > 0 ? Math.round(100 * aperturas / total) : null
-                  const tasaClick = total > 0 ? Math.round(100 * clicks / total) : null
+                  const rebotes = parseInt(c.rebotes || '0', 10)
+                  const tasaApertura = total > 0 ? Math.round(100 * aperturas / total) : 0
+                  const tasaClick = total > 0 ? Math.round(100 * clicks / total) : 0
+                  const tasaRebote = total > 0 ? Math.round(100 * rebotes / total) : 0
                   return (
-                    <tr key={c.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => abrirDetalle(c)}>
-                      <td className="px-3 py-2 text-gray-900 font-medium truncate max-w-[280px]">{c.asunto}</td>
-                      <td className="px-3 py-2"><EstadoBadge estado={c.estado} /></td>
-                      <td className="px-3 py-2 text-right text-gray-700">{c.total_destinatarios || '0'}</td>
-                      <td className="px-3 py-2 text-right text-gray-700">{c.enviados || '0'}</td>
-                      <td className="px-3 py-2 text-right text-gray-700">
-                        {c.aperturas || '0'}
-                        {tasaApertura !== null && <span className="text-[10px] text-gray-400 ml-1">({tasaApertura}%)</span>}
+                    <tr key={c.id} className="hover:bg-indigo-50/40 cursor-pointer transition-colors" onClick={() => abrirDetalle(c)}>
+                      <td className="px-4 py-2.5 text-gray-900 font-medium truncate">{c.asunto}</td>
+                      <td className="px-2 py-2.5 text-center"><EstadoBadge estado={c.estado} /></td>
+                      <td className="px-2 py-2.5 text-right text-gray-700 tabular-nums">{c.total_destinatarios || '0'}</td>
+                      <td className="px-2 py-2.5 text-right text-gray-700 tabular-nums">{c.enviados || '0'}</td>
+                      <td className="px-2 py-2.5 text-right text-gray-800 tabular-nums">
+                        <span className="font-medium">{c.aperturas || '0'}</span>
+                        <span className={`text-[11px] ml-1 font-semibold ${tasaApertura > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>{tasaApertura}%</span>
                       </td>
-                      <td className="px-3 py-2 text-right text-gray-700">
-                        {c.clicks || '0'}
-                        {tasaClick !== null && <span className="text-[10px] text-gray-400 ml-1">({tasaClick}%)</span>}
+                      <td className="px-2 py-2.5 text-right text-gray-800 tabular-nums">
+                        <span className="font-medium">{c.clicks || '0'}</span>
+                        <span className={`text-[11px] ml-1 font-semibold ${tasaClick > 0 ? 'text-violet-600' : 'text-gray-400'}`}>{tasaClick}%</span>
                       </td>
-                      <td className="px-3 py-2 text-right text-gray-700">{c.rebotes || '0'}</td>
-                      <td className="px-3 py-2 text-gray-600 text-xs whitespace-nowrap">{formatDate(c.fecha_envio) || '—'}</td>
-                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                        <div className="flex gap-1.5">
+                      <td className="px-2 py-2.5 text-right text-gray-800 tabular-nums">
+                        <span className="font-medium">{c.rebotes || '0'}</span>
+                        <span className={`text-[11px] ml-1 font-semibold ${tasaRebote > 0 ? 'text-red-600' : 'text-gray-400'}`}>{tasaRebote}%</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-600 text-xs whitespace-nowrap">{formatDate(c.fecha_envio) || '—'}</td>
+                      <td className="px-2 py-2.5 text-gray-600 text-xs whitespace-nowrap tabular-nums">{c.hora_envio || '—'}</td>
+                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                        <div className="flex gap-1.5 justify-center">
                           {c.estado === 'enviando' && (
                             <button onClick={() => cancelar(c)} className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Cancelar</button>
                           )}
                           {(c.estado === 'enviado' || c.estado === 'fallido' || c.estado === 'cancelado') && (
                             <button onClick={() => duplicar(c)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Duplicar</button>
                           )}
-                          {c.estado !== 'enviando' && c.estado !== 'cancelando' && (
+                          {c.estado !== 'enviando' && (
                             <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Eliminar</button>
                           )}
                         </div>
@@ -1148,8 +1237,8 @@ function NuevaCampanaPanel({ initial, onCreada }: {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
+    <div className="grid grid-cols-1 lg:grid-cols-9 gap-4">
+      <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-base font-bold text-gray-900">{draftId ? `Editando borrador N° ${draftId}` : 'Nueva campaña'}</h2>
           {draftId && (
@@ -1215,24 +1304,20 @@ function NuevaCampanaPanel({ initial, onCreada }: {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3">
-        <div className="text-xs font-semibold text-gray-700 mb-2">Preview (con vet de muestra)</div>
-        <div className="flex h-[760px] gap-0">
-          <div className="w-14 shrink-0 flex flex-col items-center pt-3 pb-3 select-none">
-            <span className="text-2xl text-amber-500 leading-none" aria-hidden="true">🐾</span>
-            <span className="text-2xl text-amber-500 leading-none mt-0.5" aria-hidden="true">🐾</span>
-            <div className="flex-1 w-0 border-l-2 border-dashed border-amber-300 mt-3 self-center"></div>
-          </div>
-          <iframe
-            srcDoc={previewHtml || '<p style="font-family:sans-serif;color:#999;padding:1rem">Escribí HTML para ver el preview.</p>'}
-            className="flex-1 h-full border border-gray-200 rounded bg-white"
-            sandbox=""
-          />
+      <div className="lg:col-span-4 bg-white rounded-xl shadow-sm border border-gray-200 p-3 flex flex-col">
+        <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center justify-between">
+          <span>Preview (con vet de muestra)</span>
+          <span className="text-[10px] font-normal text-gray-400">así lo va a ver el destinatario</span>
         </div>
+        <iframe
+          srcDoc={previewHtml || '<p style="font-family:sans-serif;color:#999;padding:1rem">Escribí HTML para ver el preview.</p>'}
+          className="w-full h-[760px] border border-gray-200 rounded bg-white"
+          sandbox=""
+        />
       </div>
 
       {borradores.length > 0 && (
-        <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="lg:col-span-9 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-900">Borradores guardados ({borradores.length})</h3>
             <span className="text-xs text-gray-500">Click en una fila para cargar y editar</span>

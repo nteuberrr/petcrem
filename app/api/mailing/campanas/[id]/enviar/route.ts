@@ -36,6 +36,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'RESEND_API_KEY no configurada' }, { status: 500 })
   }
 
+  // Validar URL pública: sin esto el tracking (pixel + clicks) no funciona.
+  const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
+  if (!baseUrl || /localhost|127\.0\.0\.1/i.test(baseUrl)) {
+    return NextResponse.json(
+      { error: `URL pública inválida para tracking: "${baseUrl || '(vacía)'}". Configurá PUBLIC_APP_URL=https://tu-dominio.cl en Vercel.` },
+      { status: 500 },
+    )
+  }
+
   try {
     const { id } = await params
 
@@ -67,12 +76,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'No hay destinatarios suscritos que cumplan los filtros' }, { status: 400 })
     }
 
-    // Marcar como enviando + total_destinatarios
+    // Marcar como enviando + total_destinatarios + fecha/hora envío (Chile)
+    const ahoraDate = new Date()
+    const horaChile = ahoraDate.toLocaleTimeString('es-CL', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago',
+    })
     await updateRow('mailing_campanas', idx, {
       ...campana,
       estado: 'enviando',
       total_destinatarios: String(destinatarios.length),
       fecha_envio: todayISO(),
+      hora_envio: horaChile,
     })
 
     const supabase = getSupabase()
@@ -84,10 +98,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     for (let start = 0; start < destinatarios.length; start += CHUNK) {
       // Antes de cada chunk, releer la campaña y chequear si fue cancelada
+      // o si el admin la eliminó mientras se enviaba (trato la eliminación como cancel).
       if (start > 0) {
         const recheck = await getSheetData('mailing_campanas')
         const cur = recheck.find(r => r.id === id)
-        if (cur?.estado === 'cancelando') {
+        if (!cur || cur.estado === 'cancelando' || cur.estado === 'cancelado') {
           cancelado = true
           break
         }
