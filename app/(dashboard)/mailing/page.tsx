@@ -612,7 +612,11 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
   }
 
   async function eliminar(c: Campana) {
-    if (!confirm(`¿Eliminar la campaña "${c.asunto}"?\nEsto también borra el HTML de R2 y los logs históricos quedan.`)) return
+    const enviados = parseInt(c.enviados || '0', 10)
+    const warning = enviados > 0
+      ? `¿Eliminar la campaña "${c.asunto}"?\n\n⚠ Esta campaña ya envió ${enviados} email${enviados === 1 ? '' : 's'}. Se borra el HTML y la fila de la campaña, pero los logs individuales (mailing_logs) quedan para auditoría.`
+      : `¿Eliminar la campaña "${c.asunto}"?\nSe borra el HTML de R2 y la fila de la campaña.`
+    if (!confirm(warning)) return
     const res = await fetch(`/api/mailing/campanas/${c.id}`, { method: 'DELETE' })
     if (res.ok) {
       setDetalle(null)
@@ -696,6 +700,9 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                         <div className="flex gap-1.5">
                           {(c.estado === 'enviado' || c.estado === 'fallido') && (
                             <button onClick={() => duplicar(c)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Duplicar</button>
+                          )}
+                          {c.estado !== 'enviando' && (
+                            <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Eliminar</button>
                           )}
                         </div>
                       </td>
