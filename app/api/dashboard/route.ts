@@ -173,11 +173,10 @@ export async function GET() {
     // que ya fueron entregadas al tutor (estado='despachado'). Ambas pasaron por
     // un ciclo de cremación; usado para charts/ratios históricos.
     const cremadosTodos = clientes.filter(c => c.estado === 'cremado' || c.estado === 'despachado')
-    // KPI "Cremaciones del mes" = mascotas pendientes de despacho (estado='cremado' actual)
-    // cuya fecha de cremación cae en el mes. Las despachadas ya pasaron por aquí pero
-    // ahora viven en el flujo de despachos, no acá.
+    // KPI "Cremaciones del mes" = todas las mascotas cremadas en el mes,
+    // independiente de si ya se despacharon o no (la cremación ya ocurrió y cuenta).
     const cremadosMes = clientes.filter(c => {
-      if (c.estado !== 'cremado') return false
+      if (c.estado !== 'cremado' && c.estado !== 'despachado') return false
       const f = fechaCremacion(c)
       return f && f >= startMesActual && f <= now
     })
@@ -249,12 +248,11 @@ export async function GET() {
       ? new Date(Math.min(...fechasRelevantes.map(d => d.getTime())))
       : new Date(anioActual, mesActual - 11, 1)
 
-    // Default mínimo: 12 meses; cap máximo: 24 meses
-    const startMin = new Date(anioActual, mesActual - 11, 1)
-    const startCap = new Date(anioActual, mesActual - 23, 1)
-    let startEffective = new Date(masAntigua.getFullYear(), masAntigua.getMonth(), 1)
-    if (startEffective > startMin) startEffective = startMin
-    if (startEffective < startCap) startEffective = startCap
+    // Siempre mostramos exactamente los últimos 12 meses (incluyendo el actual).
+    // Antes era adaptativo entre 12 y 24 meses, pero con >12 los labels se
+    // amontonaban y daba la impresión de que se saltaban meses.
+    void masAntigua  // ya no se usa para acotar la ventana, pero la calculamos por compatibilidad
+    const startEffective = new Date(anioActual, mesActual - 11, 1)
 
     // Generar buckets desde startEffective hasta mesActual (inclusivo)
     const startVentanas: Date[] = []

@@ -53,6 +53,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const htmlTemplate = buf.toString('utf8')
 
     const filtros: Filtros = campana.filtros_json ? JSON.parse(campana.filtros_json) : {}
+    const attachmentsRaw = campana.attachments_json ? JSON.parse(campana.attachments_json) : []
+    const adjuntos = Array.isArray(attachmentsRaw)
+      ? attachmentsRaw.map((a: { filename: string; url: string; content_type: string }) => ({
+          filename: a.filename,
+          path: a.url,
+          content_type: a.content_type,
+        }))
+      : []
     const vets = await getSheetData('mailing_veterinarios')
     const destinatarios = filtrarVets(vets, filtros)
     if (destinatarios.length === 0) {
@@ -100,6 +108,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         ],
         // Para el tracking propio: inyectamos el pixel y reescribimos los links
         tracking: { campana_id: String(id), vet_id: String(v.id) },
+        attachments: adjuntos.length > 0 ? adjuntos : undefined,
       }))
 
       const results = await sendBatch(emails)

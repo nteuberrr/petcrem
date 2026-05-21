@@ -112,6 +112,7 @@ const SHEETS: Record<string, string[]> = {
     'enviados', 'entregados', 'aperturas', 'clicks',
     'rebotes', 'spam', 'fallidos',
     'estado', 'filtros_json',
+    'attachments_json',
     'creado_por', 'fecha_creacion',
   ],
   mailing_logs: [

@@ -138,10 +138,11 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         {/* Mascotas ingresadas por mes (driver: fecha de retiro) */}
         <ChartCard title="Mascotas ingresadas por mes">
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={data.ventas_por_mes}>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={data.ventas_por_mes} margin={{ bottom: 20, right: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }} />
+              <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }}
+                interval={0} angle={-35} textAnchor="end" height={52} />
               <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => fmtNumero(v as number)} />
               <Tooltip formatter={(v) => fmtNumero(v as number)} />
               <Bar dataKey="mascotas" fill="#10b981" radius={[4, 4, 0, 0]} />
@@ -151,10 +152,11 @@ export default function DashboardPage() {
 
         {/* Ciclos por mes (driver: fecha del ciclo) */}
         <ChartCard title="Ciclos por mes">
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={data.ventas_por_mes}>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={data.ventas_por_mes} margin={{ bottom: 20, right: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }} />
+              <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }}
+                interval={0} angle={-35} textAnchor="end" height={52} />
               <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => fmtNumero(v as number)} />
               <Tooltip formatter={(v) => fmtNumero(v as number)} />
               <Bar dataKey="ciclos" fill="#f59e0b" radius={[4, 4, 0, 0]} />
@@ -260,10 +262,11 @@ export default function DashboardPage() {
                 Sin datos históricos
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={data.ratios_por_mes}>
+              <ResponsiveContainer width="100%" height={320}>
+                <LineChart data={data.ratios_por_mes} margin={{ bottom: 24, right: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }} />
+                  <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }}
+                    interval={0} angle={-35} textAnchor="end" height={56} />
                   <YAxis fontSize={11} tick={{ fill: '#6b7280' }}
                     tickFormatter={v => ratioOpen === 'costo_vehiculo_por_mascota' ? `$${(v / 1000).toFixed(0)}k`
                       : ratioOpen === 'duracion_promedio_ciclo_min' ? `${Math.round(v as number)}m`

@@ -31,6 +31,13 @@ export interface TrackingIds {
   vet_id: string
 }
 
+export interface AttachmentSpec {
+  filename: string
+  /** URL pública del archivo (Resend lo baja para adjuntar). */
+  path: string
+  content_type?: string
+}
+
 export interface SendOpts {
   to: string
   subject: string
@@ -42,6 +49,8 @@ export interface SendOpts {
   tags?: Array<{ name: string; value: string }>
   /** Si se pasa, inyectamos píxel de apertura + reescribimos links para click tracking. */
   tracking?: TrackingIds
+  /** Adjuntos via URL pública (R2). */
+  attachments?: AttachmentSpec[]
 }
 
 /**
@@ -111,6 +120,11 @@ export interface SendResult {
   error?: string
 }
 
+function buildAttachmentsPayload(attachments: AttachmentSpec[] | undefined) {
+  if (!attachments || attachments.length === 0) return undefined
+  return attachments.map(a => ({ filename: a.filename, path: a.path, contentType: a.content_type }))
+}
+
 export async function sendEmail(opts: SendOpts): Promise<SendResult> {
   try {
     const client = getClient()
@@ -122,6 +136,7 @@ export async function sendEmail(opts: SendOpts): Promise<SendResult> {
       html,
       replyTo: opts.reply_to,
       tags: opts.tags,
+      attachments: buildAttachmentsPayload(opts.attachments),
     })
     if (res.error) {
       return { ok: false, error: res.error.message || JSON.stringify(res.error) }
@@ -145,6 +160,7 @@ export async function sendBatch(emails: SendOpts[]): Promise<SendResult[]> {
       html: prepararHtml(e),
       replyTo: e.reply_to,
       tags: e.tags,
+      attachments: buildAttachmentsPayload(e.attachments),
     }))
     const res = await client.batch.send(payload)
     if (res.error || !res.data) {

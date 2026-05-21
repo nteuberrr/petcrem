@@ -16,6 +16,14 @@ type Vet = {
   fecha_creacion: string
 }
 
+type AttachmentMeta = {
+  filename: string
+  key: string
+  url: string
+  size: number
+  content_type: string
+}
+
 type Campana = {
   id: string
   asunto: string
@@ -34,6 +42,7 @@ type Campana = {
   fallidos: string
   estado: string
   filtros_json: string
+  attachments_json: string
   creado_por: string
   fecha_creacion: string
 }
