@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Webhook } from 'standardwebhooks'
 import { getSheetData, updateRow } from '@/lib/google-sheets'
+import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
 
 interface ResendEvent {
   type: string
@@ -14,12 +15,6 @@ interface ResendEvent {
     click?: { link?: string; ipAddress?: string; timestamp?: string }
     bounce?: { message?: string; subType?: string }
   }
-}
-
-function getEmailFromTo(to: string | string[] | undefined): string {
-  if (!to) return ''
-  if (Array.isArray(to)) return to[0] || ''
-  return to
 }
 
 export async function POST(req: NextRequest) {
@@ -50,17 +45,27 @@ export async function POST(req: NextRequest) {
     if (!messageId) {
       return NextResponse.json({ ok: false, reason: 'sin email_id' })
     }
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ ok: false, reason: 'supabase no configurado' })
+    }
 
-    const logs = await getSheetData('mailing_logs')
-    const idx = logs.findIndex(l => l.resend_message_id === messageId)
-    if (idx === -1) {
-      // No matchea ningún log (puede ser de un test send sin log)
+    const supabase = getSupabase()
+    const { data: logs, error: selErr } = await supabase
+      .from('mailing_logs')
+      .select('id, campana_id, fecha_entrega, fecha_apertura, fecha_click')
+      .eq('resend_message_id', messageId)
+      .limit(1)
+    if (selErr) {
+      console.error('[webhook] select error:', selErr.message)
+      return NextResponse.json({ error: selErr.message }, { status: 500 })
+    }
+    const log = logs?.[0]
+    if (!log) {
       return NextResponse.json({ ok: true, ignored: true, reason: 'log no encontrado' })
     }
-    const log = logs[idx]
-    const ts = evt.created_at || new Date().toISOString()
 
-    const updates: Record<string, string> = { ...log }
+    const ts = evt.created_at || new Date().toISOString()
+    const updates: Record<string, string | null> = {}
     let aggField: 'entregados' | 'aperturas' | 'clicks' | 'rebotes' | 'spam' | null = null
     let nuevoEstado: string | null = null
 
@@ -106,15 +111,24 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, ignored: true, type: evt.type })
     }
 
-    await updateRow('mailing_logs', idx, updates)
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ ok: true, dedup: true })
+    }
 
-    // Incrementar contador agregado en la campaña
+    const { error: updErr } = await supabase.from('mailing_logs').update(updates).eq('id', log.id)
+    if (updErr) console.error('[webhook] update error:', updErr.message)
+
+    // Incrementar contador agregado en la campaña (Sheets sigue siendo source de truth de resumen)
     if (aggField && log.campana_id) {
-      const campanas = await getSheetData('mailing_campanas')
-      const cIdx = campanas.findIndex(c => c.id === log.campana_id)
-      if (cIdx >= 0) {
-        const current = parseInt(campanas[cIdx][aggField] || '0', 10) || 0
-        await updateRow('mailing_campanas', cIdx, { ...campanas[cIdx], [aggField]: String(current + 1) })
+      try {
+        const campanas = await getSheetData('mailing_campanas')
+        const cIdx = campanas.findIndex(c => c.id === log.campana_id)
+        if (cIdx >= 0) {
+          const current = parseInt(campanas[cIdx][aggField] || '0', 10) || 0
+          await updateRow('mailing_campanas', cIdx, { ...campanas[cIdx], [aggField]: String(current + 1) })
+        }
+      } catch (err) {
+        console.error('[webhook] agg update error:', err)
       }
     }
 

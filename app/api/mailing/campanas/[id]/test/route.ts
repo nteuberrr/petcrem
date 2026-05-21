@@ -49,6 +49,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       reply_to: campana.reply_to || undefined,
       preview_text: campana.preview_text || undefined,
       tags: [{ name: 'campana_id', value: String(id) }, { name: 'tipo', value: 'test' }],
+      // En test no trackeamos (no hay log row para asociar). Útil ver el HTML sin
+      // píxel ni links reescritos para previsualizar lo que realmente se manda.
     })
     if (!result.ok) return NextResponse.json({ error: result.error || 'Falló el envío' }, { status: 500 })
     return NextResponse.json({ ok: true, message_id: result.message_id, to, sample: sampleVet })

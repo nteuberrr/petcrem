@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, updateRow, appendRows, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, updateRow } from '@/lib/google-sheets'
 import { getFromR2 } from '@/lib/cloudflare-r2'
 import { sendBatch, isResendConfigured } from '@/lib/resend-mailer'
 import { renderForVet } from '@/lib/mailing-render'
+import { getSupabase, type MailingLogInsert } from '@/lib/supabase'
 import { todayISO } from '@/lib/dates'
-
-const LOGS_COLS = [
-  'id', 'campana_id', 'vet_email', 'vet_nombre', 'resend_message_id',
-  'estado', 'fecha_envio', 'fecha_entrega', 'fecha_apertura', 'fecha_click', 'fecha_rebote',
-  'motivo_rebote', 'url_clickeada', 'error_msg', 'fecha_creacion',
-]
 
 interface Filtros {
   categoria?: string
@@ -43,8 +38,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const { id } = await params
-    await ensureSheet('mailing_logs')
-    await ensureColumns('mailing_logs', LOGS_COLS)
 
     const campanas = await getSheetData('mailing_campanas')
     const idx = campanas.findIndex(r => r.id === id)
@@ -74,19 +67,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       fecha_envio: todayISO(),
     })
 
-    // Pre-reservar IDs para los logs (1 read en vez de N)
-    const logsExistentes = await getSheetData('mailing_logs')
-    let nextLogId = Math.max(0, ...logsExistentes.map(r => parseInt(r.id || '0', 10)).filter(n => !isNaN(n))) + 1
-
+    const supabase = getSupabase()
     let enviados = 0
     let fallidos = 0
     let cancelado = false
-    const CHUNK = 100  // Resend batch limit
+    const CHUNK = 100
     const ahora = new Date().toISOString()
 
     for (let start = 0; start < destinatarios.length; start += CHUNK) {
       // Antes de cada chunk, releer la campaña y chequear si fue cancelada
-      // (el usuario puede haber apretado "Cancelar" desde la UI).
       if (start > 0) {
         const recheck = await getSheetData('mailing_campanas')
         const cur = recheck.find(r => r.id === id)
@@ -109,38 +98,37 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           { name: 'campana_id', value: String(id) },
           { name: 'vet_id', value: String(v.id) },
         ],
+        // Para el tracking propio: inyectamos el pixel y reescribimos los links
+        tracking: { campana_id: String(id), vet_id: String(v.id) },
       }))
 
       const results = await sendBatch(emails)
 
-      // Acumular logs en memoria y escribirlos en UNA sola llamada por chunk
-      // (Google Sheets API limita a 60 escrituras/min/user — sin batch, 140
-      // emails harían 140 writes y excedería la cuota).
-      const logsBatch: Record<string, unknown>[] = []
+      // Persistir logs en Supabase (1 insert batch por chunk)
+      const logsBatch: MailingLogInsert[] = []
       for (let i = 0; i < chunk.length; i++) {
         const v = chunk[i]
         const r = results[i]
-        const logId = String(nextLogId++)
         const estado = r.ok ? 'sent' : 'failed'
         if (r.ok) enviados++; else fallidos++
         logsBatch.push({
-          id: logId,
           campana_id: id,
+          vet_id: v.id,
           vet_email: v.email,
-          vet_nombre: v.nombre,
-          resend_message_id: r.message_id || '',
+          vet_nombre: v.nombre || null,
+          resend_message_id: r.message_id || null,
           estado,
-          fecha_envio: r.ok ? ahora : '',
-          fecha_entrega: '', fecha_apertura: '', fecha_click: '', fecha_rebote: '',
-          motivo_rebote: '', url_clickeada: '',
-          error_msg: r.error || '',
-          fecha_creacion: ahora,
+          fecha_envio: r.ok ? ahora : null,
+          fecha_entrega: null, fecha_apertura: null, fecha_click: null, fecha_rebote: null,
+          motivo_rebote: null, url_clickeada: null,
+          error_msg: r.error || null,
         })
       }
-      await appendRows('mailing_logs', logsBatch)
+      const { error: insertErr } = await supabase.from('mailing_logs').insert(logsBatch)
+      if (insertErr) console.error('[mailing/enviar] insert logs error:', insertErr.message)
     }
 
-    // Actualizar campana final (releer porque updateRow puede haber cambiado)
+    // Actualizar campana final
     const campanas2 = await getSheetData('mailing_campanas')
     const idx2 = campanas2.findIndex(r => r.id === id)
     if (idx2 >= 0) {
