@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, updateRow, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, updateRow, appendRows, ensureSheet, ensureColumns } from '@/lib/google-sheets'
 import { getFromR2 } from '@/lib/cloudflare-r2'
 import { sendBatch, isResendConfigured } from '@/lib/resend-mailer'
 import { renderForVet } from '@/lib/mailing-render'
@@ -102,14 +102,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       const results = await sendBatch(emails)
 
-      // Persistir logs (uno por destinatario)
+      // Acumular logs en memoria y escribirlos en UNA sola llamada por chunk
+      // (Google Sheets API limita a 60 escrituras/min/user — sin batch, 140
+      // emails harían 140 writes y excedería la cuota).
+      const logsBatch: Record<string, unknown>[] = []
       for (let i = 0; i < chunk.length; i++) {
         const v = chunk[i]
         const r = results[i]
         const logId = String(nextLogId++)
         const estado = r.ok ? 'sent' : 'failed'
         if (r.ok) enviados++; else fallidos++
-        await appendRow('mailing_logs', {
+        logsBatch.push({
           id: logId,
           campana_id: id,
           vet_email: v.email,
@@ -123,6 +126,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           fecha_creacion: ahora,
         })
       }
+      await appendRows('mailing_logs', logsBatch)
     }
 
     // Actualizar campana final (releer porque updateRow puede haber cambiado)

@@ -90,6 +90,21 @@ export async function appendRow(sheetName: string, data: Record<string, unknown>
   })
 }
 
+/** Versión batch: appendea N filas en UNA sola llamada. Usar para evitar la cuota
+ * de 60 escrituras/min/usuario de Google Sheets cuando hay muchos rows. */
+export async function appendRows(sheetName: string, rows: Record<string, unknown>[]): Promise<void> {
+  if (rows.length === 0) return
+  const sheets = getSheets()
+  const headers = await getHeaders(sheetName)
+  const values = rows.map(data => headers.map(h => data[h] ?? ''))
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: sheetName,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values },
+  })
+}
+
 export async function updateRow(
   sheetName: string,
   rowIndex: number,

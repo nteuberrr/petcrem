@@ -1099,9 +1099,16 @@ function NuevaCampanaPanel({ initial, onCreada }: {
 
   async function enviarCampana() {
     setError('')
-    const confirmacion = `Vas a enviar a ${destinatariosCount} destinatario${destinatariosCount === 1 ? '' : 's'}. ¿Confirmás?`
+    const filtroDesc = form.categoria === 'todos' ? 'TODAS las categorías' : `solo "${form.categoria}s"`
+    const confirmacion = `Vas a enviar:\n\n` +
+      `• Asunto: "${form.asunto}"\n` +
+      `• Destinatarios: ${destinatariosCount} (${filtroDesc}, suscritos)\n\n` +
+      `¿Confirmás el envío?`
     if (!confirm(confirmacion)) return
-    const id = draftId || await guardarBorrador()
+    // SIEMPRE actualizar el borrador con el form actual antes de enviar.
+    // Si el usuario cambió el filtro o el HTML sin guardar, esto asegura que
+    // el envío use lo que ve en pantalla, no el draft viejo.
+    const id = await guardarBorrador()
     if (!id) return
     setEnviando(true)
     const res = await fetch(`/api/mailing/campanas/${id}/enviar`, { method: 'POST' })
