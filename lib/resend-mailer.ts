@@ -43,8 +43,11 @@ function inyectarPreviewText(html: string, previewText: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-  const padding = '&zwnj;&nbsp;'.repeat(60)
-  const previewDiv = `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;visibility:hidden;line-height:0;color:transparent;opacity:0;font-size:1px;">${escaped}${padding}</div>`
+  // Padding amplio para que el body no se filtre en el preview del inbox.
+  // Mezclamos zero-width-joiners + zero-width-non-joiners (invisibles, no se renderizan
+  // como espacio en ningún cliente) en lugar de nbsp que algunos clientes muestran.
+  const padding = ('&zwnj;&zwj;'.repeat(200))
+  const previewDiv = `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;visibility:hidden;line-height:0;color:transparent;opacity:0;font-size:1px;">${escaped} ${padding}</div>`
   // Si el HTML tiene <body>, lo insertamos justo después; si no, al inicio.
   const bodyMatch = html.match(/<body[^>]*>/i)
   if (bodyMatch) {
