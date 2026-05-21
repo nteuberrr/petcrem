@@ -93,6 +93,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           comuna: v.comuna, telefono: v.telefono, categoria: v.categoria,
         }),
         reply_to: campana.reply_to || undefined,
+        preview_text: campana.preview_text || undefined,
         tags: [
           { name: 'campana_id', value: String(id) },
           { name: 'vet_id', value: String(v.id) },

@@ -47,6 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       subject,
       html,
       reply_to: campana.reply_to || undefined,
+      preview_text: campana.preview_text || undefined,
       tags: [{ name: 'campana_id', value: String(id) }, { name: 'tipo', value: 'test' }],
     })
     if (!result.ok) return NextResponse.json({ error: result.error || 'Falló el envío' }, { status: 500 })
