@@ -627,6 +627,17 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
     }
   }
 
+  async function cancelar(c: Campana) {
+    if (!confirm(`¿Cancelar el envío de "${c.asunto}"?\n\nLos emails que ya despachó Resend no se pueden recuperar. Solo se aborta lo que falta.`)) return
+    const res = await fetch(`/api/mailing/campanas/${c.id}/cancelar`, { method: 'POST' })
+    if (res.ok) {
+      await fetchCampanas()
+    } else {
+      const j = await res.json().catch(() => ({}))
+      alert('Error: ' + (j.error ?? res.status))
+    }
+  }
+
   async function duplicar(c: Campana) {
     setLoadingDetalle(true)
     try {
@@ -698,10 +709,13 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                       <td className="px-3 py-2 text-gray-600 text-xs whitespace-nowrap">{formatDate(c.fecha_envio) || '—'}</td>
                       <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                         <div className="flex gap-1.5">
-                          {(c.estado === 'enviado' || c.estado === 'fallido') && (
+                          {c.estado === 'enviando' && (
+                            <button onClick={() => cancelar(c)} className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Cancelar</button>
+                          )}
+                          {(c.estado === 'enviado' || c.estado === 'fallido' || c.estado === 'cancelado') && (
                             <button onClick={() => duplicar(c)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Duplicar</button>
                           )}
-                          {c.estado !== 'enviando' && (
+                          {c.estado !== 'enviando' && c.estado !== 'cancelando' && (
                             <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Eliminar</button>
                           )}
                         </div>
@@ -788,6 +802,8 @@ function EstadoBadge({ estado }: { estado: string }) {
     enviando: 'bg-amber-100 text-amber-800',
     enviado: 'bg-green-100 text-green-800',
     fallido: 'bg-red-100 text-red-800',
+    cancelando: 'bg-orange-100 text-orange-800',
+    cancelado: 'bg-zinc-200 text-zinc-700',
   }
   const cls = styles[estado] || 'bg-gray-100 text-gray-700'
   return <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${cls}`}>{estado}</span>

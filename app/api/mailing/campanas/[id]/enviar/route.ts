@@ -80,10 +80,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     let enviados = 0
     let fallidos = 0
+    let cancelado = false
     const CHUNK = 100  // Resend batch limit
     const ahora = new Date().toISOString()
 
     for (let start = 0; start < destinatarios.length; start += CHUNK) {
+      // Antes de cada chunk, releer la campaña y chequear si fue cancelada
+      // (el usuario puede haber apretado "Cancelar" desde la UI).
+      if (start > 0) {
+        const recheck = await getSheetData('mailing_campanas')
+        const cur = recheck.find(r => r.id === id)
+        if (cur?.estado === 'cancelando') {
+          cancelado = true
+          break
+        }
+      }
       const chunk = destinatarios.slice(start, start + CHUNK)
       const emails = chunk.map(v => ({
         to: v.email,
@@ -133,9 +144,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const campanas2 = await getSheetData('mailing_campanas')
     const idx2 = campanas2.findIndex(r => r.id === id)
     if (idx2 >= 0) {
+      const estadoFinal = cancelado
+        ? 'cancelado'
+        : (fallidos === destinatarios.length ? 'fallido' : 'enviado')
       await updateRow('mailing_campanas', idx2, {
         ...campanas2[idx2],
-        estado: fallidos === destinatarios.length ? 'fallido' : 'enviado',
+        estado: estadoFinal,
         enviados: String(enviados),
         fallidos: String(fallidos),
       })
@@ -143,6 +157,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     return NextResponse.json({
       ok: true,
+      cancelado,
       total_destinatarios: destinatarios.length,
       enviados,
       fallidos,
