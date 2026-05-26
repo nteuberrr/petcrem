@@ -127,6 +127,21 @@ function mismaCoord(a: LatLng, b: LatLng): boolean {
   return Math.abs(a.lat - b.lat) < 1e-4 && Math.abs(a.lng - b.lng) < 1e-4
 }
 
+async function llamarRoutesApi(body: Record<string, unknown>): Promise<{ status: number; json: Record<string, unknown> }> {
+  const url = 'https://routes.googleapis.com/directions/v2:computeRoutes'
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': getApiKey(),
+      'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex',
+    },
+    body: JSON.stringify(body),
+  })
+  const json = await res.json().catch(() => ({}))
+  return { status: res.status, json }
+}
+
 export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
   const hasIntermediates = !!(opts.intermediates && opts.intermediates.length > 0)
   // Caso degenerado: origen == destino y sin paradas. La Routes API devuelve
@@ -135,7 +150,6 @@ export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
     return { distance_meters: 0, duration_seconds: 0, encoded_polyline: '', optimized_order: [] }
   }
 
-  const url = 'https://routes.googleapis.com/directions/v2:computeRoutes'
   const body: Record<string, unknown> = {
     origin:      { location: { latLng: { latitude: opts.origin.lat, longitude: opts.origin.lng } } },
     destination: { location: { latLng: { latitude: opts.destination.lat, longitude: opts.destination.lng } } },
@@ -152,36 +166,50 @@ export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
     body.departureTime = opts.departure_time
   }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': getApiKey(),
-      'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex',
-    },
-    body: JSON.stringify(body),
-  })
-  const j = await res.json()
-  if (res.status !== 200) {
-    const msg = j.error?.message ?? JSON.stringify(j).slice(0, 300)
-    throw new Error(`Routes API ${res.status}: ${msg}`)
+  let { status, json: j } = await llamarRoutesApi(body)
+
+  // Routes API a veces devuelve 200 {} cuando combinás optimizeWaypointOrder=true
+  // con un viaje circular (origin==destination) o cuando uno de los waypoints
+  // no es ruteable. Reintentamos sin optimización para no perder el cálculo.
+  const routes = j.routes as Array<Record<string, unknown>> | undefined
+  if (status === 200 && !routes?.[0] && body.optimizeWaypointOrder) {
+    console.warn('[google-maps] Routes API devolvió 200 vacío con optimizeWaypointOrder=true — reintentando sin optimización', {
+      intermediates: hasIntermediates ? opts.intermediates!.length : 0,
+      roundtrip: mismaCoord(opts.origin, opts.destination),
+    })
+    delete body.optimizeWaypointOrder
+    const retry = await llamarRoutesApi(body)
+    status = retry.status
+    j = retry.json
   }
-  if (!j.routes?.[0]) {
-    // 200 con body vacío: la API no pudo trazar ruta. Damos un mensaje útil.
+
+  if (status !== 200) {
+    const errObj = j.error as { message?: string } | undefined
+    const msg = errObj?.message ?? JSON.stringify(j).slice(0, 300)
+    throw new Error(`Routes API ${status}: ${msg}`)
+  }
+  const routes2 = j.routes as Array<Record<string, unknown>> | undefined
+  if (!routes2?.[0]) {
+    console.error('[google-maps] Routes API 200 con respuesta vacía', {
+      origin: opts.origin,
+      destination: opts.destination,
+      intermediates: opts.intermediates,
+      body_keys: Object.keys(j),
+    })
     const detalle = Object.keys(j).length === 0
-      ? 'no se encontró ruta entre los puntos (¿direcciones imposibles de unir en auto?)'
-      : (j.error?.message ?? JSON.stringify(j).slice(0, 300))
-    throw new Error(`Routes API ${res.status}: ${detalle}`)
+      ? `no se encontró ruta entre los puntos (¿direcciones imposibles de unir en auto? Origen: ${opts.origin.lat},${opts.origin.lng} → ${opts.intermediates?.length ?? 0} parada(s) → destino: ${opts.destination.lat},${opts.destination.lng})`
+      : ((j.error as { message?: string })?.message ?? JSON.stringify(j).slice(0, 300))
+    throw new Error(`Routes API ${status}: ${detalle}`)
   }
-  const r = j.routes[0]
-  const durationStr: string = r.duration ?? '0s'
+  const r = routes2[0]
+  const durationStr = (r.duration as string) ?? '0s'
   const duration_seconds = parseInt(durationStr.replace('s', ''), 10)
 
   return {
-    distance_meters: r.distanceMeters ?? 0,
+    distance_meters: (r.distanceMeters as number) ?? 0,
     duration_seconds: Number.isFinite(duration_seconds) ? duration_seconds : 0,
-    encoded_polyline: r.polyline?.encodedPolyline ?? '',
-    optimized_order: r.optimizedIntermediateWaypointIndex ?? [],
+    encoded_polyline: ((r.polyline as { encodedPolyline?: string })?.encodedPolyline) ?? '',
+    optimized_order: (r.optimizedIntermediateWaypointIndex as number[]) ?? [],
   }
 }
 
