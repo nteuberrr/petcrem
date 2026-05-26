@@ -34,6 +34,7 @@ type OptimResult = {
   destination: { address: string; lat: number; lng: number }
   obligatorias: ParadaObligatoria[]
   candidatas: ParadaCandidata[]
+  retiros_crematorio: ParadaOptim[]
   baseline: { distance_km: number; duration_minutes: number; google_maps_url: string }
   skipped: Array<{ cliente_id: string; codigo: string; motivo: string }>
 }
@@ -840,6 +841,35 @@ export default function DespachosTab() {
               ) : (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600">
                   No hay sugeridas dentro del umbral de {optimMaxDetour} min de desvío. Subí el slider para considerar más opciones.
+                </div>
+              )}
+
+              {/* Retiros en crematorio */}
+              {optimResult.retiros_crematorio && optimResult.retiros_crematorio.length > 0 && (
+                <div className="border border-emerald-200 rounded-lg overflow-hidden">
+                  <div className="bg-emerald-50 px-3 py-2 font-semibold text-emerald-900 text-sm flex items-center justify-between">
+                    <span>Retiros en crematorio · {optimResult.retiros_crematorio.length}</span>
+                    <span className="text-[10px] font-normal text-emerald-700 uppercase tracking-wider">no van en la ruta</span>
+                  </div>
+                  <ul className="divide-y divide-gray-100">
+                    {optimResult.retiros_crematorio.map(r => (
+                      <li key={r.cliente_id} className="px-3 py-2 flex items-start gap-3">
+                        <span className="shrink-0 w-6 h-6 bg-emerald-100 text-emerald-700 text-sm rounded-full flex items-center justify-center" title="Retiro en local">🏠</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm text-gray-900">{r.nombre_mascota}</span>
+                            <span className="text-xs text-gray-500">{r.codigo}</span>
+                            <span className="text-[10px] uppercase font-medium bg-emerald-100 text-emerald-800 rounded px-1.5 py-0.5">
+                              objetivo: {r.fecha_objetivo_dmy}
+                            </span>
+                            {r.atrasada && <span className="text-[10px] uppercase font-bold bg-red-100 text-red-800 rounded px-1.5 py-0.5">Atrasada</span>}
+                          </div>
+                          <div className="text-xs text-gray-600 truncate">{r.nombre_tutor} · {r.telefono || 'sin teléfono'}</div>
+                          <div className="text-xs text-gray-500 truncate italic">El tutor retira en el crematorio</div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 

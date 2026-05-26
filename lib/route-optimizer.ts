@@ -44,12 +44,21 @@ export interface OptimizadorResult {
   destination: { address: string; lat: number; lng: number }
   obligatorias: ParadaObligatoria[]
   candidatas: ParadaCandidata[]
+  /** Entregas cuya dirección coincide con el crematorio (retiro en el local).
+   *  No entran en la ruta pero se muestran como informativo. */
+  retiros_crematorio: ParadaCliente[]
   baseline: {
     distance_km: number
     duration_minutes: number
     google_maps_url: string
   }
   skipped: Array<{ cliente_id: string; codigo: string; motivo: string }>
+}
+
+/** Dos coords se consideran el mismo lugar si están a <~150m (umbral generoso
+ *  para captar geocodes ligeramente distintos del mismo crematorio). */
+function esElMismoLugar(a: { lat: number; lng: number }, b: { lat: number; lng: number }): boolean {
+  return Math.abs(a.lat - b.lat) < 1.5e-3 && Math.abs(a.lng - b.lng) < 1.5e-3
 }
 
 interface ClienteRow extends Record<string, string> {
@@ -195,8 +204,28 @@ export async function optimizarRuta(opts: OptimizadorOpts): Promise<OptimizadorR
   })
 
   const skipped: OptimizadorResult['skipped'] = []
-  const obligatoriasGeo = await geocodearClientes(obligatoriasRows, skipped)
-  const candidatasGeo = await geocodearClientes(candidatasRows, skipped)
+  const obligatoriasGeoAll = await geocodearClientes(obligatoriasRows, skipped)
+  const candidatasGeoAll = await geocodearClientes(candidatasRows, skipped)
+
+  // Separar las entregas que son "retiro en crematorio" (misma dirección que el origen):
+  // no entran en la ruta para no degenerar la API, pero quedan visibles para el operador.
+  const retirosCrematorio: ParadaCliente[] = []
+  const obligatoriasGeo: typeof obligatoriasGeoAll = []
+  for (const c of obligatoriasGeoAll) {
+    if (esElMismoLugar(c.geo, origin)) {
+      retirosCrematorio.push(toParada(c, plazoMap, fechaBaseIso))
+    } else {
+      obligatoriasGeo.push(c)
+    }
+  }
+  const candidatasGeo: typeof candidatasGeoAll = []
+  for (const c of candidatasGeoAll) {
+    if (esElMismoLugar(c.geo, origin)) {
+      retirosCrematorio.push(toParada(c, plazoMap, fechaBaseIso))
+    } else {
+      candidatasGeo.push(c)
+    }
+  }
 
   if (obligatoriasGeo.length > 23) {
     skipped.push({
@@ -275,6 +304,7 @@ export async function optimizarRuta(opts: OptimizadorOpts): Promise<OptimizadorR
     destination: { address: destGeo.formatted_address, lat: destination.lat, lng: destination.lng },
     obligatorias,
     candidatas: candidatasFiltradas,
+    retiros_crematorio: retirosCrematorio,
     baseline: {
       distance_km: +(baselineDistance / 1000).toFixed(2),
       duration_minutes: Math.round(baselineDuration / 60),
