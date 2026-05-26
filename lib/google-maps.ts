@@ -127,6 +127,16 @@ function mismaCoord(a: LatLng, b: LatLng): boolean {
   return Math.abs(a.lat - b.lat) < 1e-4 && Math.abs(a.lng - b.lng) < 1e-4
 }
 
+/** Chile continental: lat -56..-17, lng -76..-66. Filtra geocodes basura. */
+export function coordEnChile(p: LatLng): boolean {
+  if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return false
+  return p.lat >= -56 && p.lat <= -17 && p.lng >= -76 && p.lng <= -66
+}
+
+function fmtCoord(p: LatLng): string {
+  return `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`
+}
+
 async function llamarRoutesApi(body: Record<string, unknown>): Promise<{ status: number; json: Record<string, unknown> }> {
   const url = 'https://routes.googleapis.com/directions/v2:computeRoutes'
   const res = await fetch(url, {
@@ -166,14 +176,25 @@ export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
     body.departureTime = opts.departure_time
   }
 
+  // Validar coords: si alguna queda fuera de Chile, Routes API responde 200 {}.
+  const fueraDeChile: string[] = []
+  if (!coordEnChile(opts.origin)) fueraDeChile.push(`origen (${fmtCoord(opts.origin)})`)
+  if (!coordEnChile(opts.destination)) fueraDeChile.push(`destino (${fmtCoord(opts.destination)})`)
+  if (opts.intermediates) {
+    opts.intermediates.forEach((w, i) => {
+      if (!coordEnChile(w)) fueraDeChile.push(`parada ${i + 1} (${fmtCoord(w)})`)
+    })
+  }
+  if (fueraDeChile.length > 0) {
+    throw new Error(`Coordenadas fuera de Chile: ${fueraDeChile.join(', ')}. Revisá las direcciones que geocodearon a esa ubicación.`)
+  }
+
   let { status, json: j } = await llamarRoutesApi(body)
 
-  // Routes API a veces devuelve 200 {} cuando combinás optimizeWaypointOrder=true
-  // con un viaje circular (origin==destination) o cuando uno de los waypoints
-  // no es ruteable. Reintentamos sin optimización para no perder el cálculo.
-  const routes = j.routes as Array<Record<string, unknown>> | undefined
+  // Routes API a veces devuelve 200 {} con optimizeWaypointOrder=true. Probamos sin.
+  let routes = j.routes as Array<Record<string, unknown>> | undefined
   if (status === 200 && !routes?.[0] && body.optimizeWaypointOrder) {
-    console.warn('[google-maps] Routes API devolvió 200 vacío con optimizeWaypointOrder=true — reintentando sin optimización', {
+    console.warn('[google-maps] Routes API 200 vacío con optimize=true — retry sin optimize', {
       intermediates: hasIntermediates ? opts.intermediates!.length : 0,
       roundtrip: mismaCoord(opts.origin, opts.destination),
     })
@@ -181,6 +202,18 @@ export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
     const retry = await llamarRoutesApi(body)
     status = retry.status
     j = retry.json
+    routes = j.routes as Array<Record<string, unknown>> | undefined
+  }
+
+  // Segundo retry: con TRAFFIC_UNAWARE. Algunas zonas no tienen datos de tráfico
+  // y TRAFFIC_AWARE falla con respuesta vacía.
+  if (status === 200 && !routes?.[0]) {
+    console.warn('[google-maps] Routes API 200 vacío — retry con TRAFFIC_UNAWARE')
+    body.routingPreference = 'TRAFFIC_UNAWARE'
+    const retry = await llamarRoutesApi(body)
+    status = retry.status
+    j = retry.json
+    routes = j.routes as Array<Record<string, unknown>> | undefined
   }
 
   if (status !== 200) {
@@ -188,20 +221,20 @@ export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
     const msg = errObj?.message ?? JSON.stringify(j).slice(0, 300)
     throw new Error(`Routes API ${status}: ${msg}`)
   }
-  const routes2 = j.routes as Array<Record<string, unknown>> | undefined
-  if (!routes2?.[0]) {
-    console.error('[google-maps] Routes API 200 con respuesta vacía', {
+  if (!routes?.[0]) {
+    console.error('[google-maps] Routes API 200 con respuesta vacía tras retries', {
       origin: opts.origin,
       destination: opts.destination,
       intermediates: opts.intermediates,
       body_keys: Object.keys(j),
     })
+    const paradas = (opts.intermediates ?? []).map((w, i) => `${i + 1}:${fmtCoord(w)}`).join(' | ')
     const detalle = Object.keys(j).length === 0
-      ? `no se encontró ruta entre los puntos (¿direcciones imposibles de unir en auto? Origen: ${opts.origin.lat},${opts.origin.lng} → ${opts.intermediates?.length ?? 0} parada(s) → destino: ${opts.destination.lat},${opts.destination.lng})`
+      ? `no se encontró ruta. Origen ${fmtCoord(opts.origin)} → destino ${fmtCoord(opts.destination)}${paradas ? ' · paradas: ' + paradas : ''}. Revisá si alguna dirección quedó mal geocodeada (Google Maps).`
       : ((j.error as { message?: string })?.message ?? JSON.stringify(j).slice(0, 300))
     throw new Error(`Routes API ${status}: ${detalle}`)
   }
-  const r = routes2[0]
+  const r = routes[0]
   const durationStr = (r.duration as string) ?? '0s'
   const duration_seconds = parseInt(durationStr.replace('s', ''), 10)
 
