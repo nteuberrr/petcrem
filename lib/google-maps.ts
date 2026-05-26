@@ -122,7 +122,19 @@ export interface RouteOptions {
   departure_time?: string
 }
 
+/** Considera dos coords iguales si difieren <10m (~ 0.0001° latitud) */
+function mismaCoord(a: LatLng, b: LatLng): boolean {
+  return Math.abs(a.lat - b.lat) < 1e-4 && Math.abs(a.lng - b.lng) < 1e-4
+}
+
 export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
+  const hasIntermediates = !!(opts.intermediates && opts.intermediates.length > 0)
+  // Caso degenerado: origen == destino y sin paradas. La Routes API devuelve
+  // `200 {}` (sin la propiedad routes) porque no hay ruta que computar.
+  if (mismaCoord(opts.origin, opts.destination) && !hasIntermediates) {
+    return { distance_meters: 0, duration_seconds: 0, encoded_polyline: '', optimized_order: [] }
+  }
+
   const url = 'https://routes.googleapis.com/directions/v2:computeRoutes'
   const body: Record<string, unknown> = {
     origin:      { location: { latLng: { latitude: opts.origin.lat, longitude: opts.origin.lng } } },
@@ -132,8 +144,8 @@ export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
     languageCode: 'es-CL',
     units: 'METRIC',
   }
-  if (opts.intermediates && opts.intermediates.length > 0) {
-    body.intermediates = opts.intermediates.map(w => ({ location: { latLng: { latitude: w.lat, longitude: w.lng } } }))
+  if (hasIntermediates) {
+    body.intermediates = opts.intermediates!.map(w => ({ location: { latLng: { latitude: w.lat, longitude: w.lng } } }))
     if (opts.optimize) body.optimizeWaypointOrder = true
   }
   if (opts.departure_time) {
@@ -150,9 +162,16 @@ export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
     body: JSON.stringify(body),
   })
   const j = await res.json()
-  if (res.status !== 200 || !j.routes?.[0]) {
+  if (res.status !== 200) {
     const msg = j.error?.message ?? JSON.stringify(j).slice(0, 300)
     throw new Error(`Routes API ${res.status}: ${msg}`)
+  }
+  if (!j.routes?.[0]) {
+    // 200 con body vacío: la API no pudo trazar ruta. Damos un mensaje útil.
+    const detalle = Object.keys(j).length === 0
+      ? 'no se encontró ruta entre los puntos (¿direcciones imposibles de unir en auto?)'
+      : (j.error?.message ?? JSON.stringify(j).slice(0, 300))
+    throw new Error(`Routes API ${res.status}: ${detalle}`)
   }
   const r = j.routes[0]
   const durationStr: string = r.duration ?? '0s'
