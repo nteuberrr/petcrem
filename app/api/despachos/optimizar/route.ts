@@ -25,7 +25,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result)
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
-    console.error('[optimizar] error:', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const stack = e instanceof Error ? e.stack : undefined
+    console.error('[optimizar] error:', msg, '\nstack:', stack)
+    // En dev devolvemos el stack para que el operador pueda copiar/pegar la línea exacta
+    const isDev = process.env.NODE_ENV !== 'production'
+    return NextResponse.json({ error: msg, ...(isDev && stack ? { stack } : {}) }, { status: 500 })
   }
 }

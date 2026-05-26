@@ -204,28 +204,39 @@ export async function optimizarRuta(opts: OptimizadorOpts): Promise<OptimizadorR
   })
 
   const skipped: OptimizadorResult['skipped'] = []
-  const obligatoriasGeoAll = await geocodearClientes(obligatoriasRows, skipped)
-  const candidatasGeoAll = await geocodearClientes(candidatasRows, skipped)
+  type ClienteGeo = { row: ClienteRow; geo: { lat: number; lng: number; formatted_address: string } }
+  const obligatoriasGeoAll: ClienteGeo[] = await geocodearClientes(obligatoriasRows, skipped)
+  const candidatasGeoAll: ClienteGeo[] = await geocodearClientes(candidatasRows, skipped)
 
   // Separar las entregas que son "retiro en crematorio" (misma dirección que el origen):
   // no entran en la ruta para no degenerar la API, pero quedan visibles para el operador.
   const retirosCrematorio: ParadaCliente[] = []
-  const obligatoriasGeo: typeof obligatoriasGeoAll = []
+  const obligatoriasGeo: ClienteGeo[] = []
   for (const c of obligatoriasGeoAll) {
+    if (!c || !c.row || !c.geo) continue
     if (esElMismoLugar(c.geo, origin)) {
       retirosCrematorio.push(toParada(c, plazoMap, fechaBaseIso))
     } else {
       obligatoriasGeo.push(c)
     }
   }
-  const candidatasGeo: typeof candidatasGeoAll = []
+  const candidatasGeo: ClienteGeo[] = []
   for (const c of candidatasGeoAll) {
+    if (!c || !c.row || !c.geo) continue
     if (esElMismoLugar(c.geo, origin)) {
       retirosCrematorio.push(toParada(c, plazoMap, fechaBaseIso))
     } else {
       candidatasGeo.push(c)
     }
   }
+  console.log('[optimizer] split:', {
+    obligatorias_input: obligatoriasGeoAll.length,
+    obligatorias_post_filter: obligatoriasGeo.length,
+    candidatas_input: candidatasGeoAll.length,
+    candidatas_post_filter: candidatasGeo.length,
+    retiros_crematorio: retirosCrematorio.length,
+    origin,
+  })
 
   if (obligatoriasGeo.length > 23) {
     skipped.push({
@@ -261,12 +272,29 @@ export async function optimizarRuta(opts: OptimizadorOpts): Promise<OptimizadorR
     optimizedOrder = r.optimized_order.length > 0 ? r.optimized_order : obligatoriasGeo.map((_, i) => i)
   }
 
-  const obligatorias: ParadaObligatoria[] = optimizedOrder.map((origIdx, i) => ({
-    ...toParada(obligatoriasGeo[origIdx], plazoMap, fechaBaseIso),
-    order: i + 1,
-  }))
+  // Validar que optimizedOrder no traiga índices fuera de rango (defensa contra
+  // respuestas inesperadas de la API).
+  const ordenValido = optimizedOrder.every(idx => Number.isInteger(idx) && idx >= 0 && idx < obligatoriasGeo.length)
+  if (!ordenValido) {
+    console.warn('[optimizer] optimizedOrder con índices fuera de rango, usando orden de entrada', {
+      optimizedOrder, geo_length: obligatoriasGeo.length,
+    })
+    optimizedOrder = obligatoriasGeo.map((_, i) => i)
+  }
+  const obligatorias: ParadaObligatoria[] = []
+  optimizedOrder.forEach((origIdx, i) => {
+    const c = obligatoriasGeo[origIdx]
+    if (!c || !c.row || !c.geo) {
+      console.warn('[optimizer] entrada inválida en obligatoriasGeo', { origIdx, c })
+      return
+    }
+    obligatorias.push({ ...toParada(c, plazoMap, fechaBaseIso), order: i + 1 })
+  })
   if (obligatorias.length === 0 && obligatoriasGeo.length > 0) {
-    obligatoriasGeo.forEach((c, i) => obligatorias.push({ ...toParada(c, plazoMap, fechaBaseIso), order: i + 1 }))
+    obligatoriasGeo.forEach((c, i) => {
+      if (!c || !c.row || !c.geo) return
+      obligatorias.push({ ...toParada(c, plazoMap, fechaBaseIso), order: i + 1 })
+    })
   }
 
   // 2. Para cada candidata, calcular el costo marginal de incluirla

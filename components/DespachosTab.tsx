@@ -301,7 +301,8 @@ export default function DespachosTab() {
       })
       const j = await res.json()
       if (!res.ok) {
-        setOptimError(j.error || `Error ${res.status}`)
+        const stack = typeof j.stack === 'string' ? `\n\n${j.stack.split('\n').slice(0, 4).join('\n')}` : ''
+        setOptimError((j.error || `Error ${res.status}`) + stack)
       } else {
         const r = j as OptimResult
         setOptimResult(r)
@@ -747,7 +748,7 @@ export default function DespachosTab() {
           </button>
 
           {optimError && (
-            <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">
+            <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm whitespace-pre-wrap font-mono text-[11px]">
               {optimError}
             </div>
           )}
