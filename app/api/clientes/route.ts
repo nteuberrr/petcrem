@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getSheetData, appendRow, getNextId, ensureColumns } from '@/lib/google-sheets'
 import { generarCodigo } from '@/lib/codigo-generator'
 import { todayISO } from '@/lib/dates'
+import { calcularSnapshotFicha, type AdicionalItem } from '@/lib/price-calculator'
 
 const ClienteSchema = z.object({
   nombre_mascota: z.string().min(1, 'Nombre de mascota requerido'),
@@ -64,10 +65,27 @@ export async function POST(req: NextRequest) {
       'peso_declarado', 'peso_ingreso', 'despacho_id',
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
       'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
+      'precio_servicio', 'precio_adicionales', 'precio_total',
     ])
     const codigo = await generarCodigo(data.letra_especie, data.codigo_servicio)
     const id = await getNextId('clientes')
     const now = todayISO()
+
+    // Snapshot del precio al momento de crear la ficha. Lee la tabla de precios
+    // vigente y "congela" el monto en columnas dedicadas; los cambios posteriores
+    // en Configuración → Precios NO afectan a esta ficha. Solo entrar a la ficha
+    // individual y guardar reescribe el snapshot.
+    let parsedAdicionales: AdicionalItem[] = []
+    try { parsedAdicionales = JSON.parse(data.adicionales ?? '[]') } catch { parsedAdicionales = [] }
+    const snapshot = await calcularSnapshotFicha({
+      peso: data.peso_ingreso ?? data.peso_declarado,
+      codigo_servicio: data.codigo_servicio,
+      veterinaria_id: data.veterinaria_id,
+      adicionales: parsedAdicionales,
+      descuento_tipo: data.descuento_tipo,
+      descuento_valor: data.descuento_valor as number | string | undefined,
+    })
+
     const row = {
       id,
       codigo,
@@ -91,12 +109,16 @@ export async function POST(req: NextRequest) {
       ciclo_id: '',
       despacho_id: '',
       veterinaria_id: data.veterinaria_id ?? '',
+      tipo_precios: snapshot.tipo_precios_efectivo,
       adicionales: data.adicionales ?? '[]',
       descuento_id: data.descuento_id ?? '',
       descuento_nombre: data.descuento_nombre ?? '',
       descuento_tipo: data.descuento_tipo ?? '',
       descuento_valor: data.descuento_valor !== undefined ? String(data.descuento_valor) : '',
-      descuento_monto: data.descuento_monto !== undefined ? String(data.descuento_monto) : '',
+      descuento_monto: String(snapshot.descuento_monto),
+      precio_servicio: snapshot.precio_servicio,
+      precio_adicionales: snapshot.precio_adicionales,
+      precio_total: snapshot.precio_total,
       tipo_pago: data.tipo_pago,
       estado_pago: data.estado_pago,
       fecha_creacion: now,

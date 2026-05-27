@@ -13,6 +13,7 @@ const CERT_COLS = [
   'fecha_emision', 'hora_emision',
   'emitido_por_id', 'emitido_por_nombre',
   'sin_foto', 'pdf_key', 'pdf_url',
+  'enviado_ultima_fecha', 'enviado_ultima_hora', 'enviado_cantidad', 'enviado_a',
   'fecha_creacion',
 ]
 

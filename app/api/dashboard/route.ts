@@ -123,14 +123,35 @@ export async function GET() {
       return items
     }
 
-    // Cálculo de ingreso por cliente (cacheado por id)
+    // Cálculo de ingreso por cliente (cacheado por id).
+    // PRIORIDAD: si la ficha tiene snapshot guardado (precio_total > 0), lo usamos
+    // tal cual. Esto blinda fichas viejas contra cambios en las tablas de precio.
+    // Fallback: recalcular en vivo (para fichas legacy creadas antes del feature
+    // o cualquier ficha donde el snapshot quedó en 0).
     type Ingreso = { total: number; servicio: number; adicionales: number; adicionalesItems: AdicionalItem[] }
     const ingresoCache = new Map<string, Ingreso>()
     function ingresoCliente(c: Record<string, string>): Ingreso {
       const cached = ingresoCache.get(c.id)
       if (cached) return cached
-      // Driver: peso_ingreso (real) tiene prioridad. Fallback a peso_declarado si aún no fue pesada.
-      // parsePeso normaliza escalamiento heredado de Sheets es-CL (ej. 12500 → 12.5).
+
+      const adicionalesItems = adicionalesDe(c)
+
+      // Snapshot path: precio_total guardado en la ficha
+      const snapTotal = parseDecimalOr0(c.precio_total)
+      const snapServicio = parseDecimalOr0(c.precio_servicio)
+      const snapAdicionales = parseDecimalOr0(c.precio_adicionales)
+      if (snapTotal > 0 || snapServicio > 0 || snapAdicionales > 0) {
+        const result: Ingreso = {
+          total: snapTotal,
+          servicio: snapServicio,
+          adicionales: snapAdicionales,
+          adicionalesItems,
+        }
+        ingresoCache.set(c.id, result)
+        return result
+      }
+
+      // Fallback: cálculo en vivo (compatibilidad hacia atrás con fichas legacy)
       const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
       const codigo = c.codigo_servicio || 'CI'
       let tabla: Tramo[] = preciosG
@@ -145,7 +166,6 @@ export async function GET() {
       }
       const tramo = findTramo(tabla, peso)
       const servicio = precioTramo(tramo, codigo)
-      const adicionalesItems = adicionalesDe(c)
       const adicionales = adicionalesItems.reduce((s, a) => s + (a.precio ?? 0) * (a.qty ?? 1), 0)
       const result = { total: servicio + adicionales, servicio, adicionales, adicionalesItems }
       ingresoCache.set(c.id, result)

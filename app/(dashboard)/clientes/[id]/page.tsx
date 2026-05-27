@@ -17,6 +17,10 @@ type Certificado = {
   pdf_url: string
   emitido_por_nombre: string
   sin_foto: string
+  enviado_ultima_fecha?: string
+  enviado_ultima_hora?: string
+  enviado_cantidad?: string
+  enviado_a?: string
 }
 
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
@@ -122,6 +126,23 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [deletingFicha, setDeletingFicha] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+
+  // Toggle del historial de certificados emitidos
+  const [verCertHistorico, setVerCertHistorico] = useState(false)
+
+  // Sheets devuelve la hora guardada como fracción de día (ej. 0.8625 = 20:42).
+  // Si ya viene como "HH:MM" la dejamos como está.
+  function fmtHoraCert(raw: string): string {
+    if (!raw) return ''
+    const n = parseFloat(raw)
+    if (Number.isFinite(n) && n >= 0 && n < 1) {
+      const totalMin = Math.round(n * 24 * 60)
+      const h = Math.floor(totalMin / 60) % 24
+      const m = totalMin % 60
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+    return raw
+  }
 
   const fetchCertificados = useCallback(async () => {
     const res = await fetch(`/api/clientes/${id}/certificados`).catch(() => null)
@@ -266,11 +287,42 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         return
       }
       setFeedbackCert({ kind: 'ok', msg: `Certificado enviado a ${data.to}` })
+      // Refrescar la lista para que aparezca el banner "Enviado el ..."
+      await fetchCertificados()
     } catch (e) {
       setFeedbackCert({ kind: 'error', msg: e instanceof Error ? e.message : 'Error al enviar' })
     } finally {
       setEnviandoCert(false)
     }
+  }
+
+  function intentarEnviarCertificado() {
+    // Si la versión actual ya fue enviada al menos una vez, pedimos confirmación
+    // explícita antes de reenviar (evita doble-envío accidental). También aplica
+    // al caso "histórico": si la ficha está despachada se asume entregado el día
+    // del despacho aunque no haya envío real registrado.
+    const cu = certificadosEmitidos[0]
+    const yaEnviado = !!(cu?.enviado_ultima_fecha)
+    if (yaEnviado) {
+      const fecha = cu.enviado_ultima_fecha ? fmtFecha(cu.enviado_ultima_fecha) : '—'
+      const hora = cu.enviado_ultima_hora ? ` a las ${cu.enviado_ultima_hora}` : ''
+      const dest = cu.enviado_a ? ` a ${cu.enviado_a}` : ''
+      const cantidad = parseInt(cu.enviado_cantidad || '0', 10) || 0
+      const veces = cantidad > 1 ? ` (ya se reenvió ${cantidad - 1} ${cantidad - 1 === 1 ? 'vez' : 'veces'})` : ''
+      const ok = confirm(
+        `Este certificado (V${cu.version}) ya fue enviado${dest} el ${fecha}${hora}${veces}.\n\n` +
+        `¿Querés reenviarlo de todas formas?`
+      )
+      if (!ok) return
+    } else if (cliente?.estado === 'despachado' && cliente.despacho?.fecha) {
+      const ok = confirm(
+        `Esta ficha figura como despachada el ${fmtFecha(cliente.despacho.fecha)}, ` +
+        `por lo que se asume que el certificado ya fue entregado en ese momento.\n\n` +
+        `¿Querés enviarlo nuevamente al correo del cliente?`
+      )
+      if (!ok) return
+    }
+    enviarCertificadoCorreo()
   }
 
   async function eliminarFicha() {
@@ -462,10 +514,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       <div className="rounded-2xl bg-white border-2 border-gray-200 shadow-md overflow-hidden mb-6">
         <div className="border-l-4 border-indigo-600 px-6 py-6 sm:px-8 sm:py-7">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-[260px]">
               <div className="flex items-center gap-2 flex-wrap mb-2">
                 <span className="font-mono text-xs text-indigo-700 font-bold bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded">{cliente.codigo}</span>
-                <Badge variant={estadoVariant}>{cliente.estado || 'pendiente'}</Badge>
+                <Badge variant={estadoVariant}>{cliente.estado && cliente.estado !== 'pendiente' ? cliente.estado : 'retirado'}</Badge>
                 {cliente.estado_pago === 'pagado'
                   ? <Badge variant="green">Pagado</Badge>
                   : <Badge variant="yellow">Pago pendiente</Badge>}
@@ -493,20 +545,49 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     ⬇ Descargar V{certUltimo.version}
                   </a>
                 )}
-                <button
-                  onClick={enviarCertificadoCorreo}
-                  disabled={enviandoCert || !cliente.email || !certUltimo}
-                  title={
-                    !cliente.email
-                      ? 'El cliente no tiene email registrado'
-                      : !certUltimo
-                        ? 'Generá primero un certificado para poder enviarlo'
-                        : `Enviar a ${cliente.email}`
-                  }
-                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-                >
-                  {enviandoCert ? '⌛ Enviando…' : '📧 Enviar al correo'}
-                </button>
+                {/* Toggle para ver historial de certificados — siempre disponible si hay al menos uno */}
+                {certificadosEmitidos.length > 0 && (
+                  <button
+                    onClick={() => setVerCertHistorico(v => !v)}
+                    className="inline-flex items-center gap-2 border-2 border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                  >
+                    {verCertHistorico ? '▲ Ocultar certificados' : `📁 Ver certificados generados (${certificadosEmitidos.length})`}
+                  </button>
+                )}
+                {/* "Histórico": si el cliente está despachado pero no hay envío real registrado,
+                    asumimos entregado el día del despacho. El botón pasa a "Reenviar" igual que
+                    cuando hay registro real, y la confirmación lo aclara. */}
+                {(() => {
+                  const yaEnviadoReal = !!certUltimo?.enviado_ultima_fecha
+                  const yaEnviadoHistorico = !yaEnviadoReal && cliente.estado === 'despachado' && !!cliente.despacho?.fecha
+                  const yaEnviado = yaEnviadoReal || yaEnviadoHistorico
+                  return (
+                    <button
+                      onClick={intentarEnviarCertificado}
+                      disabled={enviandoCert || !cliente.email || !certUltimo}
+                      title={
+                        !cliente.email
+                          ? 'El cliente no tiene email registrado'
+                          : !certUltimo
+                            ? 'Generá primero un certificado para poder enviarlo'
+                            : yaEnviado
+                              ? `Ya enviado — al hacer click te pedimos confirmación para reenviar`
+                              : `Enviar a ${cliente.email}`
+                      }
+                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm ${
+                        yaEnviado
+                          ? 'bg-gray-500 hover:bg-gray-600 text-white'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      }`}
+                    >
+                      {enviandoCert
+                        ? '⌛ Enviando…'
+                        : yaEnviado
+                          ? '🔄 Reenviar al correo'
+                          : '📧 Enviar al correo'}
+                    </button>
+                  )
+                })()}
               </div>
             )}
           </div>
@@ -519,6 +600,42 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               {feedbackCert.msg}
             </div>
           )}
+          {/* Banner permanente: el cliente ya recibió el certificado por correo.
+              Si hay un envío real registrado tiene prioridad. Caso contrario, si la ficha
+              está despachada se asume entregado el día del despacho (estado histórico). */}
+          {(() => {
+            // 1) Envío real registrado (futuro): muestra fecha/hora exacta de Resend
+            if (certUltimo?.enviado_ultima_fecha) {
+              return (
+                <div className="mt-4 rounded-lg px-3 py-2.5 text-xs font-medium bg-emerald-50 border-2 border-emerald-200 text-emerald-900 flex items-center gap-2">
+                  <span className="text-base">✓</span>
+                  <div className="flex-1">
+                    <span className="font-semibold">El certificado fue enviado al cliente</span>
+                    {certUltimo.enviado_a ? <span> a <span className="font-mono">{certUltimo.enviado_a}</span></span> : null}
+                    <span> el {fmtFecha(certUltimo.enviado_ultima_fecha)}</span>
+                    {certUltimo.enviado_ultima_hora ? <span> a las {certUltimo.enviado_ultima_hora}</span> : null}
+                    {parseInt(certUltimo.enviado_cantidad || '0', 10) > 1 && (
+                      <span className="text-emerald-700"> · reenviado {parseInt(certUltimo.enviado_cantidad || '0', 10) - 1} {parseInt(certUltimo.enviado_cantidad || '0', 10) - 1 === 1 ? 'vez' : 'veces'}</span>
+                    )}
+                  </div>
+                </div>
+              )
+            }
+            // 2) Ficha despachada sin envío real registrado: asumir entrega en la fecha del despacho
+            if (cliente.estado === 'despachado' && cliente.despacho?.fecha) {
+              return (
+                <div className="mt-4 rounded-lg px-3 py-2.5 text-xs font-medium bg-emerald-50 border-2 border-emerald-200 text-emerald-900 flex items-center gap-2">
+                  <span className="text-base">✓</span>
+                  <div className="flex-1">
+                    <span className="font-semibold">El certificado fue enviado al cliente</span>
+                    {cliente.email ? <span> a <span className="font-mono">{cliente.email}</span></span> : null}
+                    <span> con la misma fecha de despacho ({fmtFecha(cliente.despacho.fecha)})</span>
+                  </div>
+                </div>
+              )
+            }
+            return null
+          })()}
         </div>
       </div>
 
@@ -545,12 +662,15 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      {/* Historial de certificados emitidos (si hay más de uno) */}
-      {certificadosEmitidos.length > 1 && (
+      {/* Historial de certificados emitidos — colapsable, todos los certificados (incl. el último) */}
+      {verCertHistorico && certificadosEmitidos.length > 0 && (
         <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 mb-6 overflow-hidden">
           <div className="bg-gradient-to-r from-amber-50 to-yellow-50 px-6 py-3 border-b-2 border-amber-100 flex items-center gap-2">
             <span className="text-lg">📄</span>
-            <h2 className="text-sm font-bold text-amber-900 uppercase tracking-wide">Versiones de certificado</h2>
+            <h2 className="text-sm font-bold text-amber-900 uppercase tracking-wide">Certificados generados</h2>
+            <span className="text-[11px] text-amber-700 font-semibold bg-amber-100 px-2 py-0.5 rounded-full">
+              {certificadosEmitidos.length} versión{certificadosEmitidos.length !== 1 ? 'es' : ''}
+            </span>
           </div>
           <div className="divide-y divide-gray-100">
             {certificadosEmitidos.map(c => (
@@ -558,7 +678,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-gray-900">Versión {c.version}</p>
                   <p className="text-xs text-gray-500">
-                    {fmtFecha(c.fecha_emision)} {c.hora_emision ? `· ${c.hora_emision}` : ''}
+                    {fmtFecha(c.fecha_emision)}
+                    {c.hora_emision ? ` · ${fmtHoraCert(c.hora_emision)}` : ''}
                     {c.emitido_por_nombre ? ` · ${c.emitido_por_nombre}` : ''}
                   </p>
                 </div>

@@ -481,7 +481,7 @@ export default function ClientesPage() {
           <span className="text-xs font-semibold text-gray-600 mr-1">Filtrar:</span>
           {([
             { id: 'todos', label: 'Todos' },
-            { id: 'pendiente', label: '⏳ Pendientes de cremación' },
+            { id: 'pendiente', label: '📥 Retirados (en cámara)' },
             { id: 'cremado', label: '✓ Cremados' },
             { id: 'despachado', label: '📦 Despachados' },
             { id: 'pago_pendiente', label: '⚠ Pago pendiente' },
@@ -528,7 +528,7 @@ export default function ClientesPage() {
             >
               <div className="flex items-start justify-between mb-2">
                 <span className="font-mono text-xs text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded">{c.codigo}</span>
-                <Badge variant={c.estado === 'cremado' ? 'green' : c.estado === 'despachado' ? 'blue' : 'yellow'}>{c.estado || 'pendiente'}</Badge>
+                <Badge variant={c.estado === 'cremado' ? 'green' : c.estado === 'despachado' ? 'blue' : 'yellow'}>{c.estado && c.estado !== 'pendiente' ? c.estado : 'retirado'}</Badge>
               </div>
               <p className="font-bold text-gray-900 text-base">{c.nombre_mascota}</p>
               <p className="text-sm text-gray-600">{c.nombre_tutor}</p>
@@ -556,7 +556,7 @@ export default function ClientesPage() {
           <div className="space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-xs text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded">{selected.codigo}</span>
-              <Badge variant={selected.estado === 'cremado' ? 'green' : selected.estado === 'despachado' ? 'blue' : 'yellow'}>{selected.estado || 'pendiente'}</Badge>
+              <Badge variant={selected.estado === 'cremado' ? 'green' : selected.estado === 'despachado' ? 'blue' : 'yellow'}>{selected.estado && selected.estado !== 'pendiente' ? selected.estado : 'retirado'}</Badge>
               {selected.estado_pago === 'pagado' ? (
                 <Badge variant="green">Pagado</Badge>
               ) : (

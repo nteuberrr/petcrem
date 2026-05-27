@@ -15,6 +15,7 @@ const SHEETS: Record<string, string[]> = {
     'estado', 'ciclo_id', 'despacho_id',
     'veterinaria_id', 'tipo_precios', 'adicionales',
     'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
+    'precio_servicio', 'precio_adicionales', 'precio_total',
     'notas', 'tipo_pago', 'estado_pago',
     'fecha_creacion',
   ],
@@ -55,6 +56,17 @@ const SHEETS: Record<string, string[]> = {
   precios_especiales: ['id', 'veterinaria_id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd'],
   productos: ['id', 'nombre', 'categoria', 'precio', 'foto_url', 'stock', 'activo', 'fecha_creacion'],
   categorias_productos: ['id', 'nombre', 'activo', 'fecha_creacion'],
+  informes_veterinaria: [
+    'id', 'veterinaria_id', 'veterinaria_nombre',
+    'version',
+    'formato', // 'excel' | 'pdf'
+    'periodo_hasta_mes',  // 'YYYY-MM' del último mes incluido (referencia)
+    'cantidad_meses', 'cantidad_fichas', 'monto_total_clp',
+    'fecha_emision', 'hora_emision',
+    'emitido_por_id', 'emitido_por_nombre',
+    'archivo_key', 'archivo_url',
+    'fecha_creacion',
+  ],
   especies: ['id', 'nombre', 'letra', 'activo'],
   tipos_servicio: ['id', 'nombre', 'codigo', 'plazo_entrega_dias', 'activo'],
   otros_servicios: ['id', 'nombre', 'precio', 'activo', 'fecha_creacion'],
@@ -84,6 +96,7 @@ const SHEETS: Record<string, string[]> = {
     'fecha_emision', 'hora_emision',
     'emitido_por_id', 'emitido_por_nombre',
     'sin_foto', 'pdf_key', 'pdf_url',
+    'enviado_ultima_fecha', 'enviado_ultima_hora', 'enviado_cantidad', 'enviado_a',
     'fecha_creacion',
   ],
   geocoding_cache: [

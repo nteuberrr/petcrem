@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, updateRow, ensureColumns, deleteRow } from '@/lib/google-sheets'
 import { parseDecimal } from '@/lib/numbers'
+import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 
 export async function GET(
   _req: NextRequest,
@@ -46,6 +47,7 @@ export async function PATCH(
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
       'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
       'peso_declarado', 'peso_ingreso', 'despacho_id',
+      'precio_servicio', 'precio_adicionales', 'precio_total',
     ])
 
     const rows = await getSheetData('clientes')
@@ -72,7 +74,33 @@ export async function PATCH(
       normalizedBody.telefono = normalizedBody.telefono.replace(/\D/g, '').slice(-9)
     }
 
-    const updated = { ...rows[idx], ...normalizedBody }
+    const candidate = { ...rows[idx], ...normalizedBody }
+
+    // Recalcular snapshot del precio con los valores finales (post-merge).
+    // Este es el único punto donde se reescribe: edición explícita de la ficha.
+    // Cambios en tablas de precio nunca alcanzan acá.
+    const pesoSnapshot = parseDecimal(String(candidate.peso_ingreso ?? '')) ?? parseDecimal(String(candidate.peso_declarado ?? '')) ?? 0
+    const codigoServSnap = String(candidate.codigo_servicio ?? 'CI')
+    let adicionalesSnap: PCAdicionalItem[] = []
+    try { adicionalesSnap = JSON.parse(String(candidate.adicionales ?? '[]')) } catch { adicionalesSnap = [] }
+    const snapshot = await calcularSnapshotFicha({
+      peso: pesoSnapshot,
+      codigo_servicio: codigoServSnap,
+      veterinaria_id: candidate.veterinaria_id ? String(candidate.veterinaria_id) : undefined,
+      tipo_precios: candidate.tipo_precios ? String(candidate.tipo_precios) : undefined,
+      adicionales: adicionalesSnap,
+      descuento_tipo: candidate.descuento_tipo ? String(candidate.descuento_tipo) : undefined,
+      descuento_valor: candidate.descuento_valor as number | string | undefined,
+    })
+
+    const updated = {
+      ...candidate,
+      tipo_precios: snapshot.tipo_precios_efectivo,
+      precio_servicio: snapshot.precio_servicio,
+      precio_adicionales: snapshot.precio_adicionales,
+      precio_total: snapshot.precio_total,
+      descuento_monto: String(snapshot.descuento_monto),
+    }
     await updateRow('clientes', idx, updated)
     return NextResponse.json(updated)
   } catch (e) {

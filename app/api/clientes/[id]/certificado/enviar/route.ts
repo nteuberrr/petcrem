@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { promises as fs } from 'fs'
 import path from 'path'
-import { getSheetData, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, ensureSheet, ensureColumns, updateRow } from '@/lib/google-sheets'
 import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
 import { fmtFecha } from '@/lib/format'
+import { todayISO } from '@/lib/dates'
 
 const LOGO_CID = 'alma-logo-mail'
 let logoBufferCache: Buffer | null = null
@@ -27,6 +28,7 @@ const CERT_COLS = [
   'fecha_emision', 'hora_emision',
   'emitido_por_id', 'emitido_por_nombre',
   'sin_foto', 'pdf_key', 'pdf_url',
+  'enviado_ultima_fecha', 'enviado_ultima_hora', 'enviado_cantidad', 'enviado_a',
   'fecha_creacion',
 ]
 
@@ -46,15 +48,15 @@ function bodyTemplate(opts: { nombreMascota: string; nombreTutor: string; fechaC
 <body style="margin:0;padding:0;background:#f7f7f5;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#262626;">
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="600" style="max-width:600px;margin:32px auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e6e6e0;">
     <tr>
-      <td style="background:#1f2937;padding:24px 32px;">
+      <td style="background:#143C64;padding:0 24px;">
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
           <tr>
             <td valign="middle" style="text-align:left;">
-              <h1 style="margin:0;font-size:22px;letter-spacing:0.5px;color:#ffffff;font-weight:600;">Crematorio Alma Animal</h1>
-              <p style="margin:6px 0 0 0;color:#cbd5e1;font-size:13px;">Cuidamos su recuerdo con respeto</p>
+              <h1 style="margin:0;font-size:30px;letter-spacing:0.3px;color:#ffffff;font-weight:700;line-height:1.15;">Crematorio Alma Animal</h1>
+              <p style="margin:6px 0 0 0;color:#c7d4e3;font-size:14px;">Cuidamos su recuerdo con respeto</p>
             </td>
-            <td valign="middle" width="96" style="text-align:right;">
-              ${logoSrc ? `<img src="${logoSrc}" alt="Alma Animal" width="80" height="80" style="display:inline-block;border:0;width:80px;height:auto;" />` : ''}
+            <td valign="middle" width="150" style="text-align:right;">
+              ${logoSrc ? `<img src="${logoSrc}" alt="Alma Animal" width="140" height="140" style="display:inline-block;border:0;width:140px;height:auto;" />` : ''}
             </td>
           </tr>
         </table>
@@ -172,6 +174,27 @@ export async function POST(
 
     if (!res.ok) {
       return NextResponse.json({ error: res.error ?? 'No se pudo enviar el correo' }, { status: 502 })
+    }
+
+    // Persistir el envío en la fila del certificado para que el front pueda mostrar
+    // "Certificado enviado el DD-MM-YYYY" y evitar reenvíos accidentales.
+    try {
+      const certIdx = certs.findIndex(c => c.id === cert.id)
+      if (certIdx !== -1) {
+        const now = new Date()
+        const hh = String(now.getHours()).padStart(2, '0')
+        const mi = String(now.getMinutes()).padStart(2, '0')
+        const previa = parseInt(cert.enviado_cantidad || '0', 10) || 0
+        await updateRow('certificados', certIdx, {
+          ...cert,
+          enviado_ultima_fecha: todayISO(),
+          enviado_ultima_hora: `${hh}:${mi}`,
+          enviado_cantidad: String(previa + 1),
+          enviado_a: cliente.email,
+        })
+      }
+    } catch (err) {
+      console.error('[certificado/enviar] persistencia del envío falló (mail ya fue entregado):', err)
     }
 
     return NextResponse.json({ ok: true, message_id: res.message_id, to: cliente.email })
