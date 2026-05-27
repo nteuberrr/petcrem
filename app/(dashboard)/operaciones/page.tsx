@@ -5,6 +5,7 @@ import { todayISO, formatHora, horaToMinutos, formatDateForSheet } from '@/lib/d
 import { Modal } from '@/components/ui/Modal'
 import VehiculoTab from '@/components/VehiculoTab'
 import DespachosTab from '@/components/DespachosTab'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
@@ -28,7 +29,8 @@ type CargaPetroleo = {
   notas: string; fecha_creacion: string
 }
 
-type ResumenPetroleo = { total_cargado: number; total_consumido: number; stock_actual: number; ciclos_count: number }
+type ResumenPetroleo = { total_cargado: number; total_consumido: number; stock_actual: number; ciclos_count: number; total_costo?: number; costo_promedio_litro?: number }
+type CostoEvolutivoPoint = { fecha: string; fecha_label: string; litros: number; costo: number; costo_litro: number }
 
 function calcMinutos(ini: string, fin: string): number | null {
   const m1 = horaToMinutos(ini)
@@ -70,10 +72,12 @@ export default function OperacionesPage() {
   // Petróleo
   const [cargas, setCargas] = useState<CargaPetroleo[]>([])
   const [resumenPet, setResumenPet] = useState<ResumenPetroleo>({ total_cargado: 0, total_consumido: 0, stock_actual: 0, ciclos_count: 0 })
-  const [petForm, setPetForm] = useState({ fecha: todayISO(), litros: '', precio_neto: '', iva: '', especifico: '', notas: '' })
+  const [costoEvolutivo, setCostoEvolutivo] = useState<CostoEvolutivoPoint[]>([])
+  const [showCostoModal, setShowCostoModal] = useState(false)
+  const [petForm, setPetForm] = useState({ fecha: todayISO(), litros: '', total_bruto: '', notas: '' })
   const [savingPet, setSavingPet] = useState(false)
   const [editPetId, setEditPetId] = useState<string | null>(null)
-  const [editPetForm, setEditPetForm] = useState({ fecha: '', litros: '', precio_neto: '', iva: '', especifico: '', notas: '' })
+  const [editPetForm, setEditPetForm] = useState({ fecha: '', litros: '', total_bruto: '', notas: '' })
   const [savingEditPet, setSavingEditPet] = useState(false)
 
   const fetchCiclos = useCallback(async () => {
@@ -99,6 +103,7 @@ export default function OperacionesPage() {
     const data = await res.json()
     setCargas(Array.isArray(data.cargas) ? data.cargas : [])
     setResumenPet(data.resumen ?? { total_cargado: 0, total_consumido: 0, stock_actual: 0, ciclos_count: 0 })
+    setCostoEvolutivo(Array.isArray(data.costo_evolutivo) ? data.costo_evolutivo : [])
   }, [])
 
   useEffect(() => { fetchCiclos() }, [fetchCiclos])
@@ -115,14 +120,12 @@ export default function OperacionesPage() {
       body: JSON.stringify({
         fecha: petForm.fecha,
         litros: parseFloat(petForm.litros),
-        precio_neto: parseFloat(petForm.precio_neto) || 0,
-        iva: parseFloat(petForm.iva) || 0,
-        especifico: parseFloat(petForm.especifico) || 0,
+        total_bruto: parseFloat(petForm.total_bruto) || 0,
         notas: petForm.notas,
       }),
     })
     if (res.ok) {
-      setPetForm({ fecha: todayISO(), litros: '', precio_neto: '', iva: '', especifico: '', notas: '' })
+      setPetForm({ fecha: todayISO(), litros: '', total_bruto: '', notas: '' })
       await fetchPetroleo()
     } else {
       const err = await res.json().catch(() => ({}))
@@ -139,12 +142,13 @@ export default function OperacionesPage() {
 
   function abrirEditarCarga(c: CargaPetroleo) {
     setEditPetId(c.id)
+    // total_bruto fallback: si no está guardado, lo derivamos de los antiguos campos
+    const totalGuardado = parseFloat(c.total_bruto) || 0
+    const totalDerivado = (parseFloat(c.precio_neto) || 0) + (parseFloat(c.iva) || 0) + (parseFloat(c.especifico) || 0)
     setEditPetForm({
       fecha: formatDateForSheet(c.fecha), // convierte serial Excel → YYYY-MM-DD
       litros: c.litros ?? '',
-      precio_neto: c.precio_neto ?? '',
-      iva: c.iva ?? '',
-      especifico: c.especifico ?? '',
+      total_bruto: String(totalGuardado > 0 ? totalGuardado : totalDerivado),
       notas: c.notas ?? '',
     })
   }
@@ -160,9 +164,7 @@ export default function OperacionesPage() {
         id: editPetId,
         fecha: editPetForm.fecha,
         litros: editPetForm.litros,
-        precio_neto: parseFloat(editPetForm.precio_neto) || 0,
-        iva: parseFloat(editPetForm.iva) || 0,
-        especifico: parseFloat(editPetForm.especifico) || 0,
+        total_bruto: parseFloat(editPetForm.total_bruto) || 0,
         notas: editPetForm.notas,
       }),
     })
@@ -175,10 +177,6 @@ export default function OperacionesPage() {
     }
     setSavingEditPet(false)
   }
-
-  const totalBrutoEdit = (parseFloat(editPetForm.precio_neto) || 0) + (parseFloat(editPetForm.iva) || 0) + (parseFloat(editPetForm.especifico) || 0)
-
-  const totalBrutoPet = (parseFloat(petForm.precio_neto) || 0) + (parseFloat(petForm.iva) || 0) + (parseFloat(petForm.especifico) || 0)
 
   async function abrirModal() {
     setShowModal(true)
@@ -508,7 +506,7 @@ export default function OperacionesPage() {
                     <Fragment key={ciclo.id}>
                       <tr className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-semibold text-gray-900 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>N° {ciclo.numero_ciclo}</td>
-                        <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtFecha(ciclo.fecha)}</td>
+                        <td className="px-4 py-3 text-gray-700 whitespace-nowrap cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtFecha(ciclo.fecha)}</td>
                         <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(ciclo.mascotas_ids.length)}</td>
                         <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(lInicio, 0)} L</td>
                         <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(lFin, 0)} L</td>
@@ -635,7 +633,7 @@ export default function OperacionesPage() {
       {operTab === 'petroleo' && (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Stock actual</p>
               <p className={`text-2xl font-bold mt-1 ${resumenPet.stock_actual < 100 ? 'text-red-600' : 'text-gray-900'}`}>{fmtLitros(resumenPet.stock_actual)}</p>
@@ -651,13 +649,27 @@ export default function OperacionesPage() {
               <p className="text-2xl font-bold text-amber-600 mt-1">{fmtLitros(resumenPet.total_consumido)}</p>
               <p className="text-xs text-gray-400 mt-1">{resumenPet.ciclos_count} ciclo(s)</p>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowCostoModal(true)}
+              disabled={costoEvolutivo.length === 0}
+              title={costoEvolutivo.length === 0 ? 'Aún no hay cargas para graficar' : 'Ver evolución'}
+              className="text-left bg-white rounded-xl shadow-sm border border-gray-100 hover:border-indigo-400 hover:shadow-md p-5 transition-all disabled:cursor-not-allowed"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Costo prom. / L (histórico)</p>
+                <span className="text-xs text-indigo-500">📈</span>
+              </div>
+              <p className="text-2xl font-bold text-indigo-600 mt-1">{fmtPrecio(resumenPet.costo_promedio_litro ?? 0)}</p>
+              <p className="text-xs text-gray-400 mt-1">total: {fmtPrecio(resumenPet.total_costo ?? 0)}</p>
+            </button>
           </div>
 
           {/* Formulario nueva carga */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-5">Registrar carga de petróleo</h2>
             <form onSubmit={guardarCarga} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-medium text-gray-700">Fecha</label>
                   <input type="date" required value={petForm.fecha} onChange={e => setPetForm(f => ({ ...f, fecha: e.target.value }))}
@@ -668,29 +680,11 @@ export default function OperacionesPage() {
                   <input type="number" step="0.1" required value={petForm.litros} onChange={e => setPetForm(f => ({ ...f, litros: e.target.value }))}
                     className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-700">Total bruto (auto)</label>
-                  <div className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 font-semibold">
-                    {fmtPrecio(totalBrutoPet)}
-                  </div>
-                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-xs font-medium text-gray-700">Precio neto (CLP)</label>
-                  <input type="number" min="0" value={petForm.precio_neto} onChange={e => setPetForm(f => ({ ...f, precio_neto: e.target.value }))}
-                    className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-700">IVA (CLP)</label>
-                  <input type="number" min="0" value={petForm.iva} onChange={e => setPetForm(f => ({ ...f, iva: e.target.value }))}
-                    className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-700">Impuesto específico (CLP)</label>
-                  <input type="number" min="0" value={petForm.especifico} onChange={e => setPetForm(f => ({ ...f, especifico: e.target.value }))}
-                    className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700">Costo total (CLP)</label>
+                <input type="number" min="0" required value={petForm.total_bruto} onChange={e => setPetForm(f => ({ ...f, total_bruto: e.target.value }))}
+                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Total de la boleta" />
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-700">Notas</label>
@@ -713,40 +707,43 @@ export default function OperacionesPage() {
               <div className="p-8 text-center text-gray-400 text-sm">Sin cargas registradas</div>
             ) : (
               <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[720px]">
+              <table className="w-full text-sm min-w-[520px]">
                 <thead className="bg-gray-50">
                   <tr>
-                    {['Fecha', 'Litros', 'Neto', 'IVA', 'Específico', 'Total bruto', 'Notas', ''].map(h => (
+                    {['Fecha', 'Litros', 'Costo total', 'Costo/L', 'Notas', ''].map(h => (
                       <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {cargas.map(c => (
-                    <tr key={c.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-700">{fmtFecha(c.fecha)}</td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{fmtLitros(c.litros)}</td>
-                      <td className="px-4 py-3 text-gray-600">{fmtPrecio(c.precio_neto)}</td>
-                      <td className="px-4 py-3 text-gray-600">{fmtPrecio(c.iva)}</td>
-                      <td className="px-4 py-3 text-gray-600">{fmtPrecio(c.especifico)}</td>
-                      <td className="px-4 py-3 font-semibold text-gray-900">{fmtPrecio(c.total_bruto)}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{c.notas}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => abrirEditarCarga(c)}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
-                            Editar
-                          </button>
-                          <button
-                            onClick={() => eliminarCarga(c.id)}
-                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
-                            Eliminar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {cargas.map(c => {
+                    const total = parseFloat(c.total_bruto) || ((parseFloat(c.precio_neto) || 0) + (parseFloat(c.iva) || 0) + (parseFloat(c.especifico) || 0))
+                    const lts = parseFloat(c.litros) || 0
+                    const costoLitro = lts > 0 ? total / lts : 0
+                    return (
+                      <tr key={c.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{fmtFecha(c.fecha)}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{fmtLitros(c.litros)}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(total)}</td>
+                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fmtPrecio(costoLitro)}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{c.notas}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => abrirEditarCarga(c)}
+                              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => eliminarCarga(c.id)}
+                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                              Eliminar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
               </div>
@@ -768,26 +765,10 @@ export default function OperacionesPage() {
                     className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-gray-700">Precio neto</label>
-                  <input type="number" step="1" value={editPetForm.precio_neto} onChange={e => setEditPetForm(f => ({ ...f, precio_neto: e.target.value }))}
-                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-700">IVA</label>
-                  <input type="number" step="1" value={editPetForm.iva} onChange={e => setEditPetForm(f => ({ ...f, iva: e.target.value }))}
-                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-700">Específico</label>
-                  <input type="number" step="1" value={editPetForm.especifico} onChange={e => setEditPetForm(f => ({ ...f, especifico: e.target.value }))}
-                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-              </div>
-              <div className="bg-gray-50 border-2 border-gray-200 rounded-lg px-3 py-2 flex items-center justify-between">
-                <span className="text-xs font-medium text-gray-600">Total bruto</span>
-                <span className="text-sm font-bold text-gray-900">{fmtPrecio(totalBrutoEdit)}</span>
+              <div>
+                <label className="text-xs font-semibold text-gray-700">Costo total (CLP)</label>
+                <input type="number" min="0" required value={editPetForm.total_bruto} onChange={e => setEditPetForm(f => ({ ...f, total_bruto: e.target.value }))}
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Notas</label>
@@ -805,6 +786,34 @@ export default function OperacionesPage() {
                 </button>
               </div>
             </form>
+          </Modal>
+
+          {/* Modal evolución del costo por litro */}
+          <Modal open={showCostoModal} onClose={() => setShowCostoModal(false)} title="Costo / litro — evolución">
+            <div>
+              <p className="text-xs text-gray-500 mb-3">
+                Una línea de tiempo del precio del combustible cargado. Cada punto es una carga registrada.
+                {' '}{costoEvolutivo.length} carga{costoEvolutivo.length !== 1 ? 's' : ''} graficada{costoEvolutivo.length !== 1 ? 's' : ''}.
+              </p>
+              {costoEvolutivo.length === 0 ? (
+                <div className="flex items-center justify-center h-[240px] text-sm text-gray-400">
+                  Sin datos para graficar
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart data={costoEvolutivo} margin={{ bottom: 24, right: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="fecha_label" fontSize={11} tick={{ fill: '#6b7280' }}
+                      interval={costoEvolutivo.length > 10 ? Math.floor(costoEvolutivo.length / 10) : 0}
+                      angle={-35} textAnchor="end" height={56} />
+                    <YAxis fontSize={11} tick={{ fill: '#6b7280' }}
+                      tickFormatter={v => `$${Math.round(v as number)}`} />
+                    <Tooltip formatter={(v) => fmtPrecio(v as number)} />
+                    <Line type="monotone" dataKey="costo_litro" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
           </Modal>
         </>
       )}

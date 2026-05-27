@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/lib/auth'
 import { getSheetData, updateRow, ensureColumns, deleteRow } from '@/lib/google-sheets'
 import { parseDecimal } from '@/lib/numbers'
 
@@ -78,15 +80,77 @@ export async function PATCH(
   }
 }
 
+/**
+ * Eliminar una ficha de cliente. Solo admin.
+ *
+ * Antes de borrar la fila, limpia las referencias cruzadas para no dejar datos huérfanos:
+ *  - Devuelve al stock las unidades de productos adicionales que la ficha estaba consumiendo.
+ *  - Quita el id del cliente de la lista `mascotas_ids` del ciclo asociado (si tenía uno).
+ *  - Quita el id del cliente de la lista `paradas_ids` del despacho asociado (si tenía uno).
+ */
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions)
+    const role = (session?.user as { role?: string })?.role
+    if (role !== 'admin') {
+      return NextResponse.json({ error: 'Solo administradores pueden eliminar fichas' }, { status: 403 })
+    }
+
     const { id } = await params
     const rows = await getSheetData('clientes')
     const idx = rows.findIndex(r => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    const cliente = rows[idx]
+
+    // 1) Revertir stock de productos adicionales (devolver lo que consumió esta ficha)
+    const items = parseAdicionales(cliente.adicionales)
+    if (items.length > 0) {
+      await adjustProductStock(items, [])
+    }
+
+    // 2) Limpiar referencia en el ciclo (si tenía uno)
+    if (cliente.ciclo_id) {
+      try {
+        const ciclos = await getSheetData('ciclos')
+        const cidx = ciclos.findIndex(c => c.id === cliente.ciclo_id)
+        if (cidx !== -1) {
+          const ciclo = ciclos[cidx]
+          const idsRaw = (ciclo.mascotas_ids ?? '').toString()
+          const idsArr = idsRaw.split(',').map(s => s.trim()).filter(Boolean)
+          if (idsArr.includes(id)) {
+            const filtrados = idsArr.filter(x => x !== id)
+            await updateRow('ciclos', cidx, { ...ciclo, mascotas_ids: filtrados.join(',') })
+          }
+        }
+      } catch (err) {
+        console.warn('[clientes/delete] no se pudo limpiar referencia en ciclo:', err)
+      }
+    }
+
+    // 3) Limpiar referencia en el despacho (si tenía uno)
+    if (cliente.despacho_id) {
+      try {
+        const despachos = await getSheetData('despachos')
+        const didx = despachos.findIndex(d => d.id === cliente.despacho_id)
+        if (didx !== -1) {
+          const desp = despachos[didx]
+          const idsRaw = (desp.paradas_ids ?? desp.mascotas_ids ?? '').toString()
+          const idsArr = idsRaw.split(',').map(s => s.trim()).filter(Boolean)
+          if (idsArr.includes(id)) {
+            const filtrados = idsArr.filter(x => x !== id)
+            const colKey = desp.paradas_ids !== undefined ? 'paradas_ids' : 'mascotas_ids'
+            await updateRow('despachos', didx, { ...desp, [colKey]: filtrados.join(',') })
+          }
+        }
+      } catch (err) {
+        console.warn('[clientes/delete] no se pudo limpiar referencia en despacho:', err)
+      }
+    }
+
+    // 4) Borrar la fila del cliente
     await deleteRow('clientes', idx)
     return NextResponse.json({ ok: true })
   } catch (e) {

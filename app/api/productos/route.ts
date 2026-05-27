@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, getNextId, ensureColumn, deleteRow } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, getNextId, ensureColumn, ensureColumns, deleteRow } from '@/lib/google-sheets'
 import { todayISO } from '@/lib/dates'
 
 export async function GET() {
   try {
+    await ensureColumns('productos', ['stock', 'categoria'])
     const rows = await getSheetData('productos')
     return NextResponse.json(rows)
   } catch (e) {
@@ -13,7 +14,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureColumn('productos', 'stock')
+    await ensureColumns('productos', ['stock', 'categoria'])
     const body = await req.json()
     const id = await getNextId('productos')
     const now = todayISO()
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
       precio: String(body.precio),
       foto_url: body.foto_url ?? '',
       stock: String(body.stock ?? 0),
+      categoria: (body.categoria ?? '').toString().trim(),
       activo: 'TRUE',
       fecha_creacion: now,
     }
@@ -65,7 +67,7 @@ export async function DELETE(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    await ensureColumn('productos', 'stock')
+    await ensureColumns('productos', ['stock', 'categoria'])
     const body = await req.json()
     const { id, delta_stock, ...updates } = body
     const rows = await getSheetData('productos')

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, appendRow, getNextId, deleteRow, ensureColumns, ensureSheet, updateRow } from '@/lib/google-sheets'
-import { todayISO } from '@/lib/dates'
+import { todayISO, formatDateForSheet } from '@/lib/dates'
 
 const HOJA = 'cargas_petroleo'
 const COLS = ['id', 'fecha', 'litros', 'precio_neto', 'iva', 'especifico', 'total_bruto', 'notas', 'fecha_creacion']
@@ -23,9 +23,39 @@ export async function GET() {
       return s + Math.abs(fin - ini) // se gastan litros sin importar el sentido de la resta
     }, 0)
     const stock = totalCargado - totalConsumido
+    // Costo histórico: total bruto acumulado de todas las cargas (auto-rellena si solo
+    // hay neto+iva+especifico para cargas viejas guardadas antes del rediseño del form).
+    const totalCosto = cargas.reduce((s, r) => {
+      const tb = parseFloat(r.total_bruto) || 0
+      if (tb > 0) return s + tb
+      return s + (parseFloat(r.precio_neto) || 0) + (parseFloat(r.iva) || 0) + (parseFloat(r.especifico) || 0)
+    }, 0)
+    const costoPromedioLitro = totalCargado > 0 ? totalCosto / totalCargado : 0
+
+    // Serie evolutiva del costo por carga (orden cronológico ascendente).
+    // Cada punto = una carga individual con su fecha + costo/litro de esa carga.
+    // Útil para ver tendencia del precio del combustible a lo largo del tiempo.
+    const costoEvolutivo = cargas
+      .map(r => {
+        const lts = parseFloat(r.litros) || 0
+        const tb = parseFloat(r.total_bruto) || 0
+        const totalFb = tb > 0 ? tb : ((parseFloat(r.precio_neto) || 0) + (parseFloat(r.iva) || 0) + (parseFloat(r.especifico) || 0))
+        const iso = formatDateForSheet(r.fecha)
+        return {
+          fecha: iso,
+          fecha_label: iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: '2-digit' }) : '',
+          litros: lts,
+          costo: totalFb,
+          costo_litro: lts > 0 ? totalFb / lts : 0,
+        }
+      })
+      .filter(p => p.fecha && p.litros > 0 && p.costo > 0)
+      .sort((a, b) => a.fecha.localeCompare(b.fecha))
+
     return NextResponse.json({
       cargas: cargas.reverse(),
-      resumen: { total_cargado: totalCargado, total_consumido: totalConsumido, stock_actual: stock, ciclos_count: ciclos.length },
+      resumen: { total_cargado: totalCargado, total_consumido: totalConsumido, stock_actual: stock, ciclos_count: ciclos.length, total_costo: totalCosto, costo_promedio_litro: costoPromedioLitro },
+      costo_evolutivo: costoEvolutivo,
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
@@ -77,7 +107,10 @@ export async function PATCH(req: NextRequest) {
     if (updates.precio_neto !== undefined) updated.precio_neto = parseFloat(updates.precio_neto) || 0
     if (updates.iva !== undefined) updated.iva = parseFloat(updates.iva) || 0
     if (updates.especifico !== undefined) updated.especifico = parseFloat(updates.especifico) || 0
-    if (updates.precio_neto !== undefined || updates.iva !== undefined || updates.especifico !== undefined) {
+    // total_bruto autoritativo si viene en el body. Si no, deriva de neto+iva+esp.
+    if (updates.total_bruto !== undefined) {
+      updated.total_bruto = parseFloat(String(updates.total_bruto)) || 0
+    } else if (updates.precio_neto !== undefined || updates.iva !== undefined || updates.especifico !== undefined) {
       const neto = parseFloat(String(updated.precio_neto)) || 0
       const iva = parseFloat(String(updated.iva)) || 0
       const esp = parseFloat(String(updated.especifico)) || 0

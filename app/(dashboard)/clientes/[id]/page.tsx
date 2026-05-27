@@ -1,11 +1,23 @@
 'use client'
-import { useState, useEffect, use, useRef } from 'react'
+import { useState, useEffect, use, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtLitros, fmtPrecio, fmtFecha } from '@/lib/format'
 import { formatDateForSheet } from '@/lib/dates'
+
+type Certificado = {
+  id: string
+  cliente_id: string
+  version: string
+  fecha_emision: string
+  hora_emision: string
+  pdf_url: string
+  emitido_por_nombre: string
+  sin_foto: string
+}
 
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
 
@@ -63,7 +75,7 @@ type ClienteDetalle = {
 }
 
 type Veterinario = { id: string; nombre: string; activo: string; tipo_precios: string }
-type Producto = { id: string; nombre: string; precio: string; stock: string; activo: string }
+type Producto = { id: string; nombre: string; precio: string; stock: string; categoria?: string; activo: string }
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
 type TramoEspecial = Tramo & { veterinaria_id: string }
@@ -71,6 +83,8 @@ type TramoEspecial = Tramo & { veterinaria_id: string }
 export default function ClienteDetallePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const { data: session } = useSession()
+  const isAdmin = (session?.user as { role?: string })?.role === 'admin'
   const [cliente, setCliente] = useState<ClienteDetalle | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -97,6 +111,24 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [descuentosDisp, setDescuentosDisp] = useState<Descuento[]>([])
   const [aplicarDescuento, setAplicarDescuento] = useState(false)
   const [descuentoId, setDescuentoId] = useState('')
+
+  // Certificados emitidos (para botones de descarga y envío por correo)
+  const [certificadosEmitidos, setCertificadosEmitidos] = useState<Certificado[]>([])
+  const [enviandoCert, setEnviandoCert] = useState(false)
+  const [feedbackCert, setFeedbackCert] = useState<{ kind: 'ok' | 'error'; msg: string } | null>(null)
+
+  // Eliminar ficha (admin only)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deletingFicha, setDeletingFicha] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
+  const fetchCertificados = useCallback(async () => {
+    const res = await fetch(`/api/clientes/${id}/certificados`).catch(() => null)
+    if (!res || !res.ok) return
+    const data = await res.json().catch(() => [])
+    setCertificadosEmitidos(Array.isArray(data) ? data : [])
+  }, [id])
 
   useEffect(() => {
     fetch(`/api/clientes/${id}`)
@@ -152,7 +184,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     fetch('/api/descuentos')
       .then(r => r.json())
       .then(d => setDescuentosDisp(Array.isArray(d) ? d.filter((x: Descuento) => x.activo === 'TRUE') : []))
-  }, [id])
+    fetchCertificados()
+  }, [id, fetchCertificados])
 
   // Load special pricing when vet changes
   useEffect(() => {
@@ -214,8 +247,48 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       a.click()
       URL.revokeObjectURL(url)
       setShowCertModal(false)
+      // El backend acaba de registrar una nueva versión en R2 — refrescamos la lista
+      // para que aparezcan los botones de descargar / enviar por correo.
+      await fetchCertificados()
     } finally {
       setDescargandoCert(false)
+    }
+  }
+
+  async function enviarCertificadoCorreo() {
+    setFeedbackCert(null)
+    setEnviandoCert(true)
+    try {
+      const res = await fetch(`/api/clientes/${id}/certificado/enviar`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setFeedbackCert({ kind: 'error', msg: data?.error ?? 'No se pudo enviar el correo' })
+        return
+      }
+      setFeedbackCert({ kind: 'ok', msg: `Certificado enviado a ${data.to}` })
+    } catch (e) {
+      setFeedbackCert({ kind: 'error', msg: e instanceof Error ? e.message : 'Error al enviar' })
+    } finally {
+      setEnviandoCert(false)
+    }
+  }
+
+  async function eliminarFicha() {
+    if (!cliente) return
+    setDeleteError('')
+    setDeletingFicha(true)
+    try {
+      const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setDeleteError(data?.error ?? 'No se pudo eliminar la ficha')
+        return
+      }
+      router.push('/clientes')
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Error al eliminar')
+    } finally {
+      setDeletingFicha(false)
     }
   }
 
@@ -369,51 +442,143 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     return opts
   })()
 
+  const certUltimo = certificadosEmitidos[0]
+  const puedeGenerarCert = cliente.estado === 'cremado' || cliente.estado === 'despachado'
+  const estadoVariant: 'green' | 'blue' | 'yellow' =
+    cliente.estado === 'cremado' ? 'green'
+    : cliente.estado === 'despachado' ? 'blue'
+    : 'yellow'
+
   return (
-    <div className="max-w-3xl">
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()}
-          className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
-          title="Volver">
-          <span className="text-base">←</span>
-          <span>Volver</span>
-        </button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">{cliente.nombre_mascota}</h1>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="font-mono text-xs text-indigo-700 font-semibold bg-indigo-50 px-2 py-0.5 rounded">{cliente.codigo}</span>
-            <Badge variant={cliente.estado === 'cremado' ? 'green' : 'yellow'}>{cliente.estado}</Badge>
-            {vetSeleccionada && <Badge variant="blue">{vetSeleccionada.nombre}</Badge>}
+    <div className="max-w-4xl">
+      <button onClick={() => router.back()}
+        className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors mb-3"
+        title="Volver">
+        <span className="text-base">←</span>
+        <span className="font-medium">Volver</span>
+      </button>
+
+      {/* Header limpio sobre fondo claro: borde lateral indigo + tipografía grande */}
+      <div className="rounded-2xl bg-white border-2 border-gray-200 shadow-md overflow-hidden mb-6">
+        <div className="border-l-4 border-indigo-600 px-6 py-6 sm:px-8 sm:py-7">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <span className="font-mono text-xs text-indigo-700 font-bold bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded">{cliente.codigo}</span>
+                <Badge variant={estadoVariant}>{cliente.estado || 'pendiente'}</Badge>
+                {cliente.estado_pago === 'pagado'
+                  ? <Badge variant="green">Pagado</Badge>
+                  : <Badge variant="yellow">Pago pendiente</Badge>}
+                {vetSeleccionada && <Badge variant="blue">{vetSeleccionada.nombre}</Badge>}
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 truncate">{cliente.nombre_mascota}</h1>
+              <p className="text-sm text-gray-600 mt-1">Tutor: <span className="font-semibold text-gray-900">{cliente.nombre_tutor || '—'}</span></p>
+            </div>
+            {puedeGenerarCert && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={abrirModalCertificado}
+                  disabled={descargandoCert}
+                  className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
+                >
+                  📄 {certUltimo ? 'Generar nueva versión' : 'Generar certificado'}
+                </button>
+                {certUltimo && (
+                  <a
+                    href={certUltimo.pdf_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                  >
+                    ⬇ Descargar V{certUltimo.version}
+                  </a>
+                )}
+                <button
+                  onClick={enviarCertificadoCorreo}
+                  disabled={enviandoCert || !cliente.email || !certUltimo}
+                  title={
+                    !cliente.email
+                      ? 'El cliente no tiene email registrado'
+                      : !certUltimo
+                        ? 'Generá primero un certificado para poder enviarlo'
+                        : `Enviar a ${cliente.email}`
+                  }
+                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                >
+                  {enviandoCert ? '⌛ Enviando…' : '📧 Enviar al correo'}
+                </button>
+              </div>
+            )}
           </div>
+          {feedbackCert && (
+            <div className={`mt-4 rounded-lg px-3 py-2 text-xs font-medium border ${
+              feedbackCert.kind === 'ok'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-red-50 border-red-200 text-red-800'
+            }`}>
+              {feedbackCert.msg}
+            </div>
+          )}
         </div>
-        {(cliente.estado === 'cremado' || cliente.estado === 'despachado') && (
-          <button
-            onClick={abrirModalCertificado}
-            disabled={descargandoCert}
-            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            📄 Certificado PDF
-          </button>
-        )}
       </div>
 
-      {/* Proceso de cremación — al principio para ver estado primero */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 mb-6">
-        <h2 className="text-base font-bold text-gray-900 mb-4">Proceso de cremación</h2>
-        {cliente.ciclo ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InfoField label="Fecha del ciclo" value={fmtFecha(cliente.ciclo.fecha)} />
-            <InfoField label="Número de ciclo" value={`N° ${cliente.ciclo.numero_ciclo}`} />
-            <InfoField label="Litros utilizados" value={litrosUsados !== null ? fmtLitros(litrosUsados) : '—'} />
-            <InfoField label="Comentarios" value={cliente.ciclo.comentarios || '—'} />
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 text-yellow-800 bg-yellow-50 border-2 border-yellow-300 rounded-lg px-4 py-3 text-sm font-medium">
-            <span>⏳</span>
-            <span>Pendiente de cremación — aún no asignada a ningún ciclo.</span>
-          </div>
-        )}
+      {/* Proceso de cremación — rediseñado con header colorido y mejor jerarquía */}
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 mb-6 overflow-hidden">
+        <div className="bg-gradient-to-r from-rose-50 to-orange-50 px-6 py-3 border-b-2 border-rose-100 flex items-center gap-2">
+          <span className="text-lg">🔥</span>
+          <h2 className="text-sm font-bold text-rose-900 uppercase tracking-wide">Proceso de cremación</h2>
+        </div>
+        <div className="p-6">
+          {cliente.ciclo ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <InfoField label="Fecha del ciclo" value={fmtFecha(cliente.ciclo.fecha)} />
+              <InfoField label="N° ciclo" value={`N° ${cliente.ciclo.numero_ciclo}`} />
+              <InfoField label="Litros utilizados" value={litrosUsados !== null ? fmtLitros(litrosUsados) : '—'} />
+              <InfoField label="Comentarios" value={cliente.ciclo.comentarios || '—'} />
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 text-yellow-800 bg-yellow-50 border-2 border-yellow-300 rounded-lg px-4 py-3 text-sm font-medium">
+              <span>⏳</span>
+              <span>Pendiente de cremación — aún no asignada a ningún ciclo.</span>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Historial de certificados emitidos (si hay más de uno) */}
+      {certificadosEmitidos.length > 1 && (
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 mb-6 overflow-hidden">
+          <div className="bg-gradient-to-r from-amber-50 to-yellow-50 px-6 py-3 border-b-2 border-amber-100 flex items-center gap-2">
+            <span className="text-lg">📄</span>
+            <h2 className="text-sm font-bold text-amber-900 uppercase tracking-wide">Versiones de certificado</h2>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {certificadosEmitidos.map(c => (
+              <div key={c.id} className="flex items-center justify-between px-6 py-3 gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">Versión {c.version}</p>
+                  <p className="text-xs text-gray-500">
+                    {fmtFecha(c.fecha_emision)} {c.hora_emision ? `· ${c.hora_emision}` : ''}
+                    {c.emitido_por_nombre ? ` · ${c.emitido_por_nombre}` : ''}
+                  </p>
+                </div>
+                {c.pdf_url ? (
+                  <a
+                    href={c.pdf_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
+                  >
+                    ⬇ Descargar
+                  </a>
+                ) : (
+                  <span className="text-xs text-gray-400">PDF no disponible</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Despacho — solo si fue despachada */}
       {cliente.estado === 'despachado' && (
@@ -435,7 +600,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       {/* Datos de ingreso */}
       <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 mb-6">
         <h2 className="text-base font-bold text-gray-900 mb-4">Datos de ingreso</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
           <Field required label="Nombre tutor" value={form.nombre_tutor} onChange={v => setForm(f => ({ ...f, nombre_tutor: v }))} />
           <Field required type="email" label="Email" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} />
@@ -600,40 +765,64 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
         {showAdicionales && (
           <div className="border-t border-gray-100 px-6 pb-6 pt-4">
-            {/* Productos */}
-            {productosDisp.length > 0 && (
-              <div className="mb-6">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Productos y ánforas</p>
-                <div className="space-y-2">
-                  {productosDisp.map(p => {
-                    const item = adicionales.find(a => a.tipo === 'producto' && a.id === p.id)
-                    const stockNum = parseInt(p.stock || '0')
-                    return (
-                      <div key={p.id} className="flex items-center gap-3 py-1.5">
-                        <input
-                          type="checkbox"
-                          checked={!!item}
-                          onChange={() => toggleAdicional('producto', p)}
-                          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <span className="flex-1 text-sm text-gray-900">{p.nombre}</span>
-                        <span className="text-xs text-gray-500">{fmtPrecio(p.precio)}</span>
-                        {stockNum < 50 && <span className="text-xs text-red-500 font-medium">⚠ stock: {stockNum}</span>}
-                        {item && (
-                          <input
-                            type="number"
-                            min={1}
-                            value={item.qty}
-                            onChange={e => updateQty('producto', p.id, parseInt(e.target.value) || 1)}
-                            className="w-16 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        )}
+            {/* Productos — agrupados por categoría, sin info de stock (oculta);
+                los productos con stock = 0 quedan tachados y no seleccionables */}
+            {productosDisp.length > 0 && (() => {
+              const grupos = new Map<string, Producto[]>()
+              for (const p of productosDisp) {
+                const cat = (p.categoria ?? '').trim() || 'Sin categoría'
+                const arr = grupos.get(cat) ?? []
+                arr.push(p)
+                grupos.set(cat, arr)
+              }
+              const orden = Array.from(grupos.keys()).sort((a, b) => {
+                if (a === 'Sin categoría') return 1
+                if (b === 'Sin categoría') return -1
+                return a.localeCompare(b)
+              })
+              return (
+                <div className="mb-6">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Productos</p>
+                  <div className="space-y-4">
+                    {orden.map(cat => (
+                      <div key={cat}>
+                        <p className="text-[11px] font-bold text-indigo-700 uppercase tracking-wide mb-2 border-b border-indigo-100 pb-1">{cat}</p>
+                        <div className="space-y-2 pl-1">
+                          {grupos.get(cat)!.map(p => {
+                            const item = adicionales.find(a => a.tipo === 'producto' && a.id === p.id)
+                            const stockNum = parseInt(p.stock || '0')
+                            const sinStock = stockNum <= 0
+                            return (
+                              <div key={p.id} className={`flex items-center gap-3 py-1.5 ${sinStock ? 'opacity-50' : ''}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={!!item}
+                                  disabled={sinStock && !item}
+                                  onChange={() => toggleAdicional('producto', p)}
+                                  className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                                />
+                                <span className={`flex-1 text-sm ${sinStock ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{p.nombre}</span>
+                                <span className={`text-xs ${sinStock ? 'text-gray-400 line-through' : 'text-gray-500'}`}>{fmtPrecio(p.precio)}</span>
+                                {sinStock && <span className="text-xs text-red-600 font-semibold">sin stock</span>}
+                                {item && !sinStock && (
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={item.qty}
+                                    onChange={e => updateQty('producto', p.id, parseInt(e.target.value) || 1)}
+                                    className="w-16 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  />
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
-                    )
-                  })}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* Otros servicios */}
             {otrosServicios.length > 0 && (
@@ -793,6 +982,85 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           </div>
         </div>
       </div>
+
+      {/* Zona de peligro: eliminar ficha (solo admin) */}
+      {isAdmin && (
+        <div className="bg-white rounded-xl border-2 border-red-200 mb-6 overflow-hidden">
+          <div className="bg-red-50 px-6 py-3 border-b-2 border-red-100 flex items-center gap-2">
+            <span className="text-lg">⚠️</span>
+            <h2 className="text-sm font-bold text-red-800 uppercase tracking-wide">Zona de peligro</h2>
+          </div>
+          <div className="p-6 flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900">Eliminar ficha del cliente</p>
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                Borra esta ficha de la planilla. Devuelve al stock las unidades de productos
+                adicionales asociados y quita las referencias de esta mascota en ciclos y despachos.
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <button
+              onClick={() => { setDeleteConfirmText(''); setDeleteError(''); setShowDeleteModal(true) }}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+            >
+              Eliminar ficha
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmación de eliminación — requiere tipear el código para evitar accidentes */}
+      <Modal open={showDeleteModal} onClose={() => !deletingFicha && setShowDeleteModal(false)} title="Eliminar ficha">
+        <div className="space-y-4">
+          <div className="bg-red-50 border-2 border-red-200 rounded-lg p-3 text-sm text-red-900">
+            <p className="font-semibold">Estás por eliminar permanentemente:</p>
+            <p className="mt-1">
+              <span className="font-mono text-xs bg-white border border-red-200 px-1.5 py-0.5 rounded">{cliente.codigo}</span>
+              {' · '}
+              <span className="font-semibold">{cliente.nombre_mascota}</span>
+              {' · '}
+              {cliente.nombre_tutor}
+            </p>
+          </div>
+          <p className="text-xs text-gray-600 leading-relaxed">
+            Esta acción no se puede deshacer. Para confirmar, escribí el código de la ficha
+            (<span className="font-mono font-semibold text-gray-900">{cliente.codigo}</span>) en el campo de abajo.
+          </p>
+          <div>
+            <label className="text-xs font-semibold text-gray-700">Confirmar código</label>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              placeholder={cliente.codigo}
+              disabled={deletingFicha}
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-red-500"
+              autoFocus
+            />
+          </div>
+          {deleteError && (
+            <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{deleteError}</p>
+          )}
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              disabled={deletingFicha}
+              onClick={() => setShowDeleteModal(false)}
+              className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={deletingFicha || deleteConfirmText.trim().toUpperCase() !== cliente.codigo.toUpperCase()}
+              onClick={eliminarFicha}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 text-sm font-semibold shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {deletingFicha ? 'Eliminando…' : 'Eliminar definitivamente'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal generar certificado */}
       <Modal open={showCertModal} onClose={() => setShowCertModal(false)} title="Generar certificado de cremación">

@@ -374,6 +374,8 @@ export default function AsistenciaPage() {
 
   const retirosFiltrados = useMemo(() => {
     return retiros.filter(r => {
+      // Operador solo ve sus propios retiros
+      if (!isAdmin && r.usuario_id !== myId) return false
       const fecha = formatDateForSheet(r.fecha) || r.fecha
       if (filtroMes && !fecha.startsWith(filtroMes)) return false
       if (filtroUsuario && r.usuario_id !== filtroUsuario) return false
@@ -381,34 +383,49 @@ export default function AsistenciaPage() {
       if (filtroPago === 'pagado' && !r.pago_id) return false
       return true
     })
-  }, [retiros, filtroMes, filtroUsuario, filtroPago])
+  }, [retiros, filtroMes, filtroUsuario, filtroPago, isAdmin, myId])
 
-  // Resumen de retiros por operador — para la tab "retiros"
-  type ResumenRetiros = { usuario_id: string; usuario_nombre: string; cantidad: number; costo: number }
+  // Resumen de retiros por operador — para la tab "retiros". Separa pagados y pendientes
+  // para que el admin vea ambos montos en lugar de uno solo agregado (que confundía).
+  type ResumenRetiros = {
+    usuario_id: string
+    usuario_nombre: string
+    cantidad_pagada: number
+    cantidad_pendiente: number
+    monto_pagado: number
+    monto_pendiente: number
+  }
   const resumenRetirosPorOperador = useMemo<ResumenRetiros[]>(() => {
     const precio = vigente?.precio_retiro_adicional ?? 0
     const m = new Map<string, ResumenRetiros>()
     for (const r of retirosFiltrados) {
       let acc = m.get(r.usuario_id)
       if (!acc) {
-        acc = { usuario_id: r.usuario_id, usuario_nombre: r.usuario_nombre, cantidad: 0, costo: 0 }
+        acc = { usuario_id: r.usuario_id, usuario_nombre: r.usuario_nombre, cantidad_pagada: 0, cantidad_pendiente: 0, monto_pagado: 0, monto_pendiente: 0 }
         m.set(r.usuario_id, acc)
       }
-      acc.cantidad += 1
-      acc.costo += precio
+      if (r.pago_id) {
+        acc.cantidad_pagada += 1
+        acc.monto_pagado += precio
+      } else {
+        acc.cantidad_pendiente += 1
+        acc.monto_pendiente += precio
+      }
     }
     return Array.from(m.values()).sort((a, b) => a.usuario_nombre.localeCompare(b.usuario_nombre))
   }, [retirosFiltrados, vigente])
 
   const filtrados = useMemo(() => {
     return registros.filter(r => {
+      // Operador solo ve sus propios fichajes
+      if (!isAdmin && r.usuario_id !== myId) return false
       const fecha = formatDateForSheet(r.fecha) || r.fecha
       if (filtroMes && !fecha.startsWith(filtroMes)) return false
       if (filtroUsuario && r.usuario_id !== filtroUsuario) return false
       if (filtroEstado !== 'todos' && r.estado_aprobacion !== filtroEstado) return false
       return true
     })
-  }, [registros, filtroMes, filtroUsuario, filtroEstado])
+  }, [registros, filtroMes, filtroUsuario, filtroEstado, isAdmin, myId])
 
   // Resumen por operador — totales separados por persona
   type ResumenOperador = {
@@ -788,20 +805,22 @@ export default function AsistenciaPage() {
           </div>
         )}
 
-        {/* Resumen retiros por operador (admin) */}
+        {/* Resumen retiros por operador (admin) — separa pagados de pendientes */}
         {isAdmin && resumenRetirosPorOperador.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {resumenRetirosPorOperador.map(op => (
               <div key={op.usuario_id} className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-5">
                 <h3 className="text-base font-bold text-gray-900 mb-3">{op.usuario_nombre}</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
-                    <p className="text-xs font-semibold text-blue-700 uppercase">Retiros</p>
-                    <p className="text-lg font-bold text-blue-900 mt-1">{op.cantidad}</p>
-                  </div>
                   <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-3">
-                    <p className="text-xs font-semibold text-emerald-700 uppercase">Pago estimado</p>
-                    <p className="text-lg font-bold text-emerald-900 mt-1">{fmtPrecio(op.costo)}</p>
+                    <p className="text-xs font-semibold text-emerald-700 uppercase">Pagados</p>
+                    <p className="text-lg font-bold text-emerald-900 mt-1">{fmtPrecio(op.monto_pagado)}</p>
+                    <p className="text-[11px] text-emerald-700 mt-0.5">{op.cantidad_pagada} retiro{op.cantidad_pagada !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3">
+                    <p className="text-xs font-semibold text-amber-700 uppercase">Pendientes de pago</p>
+                    <p className="text-lg font-bold text-amber-900 mt-1">{fmtPrecio(op.monto_pendiente)}</p>
+                    <p className="text-[11px] text-amber-700 mt-0.5">{op.cantidad_pendiente} retiro{op.cantidad_pendiente !== 1 ? 's' : ''}</p>
                   </div>
                 </div>
               </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, appendRow, ensureSheet, ensureColumns } from '@/lib/google-sheets'
 import { generarCertificadoBuffer, checkCertificateAssets, type FirmaInfo } from '@/lib/certificate-generator'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 import { firmarPDF, getSignerInfo, isSigningEnabled } from '@/lib/sign-pdf'
@@ -16,18 +16,6 @@ const CERT_COLS = [
   'fecha_creacion',
 ]
 
-async function calcularVersion(clienteId: string): Promise<number> {
-  try {
-    await ensureSheet('certificados')
-    await ensureColumns('certificados', CERT_COLS)
-    const rows = await getSheetData('certificados')
-    const existentes = rows.filter(r => r.cliente_id === clienteId).length
-    return existentes + 1
-  } catch {
-    return 1
-  }
-}
-
 function nombreArchivo(cliente: Record<string, string>, version: number): string {
   const sufijo = version > 1 ? `_V${version}` : ''
   return `Certificado_${cliente.nombre_mascota}_${cliente.codigo}${sufijo}.pdf`
@@ -39,7 +27,11 @@ async function obtenerDatosCliente(id: string) {
     throw new Error(`Archivos de imagen faltantes en /public/certificates/: ${assets.missing.join(', ')}`)
   }
 
-  const clientes = await getSheetData('clientes')
+  // Una sola pasada paralela en lugar de dos getSheetData secuenciales.
+  const [clientes, ciclos] = await Promise.all([
+    getSheetData('clientes'),
+    getSheetData('ciclos'),
+  ])
   const cliente = clientes.find(c => c.id === id)
   if (!cliente) throw Object.assign(new Error('Cliente no encontrado'), { status: 404 })
   if (cliente.estado !== 'cremado' && cliente.estado !== 'despachado') {
@@ -47,7 +39,6 @@ async function obtenerDatosCliente(id: string) {
   }
   if (!cliente.ciclo_id) throw Object.assign(new Error('Sin ciclo de cremación asignado'), { status: 400 })
 
-  const ciclos = await getSheetData('ciclos')
   const ciclo = ciclos.find(c => c.id === cliente.ciclo_id)
   if (!ciclo) throw Object.assign(new Error('Ciclo de cremación no encontrado'), { status: 404 })
 
@@ -63,10 +54,23 @@ function pdfResponse(buffer: Buffer, filename: string): Response {
   })
 }
 
-async function reservarIdCertificado(): Promise<string> {
+/**
+ * Lee la hoja certificados UNA sola vez y calcula a la vez:
+ *   - certId reservado (max(id)+1)
+ *   - version del certificado para este cliente (count(propios)+1)
+ *
+ * Antes hacíamos ensureSheet+ensureColumns+getSheetData dos veces seguidas
+ * (en reservarIdCertificado y en calcularVersion), lo que duplicaba lecturas
+ * y disparaba "Quota exceeded for Read requests per minute".
+ */
+async function preparseCertificado(clienteId: string): Promise<{ certId: string; version: number }> {
   await ensureSheet('certificados')
   await ensureColumns('certificados', CERT_COLS)
-  return getNextId('certificados')
+  const rows = await getSheetData('certificados')
+  const ids = rows.map(r => parseInt(r.id, 10)).filter(n => Number.isFinite(n))
+  const certId = String((ids.length > 0 ? Math.max(...ids) : 0) + 1)
+  const version = rows.filter(r => r.cliente_id === clienteId).length + 1
+  return { certId, version }
 }
 
 function construirFirmaInfo(certId: string): FirmaInfo | null {
@@ -125,8 +129,7 @@ async function generarYFirmar(
   ciclo: Record<string, string>,
   opts: { fotoBytes?: Uint8Array; sinFoto: boolean },
 ): Promise<{ buffer: Buffer; certId: string; version: number; filename: string; firmado: boolean }> {
-  const certId = await reservarIdCertificado()
-  const version = await calcularVersion(cliente.id)
+  const { certId, version } = await preparseCertificado(cliente.id)
   const filename = nombreArchivo(cliente, version)
   const firmaActiva = isSigningEnabled()
   const firmaInfo = firmaActiva ? construirFirmaInfo(certId) : null

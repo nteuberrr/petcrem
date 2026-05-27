@@ -33,9 +33,15 @@ export interface TrackingIds {
 
 export interface AttachmentSpec {
   filename: string
-  /** URL pública del archivo (Resend lo baja para adjuntar). */
-  path: string
+  /** URL pública del archivo (Resend lo baja para adjuntar). Mutuamente excluyente con `content`. */
+  path?: string
+  /** Contenido binario (Buffer o base64 string). Mutuamente excluyente con `path`. */
+  content?: Buffer | string
   content_type?: string
+  /** Para imágenes inline referenciadas en el HTML como <img src="cid:xxx" />. */
+  content_id?: string
+  /** "attachment" (default) o "inline". `inline` + content_id hace que la imagen no aparezca como adjunto. */
+  content_disposition?: 'attachment' | 'inline'
 }
 
 export interface SendOpts {
@@ -43,6 +49,8 @@ export interface SendOpts {
   subject: string
   html: string
   reply_to?: string
+  /** Si se pasa, sobrescribe el From por defecto (útil para envíos transaccionales desde contacto@). */
+  from?: string
   /** Texto que aparece en el inbox al lado del asunto (se inyecta como span invisible). */
   preview_text?: string
   /** Tags para correlacionar webhooks con la campaña (Resend permite hasta 10 tags). */
@@ -128,7 +136,15 @@ export interface SendResult {
 
 function buildAttachmentsPayload(attachments: AttachmentSpec[] | undefined) {
   if (!attachments || attachments.length === 0) return undefined
-  return attachments.map(a => ({ filename: a.filename, path: a.path, contentType: a.content_type }))
+  return attachments.map(a => {
+    const payload: Record<string, unknown> = { filename: a.filename }
+    if (a.content !== undefined) payload.content = a.content
+    if (a.path !== undefined) payload.path = a.path
+    if (a.content_type) payload.contentType = a.content_type
+    if (a.content_id) payload.contentId = a.content_id
+    if (a.content_disposition) payload.contentDisposition = a.content_disposition
+    return payload
+  })
 }
 
 export async function sendEmail(opts: SendOpts): Promise<SendResult> {
@@ -136,7 +152,7 @@ export async function sendEmail(opts: SendOpts): Promise<SendResult> {
     const client = getClient()
     const html = prepararHtml(opts)
     const res = await client.emails.send({
-      from: getFromAddress(),
+      from: opts.from || getFromAddress(),
       to: opts.to,
       subject: opts.subject,
       html,

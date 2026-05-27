@@ -11,7 +11,8 @@ const TABS = ['Precios', 'Productos', 'Especies', 'Tipos servicio', 'Otros servi
 type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
 
-type Producto = { id: string; nombre: string; precio: string; foto_url: string; stock: string; activo: string }
+type Producto = { id: string; nombre: string; precio: string; foto_url: string; stock: string; categoria?: string; activo: string }
+type CategoriaProducto = { id: string; nombre: string; activo: string; fecha_creacion: string }
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string; veterinaria_id?: string }
 type Especie = { id: string; nombre: string; letra: string; activo: string }
 type TipoServicio = { id: string; nombre: string; codigo: string; plazo_entrega_dias: string; activo: string }
@@ -174,6 +175,11 @@ export default function ConfiguracionPage() {
   }
 
   const [productos, setProductos] = useState<Producto[]>([])
+  const [categoriasProd, setCategoriasProd] = useState<CategoriaProducto[]>([])
+  const [showCatModal, setShowCatModal] = useState(false)
+  const [editingCat, setEditingCat] = useState<CategoriaProducto | null>(null)
+  const [catForm, setCatForm] = useState({ nombre: '' })
+  const [catError, setCatError] = useState('')
   const [preciosG, setPreciosG] = useState<Tramo[]>([])
   const [preciosC, setPreciosC] = useState<Tramo[]>([])
   const [preciosE, setPreciosE] = useState<Tramo[]>([])
@@ -205,7 +211,7 @@ export default function ConfiguracionPage() {
   const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null)
   const [mostrarPassword, setMostrarPassword] = useState(false)
 
-  const [prodForm, setProdForm] = useState({ nombre: '', precio: '', foto_url: '' })
+  const [prodForm, setProdForm] = useState({ nombre: '', precio: '', foto_url: '', categoria: '' })
   const [stockDelta, setStockDelta] = useState('')
   const [especieForm, setEspecieForm] = useState({ nombre: '', letra: '' })
   const [otroForm, setOtroForm] = useState({ nombre: '', precio: '' })
@@ -221,8 +227,12 @@ export default function ConfiguracionPage() {
 
   const refresh = useCallback(async (key: RefreshKey = 'all') => {
     if (key === 'productos' || key === 'all') {
-      const p = await fetch('/api/productos').then(r => r.json())
+      const [p, c] = await Promise.all([
+        fetch('/api/productos').then(r => r.json()),
+        fetch('/api/categorias-productos').then(r => r.json()).catch(() => []),
+      ])
       setProductos(Array.isArray(p) ? p : [])
+      setCategoriasProd(Array.isArray(c) ? c : [])
     }
     if (key === 'precios' || key === 'all') {
       const [pg, pc, pe] = await Promise.all([
@@ -267,7 +277,7 @@ export default function ConfiguracionPage() {
 
   // Detecta a partir de la URL qué hoja refrescar después de mutar (evita refetchear todo)
   function refreshKeyForUrl(url: string): RefreshKey {
-    if (url.includes('/api/productos')) return 'productos'
+    if (url.includes('/api/productos') || url.includes('/api/categorias-productos')) return 'productos'
     if (url.includes('/api/precios')) return 'precios'
     if (url.includes('/api/especies')) return 'especies'
     if (url.includes('/api/servicios')) return 'servicios'
@@ -487,48 +497,136 @@ export default function ConfiguracionPage() {
 
       {/* ─── PRODUCTOS ─── */}
       {tab === 'Productos' && (
+        <div className="space-y-4">
+
+        {/* Categorías */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div>
+              <h2 className="font-semibold text-gray-900">Categorías de productos</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Agrupá productos por tipo (ej: Ánforas, Relicarios). Editar el nombre actualiza también los productos asociados.</p>
+            </div>
+            <button onClick={() => { setEditingCat(null); setCatForm({ nombre: '' }); setCatError(''); setShowCatModal(true) }}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Nueva categoría</button>
+          </div>
+          {categoriasProd.length === 0 ? (
+            <div className="px-6 py-6 text-center text-sm text-gray-400">
+              Aún no creaste categorías. También se cargan automáticamente las que ya hayan sido tipeadas en productos.
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {categoriasProd.map(c => {
+                const cantidad = productos.filter(p => (p.categoria ?? '').trim().toLowerCase() === c.nombre.toLowerCase()).length
+                return (
+                  <div key={c.id} className="flex items-center justify-between px-6 py-3 gap-3 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium text-gray-900">{c.nombre}</span>
+                      <span className="text-[11px] text-indigo-700 font-semibold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                        {cantidad} producto{cantidad !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => { setEditingCat(c); setCatForm({ nombre: c.nombre }); setCatError(''); setShowCatModal(true) }}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Editar</button>
+                      {isAdmin && (
+                        <button onClick={async () => {
+                          if (cantidad > 0) {
+                            const otras = categoriasProd.filter(x => x.id !== c.id).map(x => x.nombre)
+                            const opcionesTxt = otras.length > 0 ? `\nOpciones disponibles: ${otras.join(', ')}` : ''
+                            const reasignar = prompt(`La categoría "${c.nombre}" tiene ${cantidad} producto(s).\n\nEscribí el nombre de la categoría a la que querés moverlos, o dejá vacío para que queden sin categoría.${opcionesTxt}`)
+                            if (reasignar === null) return  // canceló
+                            const r = await fetch(`/api/categorias-productos?id=${c.id}&reasignar_a=${encodeURIComponent(reasignar.trim())}`, { method: 'DELETE' })
+                            if (!r.ok) { const err = await r.json().catch(() => ({})); alert(err?.error ?? 'Error al eliminar'); return }
+                            await refresh('productos')
+                          } else {
+                            if (!confirm(`¿Eliminar la categoría "${c.nombre}"?`)) return
+                            const r = await fetch(`/api/categorias-productos?id=${c.id}`, { method: 'DELETE' })
+                            if (!r.ok) { const err = await r.json().catch(() => ({})); alert(err?.error ?? 'Error al eliminar'); return }
+                            await refresh('productos')
+                          }
+                        }}
+                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Eliminar</button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-900">Productos adicionales</h2>
-            <button onClick={() => { setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '' }); setShowProdModal(true) }}
+            <button onClick={() => { setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '' }); setShowProdModal(true) }}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
-          <div className="divide-y divide-gray-100">
-            {productos.map(p => {
-              const stockNum = parseInt(p.stock || '0')
+          {productos.length === 0 ? (
+            <div className="px-6 py-8 text-center text-sm text-gray-400">Sin productos registrados</div>
+          ) : (
+            (() => {
+              const grupos = new Map<string, Producto[]>()
+              for (const p of productos) {
+                const cat = (p.categoria ?? '').trim() || 'Sin categoría'
+                const arr = grupos.get(cat) ?? []
+                arr.push(p)
+                grupos.set(cat, arr)
+              }
+              const orden = Array.from(grupos.keys()).sort((a, b) => {
+                if (a === 'Sin categoría') return 1
+                if (b === 'Sin categoría') return -1
+                return a.localeCompare(b)
+              })
               return (
-                <div key={p.id} className="flex items-center gap-4 px-6 py-4">
-                  {p.foto_url
-                    ? <img src={p.foto_url} alt={p.nombre} className="w-12 h-12 object-cover rounded-lg border border-gray-100" />
-                    : <div className="w-12 h-12 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-center text-gray-300 text-xl">📦</div>
-                  }
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">{p.nombre}</p>
-                    <p className="text-xs text-gray-500">{fmtPrecio(p.precio)}</p>
-                  </div>
-                  <div className="text-right mr-4">
-                    <p className={`text-sm font-bold ${stockNum < 50 ? 'text-red-600' : 'text-gray-700'}`}>{fmtNumero(stockNum)}</p>
-                    <p className="text-xs text-gray-400">en stock{stockNum < 50 && <span className="text-red-500 ml-1">⚠</span>}</p>
-                  </div>
-                  <button onClick={() => setShowStockModal(p)} className="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors mr-2">+ Unidades</button>
-                  <Toggle checked={p.activo === 'TRUE'} onChange={val => patch('/api/productos', { id: p.id, activo: val ? 'TRUE' : 'FALSE' })} />
-                  <div className="flex items-center gap-2 ml-3">
-                    <button
-                      onClick={() => { setEditingProducto(p); setProdForm({ nombre: p.nombre, precio: p.precio, foto_url: p.foto_url }); setShowProdModal(true) }}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Editar</button>
-                    {isAdmin && (
-                      <button
-                        onClick={() => { if (confirm(`¿Eliminar "${p.nombre}"?`)) del(`/api/productos?id=${p.id}`) }}
-                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Eliminar</button>
-                    )}
-                  </div>
+                <div className="divide-y-2 divide-gray-200">
+                  {orden.map(cat => (
+                    <div key={cat}>
+                      <div className="bg-indigo-50 px-6 py-2 border-b border-indigo-100 flex items-center justify-between">
+                        <h3 className="text-xs font-bold text-indigo-900 uppercase tracking-wide">{cat}</h3>
+                        <span className="text-[10px] text-indigo-700 font-semibold bg-indigo-100 px-2 py-0.5 rounded-full">
+                          {grupos.get(cat)!.length} producto{grupos.get(cat)!.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {grupos.get(cat)!.map(p => {
+                          const stockNum = parseInt(p.stock || '0')
+                          return (
+                            <div key={p.id} className="flex items-center gap-4 px-6 py-4 flex-wrap">
+                              {p.foto_url
+                                ? <img src={p.foto_url} alt={p.nombre} className="w-12 h-12 object-cover rounded-lg border border-gray-100" />
+                                : <div className="w-12 h-12 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-center text-gray-300 text-xl">📦</div>
+                              }
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{p.nombre}</p>
+                                <p className="text-xs text-gray-500">{fmtPrecio(p.precio)}</p>
+                              </div>
+                              <div className="text-right mr-4">
+                                <p className={`text-sm font-bold ${stockNum < 50 ? 'text-red-600' : 'text-gray-700'}`}>{fmtNumero(stockNum)}</p>
+                                <p className="text-xs text-gray-400">en stock{stockNum < 50 && <span className="text-red-500 ml-1">⚠</span>}</p>
+                              </div>
+                              <button onClick={() => setShowStockModal(p)} className="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors mr-2">+ Unidades</button>
+                              <Toggle checked={p.activo === 'TRUE'} onChange={val => patch('/api/productos', { id: p.id, activo: val ? 'TRUE' : 'FALSE' })} />
+                              <div className="flex items-center gap-2 ml-3">
+                                <button
+                                  onClick={() => { setEditingProducto(p); setProdForm({ nombre: p.nombre, precio: p.precio, foto_url: p.foto_url, categoria: p.categoria ?? '' }); setShowProdModal(true) }}
+                                  className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Editar</button>
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => { if (confirm(`¿Eliminar "${p.nombre}"?`)) del(`/api/productos?id=${p.id}`) }}
+                                    className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Eliminar</button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )
-            })}
-            {productos.length === 0 && (
-              <div className="px-6 py-8 text-center text-sm text-gray-400">Sin productos registrados</div>
-            )}
-          </div>
+            })()
+          )}
+        </div>
         </div>
       )}
 
@@ -1243,22 +1341,47 @@ export default function ConfiguracionPage() {
         )}
       </Modal>
 
-      <Modal open={showProdModal} onClose={() => { setShowProdModal(false); setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '' }) }}
+      <Modal open={showProdModal} onClose={() => { setShowProdModal(false); setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '' }) }}
         title={editingProducto ? 'Editar producto' : 'Agregar producto'}>
         <form onSubmit={async e => {
           e.preventDefault()
+          const categoria = prodForm.categoria.trim()
+          if (!categoria) {
+            alert('La categoría es obligatoria. Escribí una existente o creá una nueva (ej: Ánforas, Relicarios).')
+            return
+          }
           if (editingProducto) {
-            await patch('/api/productos', { id: editingProducto.id, nombre: prodForm.nombre, precio: String(parseInt(prodForm.precio) || 0), foto_url: prodForm.foto_url })
+            await patch('/api/productos', { id: editingProducto.id, nombre: prodForm.nombre, categoria, precio: String(parseInt(prodForm.precio) || 0), foto_url: prodForm.foto_url })
           } else {
-            await post('/api/productos', { nombre: prodForm.nombre, precio: parseInt(prodForm.precio), foto_url: prodForm.foto_url })
+            await post('/api/productos', { nombre: prodForm.nombre, categoria, precio: parseInt(prodForm.precio), foto_url: prodForm.foto_url })
           }
           setShowProdModal(false)
           setEditingProducto(null)
-          setProdForm({ nombre: '', precio: '', foto_url: '' })
+          setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '' })
         }} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>
             <input required value={prodForm.nombre} onChange={e => setProdForm(f => ({ ...f, nombre: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700">Categoría <span className="text-red-500">*</span></label>
+            <input
+              required
+              list="categorias-productos"
+              value={prodForm.categoria}
+              onChange={e => setProdForm(f => ({ ...f, categoria: e.target.value }))}
+              placeholder="Elegí una existente o escribí una nueva (Ánforas, Relicarios, etc.)"
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <datalist id="categorias-productos">
+              {(() => {
+                const set = new Set<string>()
+                categoriasProd.forEach(c => { if (c.activo === 'TRUE') set.add(c.nombre) })
+                productos.forEach(p => { const v = (p.categoria ?? '').trim(); if (v) set.add(v) })
+                return Array.from(set).sort().map(cat => <option key={cat} value={cat} />)
+              })()}
+            </datalist>
+            <p className="text-[10px] text-gray-500 mt-0.5">Elegí una existente o escribí una nueva. Las categorías se gestionan arriba.</p>
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Precio (CLP)</label>
@@ -1282,6 +1405,53 @@ export default function ConfiguracionPage() {
             {prodForm.foto_url && <img src={prodForm.foto_url} alt="preview" className="mt-2 w-20 h-20 object-cover rounded-lg" />}
           </div>
           <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingProducto ? 'Guardar cambios' : 'Guardar'}</button>
+        </form>
+      </Modal>
+
+      {/* Modal Categoría: agregar/editar */}
+      <Modal open={showCatModal} onClose={() => { setShowCatModal(false); setEditingCat(null); setCatForm({ nombre: '' }); setCatError('') }}
+        title={editingCat ? 'Editar categoría' : 'Nueva categoría'}>
+        <form onSubmit={async e => {
+          e.preventDefault()
+          setCatError('')
+          const nombre = catForm.nombre.trim()
+          if (!nombre) { setCatError('Nombre requerido'); return }
+          if (editingCat) {
+            const r = await fetch('/api/categorias-productos', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: editingCat.id, nombre }),
+            })
+            if (!r.ok) { const err = await r.json().catch(() => ({})); setCatError(err?.error ?? 'Error al actualizar'); return }
+          } else {
+            const r = await fetch('/api/categorias-productos', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nombre }),
+            })
+            if (!r.ok) { const err = await r.json().catch(() => ({})); setCatError(err?.error ?? 'Error al crear'); return }
+          }
+          setShowCatModal(false)
+          setEditingCat(null)
+          setCatForm({ nombre: '' })
+          await refresh('productos')
+        }} className="space-y-4">
+          <div>
+            <label className="text-xs font-medium text-gray-700">Nombre de la categoría</label>
+            <input required autoFocus value={catForm.nombre}
+              onChange={e => setCatForm({ nombre: e.target.value })}
+              placeholder="Ej: Ánforas, Relicarios, Urnas…"
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          {editingCat && (
+            <p className="text-[11px] text-gray-500">
+              Cambiar el nombre actualiza también todos los productos que actualmente están en esta categoría.
+            </p>
+          )}
+          {catError && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{catError}</p>}
+          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+            {editingCat ? 'Guardar cambios' : 'Crear categoría'}
+          </button>
         </form>
       </Modal>
 
@@ -1448,7 +1618,7 @@ export default function ConfiguracionPage() {
           })
           setShowTramoModal(null)
         }} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[['Peso mín (kg)', 'peso_min'], ['Peso máx (kg)', 'peso_max'], ['Precio CI', 'precio_ci'], ['Precio CP', 'precio_cp'], ['Precio SD', 'precio_sd']].map(([label, key]) => (
               <div key={key}>
                 <label className="text-xs font-medium text-gray-700">{label}</label>
@@ -1487,7 +1657,7 @@ export default function ConfiguracionPage() {
               </select>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[['Peso mín (kg)', 'peso_min'], ['Peso máx (kg)', 'peso_max'], ['Precio CI', 'precio_ci'], ['Precio CP', 'precio_cp'], ['Precio SD', 'precio_sd']].map(([label, key]) => (
               <div key={key}>
                 <label className="text-xs font-medium text-gray-700">{label}</label>

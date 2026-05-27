@@ -19,7 +19,10 @@ async function ensure() {
 export async function GET() {
   try {
     await ensure()
-    const rows = await getSheetData(HOJA)
+    const [rows, clientes] = await Promise.all([
+      getSheetData(HOJA),
+      getSheetData('clientes').catch(() => [] as Record<string, string>[]),
+    ])
     // Orden cronológico ascendente por km_odometro para cálculos
     const sorted = rows.slice().sort((a, b) => (parseFloat(a.km_odometro) || 0) - (parseFloat(b.km_odometro) || 0))
 
@@ -65,10 +68,51 @@ export async function GET() {
       })
       .sort((a, b) => a.mes.localeCompare(b.mes))
 
+    // Serie mensual de "costo por retiro de mascota" — driver fecha_retiro del cliente.
+    // Capada a los últimos 12 meses con actividad para alinearse al resto del dashboard.
+    const costoMensual: Record<string, { costo: number; mascotas: number }> = {}
+    for (const r of rows) {
+      const iso = formatDateForSheet(r.fecha || r.fecha_creacion)
+      if (!iso) continue
+      const f = new Date(`${iso}T12:00:00`)
+      if (isNaN(f.getTime())) continue
+      const key = `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}`
+      const lt = parseFloat(r.litros) || 0
+      const precioLt = parseFloat(r.monto) || 0
+      if (!costoMensual[key]) costoMensual[key] = { costo: 0, mascotas: 0 }
+      costoMensual[key].costo += lt * precioLt
+    }
+    for (const c of clientes) {
+      const iso = formatDateForSheet(c.fecha_retiro || c.fecha_creacion)
+      if (!iso) continue
+      const f = new Date(`${iso}T12:00:00`)
+      if (isNaN(f.getTime())) continue
+      const key = `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}`
+      if (!costoMensual[key]) costoMensual[key] = { costo: 0, mascotas: 0 }
+      costoMensual[key].mascotas += 1
+    }
+    const costoRetiroMensual = Object.entries(costoMensual)
+      .map(([mes, v]) => {
+        const [y, m] = mes.split('-').map(Number)
+        const fecha = new Date(y, m - 1, 1)
+        const mes_label = fecha.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' })
+        return {
+          mes,
+          mes_label,
+          costo: v.costo,
+          mascotas: v.mascotas,
+          costo_por_retiro: v.mascotas > 0 ? v.costo / v.mascotas : 0,
+        }
+      })
+      .filter(x => x.costo > 0 || x.mascotas > 0)
+      .sort((a, b) => a.mes.localeCompare(b.mes))
+      .slice(-12)  // últimos 12 meses con actividad
+
     return NextResponse.json({
       cargas: sorted.reverse(), // mostrar recientes primero (ya no se usa sorted después)
       resumen: { total_litros: totalLitros, total_km: kmTotales, total_monto: totalMonto, rendimiento_promedio: rendimiento },
       mensual,
+      costo_retiro_mensual: costoRetiroMensual,
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

@@ -54,8 +54,8 @@ export default function BasesPage() {
   return (
     <div className="max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Bases de datos</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Fichas de veterinarios</p>
+        <h1 className="text-2xl font-bold text-gray-900">Veterinarios</h1>
+        <p className="text-gray-500 text-sm mt-0.5">Fichas de veterinarias derivantes</p>
       </div>
 
       {/* ─── VETERINARIOS ─── */}

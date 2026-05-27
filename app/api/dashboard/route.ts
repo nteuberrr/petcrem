@@ -244,15 +244,15 @@ export async function GET() {
       const f = parseDateSafe(r.fecha)
       if (f) fechasRelevantes.push(f)
     }
+    // Ventana adaptativa: desde el primer mes con datos hasta el mes actual,
+    // capeado a un máximo de 12 meses. Si no hay datos, arranca el mes actual.
     const masAntigua = fechasRelevantes.length > 0
       ? new Date(Math.min(...fechasRelevantes.map(d => d.getTime())))
-      : new Date(anioActual, mesActual - 11, 1)
-
-    // Siempre mostramos exactamente los últimos 12 meses (incluyendo el actual).
-    // Antes era adaptativo entre 12 y 24 meses, pero con >12 los labels se
-    // amontonaban y daba la impresión de que se saltaban meses.
-    void masAntigua  // ya no se usa para acotar la ventana, pero la calculamos por compatibilidad
-    const startEffective = new Date(anioActual, mesActual - 11, 1)
+      : new Date(anioActual, mesActual, 1)
+    const masAntiguaMes = new Date(masAntigua.getFullYear(), masAntigua.getMonth(), 1)
+    const tope12mesesAtras = new Date(anioActual, mesActual - 11, 1)
+    // El inicio efectivo es el más reciente entre "primer mes con datos" y "12 meses atrás"
+    const startEffective = masAntiguaMes > tope12mesesAtras ? masAntiguaMes : tope12mesesAtras
 
     // Generar buckets desde startEffective hasta mesActual (inclusivo)
     const startVentanas: Date[] = []

@@ -14,11 +14,13 @@ type Carga = {
 
 type Resumen = { total_litros: number; total_km: number; total_monto: number; rendimiento_promedio: number }
 type Mensual = { mes: string; mes_label: string; km: number; litros: number; km_por_litro: number }
+type CostoRetiroMensual = { mes: string; mes_label: string; costo: number; mascotas: number; costo_por_retiro: number }
 
 export default function VehiculoTab() {
   const [cargas, setCargas] = useState<Carga[]>([])
   const [resumen, setResumen] = useState<Resumen>({ total_litros: 0, total_km: 0, total_monto: 0, rendimiento_promedio: 0 })
   const [mensual, setMensual] = useState<Mensual[]>([])
+  const [costoRetiroMensual, setCostoRetiroMensual] = useState<CostoRetiroMensual[]>([])
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     fecha: todayISO(),
@@ -38,6 +40,7 @@ export default function VehiculoTab() {
     setCargas(Array.isArray(data.cargas) ? data.cargas : [])
     setResumen(data.resumen ?? { total_litros: 0, total_km: 0, total_monto: 0, rendimiento_promedio: 0 })
     setMensual(Array.isArray(data.mensual) ? data.mensual : [])
+    setCostoRetiroMensual(Array.isArray(data.costo_retiro_mensual) ? data.costo_retiro_mensual : [])
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
@@ -161,24 +164,44 @@ export default function VehiculoTab() {
         </form>
       </div>
 
-      {/* Gráfico mensual */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Rendimiento mensual (km/lt)</h3>
-        {mensual.length < 1 ? (
-          <div className="flex items-center justify-center h-[200px] text-sm text-gray-400">
-            Se necesitan al menos 2 registros para calcular rendimiento
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={mensual}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="mes_label" fontSize={11} tick={{ fill: '#6b7280' }} />
-              <YAxis fontSize={11} tick={{ fill: '#6b7280' }} />
-              <Tooltip formatter={(v) => `${fmtNumero(v as number, 2)} km/lt`} />
-              <Line type="monotone" dataKey="km_por_litro" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+      {/* Gráficos mensuales */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Rendimiento mensual (km/lt)</h3>
+          {mensual.length < 1 ? (
+            <div className="flex items-center justify-center h-[200px] text-sm text-gray-400">
+              Se necesitan al menos 2 registros para calcular rendimiento
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={mensual}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="mes_label" fontSize={11} tick={{ fill: '#6b7280' }} />
+                <YAxis fontSize={11} tick={{ fill: '#6b7280' }} />
+                <Tooltip formatter={(v) => `${fmtNumero(v as number, 2)} km/lt`} />
+                <Line type="monotone" dataKey="km_por_litro" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Costo promedio por retiro de mascota</h3>
+          {costoRetiroMensual.length < 1 ? (
+            <div className="flex items-center justify-center h-[200px] text-sm text-gray-400">
+              Sin datos suficientes (necesita cargas vehiculares y retiros en el mismo mes)
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={costoRetiroMensual} margin={{ right: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="mes_label" fontSize={11} tick={{ fill: '#6b7280' }} />
+                <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => `$${((v as number) / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={(v) => fmtPrecio(v as number)} />
+                <Line type="monotone" dataKey="costo_por_retiro" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </div>
 
       {/* Historial */}

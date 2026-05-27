@@ -20,7 +20,7 @@ type Cliente = {
 }
 type Especie = { id: string; nombre: string; letra: string; activo: string }
 type Veterinario = { id: string; nombre: string; activo: string; tipo_precios?: string }
-type Producto = { id: string; nombre: string; precio: string; stock: string; activo: string }
+type Producto = { id: string; nombre: string; precio: string; stock: string; categoria?: string; activo: string }
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
@@ -55,6 +55,7 @@ const FORM_DEFAULT = {
   misma_direccion: false,
   comuna: '',
   fecha_retiro: '',
+  fecha_defuncion: '',
   especie: '',
   letra_especie: '',
   peso_declarado: '',
@@ -82,7 +83,10 @@ export default function ClientesPage() {
   const [veterinarias, setVeterinarias] = useState<Veterinario[]>([])
   const [productosDisp, setProductosDisp] = useState<Producto[]>([])
   const [otrosServicios, setOtrosServicios] = useState<OtroServicio[]>([])
-  const [noEsVeterinaria, setNoEsVeterinaria] = useState(false)
+  // Lógica invertida: por defecto es General (sin veterinaria). El checkbox
+  // dice "Cliente de Veterinaria" — al marcarlo aparece el selector.
+  const [esClienteVet, setEsClienteVet] = useState(false)
+  const noEsVeterinaria = !esClienteVet
   const [adicionales, setAdicionales] = useState<AdicionalItem[]>([])
   const [showAdicionales, setShowAdicionales] = useState(false)
   const [descuentosDisp, setDescuentosDisp] = useState<Descuento[]>([])
@@ -349,7 +353,7 @@ export default function ClientesPage() {
       })
       setShowModal(false)
       setForm(FORM_DEFAULT)
-      setNoEsVeterinaria(false)
+      setEsClienteVet(false)
       setAdicionales([])
       setShowAdicionales(false)
       setAplicarDescuento(false)
@@ -458,25 +462,10 @@ export default function ClientesPage() {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <KpiCard icon="👥" color="indigo" value={kpis.total.toString()} label="Total clientes" />
         <KpiCard icon="👥" color="emerald" value={kpis.delMes.toString()} label="Clientes del mes"
           hint={kpis.promMesHist !== null ? `Promedio histórico: ${kpis.promMesHist.toFixed(1)} (${kpis.mesesCerrados} mes${kpis.mesesCerrados !== 1 ? 'es' : ''})` : 'Sin histórico aún'} />
-        <KpiCard icon="👥" color="blue" value={kpis.delaSemana.toString()} label="Clientes de la semana"
-          hint={kpis.promSemanaHist !== null ? `Promedio histórico: ${kpis.promSemanaHist.toFixed(1)} (${kpis.semanasCerradas} semana${kpis.semanasCerradas !== 1 ? 's' : ''})` : 'Sin histórico aún'} />
-        <KpiCard icon="⚖️" color="purple" value={fmtKg(kpis.pesoProm)} label="Peso promedio" />
-      </div>
-
-      {/* Segmentación */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-5">
-          <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Distribución por especie</p>
-          <Distribucion items={kpis.porEspecie} total={kpis.total} />
-        </div>
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-5">
-          <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">Distribución por servicio</p>
-          <Distribucion items={kpis.porServicio} total={kpis.total} />
-        </div>
       </div>
 
       {/* Buscador + filtros */}
@@ -575,7 +564,7 @@ export default function ClientesPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <PreviewField label="Tutor" value={selected.nombre_tutor} />
               <PreviewField label="Especie" value={selected.especie} />
               <PreviewField label="Email" value={selected.email || '—'} />
@@ -672,7 +661,7 @@ export default function ClientesPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <ModalField required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
             <ModalField required label="Nombre tutor" value={form.nombre_tutor} onChange={v => setForm(f => ({ ...f, nombre_tutor: v }))} />
             <ModalField required type="email" label="Email" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} placeholder="ejemplo@correo.cl" />
@@ -693,12 +682,13 @@ export default function ClientesPage() {
             <ModalAddressField required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <ModalField required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
+            <ModalField required type="date" label="Fecha de defunción" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
             <ModalField required type="date" label="Fecha de retiro" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-gray-700">
                 Especie <span className="text-red-500">*</span>
@@ -719,14 +709,25 @@ export default function ClientesPage() {
               Tipo de servicio <span className="text-red-500">*</span>
             </label>
             <select required value={form.codigo_servicio} onChange={e => {
-              const svc = SERVICIOS.find(s => s.codigo === e.target.value)
-              setForm(f => ({ ...f, codigo_servicio: e.target.value, tipo_servicio: svc?.nombre ?? '' }))
+              const codigo = e.target.value
+              const svc = SERVICIOS.find(s => s.codigo === codigo)
+              // En Sin Devolución no hay despacho posterior, así que la dirección de
+              // despacho equivale a la de retiro: auto-marcamos misma_direccion para
+              // ahorrar el segundo campo.
+              const esSinDev = codigo === 'SD'
+              setForm(f => ({
+                ...f,
+                codigo_servicio: codigo,
+                tipo_servicio: svc?.nombre ?? '',
+                misma_direccion: esSinDev ? true : f.misma_direccion,
+                direccion_despacho: esSinDev ? f.direccion_retiro : f.direccion_despacho,
+              }))
             }} className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
               {SERVICIOS.map(s => <option key={s.codigo} value={s.codigo}>{s.nombre} ({s.codigo})</option>)}
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t-2 border-gray-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t-2 border-gray-200">
             <div>
               <label className="text-xs font-semibold text-gray-700">
                 Tipo de pago <span className="text-red-500">*</span>
@@ -752,16 +753,21 @@ export default function ClientesPage() {
             </div>
           </div>
 
-          {/* Veterinaria */}
+          {/* Veterinaria derivante (lógica invertida) */}
           <div className="border-t-2 border-gray-200 pt-4">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-gray-700">Veterinaria derivante</label>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" checked={noEsVeterinaria} onChange={e => { setNoEsVeterinaria(e.target.checked); if (e.target.checked) setForm(f => ({ ...f, veterinaria_id: '' })) }} className="w-3.5 h-3.5 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500" />
-                <span className="text-xs text-gray-600">No es veterinaria</span>
-              </label>
-            </div>
-            {!noEsVeterinaria && (
+            <label className="flex items-center gap-2 cursor-pointer select-none mb-2">
+              <input
+                type="checkbox"
+                checked={esClienteVet}
+                onChange={e => {
+                  setEsClienteVet(e.target.checked)
+                  if (!e.target.checked) setForm(f => ({ ...f, veterinaria_id: '' }))
+                }}
+                className="w-4 h-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-xs font-semibold text-gray-700">Cliente de veterinaria</span>
+            </label>
+            {esClienteVet && (
               <select value={form.veterinaria_id} onChange={e => setForm(f => ({ ...f, veterinaria_id: e.target.value }))}
                 className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 <option value="">Seleccionar veterinaria...</option>
@@ -791,29 +797,54 @@ export default function ClientesPage() {
 
               {showAdicionales && (
                 <div className="pb-3">
-                  {productosDisp.length > 0 && (
-                    <div className="mb-3">
-                      <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Productos</p>
-                      <div className="space-y-1.5">
-                        {productosDisp.map(p => {
-                          const item = adicionales.find(a => a.tipo === 'producto' && a.id === p.id)
-                          const stockNum = parseInt(p.stock || '0')
-                          return (
-                            <div key={p.id} className="flex items-center gap-2">
-                              <input type="checkbox" checked={!!item} onChange={() => toggleAdicional('producto', p)} className="w-3.5 h-3.5 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500" />
-                              <span className="flex-1 text-sm text-gray-800">{p.nombre}</span>
-                              <span className="text-xs text-gray-500">{fmtPrecio(p.precio)}</span>
-                              {stockNum < 50 && <span className="text-xs text-red-500 font-medium">⚠{stockNum}</span>}
-                              {item && (
-                                <input type="number" min={1} value={item.qty} onChange={e => updateQty('producto', p.id, parseInt(e.target.value) || 1)}
-                                  className="w-14 border-2 border-gray-300 rounded px-1.5 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                              )}
+                  {productosDisp.length > 0 && (() => {
+                    // Agrupados por categoría (mismo orden que en Configuración).
+                    const grupos = new Map<string, Producto[]>()
+                    for (const p of productosDisp) {
+                      const cat = (p.categoria ?? '').trim() || 'Sin categoría'
+                      const arr = grupos.get(cat) ?? []
+                      arr.push(p)
+                      grupos.set(cat, arr)
+                    }
+                    const orden = Array.from(grupos.keys()).sort((a, b) => {
+                      if (a === 'Sin categoría') return 1
+                      if (b === 'Sin categoría') return -1
+                      return a.localeCompare(b)
+                    })
+                    return (
+                      <div className="mb-3">
+                        <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Productos</p>
+                        <div className="space-y-3">
+                          {orden.map(cat => (
+                            <div key={cat}>
+                              <p className="text-[11px] font-bold text-indigo-700 uppercase tracking-wide mb-1.5 border-b border-indigo-100 pb-1">{cat}</p>
+                              <div className="space-y-1.5 pl-1">
+                                {grupos.get(cat)!.map(p => {
+                                  const item = adicionales.find(a => a.tipo === 'producto' && a.id === p.id)
+                                  const stockNum = parseInt(p.stock || '0')
+                                  const sinStock = stockNum <= 0
+                                  return (
+                                    <div key={p.id} className={`flex items-center gap-2 ${sinStock ? 'opacity-50' : ''}`}>
+                                      <input type="checkbox" checked={!!item} disabled={sinStock && !item}
+                                        onChange={() => toggleAdicional('producto', p)}
+                                        className="w-3.5 h-3.5 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed" />
+                                      <span className={`flex-1 text-sm ${sinStock ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{p.nombre}</span>
+                                      <span className={`text-xs ${sinStock ? 'text-gray-400 line-through' : 'text-gray-500'}`}>{fmtPrecio(p.precio)}</span>
+                                      {sinStock && <span className="text-[10px] text-red-600 font-semibold">sin stock</span>}
+                                      {item && !sinStock && (
+                                        <input type="number" min={1} value={item.qty} onChange={e => updateQty('producto', p.id, parseInt(e.target.value) || 1)}
+                                          className="w-14 border-2 border-gray-300 rounded px-1.5 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </div>
                             </div>
-                          )
-                        })}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   {otrosServicios.length > 0 && (
                     <div>
@@ -1043,31 +1074,6 @@ function KpiCard({ icon, color, value, label, hint }: { icon: string; color: str
         <p className="text-xs text-gray-600 mt-0.5 font-medium">{label}</p>
         {hint && <p className="text-[11px] text-gray-500 mt-1 italic">{hint}</p>}
       </div>
-    </div>
-  )
-}
-
-function Distribucion({ items, total }: { items: Record<string, number>; total: number }) {
-  const sorted = Object.entries(items).sort((a, b) => b[1] - a[1]).slice(0, 5)
-  if (total === 0 || sorted.length === 0) {
-    return <p className="text-xs text-gray-400">Sin datos</p>
-  }
-  return (
-    <div className="space-y-2">
-      {sorted.map(([label, count]) => {
-        const pct = Math.round((count / total) * 100)
-        return (
-          <div key={label}>
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="font-semibold text-gray-800">{label}</span>
-              <span className="text-gray-600">{count} · {pct}%</span>
-            </div>
-            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
-            </div>
-          </div>
-        )
-      })}
     </div>
   )
 }

@@ -29,6 +29,32 @@ const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
 // Se invalida automáticamente cuando ensureColumns agrega columnas.
 const headersCache = new Map<string, string[]>()
 
+/**
+ * Retry con backoff exponencial cuando Google Sheets responde 429 (quota exceeded)
+ * o 5xx transitorio. La quota por defecto es 60 reads/min/user — los flujos pesados
+ * (ej. generar certificado: 8-10 reads en serie) pueden topar, sobre todo si el
+ * operador clickea varias veces.
+ */
+async function withRetry<T>(fn: () => Promise<T>, label: string, maxAttempts = 4): Promise<T> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (e: unknown) {
+      lastErr = e
+      const err = e as { code?: number; status?: number; response?: { status?: number } }
+      const status = err.code ?? err.status ?? err.response?.status
+      const isRetriable = status === 429 || status === 500 || status === 503
+      if (!isRetriable || attempt === maxAttempts - 1) throw e
+      // Backoff: 500ms, 1.5s, 4.5s — total <7s para 3 retries antes del último intento
+      const delay = 500 * Math.pow(3, attempt) + Math.floor(Math.random() * 200)
+      console.warn(`[sheets] ${label} retry ${attempt + 1}/${maxAttempts - 1} tras ${status} (espera ${delay}ms)`)
+      await new Promise(r => setTimeout(r, delay))
+    }
+  }
+  throw lastErr
+}
+
 export function invalidateHeadersCache(sheetName?: string) {
   if (sheetName) headersCache.delete(sheetName)
   else headersCache.clear()
@@ -38,10 +64,10 @@ async function getHeaders(sheetName: string): Promise<string[]> {
   const cached = headersCache.get(sheetName)
   if (cached) return cached
   const sheets = getSheets()
-  const headersRes = await sheets.spreadsheets.values.get({
+  const headersRes = await withRetry(() => sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: `${sheetName}!1:1`,
-  })
+  }), `getHeaders(${sheetName})`)
   const headers = (headersRes.data.values?.[0] as string[]) ?? []
   headersCache.set(sheetName, headers)
   return headers
@@ -61,11 +87,11 @@ function normalizeCell(v: unknown): string {
 
 export async function getSheetData(sheetName: string): Promise<Record<string, string>[]> {
   const sheets = getSheets()
-  const res = await sheets.spreadsheets.values.get({
+  const res = await withRetry(() => sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: sheetName,
     valueRenderOption: 'UNFORMATTED_VALUE',
-  })
+  }), `getSheetData(${sheetName})`)
   const rows = res.data.values
   if (!rows || rows.length < 2) return []
   const headers = rows[0] as string[]
@@ -82,12 +108,12 @@ export async function appendRow(sheetName: string, data: Record<string, unknown>
   const sheets = getSheets()
   const headers = await getHeaders(sheetName)
   const row = headers.map((h) => data[h] ?? '')
-  await sheets.spreadsheets.values.append({
+  await withRetry(() => sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
     range: sheetName,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [row] },
-  })
+  }), `appendRow(${sheetName})`)
 }
 
 /** Versión batch: appendea N filas en UNA sola llamada. Usar para evitar la cuota
@@ -115,12 +141,12 @@ export async function updateRow(
   const row = headers.map((h) => data[h] ?? '')
   // rowIndex is 0-based from data rows; sheet row = rowIndex + 2 (header is row 1)
   const sheetRow = rowIndex + 2
-  await sheets.spreadsheets.values.update({
+  await withRetry(() => sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
     range: `${sheetName}!A${sheetRow}`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [row] },
-  })
+  }), `updateRow(${sheetName})`)
 }
 
 export async function findRows(
@@ -132,17 +158,38 @@ export async function findRows(
   return rows.filter((row) => row[field] === value)
 }
 
+// Cache para evitar leer la metadata del spreadsheet en cada ensureSheet/ensureColumns.
+// Esto reduce drásticamente las lecturas en flujos como "generar certificado" que llaman
+// ensureSheet+ensureColumns en cascada y antes consumían 4-5 reads extra por ejecución.
+let sheetsMetaCache: { titles: Set<string>; ts: number } | null = null
+const SHEETS_META_TTL_MS = 60_000
+
+async function getKnownSheets(): Promise<Set<string>> {
+  if (sheetsMetaCache && Date.now() - sheetsMetaCache.ts < SHEETS_META_TTL_MS) {
+    return sheetsMetaCache.titles
+  }
+  const sheets = getSheets()
+  const meta = await withRetry(() => sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID }), 'spreadsheets.get')
+  const titles = new Set<string>(
+    (meta.data.sheets ?? [])
+      .map(s => s.properties?.title)
+      .filter((t): t is string => !!t)
+  )
+  sheetsMetaCache = { titles, ts: Date.now() }
+  return titles
+}
+
 export async function ensureSheet(sheetName: string): Promise<void> {
   const sheets = getSheets()
-  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
-  const exists = meta.data.sheets?.some(s => s.properties?.title === sheetName)
-  if (exists) return
-  await sheets.spreadsheets.batchUpdate({
+  const known = await getKnownSheets()
+  if (known.has(sheetName)) return
+  await withRetry(() => sheets.spreadsheets.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
     requestBody: {
       requests: [{ addSheet: { properties: { title: sheetName } } }],
     },
-  })
+  }), `addSheet(${sheetName})`)
+  known.add(sheetName)
 }
 
 export async function ensureColumn(sheetName: string, columnName: string): Promise<void> {
@@ -169,41 +216,41 @@ export async function ensureColumn(sheetName: string, columnName: string): Promi
  */
 export async function ensureColumns(sheetName: string, columnNames: string[]): Promise<void> {
   const sheets = getSheets()
-  const headersRes = await sheets.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${sheetName}!1:1`,
-  })
-  const headers = (headersRes.data.values?.[0] as string[]) ?? []
+  // Si todos los headers ya están en cache y contienen las columnas pedidas, salimos sin tocar Sheets.
+  const cachedHeaders = headersCache.get(sheetName)
+  if (cachedHeaders && columnNames.every(c => cachedHeaders.includes(c))) return
+
+  const headers = cachedHeaders ?? await getHeaders(sheetName)
   const missing = columnNames.filter(c => !headers.includes(c))
   if (missing.length === 0) return
   const startIdx = headers.length
   const endIdx = startIdx + missing.length - 1
 
   // Verificar si el grid tiene espacio; si no, expandir antes de escribir
-  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const meta = await withRetry(() => sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID }), 'ensureColumns.meta')
   const sheet = meta.data.sheets?.find(s => s.properties?.title === sheetName)
   const sheetId = sheet?.properties?.sheetId
   const currentColCount = sheet?.properties?.gridProperties?.columnCount ?? 26
   if (sheetId !== undefined && endIdx >= currentColCount) {
     const extra = endIdx - currentColCount + 1
-    await sheets.spreadsheets.batchUpdate({
+    await withRetry(() => sheets.spreadsheets.batchUpdate({
       spreadsheetId: SPREADSHEET_ID,
       requestBody: {
         requests: [{
           appendDimension: { sheetId, dimension: 'COLUMNS', length: extra },
         }],
       },
-    })
+    }), 'ensureColumns.expand')
   }
 
   const startCol = columnLetter(startIdx)
   const endCol = columnLetter(endIdx)
-  await sheets.spreadsheets.values.update({
+  await withRetry(() => sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
     range: `${sheetName}!${startCol}1:${endCol}1`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [missing] },
-  })
+  }), `ensureColumns.write(${sheetName})`)
   invalidateHeadersCache(sheetName)
 }
 

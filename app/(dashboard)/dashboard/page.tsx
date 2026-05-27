@@ -64,14 +64,18 @@ export default function DashboardPage() {
     )
   }
 
-  const kpis = [
+  // KPIs operativos (todos los usuarios)
+  const kpisOperativos = [
     { label: `Mascotas ${mesActual}`, value: fmtNumero(data.kpis.mascotas_mes), icon: '🐾', color: 'text-indigo-700 bg-indigo-50' },
     { label: 'Cremaciones del mes', value: fmtNumero(data.kpis.cremaciones_mes), icon: '🔥', color: 'text-rose-700 bg-rose-50' },
     { label: 'Ciclos del mes', value: fmtNumero(data.kpis.ciclos_mes), icon: '♻️', color: 'text-orange-700 bg-orange-50' },
-    ...(isAdmin ? [{ label: 'Ingresos del mes', value: fmtPrecio(data.kpis.ingresos_mes), icon: '💰', color: 'text-emerald-700 bg-emerald-50' }] : []),
-    { label: 'En cámara', value: fmtNumero(data.kpis.pendientes), icon: '⏳', color: 'text-yellow-700 bg-yellow-50' },
     { label: 'Stock petróleo', value: fmtLitros(data.kpis.stock_petroleo), icon: '⛽', color: data.kpis.stock_bajo ? 'text-red-700 bg-red-50' : 'text-blue-700 bg-blue-50', alert: data.kpis.stock_bajo },
     { label: 'Litros del mes', value: fmtLitros(data.kpis.litros_mes), icon: '🛢️', color: 'text-sky-700 bg-sky-50' },
+  ]
+
+  // KPIs financieros (solo admin)
+  const kpisFinancieros = [
+    { label: 'Ingresos del mes', value: fmtPrecio(data.kpis.ingresos_mes), icon: '💰', color: 'text-emerald-700 bg-emerald-50' },
     { label: 'Pagos pendientes', value: fmtNumero(data.kpis.pendientes_pago), icon: '💳', color: 'text-rose-700 bg-rose-50' },
     { label: 'Monto por cobrar', value: fmtPrecio(data.kpis.monto_pendiente), icon: '📋', color: 'text-amber-700 bg-amber-50' },
   ]
@@ -93,22 +97,22 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Resumen operativo — {mesActual} {new Date().getFullYear()}</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Resumen operativo — {mesActual} {new Date().getFullYear()}</p>
       </div>
 
       {/* Timeline Status */}
       <TimelineStatus />
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {kpis.map(k => (
-          <div key={k.label} className={`bg-white rounded-xl shadow-md border-2 p-5 flex items-center gap-4 ${k.alert ? 'border-red-300' : 'border-gray-200'}`}>
-            <div className={`shrink-0 inline-flex items-center justify-center w-12 h-12 rounded-xl text-2xl ${k.color}`}>
+      {/* KPIs operativos */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
+        {kpisOperativos.map(k => (
+          <div key={k.label} className={`bg-white rounded-xl shadow-md border-2 p-4 sm:p-5 flex items-center gap-3 sm:gap-4 ${k.alert ? 'border-red-300' : 'border-gray-200'}`}>
+            <div className={`shrink-0 inline-flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl text-xl sm:text-2xl ${k.color}`}>
               {k.icon}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xl font-bold text-gray-900 truncate">{k.value}</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900 truncate">{k.value}</p>
               <p className="text-xs text-gray-500 mt-0.5 truncate">{k.label}</p>
               {k.alert && <p className="text-xs text-red-600 mt-0.5 font-medium">⚠ Stock bajo</p>}
             </div>
@@ -116,18 +120,38 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* KPIs financieros (solo admin) — antes de los ratios para tenerlos a la vista */}
+      {isAdmin && (
+        <div>
+          <h2 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Indicadores financieros</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            {kpisFinancieros.map(k => (
+              <div key={k.label} className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-4 sm:p-5 flex items-center gap-3 sm:gap-4">
+                <div className={`shrink-0 inline-flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl text-xl sm:text-2xl ${k.color}`}>
+                  {k.icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-lg sm:text-xl font-bold text-gray-900 truncate">{k.value}</p>
+                  <p className="text-xs text-gray-500 mt-0.5 truncate">{k.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Ratios */}
       <div>
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Ratios de eficiencia</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <h2 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Ratios de eficiencia</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {ratiosArr.map(r => (
             <button key={r.key} type="button" onClick={() => setRatioOpen(r.key)}
-              className="text-left bg-white rounded-xl shadow-md border-2 border-gray-200 hover:border-indigo-400 hover:shadow-lg p-5 transition-all">
+              className="text-left bg-white rounded-xl shadow-md border-2 border-gray-200 hover:border-indigo-400 hover:shadow-lg p-4 sm:p-5 transition-all">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-gray-600">{r.label}</p>
                 <span className="text-xs text-indigo-500">📈</span>
               </div>
-              <p className="text-xl font-bold text-gray-900 mt-1">{r.value}</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{r.value}</p>
               <p className="text-xs text-gray-500 mt-1 leading-tight">{r.sub}</p>
             </button>
           ))}
@@ -164,48 +188,56 @@ export default function DashboardPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* Top servicios */}
+        {/* Top servicios — leyenda al costado y gráfico centrado */}
         <ChartCard title="Tipos de servicio contratados">
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer width="100%" height={260}>
             <PieChart>
-              <Pie data={data.top_servicios} dataKey="count" nameKey="codigo" outerRadius={80} label={({ name, value }) => `${name}: ${value}`}>
+              <Pie data={data.top_servicios} dataKey="count" nameKey="codigo"
+                cx="35%" cy="50%" outerRadius={80}
+                label={({ value }) => value}>
                 {data.top_servicios.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
               </Pie>
               <Tooltip />
-              <Legend />
+              <Legend layout="vertical" align="right" verticalAlign="middle"
+                wrapperStyle={{ fontSize: '12px', paddingLeft: '8px' }} />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* Por especie */}
+        {/* Por especie — leyenda al costado y gráfico centrado */}
         <ChartCard title="Mascotas por especie">
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer width="100%" height={260}>
             <PieChart>
-              <Pie data={data.por_especie} dataKey="count" nameKey="especie" outerRadius={80} label={({ name, value }) => `${name}: ${value}`}>
+              <Pie data={data.por_especie} dataKey="count" nameKey="especie"
+                cx="35%" cy="50%" outerRadius={80}
+                label={({ value }) => value}>
                 {data.por_especie.map((_, i) => <Cell key={i} fill={COLORS[(i + 2) % COLORS.length]} />)}
               </Pie>
               <Tooltip />
-              <Legend />
+              <Legend layout="vertical" align="right" verticalAlign="middle"
+                wrapperStyle={{ fontSize: '12px', paddingLeft: '8px' }} />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* Ventas por veterinaria */}
-        <ChartCard title="Top veterinarias por ingresos">
-          {data.ventas_por_vet.length === 0 ? (
-            <EmptyChart label="Sin ventas a veterinarias aún" />
-          ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={data.ventas_por_vet} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis type="number" fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                <YAxis dataKey="vet" type="category" fontSize={11} width={110} tick={{ fill: '#6b7280' }} />
-                <Tooltip formatter={(v) => fmtPrecio(v as number)} />
-                <Bar dataKey="ingresos" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
+        {/* Ventas por veterinaria (solo admin) */}
+        {isAdmin && (
+          <ChartCard title="Top veterinarias por ingresos">
+            {data.ventas_por_vet.length === 0 ? (
+              <EmptyChart label="Sin ventas a veterinarias aún" />
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={data.ventas_por_vet} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis type="number" fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                  <YAxis dataKey="vet" type="category" fontSize={11} width={110} tick={{ fill: '#6b7280' }} />
+                  <Tooltip formatter={(v) => fmtPrecio(v as number)} />
+                  <Bar dataKey="ingresos" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </ChartCard>
+        )}
 
         {/* Top productos */}
         <ChartCard title="Top productos adicionales vendidos">
@@ -255,7 +287,7 @@ export default function DashboardPage() {
               {ratioOpen === 'costo_vehiculo_por_mascota' ? 'Promedio mensual en pesos. '
                 : ratioOpen === 'duracion_promedio_ciclo_min' ? 'Promedio mensual en minutos. '
                 : 'Promedio mensual. '}
-              Últimos 12 meses con actividad.
+              Últimos {data.ratios_por_mes.length} mes{data.ratios_por_mes.length !== 1 ? 'es' : ''} con actividad (máx 12).
             </p>
             {data.ratios_por_mes.length === 0 ? (
               <div className="flex items-center justify-center h-[240px] text-sm text-gray-400">
@@ -289,7 +321,7 @@ export default function DashboardPage() {
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5">
       <h3 className="text-sm font-semibold text-gray-700 mb-4">{title}</h3>
       {children}
     </div>
