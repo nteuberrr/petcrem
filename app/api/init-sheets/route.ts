@@ -114,7 +114,7 @@ const SHEETS: Record<string, string[]> = {
   mailing_veterinarios: [
     'id', 'nombre', 'email',
     'veterinaria', 'comuna', 'telefono',
-    'categoria', 'suscrito', 'notas',
+    'categoria', 'tamano_veterinaria', 'suscrito', 'notas',
     'fecha_creacion',
   ],
   mailing_campanas: [
