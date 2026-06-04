@@ -95,8 +95,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let cancelado = false
     const CHUNK = 100
     const ahora = new Date().toISOString()
+    const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
     for (let start = 0; start < destinatarios.length; start += CHUNK) {
+      // Pausa entre chunks para no acumular contra el rate limit de Resend.
+      if (start > 0) await sleep(1500)
       // Antes de cada chunk, releer la campaña y chequear si fue cancelada
       // o si el admin la eliminó mientras se enviaba (trato la eliminación
       // como cancel). Saltamos el primer chunk para no leer dos veces seguidas

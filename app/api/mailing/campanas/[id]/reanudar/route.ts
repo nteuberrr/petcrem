@@ -142,8 +142,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let fallidos = 0
     const CHUNK = 100
     const ahora = new Date().toISOString()
+    const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
     for (let start = 0; start < faltantes.length; start += CHUNK) {
+      // Pausa entre chunks para no acumular contra el rate limit de Resend.
+      if (start > 0) await sleep(1500)
       const chunk = faltantes.slice(start, start + CHUNK)
       const emails = chunk.map(v => ({
         to: v.email,

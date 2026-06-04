@@ -195,13 +195,30 @@ function sanitizarEmail(raw: string | undefined | null): string | null {
   return s
 }
 
+/** Pausa N milisegundos. */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/** Detecta errores de rate limit en respuestas de Resend (HTTP 429 o frases típicas). */
+function esRateLimit(err: unknown): boolean {
+  if (!err) return false
+  const obj = err as { statusCode?: number; status?: number; name?: string; message?: string }
+  if (obj.statusCode === 429 || obj.status === 429) return true
+  const msg = String(obj.message || obj.name || err).toLowerCase()
+  return msg.includes('rate limit') || msg.includes('429') || msg.includes('too many request') || msg.includes('quota')
+}
+
 /**
  * Envío en lote. Resend limita a 100 emails por request.
  *
- * Robusto contra emails inválidos:
+ * Robusto contra emails inválidos Y rate limits:
  * - Filtra los emails con formato malo ANTES de mandar (los marca failed local).
- * - Si Resend rechaza el batch entero (típicamente porque uno solo está mal),
- *   reintenta uno por uno para no perder los buenos.
+ * - Si Resend rechaza el batch entero (típicamente porque uno solo está mal o
+ *   por rate limit), reintenta uno por uno con throttle de ~140ms (~7/sec,
+ *   por debajo del límite Pro de 10/sec).
+ * - Si un email individual devuelve 429, espera con backoff exponencial
+ *   (1s, 2s, 4s) y lo reintenta hasta 3 veces.
  */
 export async function sendBatch(emails: SendOpts[]): Promise<SendResult[]> {
   if (emails.length === 0) return []
@@ -231,25 +248,61 @@ export async function sendBatch(emails: SendOpts[]): Promise<SendResult[]> {
       tags: v.opts.tags,
       attachments: buildAttachmentsPayload(v.opts.attachments),
     }))
-    const res = await client.batch.send(payload)
+    // Intento de batch con retry en caso de rate limit (3 intentos: 0, 2s, 5s)
+    let res = await client.batch.send(payload)
+    let batchAttempt = 0
+    while (res.error && esRateLimit(res.error) && batchAttempt < 2) {
+      batchAttempt++
+      const wait = batchAttempt === 1 ? 2000 : 5000
+      console.warn(`[sendBatch] batch rate-limited, esperando ${wait}ms y reintentando…`)
+      await sleep(wait)
+      res = await client.batch.send(payload)
+    }
     if (res.error || !res.data) {
       const errMsg = res.error?.message || 'batch send falló'
       // FALLBACK: si el batch falla entero (un email malo arrastró al resto),
       // probamos uno por uno para no perder los buenos. Los emails buenos se
       // envían; los problemáticos quedan con error_msg específico de Resend.
-      console.warn(`[sendBatch] batch falló (${errMsg}), reintentando individual…`)
+      // Throttle entre cada send para no superar el rate limit (Pro: 10/sec).
+      console.warn(`[sendBatch] batch falló (${errMsg}), reintentando individual con throttle…`)
       for (let i = 0; i < validos.length; i++) {
         const v = validos[i]
-        try {
-          const single = await client.emails.send(payload[i])
-          if (single.error) {
-            results[v.idx] = { ok: false, error: single.error.message || JSON.stringify(single.error) }
-          } else {
-            results[v.idx] = { ok: true, message_id: single.data?.id }
+        let attempt = 0
+        let lastErr = ''
+        let resuelto = false
+        while (attempt < 4 && !resuelto) {
+          try {
+            const single = await client.emails.send(payload[i])
+            if (single.error) {
+              lastErr = single.error.message || JSON.stringify(single.error)
+              if (esRateLimit(single.error) && attempt < 3) {
+                const wait = 1000 * Math.pow(2, attempt) // 1s, 2s, 4s
+                await sleep(wait)
+                attempt++
+                continue
+              }
+              results[v.idx] = { ok: false, error: lastErr }
+            } else {
+              results[v.idx] = { ok: true, message_id: single.data?.id }
+            }
+            resuelto = true
+          } catch (e) {
+            lastErr = e instanceof Error ? e.message : String(e)
+            if (esRateLimit(e) && attempt < 3) {
+              const wait = 1000 * Math.pow(2, attempt)
+              await sleep(wait)
+              attempt++
+              continue
+            }
+            results[v.idx] = { ok: false, error: lastErr }
+            resuelto = true
           }
-        } catch (e) {
-          results[v.idx] = { ok: false, error: e instanceof Error ? e.message : String(e) }
         }
+        if (!resuelto) {
+          results[v.idx] = { ok: false, error: `rate limit tras ${attempt} reintentos: ${lastErr}` }
+        }
+        // Throttle base entre cada send individual (~7/sec, debajo de 10/sec de Pro)
+        await sleep(140)
       }
       return results
     }
