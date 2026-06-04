@@ -894,8 +894,8 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                               <button onClick={() => cancelar(c)} className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Cancelar</button>
                             </>
                           )}
-                          {(c.estado === 'fallido' || c.estado === 'cancelado') && (
-                            <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm" title="Reanudar envío a los que faltan">Reanudar</button>
+                          {(c.estado === 'enviado' || c.estado === 'fallido' || c.estado === 'cancelado') && (
+                            <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm" title="Reanudar / reintentar fallidos">Reanudar</button>
                           )}
                           {(c.estado === 'enviado' || c.estado === 'fallido' || c.estado === 'cancelado') && (
                             <button onClick={() => duplicar(c)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Duplicar</button>
