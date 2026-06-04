@@ -71,6 +71,8 @@ type DebugData = {
     from_email: string
     resend_key_set: boolean
     supabase_configured: boolean
+    supabase_alive?: boolean | null
+    supabase_error?: string | null
   }
   campana_id?: string | null
   contadores_planilla?: Record<string, unknown> | null
@@ -893,7 +895,15 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                   <li>PUBLIC_APP_URL: {debugData.env.public_app_url ?? '(vacío)'}</li>
                   <li>RESEND_WEBHOOK_SECRET: {debugData.env.webhook_secret_set ? '✓ set' : '✗ ausente'}</li>
                   <li>RESEND_API_KEY: {debugData.env.resend_key_set ? '✓ set' : '✗ ausente'}</li>
-                  <li>Supabase: {debugData.env.supabase_configured ? '✓ conectado' : '✗ no configurado'}</li>
+                  <li>Supabase: {
+                    !debugData.env.supabase_configured
+                      ? <b className="text-red-700">✗ no configurado</b>
+                      : debugData.env.supabase_alive === false
+                        ? <b className="text-red-700">✗ NO responde — {debugData.env.supabase_error}</b>
+                        : debugData.env.supabase_alive === true
+                          ? <b className="text-emerald-700">✓ conectado y respondiendo</b>
+                          : <b className="text-amber-700">env vars OK pero sin verificar</b>
+                  }</li>
                   <li>From: {debugData.env.from_email}</li>
                 </ul>
               </section>

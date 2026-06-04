@@ -33,6 +33,8 @@ export async function GET(req: Request) {
     from_email: process.env.MAILING_FROM_EMAIL || '(sin configurar)',
     resend_key_set: !!process.env.RESEND_API_KEY,
     supabase_configured: isSupabaseConfigured(),
+    supabase_alive: null as boolean | null,
+    supabase_error: null as string | null,
   }
 
   if (!isSupabaseConfigured()) {
@@ -40,6 +42,24 @@ export async function GET(req: Request) {
   }
 
   const supabase = getSupabase()
+
+  // Test real de conexión: consulta liviana. Si esto falla, el proyecto está
+  // pausado (free tier de Supabase pausa tras 1 semana de inactividad) o las
+  // credenciales son incorrectas.
+  try {
+    const probe = await supabase.from('mailing_logs').select('id', { count: 'exact', head: true }).limit(1)
+    env.supabase_alive = !probe.error
+    if (probe.error) env.supabase_error = probe.error.message
+  } catch (e) {
+    env.supabase_alive = false
+    env.supabase_error = e instanceof Error ? e.message : String(e)
+  }
+  if (env.supabase_alive === false) {
+    return NextResponse.json({
+      env,
+      error: `Supabase NO responde: ${env.supabase_error}. Posibles causas: proyecto pausado (free tier pausa tras 1 semana), URL/anon key incorrectas, o proyecto eliminado. Ir a https://supabase.com/dashboard y reanudarlo si está pausado.`,
+    })
+  }
 
   // Query base: últimos N logs (filtrados por campaña si viene id)
   let q = supabase
