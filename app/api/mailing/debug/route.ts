@@ -28,8 +28,12 @@ export async function GET(req: Request) {
 
   const env = {
     own_tracking_disabled: (process.env.MAILING_DISABLE_OWN_TRACKING ?? '').toLowerCase() === 'true',
+    webhook_permissive: (process.env.MAILING_WEBHOOK_PERMISSIVE ?? '').toLowerCase() === 'true',
     public_app_url: process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || null,
     webhook_secret_set: !!process.env.RESEND_WEBHOOK_SECRET,
+    webhook_secret_prefix: process.env.RESEND_WEBHOOK_SECRET
+      ? process.env.RESEND_WEBHOOK_SECRET.slice(0, 6) + '…' + process.env.RESEND_WEBHOOK_SECRET.slice(-4)
+      : null,
     from_email: process.env.MAILING_FROM_EMAIL || '(sin configurar)',
     resend_key_set: !!process.env.RESEND_API_KEY,
     supabase_configured: isSupabaseConfigured(),

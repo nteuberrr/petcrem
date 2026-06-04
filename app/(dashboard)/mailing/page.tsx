@@ -66,8 +66,10 @@ type Prefilled = { asunto: string; html: string; preview_text: string; reply_to:
 type DebugData = {
   env?: {
     own_tracking_disabled: boolean
+    webhook_permissive?: boolean
     public_app_url: string | null
     webhook_secret_set: boolean
+    webhook_secret_prefix?: string | null
     from_email: string
     resend_key_set: boolean
     supabase_configured: boolean
@@ -892,8 +894,9 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                 <h3 className="text-sm font-bold text-gray-900 mb-2">Variables de entorno</h3>
                 <ul className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1 font-mono">
                   <li>MAILING_DISABLE_OWN_TRACKING: <b className={debugData.env.own_tracking_disabled ? 'text-emerald-700' : 'text-amber-700'}>{String(debugData.env.own_tracking_disabled)}</b></li>
+                  <li>MAILING_WEBHOOK_PERMISSIVE: <b className={debugData.env.webhook_permissive ? 'text-emerald-700' : 'text-amber-700'}>{String(debugData.env.webhook_permissive ?? false)}</b></li>
                   <li>PUBLIC_APP_URL: {debugData.env.public_app_url ?? '(vacío)'}</li>
-                  <li>RESEND_WEBHOOK_SECRET: {debugData.env.webhook_secret_set ? '✓ set' : '✗ ausente'}</li>
+                  <li>RESEND_WEBHOOK_SECRET: {debugData.env.webhook_secret_set ? `✓ set (${debugData.env.webhook_secret_prefix})` : '✗ ausente'}</li>
                   <li>RESEND_API_KEY: {debugData.env.resend_key_set ? '✓ set' : '✗ ausente'}</li>
                   <li>Supabase: {
                     !debugData.env.supabase_configured
