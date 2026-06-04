@@ -93,8 +93,11 @@ export async function GET(req: Request) {
     }
   }
 
-  // Contadores que tenemos en la planilla para esa campaña
+  // Contadores: dos versiones para comparar.
+  // - planilla: lo que está crudo en mailing_campanas (puede estar desactualizado)
+  // - reales: calculados acá desde mailing_logs en este momento
   let contadoresPlanilla: Record<string, unknown> | null = null
+  let contadoresReales: Record<string, unknown> | null = null
   if (campanaId) {
     try {
       const rows = await getSheetData('mailing_campanas')
@@ -110,12 +113,35 @@ export async function GET(req: Request) {
     } catch (e) {
       contadoresPlanilla = { error: String(e) }
     }
+    // Reales: agregación rápida sobre TODOS los logs (no solo los 50 que muestra la tabla)
+    try {
+      const { data: allLogs, error: aggErr } = await supabase
+        .from('mailing_logs')
+        .select('estado, fecha_envio, fecha_entrega, fecha_apertura, fecha_click, fecha_rebote')
+        .eq('campana_id', campanaId)
+      if (!aggErr && allLogs) {
+        let enviados = 0, entregados = 0, aperturas = 0, clicks = 0, rebotes = 0, spam = 0, fallidos = 0
+        for (const l of allLogs) {
+          if (l.fecha_envio) enviados++
+          if (l.fecha_entrega) entregados++
+          if (l.fecha_apertura) aperturas++
+          if (l.fecha_click) clicks++
+          if (l.fecha_rebote) rebotes++
+          if (l.estado === 'complained') spam++
+          if (l.estado === 'failed') fallidos++
+        }
+        contadoresReales = { enviados, entregados, aperturas, clicks, rebotes, spam, fallidos, total_logs: allLogs.length }
+      }
+    } catch (e) {
+      contadoresReales = { error: String(e) }
+    }
   }
 
   return NextResponse.json({
     env,
     campana_id: campanaId || null,
     contadores_planilla: contadoresPlanilla,
+    contadores_reales: contadoresReales,
     distribucion_logs: distribucion,
     logs,
     interpretacion: interpretar(env, logs ?? [], distribucion),

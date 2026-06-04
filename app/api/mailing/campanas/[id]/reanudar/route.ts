@@ -87,24 +87,39 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const vets = await getSheetData('mailing_veterinarios')
     const destinatarios = filtrarVets(vets, filtros)
 
-    // Calcular a quiénes ya se les envió (vía mailing_logs en Supabase)
+    // Calcular a quiénes ya se les envió OK (vía mailing_logs en Supabase).
+    // Importante: los logs con estado='failed' NO cuentan como enviados —
+    // esos fueron errores transitorios que vale la pena reintentar.
     const supabase = getSupabase()
     const { data: logs, error: logsErr } = await supabase
       .from('mailing_logs')
-      .select('vet_id, vet_email')
+      .select('id, vet_id, vet_email, estado')
       .eq('campana_id', id)
     if (logsErr) {
       console.error('[reanudar] error leyendo logs:', logsErr.message)
       return NextResponse.json({ error: `Error leyendo logs: ${logsErr.message}` }, { status: 500 })
     }
-    const yaEnviadosIds = new Set((logs ?? []).map(l => l.vet_id).filter(Boolean))
-    const yaEnviadosEmails = new Set((logs ?? []).map(l => (l.vet_email ?? '').toLowerCase()).filter(Boolean))
+    const logsOk = (logs ?? []).filter(l => l.estado !== 'failed')
+    const logsFailed = (logs ?? []).filter(l => l.estado === 'failed')
+    const yaEnviadosIds = new Set(logsOk.map(l => l.vet_id).filter(Boolean))
+    const yaEnviadosEmails = new Set(logsOk.map(l => (l.vet_email ?? '').toLowerCase()).filter(Boolean))
 
     const faltantes = destinatarios.filter(v => {
       if (yaEnviadosIds.has(v.id)) return false
       if (yaEnviadosEmails.has((v.email ?? '').toLowerCase())) return false
       return true
     })
+
+    // Si hay logs con estado='failed' para los que vamos a reintentar, los
+    // borramos primero para no dejar duplicados (el nuevo intento insertará
+    // un log nuevo con el resultado actualizado).
+    const emailsAReintentar = new Set(faltantes.map(v => (v.email ?? '').toLowerCase()))
+    const idsLogsFailedAReintentar = logsFailed
+      .filter(l => emailsAReintentar.has((l.vet_email ?? '').toLowerCase()))
+      .map(l => l.id)
+    if (idsLogsFailedAReintentar.length > 0) {
+      await supabase.from('mailing_logs').delete().in('id', idsLogsFailedAReintentar)
+    }
 
     if (faltantes.length === 0) {
       // Nada para reanudar: marcamos como enviado completo y devolvemos

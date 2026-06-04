@@ -78,6 +78,7 @@ type DebugData = {
   }
   campana_id?: string | null
   contadores_planilla?: Record<string, unknown> | null
+  contadores_reales?: Record<string, unknown> | null
   distribucion_logs?: Record<string, number>
   logs?: Array<{
     id: string
@@ -948,12 +949,21 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                 </ul>
               </section>
             )}
+            {debugData.contadores_reales && (
+              <section>
+                <h3 className="text-sm font-bold text-emerald-700 mb-2">Contadores reales (calculados desde Supabase ahora)</h3>
+                <pre className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 overflow-x-auto">
+                  {JSON.stringify(debugData.contadores_reales, null, 2)}
+                </pre>
+              </section>
+            )}
             {debugData.contadores_planilla && (
               <section>
-                <h3 className="text-sm font-bold text-gray-900 mb-2">Contadores en planilla</h3>
-                <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-x-auto">
+                <h3 className="text-sm font-bold text-gray-600 mb-2">Contadores en planilla (cacheados)</h3>
+                <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-x-auto text-gray-600">
                   {JSON.stringify(debugData.contadores_planilla, null, 2)}
                 </pre>
+                <p className="text-[11px] text-gray-500 mt-1 italic">Los reales (verde) son la fuente de verdad. Estos pueden estar atrasados.</p>
               </section>
             )}
             {debugData.distribucion_logs && Object.keys(debugData.distribucion_logs).length > 0 && (
