@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Webhook } from 'standardwebhooks'
-import { getSheetData, updateRow } from '@/lib/google-sheets'
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
 
 interface ResendEvent {
@@ -157,19 +156,13 @@ export async function POST(req: NextRequest) {
     const { error: updErr } = await supabase.from('mailing_logs').update(updates).eq('id', log.id)
     if (updErr) console.error('[webhook] update error:', updErr.message)
 
-    // Incrementar contador agregado en la campaña (Sheets sigue siendo source de truth de resumen)
-    if (aggField && log.campana_id) {
-      try {
-        const campanas = await getSheetData('mailing_campanas')
-        const cIdx = campanas.findIndex(c => c.id === log.campana_id)
-        if (cIdx >= 0) {
-          const current = parseInt(campanas[cIdx][aggField] || '0', 10) || 0
-          await updateRow('mailing_campanas', cIdx, { ...campanas[cIdx], [aggField]: String(current + 1) })
-        }
-      } catch (err) {
-        console.error('[webhook] agg update error (no bloquea):', err)
-      }
-    }
+    // NOTA: NO actualizamos contadores en mailing_campanas desde acá. Antes lo
+    // hacíamos, pero con 500+ destinatarios y 4-5 eventos cada uno (sent,
+    // delivered, opened, clicked, bounced) se generan miles de read+write
+    // contra Sheets en pocos minutos y revienta la cuota (60 reads/min/user).
+    // Los contadores los calcula on-demand /api/mailing/campanas desde
+    // Supabase agregando los logs por estado.
+    void aggField
 
     return NextResponse.json({ ok: true, applied: nuevoEstado })
   } catch (e) {

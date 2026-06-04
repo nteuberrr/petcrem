@@ -98,13 +98,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     for (let start = 0; start < destinatarios.length; start += CHUNK) {
       // Antes de cada chunk, releer la campaña y chequear si fue cancelada
-      // o si el admin la eliminó mientras se enviaba (trato la eliminación como cancel).
+      // o si el admin la eliminó mientras se enviaba (trato la eliminación
+      // como cancel). Saltamos el primer chunk para no leer dos veces seguidas
+      // y solo verificamos a partir del chunk 2 con un pequeño throttle.
       if (start > 0) {
-        const recheck = await getSheetData('mailing_campanas')
-        const cur = recheck.find(r => r.id === id)
-        if (!cur || cur.estado === 'cancelando' || cur.estado === 'cancelado') {
-          cancelado = true
-          break
+        try {
+          const recheck = await getSheetData('mailing_campanas')
+          const cur = recheck.find(r => r.id === id)
+          if (!cur || cur.estado === 'cancelando' || cur.estado === 'cancelado') {
+            cancelado = true
+            break
+          }
+        } catch (err) {
+          // Si por cuota de Sheets no podemos releer, seguimos con el envío
+          // (el operador puede cancelar igual desde otro flujo). Loggeamos.
+          console.warn('[mailing/enviar] recheck falló, continuando con el envío:', err)
         }
       }
       const chunk = destinatarios.slice(start, start + CHUNK)
