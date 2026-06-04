@@ -63,6 +63,35 @@ type Diagnostics = {
 
 type Prefilled = { asunto: string; html: string; preview_text: string; reply_to: string; categoria: string } | null
 
+type DebugData = {
+  env?: {
+    own_tracking_disabled: boolean
+    public_app_url: string | null
+    webhook_secret_set: boolean
+    from_email: string
+    resend_key_set: boolean
+    supabase_configured: boolean
+  }
+  campana_id?: string | null
+  contadores_planilla?: Record<string, unknown> | null
+  distribucion_logs?: Record<string, number>
+  logs?: Array<{
+    id: string
+    campana_id: string
+    vet_email: string
+    resend_message_id: string | null
+    estado: string | null
+    fecha_envio: string | null
+    fecha_entrega: string | null
+    fecha_apertura: string | null
+    fecha_click: string | null
+    fecha_rebote: string | null
+    error_msg: string | null
+  }>
+  interpretacion?: string[]
+  error?: string
+}
+
 const TABS = ['Campañas', 'Base', 'Nueva campaña'] as const
 type Tab = typeof TABS[number]
 
@@ -661,6 +690,8 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
   const [detalleHtml, setDetalleHtml] = useState<string>('')
   const [detalleLogs, setDetalleLogs] = useState<Record<string, string>[]>([])
   const [loadingDetalle, setLoadingDetalle] = useState(false)
+  const [debugData, setDebugData] = useState<DebugData | null>(null)
+  const [debugLoading, setDebugLoading] = useState(false)
 
   const fetchCampanas = useCallback(async () => {
     setLoading(true)
@@ -688,6 +719,20 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
       // ignore
     }
     setLoadingDetalle(false)
+  }
+
+  async function abrirDebug(c: Campana) {
+    setDebugLoading(true)
+    setDebugData(null)
+    try {
+      const res = await fetch(`/api/mailing/debug?campana_id=${encodeURIComponent(c.id)}&limit=50`)
+      const j = await res.json()
+      setDebugData(j as DebugData)
+    } catch (e) {
+      setDebugData({ error: e instanceof Error ? e.message : String(e) } as DebugData)
+    } finally {
+      setDebugLoading(false)
+    }
   }
 
   async function eliminar(c: Campana) {
@@ -813,6 +858,9 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                           {(c.estado === 'enviado' || c.estado === 'fallido' || c.estado === 'cancelado') && (
                             <button onClick={() => duplicar(c)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Duplicar</button>
                           )}
+                          {(c.estado === 'enviado' || c.estado === 'fallido') && (
+                            <button onClick={() => abrirDebug(c)} className="bg-gray-700 hover:bg-gray-800 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm" title="Ver diagnóstico de tracking">🔍</button>
+                          )}
                           {c.estado !== 'enviando' && (
                             <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Eliminar</button>
                           )}
@@ -826,6 +874,88 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
           </div>
         )}
       </div>
+
+      {/* Modal de diagnóstico de tracking */}
+      <Modal open={!!debugData || debugLoading} onClose={() => { setDebugData(null) }} title="Diagnóstico de tracking">
+        {debugLoading && <p className="text-sm text-gray-500">Cargando…</p>}
+        {debugData && !debugLoading && (
+          <div className="space-y-4 text-xs">
+            {debugData.error && (
+              <div className="bg-red-50 border-2 border-red-200 text-red-800 rounded-lg px-3 py-2">
+                {debugData.error}
+              </div>
+            )}
+            {debugData.env && (
+              <section>
+                <h3 className="text-sm font-bold text-gray-900 mb-2">Variables de entorno</h3>
+                <ul className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1 font-mono">
+                  <li>MAILING_DISABLE_OWN_TRACKING: <b className={debugData.env.own_tracking_disabled ? 'text-emerald-700' : 'text-amber-700'}>{String(debugData.env.own_tracking_disabled)}</b></li>
+                  <li>PUBLIC_APP_URL: {debugData.env.public_app_url ?? '(vacío)'}</li>
+                  <li>RESEND_WEBHOOK_SECRET: {debugData.env.webhook_secret_set ? '✓ set' : '✗ ausente'}</li>
+                  <li>RESEND_API_KEY: {debugData.env.resend_key_set ? '✓ set' : '✗ ausente'}</li>
+                  <li>Supabase: {debugData.env.supabase_configured ? '✓ conectado' : '✗ no configurado'}</li>
+                  <li>From: {debugData.env.from_email}</li>
+                </ul>
+              </section>
+            )}
+            {debugData.contadores_planilla && (
+              <section>
+                <h3 className="text-sm font-bold text-gray-900 mb-2">Contadores en planilla</h3>
+                <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-x-auto">
+                  {JSON.stringify(debugData.contadores_planilla, null, 2)}
+                </pre>
+              </section>
+            )}
+            {debugData.distribucion_logs && Object.keys(debugData.distribucion_logs).length > 0 && (
+              <section>
+                <h3 className="text-sm font-bold text-gray-900 mb-2">Distribución de estados en logs</h3>
+                <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-x-auto">
+                  {JSON.stringify(debugData.distribucion_logs, null, 2)}
+                </pre>
+              </section>
+            )}
+            {debugData.interpretacion && debugData.interpretacion.length > 0 && (
+              <section>
+                <h3 className="text-sm font-bold text-gray-900 mb-2">Interpretación</h3>
+                <ul className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 space-y-1">
+                  {debugData.interpretacion.map((l, i) => (
+                    <li key={i} className={l.startsWith('⚠') ? 'text-amber-800 font-semibold' : 'text-gray-700'}>{l}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {debugData.logs && debugData.logs.length > 0 && (
+              <section>
+                <h3 className="text-sm font-bold text-gray-900 mb-2">Logs ({debugData.logs.length})</h3>
+                <div className="border border-gray-200 rounded-lg overflow-hidden max-h-96 overflow-y-auto">
+                  <table className="w-full text-[11px]">
+                    <thead className="bg-gray-100 sticky top-0">
+                      <tr>
+                        {['Email', 'Estado', 'Sent', 'Delivered', 'Opened', 'Clicked', 'Bounced'].map(h => (
+                          <th key={h} className="px-2 py-1 text-left text-gray-600">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {debugData.logs.map(l => (
+                        <tr key={l.id}>
+                          <td className="px-2 py-1 text-gray-900 truncate max-w-[180px]" title={l.vet_email}>{l.vet_email}</td>
+                          <td className="px-2 py-1 text-gray-700">{l.estado}</td>
+                          <td className="px-2 py-1 text-gray-500">{l.fecha_envio ? '✓' : '—'}</td>
+                          <td className="px-2 py-1 text-gray-500">{l.fecha_entrega ? '✓' : '—'}</td>
+                          <td className="px-2 py-1 text-emerald-700">{l.fecha_apertura ? '✓' : '—'}</td>
+                          <td className="px-2 py-1 text-violet-700">{l.fecha_click ? '✓' : '—'}</td>
+                          <td className="px-2 py-1 text-red-700">{l.fecha_rebote ? '✓' : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <Modal open={!!detalle} onClose={() => setDetalle(null)} title={detalle ? `Campaña: ${detalle.asunto}` : ''}>
         {detalle && (
