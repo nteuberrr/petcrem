@@ -22,7 +22,9 @@ export async function POST(req: NextRequest) {
     const secret = process.env.RESEND_WEBHOOK_SECRET
     const rawBody = await req.text()
 
+    const permisivo = (process.env.MAILING_WEBHOOK_PERMISSIVE ?? '').toLowerCase() === 'true'
     let evt: ResendEvent
+    let firmaValida: boolean | null = null
     if (secret) {
       try {
         const wh = new Webhook(secret)
@@ -32,14 +34,30 @@ export async function POST(req: NextRequest) {
           'svix-signature': req.headers.get('svix-signature') || '',
         }
         evt = wh.verify(rawBody, headers) as ResendEvent
+        firmaValida = true
       } catch (verifyErr) {
-        console.warn('[webhook] firma inválida:', verifyErr)
-        return NextResponse.json({ error: 'firma inválida' }, { status: 401 })
+        firmaValida = false
+        const errMsg = verifyErr instanceof Error ? verifyErr.message : String(verifyErr)
+        if (permisivo) {
+          // Modo desbloqueo: procesamos igual aunque la firma no matchea. Útil
+          // cuando el secret en Vercel y en Resend no coinciden por algún motivo
+          // (copy/paste roto, rotación, etc) y necesitás que las métricas anden.
+          console.warn(`[webhook] firma inválida pero MAILING_WEBHOOK_PERMISSIVE=true, procesando igual: ${errMsg}`)
+          try {
+            evt = JSON.parse(rawBody) as ResendEvent
+          } catch {
+            return NextResponse.json({ ok: true, ignored: true, reason: 'body no parseable' })
+          }
+        } else {
+          console.warn('[webhook] firma inválida (set MAILING_WEBHOOK_PERMISSIVE=true en Vercel para procesar igual):', errMsg)
+          return NextResponse.json({ error: 'firma inválida', hint: 'set MAILING_WEBHOOK_PERMISSIVE=true para procesar sin verificar' }, { status: 401 })
+        }
       }
     } else {
       console.warn('[webhook] RESEND_WEBHOOK_SECRET no configurado — aceptando sin verificar (dev)')
       evt = JSON.parse(rawBody) as ResendEvent
     }
+    void firmaValida  // disponible si más adelante queremos marcar el log
 
     const messageId = evt.data?.email_id
     if (!messageId) {

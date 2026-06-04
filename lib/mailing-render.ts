@@ -27,7 +27,18 @@ export function deriveVars(vet: VetData): Record<string, string> {
 }
 
 export function renderTemplate(html: string, vars: Record<string, string>): string {
-  return html.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => vars[key] ?? '')
+  let out = html
+  // Formato canónico: {{nombre}} con doble llave (estilo Mustache/Handlebars).
+  out = out.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => vars[key] ?? '')
+  // Fallback: {nombre} con llave simple. Para no romper CSS o JSON dentro del HTML,
+  // solo reemplazamos cuando la key matcheea una variable conocida y las llaves NO
+  // forman parte de un par doble (negative lookaround).
+  const claves = new Set(Object.keys(vars))
+  out = out.replace(/(?<!\{)\{\s*(\w+)\s*\}(?!\})/g, (match, key) => {
+    if (claves.has(key)) return vars[key] ?? ''
+    return match
+  })
+  return out
 }
 
 export function renderForVet(html: string, vet: VetData): string {
