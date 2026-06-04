@@ -725,6 +725,37 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
     setLoadingDetalle(false)
   }
 
+  async function reanudar(c: Campana) {
+    const totalDest = parseInt(c.total_destinatarios || '0', 10) || 0
+    const enviadosAct = parseInt(c.enviados || '0', 10) || 0
+    const faltantesAprox = Math.max(0, totalDest - enviadosAct)
+    if (!confirm(
+      `Reanudar envío de "${c.asunto}"?\n\n` +
+      `Total destinatarios:    ${totalDest}\n` +
+      `Ya enviados:            ${enviadosAct}\n` +
+      `Faltan (aprox):         ${faltantesAprox}\n\n` +
+      `Voy a consultar mailing_logs y mandar SOLO a los que no recibieron todavía. ` +
+      `Es seguro re-correrlo: no se duplican envíos.`
+    )) return
+    const res = await fetch(`/api/mailing/campanas/${c.id}/reanudar`, { method: 'POST' })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      alert('Error: ' + (j.error ?? res.status))
+      return
+    }
+    if (j.nada_para_reanudar) {
+      alert(`No hay nada para reanudar. Los ${j.total_destinatarios} destinatarios ya tienen log.\n\nLa campaña queda como "enviado".`)
+    } else {
+      alert(
+        `Reanudación OK:\n` +
+        `- Faltaban: ${j.faltantes}\n` +
+        `- Enviados ahora: ${j.enviados_ahora}\n` +
+        `- Fallidos ahora: ${j.fallidos_ahora}`
+      )
+    }
+    await fetchCampanas()
+  }
+
   async function abrirDebug(c: Campana) {
     setDebugLoading(true)
     setDebugData(null)
@@ -857,7 +888,13 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                       <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                         <div className="flex gap-1.5 justify-center">
                           {c.estado === 'enviando' && (
-                            <button onClick={() => cancelar(c)} className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Cancelar</button>
+                            <>
+                              <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm" title="Reanudar envío a los que faltan">Reanudar</button>
+                              <button onClick={() => cancelar(c)} className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Cancelar</button>
+                            </>
+                          )}
+                          {(c.estado === 'fallido' || c.estado === 'cancelado') && (
+                            <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm" title="Reanudar envío a los que faltan">Reanudar</button>
                           )}
                           {(c.estado === 'enviado' || c.estado === 'fallido' || c.estado === 'cancelado') && (
                             <button onClick={() => duplicar(c)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Duplicar</button>
