@@ -64,9 +64,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const idx = campanas.findIndex(r => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'Campaña no encontrada' }, { status: 404 })
     const campana = campanas[idx]
-    if (campana.estado !== 'enviando' && campana.estado !== 'fallido' && campana.estado !== 'cancelado') {
+    const estadosReanudables = ['enviando', 'enviado', 'fallido', 'cancelado']
+    if (!estadosReanudables.includes(campana.estado)) {
       return NextResponse.json({
-        error: `La campaña está en estado "${campana.estado}", no se puede reanudar. Solo se reanudan campañas en 'enviando', 'fallido' o 'cancelado'.`,
+        error: `La campaña está en estado "${campana.estado}", no se puede reanudar. Solo se reanudan campañas en ${estadosReanudables.map(s => `'${s}'`).join(', ')}.`,
       }, { status: 400 })
     }
     if (!campana.html_key) return NextResponse.json({ error: 'Campaña sin HTML' }, { status: 400 })
