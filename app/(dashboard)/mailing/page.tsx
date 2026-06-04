@@ -1243,7 +1243,11 @@ function NuevaCampanaPanel({ initial, onCreada }: {
 
   async function enviarTest() {
     setError('')
-    const id = draftId || await guardarBorrador()
+    // SIEMPRE guardar borrador antes (no solo si es nuevo). Si el usuario edita
+    // el HTML después de la primera vez —p.ej. cargando un nuevo .html con
+    // imágenes que se acaban de subir a R2—, hay que subir el HTML actualizado
+    // a R2 antes de mandar el test. El endpoint /test lee de R2, no del form.
+    const id = await guardarBorrador()
     if (!id) return
     setTestEmail('')
     setTestOpen(true)
