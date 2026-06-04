@@ -6,6 +6,32 @@
  * - En la UI visible al usuario: DD-MM-YYYY
  */
 
+/**
+ * Formatea una hora que puede venir como:
+ * - Fracción de día decimal (ej. 0.99583333 → 23:54). Esto pasa porque Sheets
+ *   guarda strings "HH:MM" como tiempo y getSheetData usa UNFORMATTED_VALUE.
+ * - String "HH:MM" o "HH:MM:SS" ya formateado → se devuelve tal cual.
+ * - Vacío o inválido → '—'
+ */
+export function formatHoraDia(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === '') return '—'
+  const s = String(raw).trim()
+  if (!s) return '—'
+  // Si ya es HH:MM o HH:MM:SS, lo dejamos
+  if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(s)) {
+    const [h, m] = s.split(':')
+    return `${h.padStart(2, '0')}:${m}`
+  }
+  const n = parseFloat(s)
+  if (Number.isFinite(n) && n >= 0 && n < 1) {
+    const totalMin = Math.round(n * 24 * 60)
+    const h = Math.floor(totalMin / 60) % 24
+    const m = totalMin % 60
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  }
+  return s
+}
+
 function parse(dateStr: string | Date | null | undefined): Date | null {
   if (!dateStr) return null
   if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr

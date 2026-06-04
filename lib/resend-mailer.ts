@@ -85,8 +85,16 @@ function inyectarPreviewText(html: string, previewText: string): string {
 /**
  * Inyecta el píxel 1x1 invisible al final del body para tracking de aperturas
  * y reescribe todos los <a href="http..."> para que pasen por nuestro endpoint de click.
+ *
+ * Si MAILING_DISABLE_OWN_TRACKING está en 'true' devolvemos el html intacto.
+ * Útil cuando Resend (Pro) ya está rastreando aperturas/clicks con su propio
+ * tracking subdomain — evita la doble redirección de links (Resend → tu app
+ * → destino) y la doble cuenta de aperturas (pixel Resend + pixel propio).
  */
 function inyectarTracking(html: string, ids: TrackingIds): string {
+  if ((process.env.MAILING_DISABLE_OWN_TRACKING ?? '').toLowerCase() === 'true') {
+    return html
+  }
   const baseUrl = getPublicBaseUrl()
   if (!baseUrl) {
     console.warn('[resend-mailer] PUBLIC_APP_URL/NEXTAUTH_URL vacíos — tracking propio deshabilitado (pixel + clicks no se inyectan)')

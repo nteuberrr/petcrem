@@ -298,9 +298,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
   function intentarEnviarCertificado() {
     // Si la versión actual ya fue enviada al menos una vez, pedimos confirmación
-    // explícita antes de reenviar (evita doble-envío accidental). También aplica
-    // al caso "histórico": si la ficha está despachada se asume entregado el día
-    // del despacho aunque no haya envío real registrado.
+    // explícita antes de reenviar (evita doble-envío accidental).
     const cu = certificadosEmitidos[0]
     const yaEnviado = !!(cu?.enviado_ultima_fecha)
     if (yaEnviado) {
@@ -312,13 +310,6 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       const ok = confirm(
         `Este certificado (V${cu.version}) ya fue enviado${dest} el ${fecha}${hora}${veces}.\n\n` +
         `¿Querés reenviarlo de todas formas?`
-      )
-      if (!ok) return
-    } else if (cliente?.estado === 'despachado' && cliente.despacho?.fecha) {
-      const ok = confirm(
-        `Esta ficha figura como despachada el ${fmtFecha(cliente.despacho.fecha)}, ` +
-        `por lo que se asume que el certificado ya fue entregado en ese momento.\n\n` +
-        `¿Querés enviarlo nuevamente al correo del cliente?`
       )
       if (!ok) return
     }
@@ -554,40 +545,30 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     {verCertHistorico ? '▲ Ocultar certificados' : `📁 Ver certificados generados (${certificadosEmitidos.length})`}
                   </button>
                 )}
-                {/* "Histórico": si el cliente está despachado pero no hay envío real registrado,
-                    asumimos entregado el día del despacho. El botón pasa a "Reenviar" igual que
-                    cuando hay registro real, y la confirmación lo aclara. */}
-                {(() => {
-                  const yaEnviadoReal = !!certUltimo?.enviado_ultima_fecha
-                  const yaEnviadoHistorico = !yaEnviadoReal && cliente.estado === 'despachado' && !!cliente.despacho?.fecha
-                  const yaEnviado = yaEnviadoReal || yaEnviadoHistorico
-                  return (
-                    <button
-                      onClick={intentarEnviarCertificado}
-                      disabled={enviandoCert || !cliente.email || !certUltimo}
-                      title={
-                        !cliente.email
-                          ? 'El cliente no tiene email registrado'
-                          : !certUltimo
-                            ? 'Generá primero un certificado para poder enviarlo'
-                            : yaEnviado
-                              ? `Ya enviado — al hacer click te pedimos confirmación para reenviar`
-                              : `Enviar a ${cliente.email}`
-                      }
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm ${
-                        yaEnviado
-                          ? 'bg-gray-500 hover:bg-gray-600 text-white'
-                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      }`}
-                    >
-                      {enviandoCert
-                        ? '⌛ Enviando…'
-                        : yaEnviado
-                          ? '🔄 Reenviar al correo'
-                          : '📧 Enviar al correo'}
-                    </button>
-                  )
-                })()}
+                <button
+                  onClick={intentarEnviarCertificado}
+                  disabled={enviandoCert || !cliente.email || !certUltimo}
+                  title={
+                    !cliente.email
+                      ? 'El cliente no tiene email registrado'
+                      : !certUltimo
+                        ? 'Generá primero un certificado para poder enviarlo'
+                        : certUltimo.enviado_ultima_fecha
+                          ? `Ya enviado — al hacer click te pedimos confirmación para reenviar`
+                          : `Enviar a ${cliente.email}`
+                  }
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm ${
+                    certUltimo?.enviado_ultima_fecha
+                      ? 'bg-gray-500 hover:bg-gray-600 text-white'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  }`}
+                >
+                  {enviandoCert
+                    ? '⌛ Enviando…'
+                    : certUltimo?.enviado_ultima_fecha
+                      ? '🔄 Reenviar al correo'
+                      : '📧 Enviar al correo'}
+                </button>
               </div>
             )}
           </div>
@@ -600,42 +581,23 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               {feedbackCert.msg}
             </div>
           )}
-          {/* Banner permanente: el cliente ya recibió el certificado por correo.
-              Si hay un envío real registrado tiene prioridad. Caso contrario, si la ficha
-              está despachada se asume entregado el día del despacho (estado histórico). */}
-          {(() => {
-            // 1) Envío real registrado (futuro): muestra fecha/hora exacta de Resend
-            if (certUltimo?.enviado_ultima_fecha) {
-              return (
-                <div className="mt-4 rounded-lg px-3 py-2.5 text-xs font-medium bg-emerald-50 border-2 border-emerald-200 text-emerald-900 flex items-center gap-2">
-                  <span className="text-base">✓</span>
-                  <div className="flex-1">
-                    <span className="font-semibold">El certificado fue enviado al cliente</span>
-                    {certUltimo.enviado_a ? <span> a <span className="font-mono">{certUltimo.enviado_a}</span></span> : null}
-                    <span> el {fmtFecha(certUltimo.enviado_ultima_fecha)}</span>
-                    {certUltimo.enviado_ultima_hora ? <span> a las {certUltimo.enviado_ultima_hora}</span> : null}
-                    {parseInt(certUltimo.enviado_cantidad || '0', 10) > 1 && (
-                      <span className="text-emerald-700"> · reenviado {parseInt(certUltimo.enviado_cantidad || '0', 10) - 1} {parseInt(certUltimo.enviado_cantidad || '0', 10) - 1 === 1 ? 'vez' : 'veces'}</span>
-                    )}
-                  </div>
-                </div>
-              )
-            }
-            // 2) Ficha despachada sin envío real registrado: asumir entrega en la fecha del despacho
-            if (cliente.estado === 'despachado' && cliente.despacho?.fecha) {
-              return (
-                <div className="mt-4 rounded-lg px-3 py-2.5 text-xs font-medium bg-emerald-50 border-2 border-emerald-200 text-emerald-900 flex items-center gap-2">
-                  <span className="text-base">✓</span>
-                  <div className="flex-1">
-                    <span className="font-semibold">El certificado fue enviado al cliente</span>
-                    {cliente.email ? <span> a <span className="font-mono">{cliente.email}</span></span> : null}
-                    <span> con la misma fecha de despacho ({fmtFecha(cliente.despacho.fecha)})</span>
-                  </div>
-                </div>
-              )
-            }
-            return null
-          })()}
+          {/* Banner permanente: solo aparece cuando hay un envío real registrado
+              en sheet `certificados` (vía POST /api/clientes/[id]/certificado/enviar).
+              Estado 'despachado' por sí solo no implica envío. */}
+          {certUltimo?.enviado_ultima_fecha && (
+            <div className="mt-4 rounded-lg px-3 py-2.5 text-xs font-medium bg-emerald-50 border-2 border-emerald-200 text-emerald-900 flex items-center gap-2">
+              <span className="text-base">✓</span>
+              <div className="flex-1">
+                <span className="font-semibold">El certificado fue enviado al cliente</span>
+                {certUltimo.enviado_a ? <span> a <span className="font-mono">{certUltimo.enviado_a}</span></span> : null}
+                <span> el {fmtFecha(certUltimo.enviado_ultima_fecha)}</span>
+                {certUltimo.enviado_ultima_hora ? <span> a las {certUltimo.enviado_ultima_hora}</span> : null}
+                {parseInt(certUltimo.enviado_cantidad || '0', 10) > 1 && (
+                  <span className="text-emerald-700"> · reenviado {parseInt(certUltimo.enviado_cantidad || '0', 10) - 1} {parseInt(certUltimo.enviado_cantidad || '0', 10) - 1 === 1 ? 'vez' : 'veces'}</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

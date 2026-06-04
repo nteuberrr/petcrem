@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Modal } from '@/components/ui/Modal'
-import { formatDate, formatDateTime } from '@/lib/dates'
+import { formatDate, formatDateTime, formatHoraDia } from '@/lib/dates'
 
 type Vet = {
   id: string
@@ -804,7 +804,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                         <span className={`text-[11px] ml-1 font-semibold ${tasaRebote > 0 ? 'text-red-600' : 'text-gray-400'}`}>{tasaRebote}%</span>
                       </td>
                       <td className="px-3 py-2.5 text-gray-600 text-xs whitespace-nowrap">{formatDate(c.fecha_envio) || '—'}</td>
-                      <td className="px-2 py-2.5 text-gray-600 text-xs whitespace-nowrap tabular-nums">{c.hora_envio || '—'}</td>
+                      <td className="px-2 py-2.5 text-gray-600 text-xs whitespace-nowrap tabular-nums">{formatHoraDia(c.hora_envio)}</td>
                       <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                         <div className="flex gap-1.5 justify-center">
                           {c.estado === 'enviando' && (
@@ -1130,8 +1130,67 @@ function NuevaCampanaPanel({ initial, onCreada }: {
     const file = e.target.files?.[0]
     if (!file) return
     const text = await file.text()
-    setForm(f => ({ ...f, html: text }))
     if (fileRef.current) fileRef.current.value = ''
+    // Procesar imágenes embebidas como data:base64 — Gmail/Outlook las bloquean por
+    // tamaño. Las subimos a R2 y reescribimos el src en el HTML.
+    const { html: nuevoHtml, subidas, fallidas, locales } = await procesarImagenesInline(text)
+    setForm(f => ({ ...f, html: nuevoHtml }))
+    setError('')
+    const partes: string[] = []
+    if (subidas > 0) partes.push(`${subidas} imagen${subidas === 1 ? '' : 'es'} embebida${subidas === 1 ? '' : 's'} subida${subidas === 1 ? '' : 's'} a R2`)
+    if (fallidas > 0) partes.push(`${fallidas} fallaron al subir`)
+    if (locales.length > 0) partes.push(`⚠ ${locales.length} con ruta local/relativa que no se ven en el inbox: ${locales.slice(0, 3).join(', ')}${locales.length > 3 ? '…' : ''}`)
+    if (partes.length > 0) setInfo(partes.join(' · '))
+    else setInfo('HTML cargado')
+  }
+
+  /**
+   * Detecta <img src="data:image/...;base64,..."> y los sube a R2.
+   * También detecta src locales (file://, C:\, rutas relativas) y los reporta sin tocar.
+   */
+  async function procesarImagenesInline(html: string): Promise<{
+    html: string
+    subidas: number
+    fallidas: number
+    locales: string[]
+  }> {
+    let subidas = 0
+    let fallidas = 0
+    const locales: string[] = []
+    const dataUrlRe = /src=(["'])(data:image\/[^"';]+;base64,[^"']+)\1/gi
+    const matches: Array<{ full: string; quote: string; dataUrl: string }> = []
+    let m: RegExpExecArray | null
+    while ((m = dataUrlRe.exec(html)) !== null) {
+      matches.push({ full: m[0], quote: m[1], dataUrl: m[2] })
+    }
+    let resultado = html
+    for (const it of matches) {
+      try {
+        const r = await fetch('/api/mailing/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data_url: it.dataUrl }),
+        })
+        const j = await r.json()
+        if (r.ok && j.url) {
+          resultado = resultado.replace(it.full, `src=${it.quote}${j.url}${it.quote}`)
+          subidas++
+        } else {
+          fallidas++
+        }
+      } catch {
+        fallidas++
+      }
+    }
+    // Detectar rutas locales que Gmail no puede resolver
+    const localRe = /src=(["'])((?:file:\/\/|[A-Za-z]:\\|\.{1,2}\/|\/[^/])[^"']*)\1/gi
+    let lm: RegExpExecArray | null
+    while ((lm = localRe.exec(resultado)) !== null) {
+      // Excluir CIDs y URLs que empiecen con "/" pero que sean del propio sitio (raro pero por las dudas)
+      if (lm[2].startsWith('cid:')) continue
+      locales.push(lm[2].slice(0, 60))
+    }
+    return { html: resultado, subidas, fallidas, locales }
   }
 
   async function guardarBorrador(): Promise<string | null> {

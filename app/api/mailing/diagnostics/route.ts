@@ -23,11 +23,18 @@ export async function GET() {
   const fromEmail = process.env.MAILING_FROM_EMAIL || 'onboarding@resend.dev'
   const fromName = process.env.MAILING_FROM_NAME || 'Alma Animal'
   const webhookSecret = !!process.env.RESEND_WEBHOOK_SECRET
+  const ownTrackingDisabled = (process.env.MAILING_DISABLE_OWN_TRACKING ?? '').toLowerCase() === 'true'
+
+  // Si el tracking propio está apagado, asumimos que Resend lo maneja con su
+  // tracking subdomain. tracking_ok se considera OK porque los envíos van a
+  // contar aperturas/clicks por la vía de Resend (no por la nuestra).
+  const trackingOk = ownTrackingDisabled || (!baseMissing && !isLocalhost)
 
   return NextResponse.json({
     resend_ok: isResendConfigured(),
     supabase_ok: isSupabaseConfigured(),
-    tracking_ok: !baseMissing && !isLocalhost,
+    tracking_ok: trackingOk,
+    own_tracking_disabled: ownTrackingDisabled,
     base_url: baseUrl || null,
     is_dev: isDev,
     base_missing: baseMissing,
