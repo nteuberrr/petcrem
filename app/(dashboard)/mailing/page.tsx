@@ -986,12 +986,35 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
             )}
             {debugData.logs && debugData.logs.length > 0 && (
               <section>
+                {(() => {
+                  // Agrupamos los error_msg de los failed para ver qué dijo Resend
+                  const fails = debugData.logs!.filter(l => l.estado === 'failed' && l.error_msg)
+                  const grupos = new Map<string, number>()
+                  for (const f of fails) {
+                    const k = (f.error_msg ?? '').slice(0, 200)
+                    grupos.set(k, (grupos.get(k) || 0) + 1)
+                  }
+                  if (grupos.size === 0) return null
+                  return (
+                    <section className="mb-3">
+                      <h3 className="text-sm font-bold text-red-700 mb-2">Errores de envío agrupados ({fails.length})</h3>
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1.5">
+                        {Array.from(grupos.entries()).sort((a, b) => b[1] - a[1]).map(([msg, cnt]) => (
+                          <div key={msg} className="flex gap-2 items-start text-xs">
+                            <span className="bg-red-200 text-red-900 font-bold px-2 py-0.5 rounded shrink-0">×{cnt}</span>
+                            <span className="text-red-900 break-all">{msg || '(sin mensaje)'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )
+                })()}
                 <h3 className="text-sm font-bold text-gray-900 mb-2">Logs ({debugData.logs.length})</h3>
                 <div className="border border-gray-200 rounded-lg overflow-hidden max-h-96 overflow-y-auto">
                   <table className="w-full text-[11px]">
                     <thead className="bg-gray-100 sticky top-0">
                       <tr>
-                        {['Email', 'Estado', 'Sent', 'Delivered', 'Opened', 'Clicked', 'Bounced'].map(h => (
+                        {['Email', 'Estado', 'Sent', 'Delivered', 'Opened', 'Clicked', 'Bounced', 'Error'].map(h => (
                           <th key={h} className="px-2 py-1 text-left text-gray-600">{h}</th>
                         ))}
                       </tr>
@@ -1006,6 +1029,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                           <td className="px-2 py-1 text-emerald-700">{l.fecha_apertura ? '✓' : '—'}</td>
                           <td className="px-2 py-1 text-violet-700">{l.fecha_click ? '✓' : '—'}</td>
                           <td className="px-2 py-1 text-red-700">{l.fecha_rebote ? '✓' : '—'}</td>
+                          <td className="px-2 py-1 text-red-700 truncate max-w-[200px]" title={l.error_msg ?? ''}>{l.error_msg ?? '—'}</td>
                         </tr>
                       ))}
                     </tbody>
