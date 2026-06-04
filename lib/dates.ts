@@ -36,10 +36,11 @@ export function formatHoraDia(raw: unknown): string {
   if (Number.isFinite(n) && n > 0 && n < 1) {
     return fracToHHMM(n)
   }
-  // Caso B: viene como "99583333333333" (entero grande sin punto decimal).
-  // Si son puros dígitos y tienen más de 6 cifras, asumimos que es la fracción
-  // de día con el "0." removido. Lo reconstruimos.
-  if (/^\d{7,}$/.test(s)) {
+  // Caso B: viene como "99583333333333" o "91875" (digitos puros sin punto
+  // decimal). Sheets a veces devuelve la fracción sin el "0." inicial. Como
+  // las celdas de tipo "time" guardadas siempre quedan como fracciones de día,
+  // cualquier secuencia de dígitos pura aca es casi seguro una fracción.
+  if (/^\d+$/.test(s)) {
     const frac = parseFloat('0.' + s)
     if (Number.isFinite(frac) && frac > 0 && frac < 1) {
       return fracToHHMM(frac)
