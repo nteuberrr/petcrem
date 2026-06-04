@@ -43,25 +43,46 @@ export async function POST(req: NextRequest) {
 
     const messageId = evt.data?.email_id
     if (!messageId) {
-      return NextResponse.json({ ok: false, reason: 'sin email_id' })
+      return NextResponse.json({ ok: true, ignored: true, reason: 'sin email_id' })
     }
     if (!isSupabaseConfigured()) {
-      return NextResponse.json({ ok: false, reason: 'supabase no configurado' })
+      return NextResponse.json({ ok: true, ignored: true, reason: 'supabase no configurado' })
     }
 
+    // Race condition guard: el endpoint /enviar hace sendBatch ANTES de hacer
+    // INSERT de los logs. Resend a veces dispara el webhook antes de que el
+    // insert termine. Reintentamos buscar el log con backoff exponencial.
+    type LogRow = { id: string; campana_id: string; fecha_entrega: string | null; fecha_apertura: string | null; fecha_click: string | null }
     const supabase = getSupabase()
-    const { data: logs, error: selErr } = await supabase
-      .from('mailing_logs')
-      .select('id, campana_id, fecha_entrega, fecha_apertura, fecha_click')
-      .eq('resend_message_id', messageId)
-      .limit(1)
-    if (selErr) {
-      console.error('[webhook] select error:', selErr.message)
-      return NextResponse.json({ error: selErr.message }, { status: 500 })
+    const MAX_ATTEMPTS = 5
+    const DELAYS_MS = [0, 800, 1800, 3500, 6500]  // total ~12.6s
+    let log: LogRow | null = null
+    let lastSelErr: string | null = null
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      if (DELAYS_MS[attempt] > 0) {
+        await new Promise(r => setTimeout(r, DELAYS_MS[attempt]))
+      }
+      const { data: logs, error: selErr } = await supabase
+        .from('mailing_logs')
+        .select('id, campana_id, fecha_entrega, fecha_apertura, fecha_click')
+        .eq('resend_message_id', messageId)
+        .limit(1)
+      if (selErr) {
+        lastSelErr = selErr.message
+        console.warn(`[webhook] select intento ${attempt + 1}/${MAX_ATTEMPTS}:`, selErr.message)
+        continue
+      }
+      if (logs && logs.length > 0) {
+        log = logs[0] as unknown as LogRow
+        break
+      }
     }
-    const log = logs?.[0]
     if (!log) {
-      return NextResponse.json({ ok: true, ignored: true, reason: 'log no encontrado' })
+      // Devolvemos 200 para que Resend no marque failed_attempts. Es esperado:
+      // o el log nunca se insertó (test, email manual no de campaña) o tardó
+      // demasiado. Loggeamos para visibility.
+      console.warn(`[webhook] log no encontrado tras ${MAX_ATTEMPTS} intentos para message_id=${messageId} (tipo=${evt.type}). Último error select: ${lastSelErr ?? 'ninguno'}`)
+      return NextResponse.json({ ok: true, ignored: true, reason: 'log no encontrado', message_id: messageId })
     }
 
     const ts = evt.created_at || new Date().toISOString()
@@ -128,14 +149,18 @@ export async function POST(req: NextRequest) {
           await updateRow('mailing_campanas', cIdx, { ...campanas[cIdx], [aggField]: String(current + 1) })
         }
       } catch (err) {
-        console.error('[webhook] agg update error:', err)
+        console.error('[webhook] agg update error (no bloquea):', err)
       }
     }
 
     return NextResponse.json({ ok: true, applied: nuevoEstado })
   } catch (e) {
+    // Importante: devolvemos 200 OK incluso ante errores transitorios para que
+    // Resend NO acumule failed_attempts y termine deshabilitando el webhook.
+    // Loggeamos para visibility en Vercel; los eventos siguen estando en
+    // Resend → Webhook → Replay si los necesitamos.
     const msg = e instanceof Error ? e.message : String(e)
-    console.error('[webhook resend] error:', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error('[webhook resend] error capturado (devolvemos 200):', msg)
+    return NextResponse.json({ ok: true, error: msg, swallowed: true })
   }
 }
