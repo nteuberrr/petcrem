@@ -177,29 +177,90 @@ export async function sendEmail(opts: SendOpts): Promise<SendResult> {
   }
 }
 
-/** Envío en lote. Resend limita a 100 emails por request. */
+/**
+ * Sanitiza una dirección de email: trim, remueve caracteres invisibles
+ * (zero-width, NBSP, BOM, etc), valida formato básico. Devuelve null si no
+ * es un email enviable.
+ */
+function sanitizarEmail(raw: string | undefined | null): string | null {
+  if (!raw) return null
+  let s = String(raw)
+  // Quitar caracteres invisibles típicos que rompen el parser de Resend
+  s = s.replace(/[​-‍⁠﻿ ]/g, '')
+  s = s.trim()
+  if (!s) return null
+  // Formato básico email@dominio.tld (regex permisivo pero sin espacios ni comas)
+  const re = /^[^\s,;<>"()@]+@[^\s,;<>"()@]+\.[^\s,;<>"()@]+$/i
+  if (!re.test(s)) return null
+  return s
+}
+
+/**
+ * Envío en lote. Resend limita a 100 emails por request.
+ *
+ * Robusto contra emails inválidos:
+ * - Filtra los emails con formato malo ANTES de mandar (los marca failed local).
+ * - Si Resend rechaza el batch entero (típicamente porque uno solo está mal),
+ *   reintenta uno por uno para no perder los buenos.
+ */
 export async function sendBatch(emails: SendOpts[]): Promise<SendResult[]> {
   if (emails.length === 0) return []
   if (emails.length > 100) throw new Error('sendBatch limitado a 100 emails por llamada')
+
+  // Validación previa: separar válidos de inválidos
+  const validos: { idx: number; opts: SendOpts; toLimpio: string }[] = []
+  const results: SendResult[] = emails.map(() => ({ ok: false, error: '' }))
+  emails.forEach((e, idx) => {
+    const limpio = sanitizarEmail(e.to)
+    if (!limpio) {
+      results[idx] = { ok: false, error: `email inválido o vacío: "${e.to}"` }
+    } else {
+      validos.push({ idx, opts: { ...e, to: limpio }, toLimpio: limpio })
+    }
+  })
+  if (validos.length === 0) return results
+
   try {
     const client = getClient()
-    const payload = emails.map(e => ({
-      from: getFromAddress(),
-      to: e.to,
-      subject: e.subject,
-      html: prepararHtml(e),
-      replyTo: e.reply_to,
-      tags: e.tags,
-      attachments: buildAttachmentsPayload(e.attachments),
+    const payload = validos.map(v => ({
+      from: v.opts.from || getFromAddress(),
+      to: v.toLimpio,
+      subject: v.opts.subject,
+      html: prepararHtml(v.opts),
+      replyTo: v.opts.reply_to,
+      tags: v.opts.tags,
+      attachments: buildAttachmentsPayload(v.opts.attachments),
     }))
     const res = await client.batch.send(payload)
     if (res.error || !res.data) {
       const errMsg = res.error?.message || 'batch send falló'
-      return emails.map(() => ({ ok: false, error: errMsg }))
+      // FALLBACK: si el batch falla entero (un email malo arrastró al resto),
+      // probamos uno por uno para no perder los buenos. Los emails buenos se
+      // envían; los problemáticos quedan con error_msg específico de Resend.
+      console.warn(`[sendBatch] batch falló (${errMsg}), reintentando individual…`)
+      for (let i = 0; i < validos.length; i++) {
+        const v = validos[i]
+        try {
+          const single = await client.emails.send(payload[i])
+          if (single.error) {
+            results[v.idx] = { ok: false, error: single.error.message || JSON.stringify(single.error) }
+          } else {
+            results[v.idx] = { ok: true, message_id: single.data?.id }
+          }
+        } catch (e) {
+          results[v.idx] = { ok: false, error: e instanceof Error ? e.message : String(e) }
+        }
+      }
+      return results
     }
-    return res.data.data.map((d: { id?: string }) => ({ ok: true, message_id: d.id }))
+    // Batch ok: distribuir message_ids
+    res.data.data.forEach((d: { id?: string }, i: number) => {
+      results[validos[i].idx] = { ok: true, message_id: d.id }
+    })
+    return results
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    return emails.map(() => ({ ok: false, error: msg }))
+    validos.forEach(v => { results[v.idx] = { ok: false, error: msg } })
+    return results
   }
 }
