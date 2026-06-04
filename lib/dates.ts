@@ -8,9 +8,11 @@
 
 /**
  * Formatea una hora que puede venir como:
- * - Fracción de día decimal (ej. 0.99583333 → 23:54). Esto pasa porque Sheets
- *   guarda strings "HH:MM" como tiempo y getSheetData usa UNFORMATTED_VALUE.
  * - String "HH:MM" o "HH:MM:SS" ya formateado → se devuelve tal cual.
+ * - Fracción de día decimal (ej. 0.99583333 → 23:54). Pasa porque Sheets
+ *   guarda strings "HH:MM" como tiempo y getSheetData usa UNFORMATTED_VALUE.
+ * - Fracción de día SIN punto decimal (ej. "99583333333333" → 23:54). Pasa
+ *   cuando Sheets serializa el valor sin el "0." inicial.
  * - Vacío o inválido → '—'
  */
 export function formatHoraDia(raw: unknown): string {
@@ -22,12 +24,26 @@ export function formatHoraDia(raw: unknown): string {
     const [h, m] = s.split(':')
     return `${h.padStart(2, '0')}:${m}`
   }
-  const n = parseFloat(s)
-  if (Number.isFinite(n) && n >= 0 && n < 1) {
-    const totalMin = Math.round(n * 24 * 60)
+  // Helper: convierte una fracción de día (0..1) a "HH:MM"
+  const fracToHHMM = (frac: number) => {
+    const totalMin = Math.round(frac * 24 * 60)
     const h = Math.floor(totalMin / 60) % 24
     const m = totalMin % 60
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  }
+  // Caso A: viene como "0.99583..."
+  const n = parseFloat(s)
+  if (Number.isFinite(n) && n > 0 && n < 1) {
+    return fracToHHMM(n)
+  }
+  // Caso B: viene como "99583333333333" (entero grande sin punto decimal).
+  // Si son puros dígitos y tienen más de 6 cifras, asumimos que es la fracción
+  // de día con el "0." removido. Lo reconstruimos.
+  if (/^\d{7,}$/.test(s)) {
+    const frac = parseFloat('0.' + s)
+    if (Number.isFinite(frac) && frac > 0 && frac < 1) {
+      return fracToHHMM(frac)
+    }
   }
   return s
 }
