@@ -51,6 +51,43 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     for (const campo of CAMPOS_EDITABLES) {
       if (campo in body) partial[campo] = String(body[campo] ?? '')
     }
+
+    // Asignación manual de vet (cambio o asignación inicial).
+    // - Si viene vet_id_asignado con valor → buscamos el vet, lo asignamos,
+    //   estado pasa a 'confirmada' (si no estaba 'realizada'/'cancelada'),
+    //   y completamos los timestamps que falten.
+    // - Si viene vet_id_asignado como '' (vacío explícito) → se desasigna y
+    //   el estado vuelve a 'enviada' (asume que ya se había enviado al menos
+    //   a alguien). Si no se había enviado, queda 'creada'.
+    if ('vet_id_asignado' in body) {
+      const ahora = new Date().toISOString()
+      const nuevoVetId = String(body.vet_id_asignado ?? '')
+      if (nuevoVetId) {
+        const vets = await getSheetData('vet_convenio_eutanasia')
+        const v = vets.find(r => r.id === nuevoVetId)
+        if (!v) return NextResponse.json({ error: 'Veterinario no existe' }, { status: 400 })
+        partial.vet_id_asignado = v.id
+        partial.vet_nombre_asignado = `${v.nombre || ''} ${v.apellido || ''}`.trim()
+        partial.vet_email_asignado = v.email
+        const estadoActual = partial.estado ?? rows[idx].estado
+        if (estadoActual !== 'realizada' && estadoActual !== 'cancelada') {
+          partial.estado = 'confirmada'
+          if (!rows[idx].fecha_aceptacion) partial.fecha_aceptacion = ahora
+          if (!rows[idx].fecha_confirmacion) partial.fecha_confirmacion = ahora
+        }
+      } else {
+        // Desasignar
+        partial.vet_id_asignado = ''
+        partial.vet_nombre_asignado = ''
+        partial.vet_email_asignado = ''
+        const estadoActual = partial.estado ?? rows[idx].estado
+        if (estadoActual === 'aceptada' || estadoActual === 'confirmada') {
+          // Volvemos al estado previo razonable
+          partial.estado = rows[idx].fecha_envio_cotizacion ? 'enviada' : 'creada'
+        }
+      }
+    }
+
     // Marcadores de timestamp si cambia el estado a algunos específicos
     if (partial.estado === 'realizada' && !rows[idx].fecha_realizacion) {
       partial.fecha_realizacion = new Date().toISOString()

@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
   const q = (url.searchParams.get('q') ?? '').trim()
   if (!q || q.length < 2) return NextResponse.json([])
 
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY
+  // Misma key que usa /api/places/autocomplete para direcciones.
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY
 
   if (apiKey) {
     try {

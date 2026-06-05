@@ -5,7 +5,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import ComunaPicker from '@/components/ui/ComunaPicker'
 import { fmtPrecio } from '@/lib/format'
-import { formatDate, todayISO } from '@/lib/dates'
+import { formatDate, formatHoraDia, todayISO } from '@/lib/dates'
+import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { COMUNAS } from '@/lib/comunas'
 
 const TABS = ['Cotizaciones', 'Veterinarios', 'Precios'] as const
@@ -144,6 +145,19 @@ export default function ServiciosEutanasiasPage() {
   const [cotiForm, setCotiForm] = useState(cotizacionFormDefault())
   const [savingCoti, setSavingCoti] = useState(false)
   const [cotiError, setCotiError] = useState('')
+  // Estado paralelo al form: si el admin elige asignar vet manualmente al crear.
+  const [vetManualId, setVetManualId] = useState('')
+  // Cuando se detecta automáticamente la comuna desde la dirección, marcamos
+  // el campo como "auto" para mostrar un badge visual.
+  const [comunaAuto, setComunaAuto] = useState(false)
+  const [comunaWarn, setComunaWarn] = useState('')
+
+  // Edición de cotización existente
+  const [editCoti, setEditCoti] = useState<Cotizacion | null>(null)
+  const [editForm, setEditForm] = useState(cotizacionFormDefault())
+  const [editVetManualId, setEditVetManualId] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError] = useState('')
 
   // Detalle cotización + matching
   const [detalleCoti, setDetalleCoti] = useState<Cotizacion | null>(null)
@@ -209,8 +223,36 @@ export default function ServiciosEutanasiasPage() {
   // ─── Cotizaciones handlers ────────────────────────────────────────────────
   function abrirNuevaCotizacion() {
     setCotiForm(cotizacionFormDefault())
+    setVetManualId('')
+    setComunaAuto(false)
+    setComunaWarn('')
     setCotiError('')
     setShowCotiModal(true)
+  }
+
+  /**
+   * Cuando el admin selecciona una dirección del autocomplete, le pedimos a
+   * Google los detalles del lugar (que incluye sus address_components) y
+   * extraemos la comuna canónica. Eso permite garantizar que la comuna de la
+   * cotización es la MISMA forma canónica que la que cargó el vet al
+   * registrarse — sin esto, el matcher fallaba por diferencias de tildes /
+   * mayúsculas / abreviaturas entre "Las Condes" y "las condes" etc.
+   */
+  async function onSelectDireccion(place: { text: string; placeId: string }) {
+    if (!place.placeId) return
+    try {
+      const r = await fetch(`/api/eutanasias/place-details?placeId=${encodeURIComponent(place.placeId)}`)
+      const j = await r.json()
+      if (j.ok && j.comuna) {
+        setCotiForm(f => ({ ...f, comuna: j.comuna }))
+        setComunaAuto(true)
+        setComunaWarn(j.comuna_canonica ? '' : 'Comuna detectada pero no aparece en nuestra lista oficial; verifica que coincida con la registrada por los vets.')
+      } else {
+        setComunaWarn('No pudimos detectar la comuna desde la dirección. Ingresala manualmente.')
+      }
+    } catch {
+      setComunaWarn('No pudimos detectar la comuna. Ingresala manualmente.')
+    }
   }
 
   async function guardarCotizacion(e: React.FormEvent) {
@@ -221,7 +263,11 @@ export default function ServiciosEutanasiasPage() {
       const r = await fetch('/api/eutanasias/cotizaciones', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...cotiForm, peso: parseFloat(cotiForm.peso) }),
+        body: JSON.stringify({
+          ...cotiForm,
+          peso: parseFloat(cotiForm.peso),
+          vet_id_asignado: vetManualId || undefined,
+        }),
       })
       const j = await r.json()
       if (!r.ok) {
@@ -230,10 +276,63 @@ export default function ServiciosEutanasiasPage() {
       }
       setShowCotiModal(false)
       await cargarCotis()
-      // Abrir detalle + buscar vets
-      await abrirDetalleCotizacion(j as Cotizacion)
+      // Si se asignó vet manualmente, no abrimos el detalle de matching;
+      // el vet ya está fijo. Solo refrescamos la lista.
+      if (!vetManualId) {
+        await abrirDetalleCotizacion(j as Cotizacion)
+      }
     } finally {
       setSavingCoti(false)
+    }
+  }
+
+  function abrirEditarCotizacion(c: Cotizacion) {
+    setEditCoti(c)
+    setEditForm({
+      mascota_nombre: c.mascota_nombre,
+      especie: c.especie,
+      peso: c.peso,
+      cliente_nombre: c.cliente_nombre,
+      cliente_telefono: c.cliente_telefono,
+      cliente_email: c.cliente_email,
+      direccion: c.direccion,
+      comuna: c.comuna,
+      fecha_servicio: c.fecha_servicio,
+      hora_servicio: formatHoraDia(c.hora_servicio),
+      notas: c.notas,
+    })
+    setEditVetManualId(c.vet_id_asignado || '')
+    setEditError('')
+  }
+
+  async function guardarEdicion(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editCoti) return
+    setEditError('')
+    setSavingEdit(true)
+    try {
+      const payload: Record<string, unknown> = { ...editForm, peso: parseFloat(editForm.peso) }
+      // Si cambia el vet asignado, lo enviamos como override (el endpoint lo procesa).
+      if (editVetManualId && editVetManualId !== editCoti.vet_id_asignado) {
+        payload.vet_id_asignado = editVetManualId
+      } else if (!editVetManualId && editCoti.vet_id_asignado) {
+        // Quitarle el vet asignado
+        payload.vet_id_asignado = ''
+      }
+      const r = await fetch(`/api/eutanasias/cotizaciones/${editCoti.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const j = await r.json()
+      if (!r.ok) {
+        setEditError(j.error || 'Error al guardar')
+        return
+      }
+      setEditCoti(null)
+      await cargarCotis()
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -319,6 +418,9 @@ export default function ServiciosEutanasiasPage() {
       ? cotis.filter(c => c.estado === filtroEstadoCoti)
       : cotis
   }, [cotis, filtroEstadoCoti])
+
+  // Vets activos disponibles para asignación manual.
+  const vetsActivos = useMemo(() => vets.filter(v => v.activo !== 'FALSE'), [vets])
 
   // ─── Vets handlers ─────────────────────────────────────────────────────────
   function abrirNuevoVet() {
@@ -488,10 +590,21 @@ export default function ServiciosEutanasiasPage() {
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Servicios</h1>
-        <p className="text-gray-500 text-sm mt-1">Convenio de eutanasias a domicilio: veterinarios participantes y precios.</p>
+      <header className="mb-4">
+        <p className="text-xs uppercase tracking-wider text-gray-400">Servicios</p>
+        <h1 className="text-2xl font-bold text-gray-900 mt-1">Eutanasias</h1>
+        <p className="text-gray-500 text-sm mt-1">Convenio de eutanasias a domicilio: cotizaciones, veterinarios participantes y precios.</p>
       </header>
+
+      {/* Selector de sub-módulo (por ahora único, preparado para más en el futuro). */}
+      <div className="flex gap-2 mb-5">
+        <button
+          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-indigo-600 text-white cursor-default"
+          disabled
+        >
+          Eutanasias
+        </button>
+      </div>
 
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex gap-6">
@@ -543,7 +656,7 @@ export default function ServiciosEutanasiasPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                     <tr>
-                      <th className="px-3 py-2 text-left">ID</th>
+                      <th className="px-3 py-2 text-left">N°</th>
                       <th className="px-3 py-2 text-left">Mascota</th>
                       <th className="px-3 py-2 text-left">Comuna</th>
                       <th className="px-3 py-2 text-left">Fecha servicio</th>
@@ -556,14 +669,14 @@ export default function ServiciosEutanasiasPage() {
                   <tbody className="divide-y divide-gray-100">
                     {cotisFiltradas.map(c => (
                       <tr key={c.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-xs text-gray-500">#{c.id}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">N° {c.id}</td>
                         <td className="px-3 py-2">
                           <div className="font-medium text-gray-900">{c.mascota_nombre}</div>
                           <div className="text-xs text-gray-500">{c.especie} · {c.peso} kg</div>
                         </td>
                         <td className="px-3 py-2 text-gray-700">{c.comuna}</td>
                         <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
-                          {formatDate(c.fecha_servicio)} {c.hora_servicio}
+                          {formatDate(c.fecha_servicio)} · {formatHoraDia(c.hora_servicio)}
                         </td>
                         <td className="px-3 py-2">
                           <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${estadoColor(c.estado)}`}>
@@ -579,6 +692,9 @@ export default function ServiciosEutanasiasPage() {
                         <td className="px-3 py-2 text-right whitespace-nowrap">
                           <button onClick={() => abrirDetalleCotizacion(c)} className="text-indigo-600 hover:text-indigo-800 text-xs font-medium mr-2">
                             {c.estado === 'creada' || c.estado === 'enviada' ? 'Enviar' : 'Ver'}
+                          </button>
+                          <button onClick={() => abrirEditarCotizacion(c)} className="text-gray-600 hover:text-gray-800 text-xs font-medium mr-2">
+                            Editar
                           </button>
                           {(c.estado === 'confirmada') && (
                             <button onClick={() => marcarRealizada(c.id)} className="text-green-700 hover:text-green-900 text-xs font-medium mr-2">
@@ -800,19 +916,34 @@ export default function ServiciosEutanasiasPage() {
             <Field label="Hora" required>
               <input type="time" required value={cotiForm.hora_servicio} onChange={e => setCotiForm({ ...cotiForm, hora_servicio: e.target.value })} className={inputCls} />
             </Field>
-            <Field label="Comuna" required>
+          </div>
+
+          <Field label="Dirección" required>
+            <AddressAutocomplete
+              value={cotiForm.direccion}
+              onChange={v => { setCotiForm(f => ({ ...f, direccion: v })); if (comunaAuto) { setComunaAuto(false); setComunaWarn('') } }}
+              onSelectPlace={onSelectDireccion}
+              required
+              placeholder="Calle, número, comuna…"
+              className={inputCls}
+            />
+            <p className="text-xs text-gray-500 mt-1">La comuna se detecta automáticamente al elegir una sugerencia de Google.</p>
+          </Field>
+
+          <Field label="Comuna" required>
+            <div className="flex gap-2 items-center">
               <input
                 type="text" required
                 value={cotiForm.comuna}
-                onChange={e => setCotiForm({ ...cotiForm, comuna: e.target.value })}
-                placeholder="Ej: Providencia"
-                className={inputCls}
+                onChange={e => { setCotiForm({ ...cotiForm, comuna: e.target.value }); setComunaAuto(false) }}
+                placeholder="Detectada de la dirección"
+                className={`flex-1 ${inputCls}`}
               />
-            </Field>
-          </div>
-          <Field label="Dirección" required>
-            <input type="text" required value={cotiForm.direccion} onChange={e => setCotiForm({ ...cotiForm, direccion: e.target.value })} placeholder="Calle, número, depto." className={inputCls} />
+              {comunaAuto && <span className="text-[10px] font-semibold uppercase px-2 py-1 rounded bg-emerald-100 text-emerald-700 whitespace-nowrap">Auto</span>}
+            </div>
+            {comunaWarn && <p className="text-xs text-amber-700 mt-1">{comunaWarn}</p>}
           </Field>
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Nombre del cliente" required>
               <input type="text" required value={cotiForm.cliente_nombre} onChange={e => setCotiForm({ ...cotiForm, cliente_nombre: e.target.value })} className={inputCls} />
@@ -824,24 +955,119 @@ export default function ServiciosEutanasiasPage() {
               <input type="email" value={cotiForm.cliente_email} onChange={e => setCotiForm({ ...cotiForm, cliente_email: e.target.value })} className={inputCls} />
             </Field>
           </div>
+
           <Field label="Notas internas">
             <textarea value={cotiForm.notas} onChange={e => setCotiForm({ ...cotiForm, notas: e.target.value })} rows={2} className={inputCls} placeholder="Información adicional que ayude al vet" />
           </Field>
+
+          {/* Asignar vet manualmente (opcional) */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Asignar veterinario manualmente <span className="text-gray-400">(opcional)</span>
+            </label>
+            <select
+              value={vetManualId}
+              onChange={e => setVetManualId(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">— Buscar vets disponibles al crear —</option>
+              {vetsActivos.map(v => (
+                <option key={v.id} value={v.id}>
+                  {`${v.nombre} ${v.apellido}`.trim()} ({v.email})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Si eliges uno, la cotización queda <strong>confirmada</strong> directamente, sin enviar correos automáticos.
+            </p>
+          </div>
+
           {cotiError && <p className="text-sm text-red-600">{cotiError}</p>}
           <div className="flex gap-2 justify-end pt-2">
             <button type="button" onClick={() => setShowCotiModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
             <button type="submit" disabled={savingCoti} className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg">
-              {savingCoti ? 'Creando…' : 'Crear y buscar vets'}
+              {savingCoti ? 'Creando…' : (vetManualId ? 'Crear y asignar' : 'Crear y buscar vets')}
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal Editar cotización */}
+      <Modal open={!!editCoti} onClose={() => setEditCoti(null)} title={editCoti ? `Editar cotización N° ${editCoti.id}` : ''}>
+        {editCoti && (
+          <form onSubmit={guardarEdicion} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Mascota" required>
+                <input type="text" required value={editForm.mascota_nombre} onChange={e => setEditForm({ ...editForm, mascota_nombre: e.target.value })} className={inputCls} />
+              </Field>
+              <Field label="Especie" required>
+                <select required value={editForm.especie} onChange={e => setEditForm({ ...editForm, especie: e.target.value })} className={inputCls}>
+                  <option>Perro</option><option>Gato</option><option>Conejo</option><option>Hamster</option><option>Hurón</option><option>Ave</option><option>Otro</option>
+                </select>
+              </Field>
+              <Field label="Peso (kg)" required>
+                <input type="number" step="0.1" required value={editForm.peso} onChange={e => setEditForm({ ...editForm, peso: e.target.value })} className={inputCls} />
+              </Field>
+              <Field label="Fecha" required>
+                <input type="date" required value={editForm.fecha_servicio} onChange={e => setEditForm({ ...editForm, fecha_servicio: e.target.value })} className={inputCls} />
+              </Field>
+              <Field label="Hora" required>
+                <input type="time" required value={editForm.hora_servicio} onChange={e => setEditForm({ ...editForm, hora_servicio: e.target.value })} className={inputCls} />
+              </Field>
+              <Field label="Comuna" required>
+                <input type="text" required value={editForm.comuna} onChange={e => setEditForm({ ...editForm, comuna: e.target.value })} className={inputCls} />
+              </Field>
+            </div>
+            <Field label="Dirección" required>
+              <input type="text" required value={editForm.direccion} onChange={e => setEditForm({ ...editForm, direccion: e.target.value })} className={inputCls} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Nombre cliente" required>
+                <input type="text" required value={editForm.cliente_nombre} onChange={e => setEditForm({ ...editForm, cliente_nombre: e.target.value })} className={inputCls} />
+              </Field>
+              <Field label="Teléfono cliente" required>
+                <input type="tel" required value={editForm.cliente_telefono} onChange={e => setEditForm({ ...editForm, cliente_telefono: e.target.value.replace(/\D/g, '').slice(0, 9) })} className={inputCls} />
+              </Field>
+              <Field label="Email cliente">
+                <input type="email" value={editForm.cliente_email} onChange={e => setEditForm({ ...editForm, cliente_email: e.target.value })} className={inputCls} />
+              </Field>
+            </div>
+            <Field label="Notas internas">
+              <textarea value={editForm.notas} onChange={e => setEditForm({ ...editForm, notas: e.target.value })} rows={2} className={inputCls} />
+            </Field>
+
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Veterinario asignado</label>
+              <select value={editVetManualId} onChange={e => setEditVetManualId(e.target.value)} className={inputCls}>
+                <option value="">— Ninguno (esperando que un vet acepte) —</option>
+                {vetsActivos.map(v => (
+                  <option key={v.id} value={v.id}>{`${v.nombre} ${v.apellido}`.trim()} ({v.email})</option>
+                ))}
+              </select>
+              {editVetManualId && editVetManualId !== editCoti.vet_id_asignado && (
+                <p className="text-xs text-amber-700 mt-1">Al guardar, la cotización pasará a <strong>confirmada</strong> con este vet asignado.</p>
+              )}
+              {!editVetManualId && editCoti.vet_id_asignado && (
+                <p className="text-xs text-amber-700 mt-1">Al guardar, se quitará el vet actualmente asignado y la cotización vuelve a estado <strong>enviada</strong>.</p>
+              )}
+            </div>
+
+            {editError && <p className="text-sm text-red-600">{editError}</p>}
+            <div className="flex gap-2 justify-end pt-2">
+              <button type="button" onClick={() => setEditCoti(null)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
+              <button type="submit" disabled={savingEdit} className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg">
+                {savingEdit ? 'Guardando…' : 'Guardar cambios'}
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       {/* Modal Detalle cotización + matching vets */}
       <Modal
         open={!!detalleCoti}
         onClose={() => { setDetalleCoti(null); setResultEnvio(null) }}
-        title={detalleCoti ? `Cotización #${detalleCoti.id} — ${detalleCoti.mascota_nombre}` : ''}
+        title={detalleCoti ? `Cotización N° ${detalleCoti.id} — ${detalleCoti.mascota_nombre}` : ''}
       >
         {detalleCoti && (
           <div className="space-y-4">
@@ -849,7 +1075,7 @@ export default function ServiciosEutanasiasPage() {
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs space-y-1">
               <div className="flex justify-between"><span className="text-gray-500">Especie / Peso</span><span>{detalleCoti.especie} · {detalleCoti.peso} kg</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Comuna</span><span>{detalleCoti.comuna}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Fecha / Hora</span><span>{formatDate(detalleCoti.fecha_servicio)} {detalleCoti.hora_servicio}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Fecha / Hora</span><span>{formatDate(detalleCoti.fecha_servicio)} · {formatHoraDia(detalleCoti.hora_servicio)}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Pago al vet</span><span className="font-semibold">{fmtPrecio(parseInt(detalleCoti.precio_snapshot, 10) || 0)}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Estado</span><span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${estadoColor(detalleCoti.estado)}`}>{detalleCoti.estado}</span></div>
               {detalleCoti.vet_nombre_asignado && (

@@ -92,9 +92,21 @@ export async function POST(req: NextRequest) {
     const tramos = await getSheetData('precios_eutanasia')
     const precio = precioParaPeso(tramos, peso)
 
+    // Asignación manual opcional: si viene vet_id_asignado, buscamos el vet
+    // y dejamos la cotización confirmada directamente.
+    let vetAsignado: Record<string, string> | null = null
+    if (body.vet_id_asignado) {
+      const vets = await getSheetData('vet_convenio_eutanasia')
+      const v = vets.find(r => r.id === String(body.vet_id_asignado))
+      if (!v) return NextResponse.json({ error: 'Veterinario asignado no existe' }, { status: 400 })
+      if (v.activo === 'FALSE') return NextResponse.json({ error: 'El veterinario está inactivo' }, { status: 400 })
+      vetAsignado = v
+    }
+
     await ensureSheet(SHEET)
     await ensureColumns(SHEET, COLS)
     const id = await getNextId(SHEET)
+    const ahora = nowISO()
     const row = {
       id,
       mascota_nombre: mascota,
@@ -108,15 +120,15 @@ export async function POST(req: NextRequest) {
       fecha_servicio: fecha,
       hora_servicio: hora,
       notas,
-      estado: 'creada',
-      vet_id_asignado: '',
-      vet_nombre_asignado: '',
-      vet_email_asignado: '',
+      estado: vetAsignado ? 'confirmada' : 'creada',
+      vet_id_asignado: vetAsignado?.id ?? '',
+      vet_nombre_asignado: vetAsignado ? `${vetAsignado.nombre || ''} ${vetAsignado.apellido || ''}`.trim() : '',
+      vet_email_asignado: vetAsignado?.email ?? '',
       precio_snapshot: String(precio),
-      fecha_creacion: nowISO(),
+      fecha_creacion: ahora,
       fecha_envio_cotizacion: '',
-      fecha_aceptacion: '',
-      fecha_confirmacion: '',
+      fecha_aceptacion: vetAsignado ? ahora : '',
+      fecha_confirmacion: vetAsignado ? ahora : '',
       fecha_realizacion: '',
       fecha_cancelacion: '',
       creado_por: session?.user?.name || session?.user?.email || '',

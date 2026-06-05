@@ -1,4 +1,5 @@
 import { buscarComuna } from './comunas'
+import { formatHoraDia } from './dates'
 
 /**
  * Reglas de matching para encontrar vets del convenio que pueden atender
@@ -31,14 +32,23 @@ export interface VetMatch {
   horarios: Record<string, { am?: boolean; pm?: boolean }>
 }
 
-/** Calcula día de la semana y slot AM/PM para una fecha+hora. Acepta ISO YYYY-MM-DD y HH:MM. */
+/**
+ * Calcula día de la semana y slot AM/PM para una fecha+hora.
+ * Acepta horaHHMM como "HH:MM", como fracción decimal de día ("0.5" → 12:00)
+ * o como dígitos sin punto ("5" → 12:00, formato que devuelve Sheets cuando
+ * la celda tiene formato de tiempo). Usa formatHoraDia() para normalizar.
+ */
 export function diaYSlotPara(fechaISO: string, horaHHMM: string): { dia: DiaKey; slot: Slot } | null {
   if (!fechaISO || !horaHHMM) return null
+  // Normalizar la hora a "HH:MM"
+  const horaNorm = formatHoraDia(horaHHMM)
+  if (horaNorm === '—' || !/^\d{2}:\d{2}$/.test(horaNorm)) return null
+
   // Construimos la fecha como "local" para que el día de la semana sea el chileno
   // intuitivo, no el UTC. Si el usuario pone 2026-06-08 21:00, queremos lunes PM,
   // no martes AM (que es lo que daría toISOString sobre Chile UTC-4).
   const [y, m, d] = fechaISO.split('-').map(n => parseInt(n, 10))
-  const [hh, mm] = horaHHMM.split(':').map(n => parseInt(n, 10))
+  const [hh, mm] = horaNorm.split(':').map(n => parseInt(n, 10))
   if ([y, m, d, hh].some(n => isNaN(n))) return null
   const dt = new Date(y, (m || 1) - 1, d || 1, hh, mm || 0, 0, 0)
   const dia = DIA_KEYS[dt.getDay()]

@@ -11,6 +11,11 @@ interface Props {
   onChange: (v: string) => void
   /** Cuando el usuario selecciona una sugerencia (vs solo tipear). */
   onSelect?: (v: string) => void
+  /**
+   * Variante que recibe también el placeId de Google. Útil cuando el caller
+   * quiere consultar /api/eutanasias/place-details para extraer comuna/región.
+   */
+  onSelectPlace?: (place: { text: string; placeId: string }) => void
   placeholder?: string
   className?: string
   required?: boolean
@@ -25,7 +30,7 @@ const MIN_CHARS = 3
 const MAX_SUGGESTIONS = 5
 
 export default function AddressAutocomplete({
-  value, onChange, onSelect,
+  value, onChange, onSelect, onSelectPlace,
   placeholder = 'Buscar dirección…',
   className = '',
   required,
@@ -98,6 +103,7 @@ export default function AddressAutocomplete({
     justSelectedRef.current = true
     onChange(s.text)
     onSelect?.(s.text)
+    onSelectPlace?.({ text: s.text, placeId: s.placeId })
     setSugs([])
     setOpen(false)
     setHighlight(-1)
