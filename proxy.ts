@@ -14,7 +14,9 @@ export async function proxy(req: NextRequest) {
 
   // Rutas públicas: login, NextAuth API, init-sheets, reorder-columns (operaciones admin de schema),
   // webhook de Resend (lo llama Resend, no un usuario; se valida por signature),
-  // y endpoints de tracking (los llaman clientes de email — Gmail/Outlook — sin sesión).
+  // endpoints de tracking (los llaman clientes de email — Gmail/Outlook — sin sesión),
+  // landing público del convenio de eutanasias + endpoints que ese landing usa
+  // (GET de precios para mostrar tabla, POST de inscripción).
   if (
     pathname === '/login' ||
     pathname.startsWith('/api/auth') ||
@@ -22,7 +24,10 @@ export async function proxy(req: NextRequest) {
     pathname === '/api/reorder-columns' ||
     pathname === '/api/mailing/webhooks/resend' ||
     pathname.startsWith('/api/mailing/pixel/') ||
-    pathname.startsWith('/api/mailing/click/')
+    pathname.startsWith('/api/mailing/click/') ||
+    pathname === '/convenio-eutanasias' ||
+    pathname === '/api/eutanasias/precios' ||
+    pathname === '/api/eutanasias/vets/inscribir'
   ) {
     return NextResponse.next()
   }

@@ -1,0 +1,82 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/lib/auth'
+import { getSheetData, appendRow, updateRow, deleteRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+
+const SHEET = 'precios_eutanasia'
+const COLS = ['id', 'peso_min', 'peso_max', 'precio']
+
+async function requireAdmin() {
+  const session = await getServerSession(authOptions)
+  if ((session?.user as { role?: string })?.role !== 'admin') {
+    return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
+  }
+  return null
+}
+
+/** GET — público (sin auth) para que el landing del convenio muestre la tabla. */
+export async function GET() {
+  try {
+    await ensureSheet(SHEET)
+    await ensureColumns(SHEET, COLS)
+    const rows = await getSheetData(SHEET)
+    rows.sort((a, b) => (parseFloat(a.peso_min) || 0) - (parseFloat(b.peso_min) || 0))
+    return NextResponse.json(rows)
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 })
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+  try {
+    const body = await req.json()
+    const id = await getNextId(SHEET)
+    const row = {
+      id,
+      peso_min: String(body.peso_min ?? ''),
+      peso_max: String(body.peso_max ?? ''),
+      precio: String(body.precio ?? ''),
+    }
+    await appendRow(SHEET, row)
+    return NextResponse.json(row, { status: 201 })
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 400 })
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+  try {
+    const body = await req.json()
+    const { id, ...updates } = body
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+    const rows = await getSheetData(SHEET)
+    const idx = rows.findIndex(r => r.id === String(id))
+    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    const updated = { ...rows[idx], ...updates }
+    await updateRow(SHEET, idx, updated)
+    return NextResponse.json(updated)
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 400 })
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+    const rows = await getSheetData(SHEET)
+    const idx = rows.findIndex(r => r.id === id)
+    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    await deleteRow(SHEET, idx)
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 })
+  }
+}

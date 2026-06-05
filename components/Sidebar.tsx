@@ -11,7 +11,9 @@ const nav = [
   { href: '/asistencia', label: 'Asistencia', icon: '🕐', adminOnly: false },
   { href: '/rendiciones', label: 'Rendiciones', icon: '🧾', adminOnly: true },
   { href: '/bases', label: 'Veterinarios', icon: '🏥', adminOnly: true },
+  { href: '/servicios', label: 'Servicios', icon: '🤝', adminOnly: true },
   { href: '/mailing', label: 'Mailing', icon: '✉️', adminOnly: true },
+  { href: '/adicionales', label: 'Adicionales', icon: '📦', adminOnly: true },
   { href: '/configuracion', label: 'Configuración', icon: '⚙️', adminOnly: true },
   { href: '/reportes', label: 'Reportes', icon: '📈', adminOnly: true },
 ]

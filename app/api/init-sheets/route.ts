@@ -140,6 +140,22 @@ const SHEETS: Record<string, string[]> = {
     'error_msg',
     'fecha_creacion',
   ],
+  // Convenio de eutanasias a domicilio. Vets se inscriben en /convenio-eutanasias
+  // (auto-aprobado) o los carga el admin manualmente.
+  // - comunas: JSON array de nombres de comuna donde puede atender.
+  // - horarios: JSON object { lun: {am: bool, pm: bool}, mar: {...}, ... }
+  // - rut: opcional, formato 12345678-9.
+  // - origen: 'manual' (cargado por admin) | 'publico' (inscripto desde landing).
+  vet_convenio_eutanasia: [
+    'id', 'nombre', 'email', 'telefono', 'rut',
+    'comunas', 'horarios',
+    'activo', 'origen', 'notas',
+    'total_servicios',
+    'fecha_inscripcion', 'fecha_creacion',
+  ],
+  // Tabla de precios que se le paga al vet por servicio de eutanasia, segmentada
+  // solo por tramo de peso (no por especie). Mismo precio para todos los vets.
+  precios_eutanasia: ['id', 'peso_min', 'peso_max', 'precio'],
 }
 
 export async function POST() {
