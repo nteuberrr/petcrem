@@ -49,6 +49,21 @@ export function formatHoraDia(raw: unknown): string {
   return s
 }
 
+/**
+ * Parsea cualquier representación de fecha que veas en este proyecto:
+ * - Date object
+ * - ISO YYYY-MM-DD (opcionalmente con hora)
+ * - DD/MM/YYYY o DD-MM-YYYY
+ * - Excel serial number (lo que devuelve Sheets con UNFORMATTED_VALUE)
+ *
+ * Devuelve null si no puede parsearla. La expongo aparte de formatDate
+ * porque los matchers y filters necesitan el Date object, no el string
+ * formateado.
+ */
+export function parseFecha(dateStr: string | Date | null | undefined): Date | null {
+  return parse(dateStr)
+}
+
 function parse(dateStr: string | Date | null | undefined): Date | null {
   if (!dateStr) return null
   if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr

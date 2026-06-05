@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData } from '@/lib/google-sheets'
-import { matchVets } from '@/lib/eutanasia-matcher'
+import { matchVetsConDiagnostico } from '@/lib/eutanasia-matcher'
 
 /**
  * POST /api/eutanasias/cotizaciones/[id]/buscar-vets
@@ -28,11 +28,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!c) return NextResponse.json({ error: 'Cotización no encontrada' }, { status: 404 })
 
     const vets = await getSheetData('vet_convenio_eutanasia')
-    const matches = matchVets(vets, c.comuna, c.fecha_servicio, c.hora_servicio)
+    const resultado = matchVetsConDiagnostico(vets, c.comuna, c.fecha_servicio, c.hora_servicio)
     return NextResponse.json({
       cotizacion: { id: c.id, comuna: c.comuna, fecha_servicio: c.fecha_servicio, hora_servicio: c.hora_servicio },
-      total: matches.length,
-      vets: matches,
+      total: resultado.matched.length,
+      total_vets_evaluados: vets.length,
+      vets: resultado.matched,
+      excluidos: resultado.excluidos,
+      diagnostico: {
+        comuna_canonica: resultado.comuna_canonica,
+        dia_resuelto: resultado.horario_ref?.dia ?? null,
+        slot_resuelto: resultado.horario_ref?.slot ?? null,
+      },
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

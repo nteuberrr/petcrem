@@ -1,5 +1,5 @@
 import { buscarComuna } from './comunas'
-import { formatHoraDia } from './dates'
+import { formatHoraDia, parseFecha } from './dates'
 
 /**
  * Reglas de matching para encontrar vets del convenio que pueden atender
@@ -34,58 +34,128 @@ export interface VetMatch {
 
 /**
  * Calcula día de la semana y slot AM/PM para una fecha+hora.
- * Acepta horaHHMM como "HH:MM", como fracción decimal de día ("0.5" → 12:00)
- * o como dígitos sin punto ("5" → 12:00, formato que devuelve Sheets cuando
- * la celda tiene formato de tiempo). Usa formatHoraDia() para normalizar.
+ * - Acepta fechaISO como "YYYY-MM-DD", "DD/MM/YYYY", "DD-MM-YYYY", o como
+ *   Excel serial number (lo que devuelve Sheets con UNFORMATTED_VALUE).
+ * - Acepta horaHHMM como "HH:MM", como fracción decimal de día ("0.5" → 12:00)
+ *   o como dígitos sin punto ("5" → 12:00).
  */
 export function diaYSlotPara(fechaISO: string, horaHHMM: string): { dia: DiaKey; slot: Slot } | null {
   if (!fechaISO || !horaHHMM) return null
+
   // Normalizar la hora a "HH:MM"
   const horaNorm = formatHoraDia(horaHHMM)
   if (horaNorm === '—' || !/^\d{2}:\d{2}$/.test(horaNorm)) return null
-
-  // Construimos la fecha como "local" para que el día de la semana sea el chileno
-  // intuitivo, no el UTC. Si el usuario pone 2026-06-08 21:00, queremos lunes PM,
-  // no martes AM (que es lo que daría toISOString sobre Chile UTC-4).
-  const [y, m, d] = fechaISO.split('-').map(n => parseInt(n, 10))
   const [hh, mm] = horaNorm.split(':').map(n => parseInt(n, 10))
-  if ([y, m, d, hh].some(n => isNaN(n))) return null
-  const dt = new Date(y, (m || 1) - 1, d || 1, hh, mm || 0, 0, 0)
+  if (isNaN(hh)) return null
+
+  // Normalizar la fecha. parseFecha entiende serials de Sheets y formatos DMY.
+  const baseDate = parseFecha(fechaISO)
+  if (!baseDate) return null
+
+  // Construimos un Date local con la hora ya parseada. Usamos getFullYear/etc
+  // del baseDate (que ya está en local) y aplicamos la hora encima.
+  const dt = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), hh, mm || 0, 0, 0)
   const dia = DIA_KEYS[dt.getDay()]
   const slot: Slot = hh < 12 ? 'am' : 'pm'
   return { dia, slot }
 }
 
+export type RazonExclusion =
+  | 'inactivo'
+  | 'no_cubre_comuna'
+  | 'sin_horario_en_dia'
+  | 'sin_slot_am'
+  | 'sin_slot_pm'
+
+export interface VetExcluido {
+  id: string
+  nombre_completo: string
+  email: string
+  razon: RazonExclusion
+  detalle: string
+}
+
+export interface MatchResultado {
+  matched: VetMatch[]
+  excluidos: VetExcluido[]
+  comuna_canonica: string
+  /** Si fue null, no pudimos parsear la fecha/hora — caso degenerado. */
+  horario_ref: { dia: DiaKey; slot: Slot } | null
+}
+
 /**
- * Filtra vets que cumplen los tres criterios.
- * Acepta cualquier Record<string,string> (formato getSheetData) y usa los campos
- * que necesita; los campos opcionales se interpretan como vacío.
+ * Versión con diagnóstico de matchVets: además del listado de vets que pasan,
+ * devuelve por cada vet excluido la razón concreta. Útil para mostrar al admin
+ * cuando no hay coincidencias y entender qué ajustar (comuna ingresada,
+ * horario del vet, fecha de la cotización, etc.).
  */
-export function matchVets(
+export function matchVetsConDiagnostico(
   vets: Record<string, string>[],
   comuna: string,
   fechaISO: string,
   horaHHMM: string,
-): VetMatch[] {
+): MatchResultado {
   const comunaCanon = buscarComuna(comuna)?.nombre ?? comuna
   const horarioRef = diaYSlotPara(fechaISO, horaHHMM)
-  if (!horarioRef) return []
 
-  const out: VetMatch[] = []
+  const matched: VetMatch[] = []
+  const excluidos: VetExcluido[] = []
+
   for (const v of vets) {
-    if ((v.activo ?? 'TRUE').toUpperCase() !== 'TRUE') continue
+    const nombre_completo = `${v.nombre ?? ''} ${v.apellido ?? ''}`.trim() || v.email || '(sin nombre)'
+    const baseExc = { id: v.id, nombre_completo, email: v.email ?? '' }
+
+    if ((v.activo ?? 'TRUE').toUpperCase() !== 'TRUE') {
+      excluidos.push({ ...baseExc, razon: 'inactivo', detalle: 'El vet está marcado como inactivo.' })
+      continue
+    }
+
     let comunas: string[] = []
     try { const x = JSON.parse(v.comunas ?? '[]'); if (Array.isArray(x)) comunas = x } catch { /* */ }
-    if (!comunas.includes(comunaCanon)) continue
+    if (!comunas.includes(comunaCanon)) {
+      excluidos.push({
+        ...baseExc,
+        razon: 'no_cubre_comuna',
+        detalle: `No cubre "${comunaCanon}". Cubre: ${comunas.length > 0 ? comunas.join(', ') : '(ninguna)'}.`,
+      })
+      continue
+    }
 
     let horarios: Record<string, { am?: boolean; pm?: boolean }> = {}
     try { const x = JSON.parse(v.horarios ?? '{}'); if (x && typeof x === 'object') horarios = x } catch { /* */ }
-    const diaH = horarios[horarioRef.dia]
-    if (!diaH) continue
-    if (horarioRef.slot === 'am' && !diaH.am) continue
-    if (horarioRef.slot === 'pm' && !diaH.pm) continue
 
-    out.push({
+    if (!horarioRef) {
+      // Si no pudimos parsear fecha/hora, no descartamos; lo registramos arriba.
+      continue
+    }
+
+    const diaH = horarios[horarioRef.dia]
+    if (!diaH) {
+      excluidos.push({
+        ...baseExc,
+        razon: 'sin_horario_en_dia',
+        detalle: `No atiende los ${nombreDia(horarioRef.dia)}.`,
+      })
+      continue
+    }
+    if (horarioRef.slot === 'am' && !diaH.am) {
+      excluidos.push({
+        ...baseExc,
+        razon: 'sin_slot_am',
+        detalle: `Atiende los ${nombreDia(horarioRef.dia)} solo en PM (la cotización es AM).`,
+      })
+      continue
+    }
+    if (horarioRef.slot === 'pm' && !diaH.pm) {
+      excluidos.push({
+        ...baseExc,
+        razon: 'sin_slot_pm',
+        detalle: `Atiende los ${nombreDia(horarioRef.dia)} solo en AM (la cotización es PM).`,
+      })
+      continue
+    }
+
+    matched.push({
       id: v.id,
       nombre: v.nombre ?? '',
       apellido: v.apellido ?? '',
@@ -95,7 +165,24 @@ export function matchVets(
       horarios,
     })
   }
-  return out
+
+  return { matched, excluidos, comuna_canonica: comunaCanon, horario_ref: horarioRef }
+}
+
+function nombreDia(k: DiaKey): string {
+  return { lun: 'lunes', mar: 'martes', mie: 'miércoles', jue: 'jueves', vie: 'viernes', sab: 'sábado', dom: 'domingo' }[k]
+}
+
+/**
+ * Wrapper sin diagnóstico para callers que solo quieren la lista.
+ */
+export function matchVets(
+  vets: Record<string, string>[],
+  comuna: string,
+  fechaISO: string,
+  horaHHMM: string,
+): VetMatch[] {
+  return matchVetsConDiagnostico(vets, comuna, fechaISO, horaHHMM).matched
 }
 
 /** Busca el precio que corresponde a un peso (kg) en tramos. */

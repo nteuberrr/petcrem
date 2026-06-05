@@ -160,8 +160,12 @@ export default function ServiciosEutanasiasPage() {
   const [editError, setEditError] = useState('')
 
   // Detalle cotización + matching
+  type Excluido = { id: string; nombre_completo: string; email: string; razon: string; detalle: string }
+  type Diagnostico = { comuna_canonica: string; dia_resuelto: string | null; slot_resuelto: string | null }
   const [detalleCoti, setDetalleCoti] = useState<Cotizacion | null>(null)
   const [matchingVets, setMatchingVets] = useState<VetMatch[]>([])
+  const [matchingExcluidos, setMatchingExcluidos] = useState<Excluido[]>([])
+  const [matchingDiag, setMatchingDiag] = useState<Diagnostico | null>(null)
   const [matchingLoading, setMatchingLoading] = useState(false)
   const [vetsSeleccionados, setVetsSeleccionados] = useState<Set<string>>(new Set())
   const [enviando, setEnviando] = useState(false)
@@ -339,6 +343,8 @@ export default function ServiciosEutanasiasPage() {
   async function abrirDetalleCotizacion(c: Cotizacion) {
     setDetalleCoti(c)
     setMatchingVets([])
+    setMatchingExcluidos([])
+    setMatchingDiag(null)
     setVetsSeleccionados(new Set())
     setResultEnvio(null)
     setMatchingLoading(true)
@@ -348,6 +354,8 @@ export default function ServiciosEutanasiasPage() {
       const vetsRes: VetMatch[] = Array.isArray(j.vets) ? j.vets : []
       setMatchingVets(vetsRes)
       setVetsSeleccionados(new Set(vetsRes.map(v => v.id)))
+      setMatchingExcluidos(Array.isArray(j.excluidos) ? j.excluidos : [])
+      setMatchingDiag(j.diagnostico ?? null)
     } finally {
       setMatchingLoading(false)
     }
@@ -1089,9 +1097,39 @@ export default function ServiciosEutanasiasPage() {
                 {matchingLoading ? (
                   <p className="text-sm text-gray-500">Buscando coincidencias…</p>
                 ) : matchingVets.length === 0 ? (
-                  <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                    No hay vets disponibles que cubran <strong>{detalleCoti.comuna}</strong> el {formatDate(detalleCoti.fecha_servicio)} {detalleCoti.hora_servicio}. Considera ampliar tu base de vets o ajustar la fecha/hora.
-                  </p>
+                  <div className="space-y-3">
+                    <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      <p className="font-medium">Ningún vet matchea los criterios.</p>
+                      {matchingDiag && (
+                        <p className="text-xs mt-1">
+                          Buscando para <strong>{matchingDiag.comuna_canonica}</strong>{' '}
+                          {matchingDiag.dia_resuelto && <>el <strong>{matchingDiag.dia_resuelto}</strong> </>}
+                          {matchingDiag.slot_resuelto && <>en <strong>{matchingDiag.slot_resuelto.toUpperCase()}</strong></>}
+                        </p>
+                      )}
+                    </div>
+                    {matchingExcluidos.length > 0 && (
+                      <details className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs" open>
+                        <summary className="cursor-pointer font-medium text-gray-700">
+                          Por qué se excluyeron los {matchingExcluidos.length} vet{matchingExcluidos.length === 1 ? '' : 's'} evaluado{matchingExcluidos.length === 1 ? '' : 's'}
+                        </summary>
+                        <ul className="mt-2 space-y-1.5">
+                          {matchingExcluidos.map(e => (
+                            <li key={e.id} className="flex gap-2">
+                              <span className="text-gray-500 shrink-0">·</span>
+                              <span>
+                                <span className="font-medium text-gray-800">{e.nombre_completo}</span>
+                                <span className="text-gray-600"> — {e.detalle}</span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                    {matchingExcluidos.length === 0 && (
+                      <p className="text-xs text-gray-500">No tienes vets inscritos todavía. Carga uno en el tab "Veterinarios" o pasalo por el formulario público.</p>
+                    )}
+                  </div>
                 ) : (
                   <div className="border border-gray-200 rounded-lg divide-y max-h-72 overflow-y-auto">
                     {matchingVets.map(v => {
