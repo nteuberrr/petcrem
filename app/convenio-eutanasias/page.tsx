@@ -221,9 +221,9 @@ export default function ConvenioEutanasiasPage() {
                   className={inputCls}
                 />
               </FormField>
-              <FormField label="RUT (opcional)" hint="Para facturación cuando atiendas un caso">
+              <FormField label="RUT" required hint="Para emitir tu pago y factura">
                 <input
-                  type="text"
+                  type="text" required
                   value={form.rut}
                   onChange={e => setForm({ ...form, rut: e.target.value })}
                   placeholder="12345678-9"

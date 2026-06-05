@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, updateRow, deleteRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
 import { todayISO } from '@/lib/dates'
 import { buscarComuna } from '@/lib/comunas'
+import { enviarBienvenidaVet } from '@/lib/eutanasia-mailer'
 
 const SHEET = 'vet_convenio_eutanasia'
 const COLS = [
@@ -100,8 +101,14 @@ export async function POST(req: NextRequest) {
     if (!body.nombre || !String(body.nombre).trim()) {
       return NextResponse.json({ error: 'nombre es requerido' }, { status: 400 })
     }
+    if (!body.apellido || !String(body.apellido).trim()) {
+      return NextResponse.json({ error: 'apellido es requerido' }, { status: 400 })
+    }
     if (!body.email || !validarEmail(String(body.email))) {
       return NextResponse.json({ error: 'email inválido' }, { status: 400 })
+    }
+    if (!body.rut || !String(body.rut).trim()) {
+      return NextResponse.json({ error: 'rut es requerido' }, { status: 400 })
     }
     const comunas = normalizarComunas(body.comunas)
     const horarios = normalizarHorarios(body.horarios)
@@ -128,6 +135,8 @@ export async function POST(req: NextRequest) {
       fecha_creacion: hoy,
     }
     await appendRow(SHEET, row)
+    // Mail de bienvenida — best-effort.
+    void enviarBienvenidaVet({ nombre: row.nombre, apellido: row.apellido, email: row.email })
     return NextResponse.json(row, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })

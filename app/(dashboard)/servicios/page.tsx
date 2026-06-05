@@ -487,6 +487,8 @@ export default function ServiciosEutanasiasPage() {
     if (!vetForm.nombre.trim()) return setVetError('Nombre obligatorio')
     if (!vetForm.apellido.trim()) return setVetError('Apellido obligatorio')
     if (!vetForm.email.trim()) return setVetError('Email obligatorio')
+    if (!vetForm.telefono.trim() || vetForm.telefono.length !== 9) return setVetError('Teléfono obligatorio (9 dígitos)')
+    if (!vetForm.rut.trim()) return setVetError('RUT obligatorio')
     if (vetForm.comunas.length === 0) return setVetError('Agrega al menos una comuna')
     if (Object.keys(vetForm.horarios).length === 0) return setVetError('Selecciona al menos un día/horario')
 
@@ -1194,11 +1196,11 @@ export default function ServiciosEutanasiasPage() {
             <Field label="Email" required>
               <input type="email" required value={vetForm.email} onChange={e => setVetForm({ ...vetForm, email: e.target.value })} className={inputCls} />
             </Field>
-            <Field label="Teléfono (9 dígitos)">
-              <input type="tel" value={vetForm.telefono} onChange={e => setVetForm({ ...vetForm, telefono: e.target.value.replace(/\D/g, '').slice(0, 9) })} className={inputCls} />
+            <Field label="Teléfono (9 dígitos)" required>
+              <input type="tel" required value={vetForm.telefono} onChange={e => setVetForm({ ...vetForm, telefono: e.target.value.replace(/\D/g, '').slice(0, 9) })} className={inputCls} />
             </Field>
-            <Field label="RUT">
-              <input type="text" value={vetForm.rut} onChange={e => setVetForm({ ...vetForm, rut: e.target.value })} className={inputCls} placeholder="12345678-9" />
+            <Field label="RUT" required>
+              <input type="text" required value={vetForm.rut} onChange={e => setVetForm({ ...vetForm, rut: e.target.value })} className={inputCls} placeholder="12345678-9" />
             </Field>
           </div>
 

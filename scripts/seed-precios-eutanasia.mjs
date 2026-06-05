@@ -2,8 +2,11 @@
 // precios_eutanasia con una tarifa progresiva entre PRECIO_MIN y PRECIO_MAX.
 //
 // Uso:
-//   node scripts/seed-precios-eutanasia.mjs           # dry-run (solo imprime)
-//   node scripts/seed-precios-eutanasia.mjs --apply   # escribe
+//   node scripts/seed-precios-eutanasia.mjs              # dry-run (solo imprime)
+//   node scripts/seed-precios-eutanasia.mjs --apply      # escribe (aborta si ya hay datos)
+//   node scripts/seed-precios-eutanasia.mjs --apply --replace
+//                                                       # borra los tramos
+//                                                       # existentes y reescribe
 //
 // La progresión es lineal: para N tramos, el primer tramo queda en PRECIO_MIN
 // y el último en PRECIO_MAX, repartiendo el resto uniformemente.
@@ -13,7 +16,7 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
 const PRECIO_MIN = 60000
-const PRECIO_MAX = 120000
+const PRECIO_MAX = 100000
 
 const env = readFileSync(resolve('.env.local'), 'utf8')
   .split('\n')
@@ -31,6 +34,7 @@ const auth = new google.auth.JWT({
 const sheets = google.sheets({ version: 'v4', auth })
 const spreadsheetId = env.GOOGLE_SPREADSHEET_ID
 const apply = process.argv.includes('--apply')
+const replace = process.argv.includes('--replace')
 
 // 1. Leer precios_generales
 const gen = await sheets.spreadsheets.values.get({
@@ -103,17 +107,26 @@ if (currentHeaders.length === 0) {
   console.log('Headers escritos.')
 }
 
-// 5. Leer filas existentes para saber qué id usar y advertir si ya hay datos
+// 5. Leer filas existentes para saber qué id usar y decidir qué hacer
 const dataRes = await sheets.spreadsheets.values.get({
   spreadsheetId, range: 'precios_eutanasia',
   valueRenderOption: 'UNFORMATTED_VALUE',
 })
 const existingRows = (dataRes.data.values ?? []).slice(1)
 if (existingRows.length > 0) {
-  console.log(`\n⚠ Ya hay ${existingRows.length} tramos en precios_eutanasia. Este script SOLO agrega; no borra ni reemplaza.`)
-  console.log('Si querés reemplazar, borra las filas existentes desde la planilla y volvé a correr.')
-  console.log('Abortando para no duplicar.')
-  process.exit(0)
+  if (!replace) {
+    console.log(`\n⚠ Ya hay ${existingRows.length} tramos en precios_eutanasia. Este script SOLO agrega.`)
+    console.log('Para reemplazar usá --replace (borra los actuales y reescribe).')
+    console.log('Abortando para no duplicar.')
+    process.exit(0)
+  }
+  // Borrar el rango existente (todas las filas debajo del header)
+  console.log(`\nBorrando ${existingRows.length} tramos existentes…`)
+  const ultimaFila = existingRows.length + 1 // header en fila 1, datos desde fila 2
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId,
+    range: `precios_eutanasia!A2:Z${ultimaFila}`,
+  })
 }
 
 // 6. Insertar tramos

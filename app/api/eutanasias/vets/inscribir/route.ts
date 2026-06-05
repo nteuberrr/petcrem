@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
 import { todayISO } from '@/lib/dates'
 import { buscarComuna } from '@/lib/comunas'
+import { enviarBienvenidaVet } from '@/lib/eutanasia-mailer'
 
 const SHEET = 'vet_convenio_eutanasia'
 const COLS = [
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest) {
     const apellido = String(body.apellido ?? '').trim()
     const email = String(body.email ?? '').trim().toLowerCase()
     const telefono = normalizarTelefono(String(body.telefono ?? ''))
+    const rut = String(body.rut ?? '').trim()
     const comunas = normalizarComunas(body.comunas)
     const horarios = normalizarHorarios(body.horarios)
 
@@ -91,6 +93,9 @@ export async function POST(req: NextRequest) {
     }
     if (!apellido || apellido.length < 2) {
       return NextResponse.json({ error: 'El apellido es obligatorio.' }, { status: 400 })
+    }
+    if (!rut || rut.length < 5) {
+      return NextResponse.json({ error: 'El RUT es obligatorio.' }, { status: 400 })
     }
     if (!email || !validarEmail(email)) {
       return NextResponse.json({ error: 'El email no es válido.' }, { status: 400 })
@@ -127,7 +132,7 @@ export async function POST(req: NextRequest) {
       apellido,
       email,
       telefono,
-      rut: String(body.rut ?? '').trim(),
+      rut,
       comunas: JSON.stringify(comunas),
       horarios: JSON.stringify(horarios),
       activo: 'TRUE',
@@ -139,10 +144,13 @@ export async function POST(req: NextRequest) {
     }
     await appendRow(SHEET, row)
 
+    // Mail de bienvenida — best-effort, no rompe la inscripción si falla.
+    void enviarBienvenidaVet({ nombre, apellido, email })
+
     return NextResponse.json({
       ok: true,
       id,
-      mensaje: '¡Inscripción recibida! Te contactaremos al correo registrado cuando llegue una solicitud que coincida con tus comunas y horarios.',
+      mensaje: '¡Inscripción recibida! Te enviamos un correo de bienvenida con todos los detalles. Te contactaremos al mismo email cuando llegue una solicitud que coincida con tus comunas y horarios.',
     }, { status: 201 })
   } catch (e) {
     console.error('[inscribir vet eutanasia] error:', e)
