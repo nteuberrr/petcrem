@@ -144,13 +144,17 @@ export async function POST(req: NextRequest) {
     }
     await appendRow(SHEET, row)
 
-    // Mail de bienvenida — best-effort, no rompe la inscripción si falla.
-    void enviarBienvenidaVet({ nombre, apellido, email })
+    // Mail de bienvenida — esperamos el envío porque en serverless el handler
+    // termina al return y mata el promise pendiente. Si falla, no abortamos
+    // la inscripción (la fila ya quedó), pero loggeamos el detalle.
+    const bienvenida = await enviarBienvenidaVet({ nombre, apellido, email })
 
     return NextResponse.json({
       ok: true,
       id,
-      mensaje: '¡Inscripción recibida! Te enviamos un correo de bienvenida con todos los detalles. Te contactaremos al mismo email cuando llegue una solicitud que coincida con tus comunas y horarios.',
+      bienvenida_estado: bienvenida.estado,
+      bienvenida_error: bienvenida.error,
+      mensaje: '¡Bienvenido a la comunidad! Te enviamos un correo de bienvenida con todos los detalles. Nos pondremos en contacto contigo cuando llegue una solicitud que coincida con tus comunas y horarios.',
     }, { status: 201 })
   } catch (e) {
     console.error('[inscribir vet eutanasia] error:', e)

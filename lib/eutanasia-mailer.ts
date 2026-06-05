@@ -14,27 +14,44 @@ const COLOR = '#143C64'
  *  - Aclara la política de pago: pagamos al día hábil siguiente del servicio.
  *  - Linkea al landing por si quiere consultar tarifas o pedirnos cambios.
  */
+export interface BienvenidaResult {
+  ok: boolean
+  /** 'enviado' si Resend aceptó; 'omitido_sin_resend' si no había key; 'error' si falló. */
+  estado: 'enviado' | 'omitido_sin_resend' | 'error'
+  message_id?: string
+  error?: string
+}
+
 export async function enviarBienvenidaVet(args: {
   nombre: string
   apellido: string
   email: string
-}): Promise<void> {
+}): Promise<BienvenidaResult> {
   if (!isResendConfigured()) {
-    console.warn('[eutanasia-mailer] Resend no configurado, salto mail de bienvenida')
-    return
+    console.warn('[eutanasia-mailer] Resend no configurado, salto mail de bienvenida a', args.email)
+    return { ok: false, estado: 'omitido_sin_resend' }
   }
   const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
   const nombreCompleto = `${args.nombre || ''} ${args.apellido || ''}`.trim() || 'Dr/a.'
 
   try {
-    await sendEmail({
+    const res = await sendEmail({
       to: args.email,
       subject: 'Bienvenido al convenio de eutanasias - Alma Animal',
       html: renderBienvenida({ nombreCompleto, baseUrl }),
       tags: [{ name: 'tipo', value: 'eutanasia_bienvenida_vet' }],
     })
+    if (res.ok) {
+      console.log(`[eutanasia-mailer] bienvenida enviada a ${args.email}, message_id=${res.message_id}`)
+      return { ok: true, estado: 'enviado', message_id: res.message_id }
+    } else {
+      console.error(`[eutanasia-mailer] sendEmail devolvió error para ${args.email}:`, res.error)
+      return { ok: false, estado: 'error', error: res.error }
+    }
   } catch (e) {
-    console.warn('[eutanasia-mailer] error enviando bienvenida:', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`[eutanasia-mailer] excepción enviando bienvenida a ${args.email}:`, msg)
+    return { ok: false, estado: 'error', error: msg }
   }
 }
 

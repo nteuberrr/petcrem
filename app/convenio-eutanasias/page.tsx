@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import ComunaPicker from '@/components/ui/ComunaPicker'
+import { Modal } from '@/components/ui/Modal'
 import { fmtPrecio } from '@/lib/format'
 
 type Tramo = { id: string; peso_min: string; peso_max: string; precio: string }
@@ -164,12 +165,9 @@ export default function ConvenioEutanasiasPage() {
           <h2 className="text-2xl font-bold text-gray-900 mb-3">Inscríbete al convenio</h2>
           <p className="text-gray-600 mb-6">Es gratis y solo te tomará un minuto. Te contactaremos por correo cuando llegue una solicitud que coincida con tus comunas y horarios.</p>
 
-          {resultado && (
-            <div className={`mb-6 p-4 rounded-lg border ${
-              resultado.tipo === 'ok' ? 'bg-green-50 border-green-200 text-green-800' :
-              resultado.tipo === 'duplicado' ? 'bg-amber-50 border-amber-200 text-amber-800' :
-              'bg-red-50 border-red-200 text-red-800'
-            }`}>
+          {/* Banner inline solo para errores. El éxito se muestra en pop-up. */}
+          {resultado && resultado.tipo === 'error' && (
+            <div className="mb-6 p-4 rounded-lg border bg-red-50 border-red-200 text-red-800">
               {resultado.mensaje}
             </div>
           )}
@@ -313,6 +311,34 @@ export default function ConvenioEutanasiasPage() {
           ¿Dudas? Escríbenos a <a href="mailto:info@crematorioalmaanimal.cl" className="text-gray-700 underline">info@crematorioalmaanimal.cl</a>
         </footer>
       </main>
+
+      {/* Pop-up de bienvenida tras inscripción exitosa */}
+      <Modal
+        open={!!resultado && (resultado.tipo === 'ok' || resultado.tipo === 'duplicado')}
+        onClose={() => setResultado(null)}
+        title={resultado?.tipo === 'duplicado' ? 'Ya estás inscrito' : '¡Bienvenido a la comunidad!'}
+      >
+        <div className="text-center py-2">
+          <div className="text-5xl mb-3">{resultado?.tipo === 'duplicado' ? '👋' : '🎉'}</div>
+          <p className="text-base text-gray-800 mb-2">
+            {resultado?.tipo === 'duplicado'
+              ? resultado.mensaje
+              : 'Nos pondremos en contacto contigo cuando llegue una solicitud que coincida con tus comunas y horarios.'}
+          </p>
+          {resultado?.tipo === 'ok' && (
+            <p className="text-sm text-gray-500 mt-3">
+              Revisa tu correo: te enviamos los detalles del convenio.
+            </p>
+          )}
+          <button
+            onClick={() => setResultado(null)}
+            className="mt-6 px-6 py-2.5 text-white font-medium rounded-lg"
+            style={{ backgroundColor: COLOR }}
+          >
+            Entendido
+          </button>
+        </div>
+      </Modal>
     </div>
   )
 }

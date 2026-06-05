@@ -135,9 +135,13 @@ export async function POST(req: NextRequest) {
       fecha_creacion: hoy,
     }
     await appendRow(SHEET, row)
-    // Mail de bienvenida — best-effort.
-    void enviarBienvenidaVet({ nombre: row.nombre, apellido: row.apellido, email: row.email })
-    return NextResponse.json(row, { status: 201 })
+    // Mail de bienvenida — await para que el serverless no mate la promise.
+    const bienvenida = await enviarBienvenidaVet({ nombre: row.nombre, apellido: row.apellido, email: row.email })
+    return NextResponse.json({
+      ...row,
+      bienvenida_estado: bienvenida.estado,
+      bienvenida_error: bienvenida.error,
+    }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })
   }
