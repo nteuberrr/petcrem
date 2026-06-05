@@ -5,7 +5,7 @@ import { buscarComuna } from '@/lib/comunas'
 
 const SHEET = 'vet_convenio_eutanasia'
 const COLS = [
-  'id', 'nombre', 'email', 'telefono', 'rut',
+  'id', 'nombre', 'apellido', 'email', 'telefono', 'rut',
   'comunas', 'horarios',
   'activo', 'origen', 'notas',
   'total_servicios',
@@ -80,13 +80,17 @@ export async function POST(req: NextRequest) {
 
     // Validaciones de campos requeridos
     const nombre = String(body.nombre ?? '').trim()
+    const apellido = String(body.apellido ?? '').trim()
     const email = String(body.email ?? '').trim().toLowerCase()
     const telefono = normalizarTelefono(String(body.telefono ?? ''))
     const comunas = normalizarComunas(body.comunas)
     const horarios = normalizarHorarios(body.horarios)
 
-    if (!nombre || nombre.length < 3) {
+    if (!nombre || nombre.length < 2) {
       return NextResponse.json({ error: 'El nombre es obligatorio.' }, { status: 400 })
+    }
+    if (!apellido || apellido.length < 2) {
+      return NextResponse.json({ error: 'El apellido es obligatorio.' }, { status: 400 })
     }
     if (!email || !validarEmail(email)) {
       return NextResponse.json({ error: 'El email no es válido.' }, { status: 400 })
@@ -120,6 +124,7 @@ export async function POST(req: NextRequest) {
     const row = {
       id,
       nombre,
+      apellido,
       email,
       telefono,
       rut: String(body.rut ?? '').trim(),

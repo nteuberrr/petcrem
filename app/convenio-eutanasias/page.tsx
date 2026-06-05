@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { COMUNAS, REGIONES } from '@/lib/comunas'
+import ComunaPicker from '@/components/ui/ComunaPicker'
 import { fmtPrecio } from '@/lib/format'
 
 type Tramo = { id: string; peso_min: string; peso_max: string; precio: string }
@@ -26,6 +26,7 @@ export default function ConvenioEutanasiasPage() {
   // form
   const [form, setForm] = useState({
     nombre: '',
+    apellido: '',
     email: '',
     telefono: '',
     rut: '',
@@ -50,8 +51,16 @@ export default function ConvenioEutanasiasPage() {
     })
   }
 
-  function toggleComuna(nombre: string) {
-    setComunas(prev => prev.includes(nombre) ? prev.filter(c => c !== nombre) : [...prev, nombre])
+  function marcarTodaLaSemana() {
+    setHorarios({
+      lun: { am: true, pm: true },
+      mar: { am: true, pm: true },
+      mie: { am: true, pm: true },
+      jue: { am: true, pm: true },
+      vie: { am: true, pm: true },
+      sab: { am: true, pm: true },
+      dom: { am: true, pm: true },
+    })
   }
 
   async function enviar(e: React.FormEvent) {
@@ -76,7 +85,7 @@ export default function ConvenioEutanasiasPage() {
       } else {
         setResultado({ tipo: 'ok', mensaje: j.mensaje })
         // Reset
-        setForm({ nombre: '', email: '', telefono: '', rut: '', notas: '', website: '' })
+        setForm({ nombre: '', apellido: '', email: '', telefono: '', rut: '', notas: '', website: '' })
         setComunas([])
         setHorarios({})
       }
@@ -179,11 +188,19 @@ export default function ConvenioEutanasiasPage() {
             />
 
             <div className="grid md:grid-cols-2 gap-4">
-              <FormField label="Nombre completo" required>
+              <FormField label="Nombre" required>
                 <input
                   type="text" required
                   value={form.nombre}
                   onChange={e => setForm({ ...form, nombre: e.target.value })}
+                  className={inputCls}
+                />
+              </FormField>
+              <FormField label="Apellido" required>
+                <input
+                  type="text" required
+                  value={form.apellido}
+                  onChange={e => setForm({ ...form, apellido: e.target.value })}
                   className={inputCls}
                 />
               </FormField>
@@ -219,45 +236,24 @@ export default function ConvenioEutanasiasPage() {
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">
                 Comunas donde puedes atender <span className="text-red-500">*</span>
-                {comunas.length > 0 && <span className="ml-2 text-gray-500 font-normal">({comunas.length} seleccionadas)</span>}
               </label>
-              <p className="text-xs text-gray-500 mb-2">Despliega cada región y haz clic para seleccionar.</p>
-              <div className="border border-gray-300 rounded-lg max-h-72 overflow-y-auto p-2 bg-gray-50">
-                {REGIONES.map(region => {
-                  const cs = COMUNAS.filter(c => c.region === region)
-                  const seleccionadas = cs.filter(c => comunas.includes(c.nombre)).length
-                  return (
-                    <details key={region} className="mb-1" open={region === 'Metropolitana'}>
-                      <summary className="text-sm font-semibold text-gray-800 cursor-pointer py-1.5 px-2 hover:bg-white rounded">
-                        {region} <span className="text-xs text-gray-500 font-normal">({seleccionadas}/{cs.length})</span>
-                      </summary>
-                      <div className="flex flex-wrap gap-1.5 mt-2 mb-3 px-2">
-                        {cs.map(c => {
-                          const sel = comunas.includes(c.nombre)
-                          return (
-                            <button
-                              key={c.nombre}
-                              type="button"
-                              onClick={() => toggleComuna(c.nombre)}
-                              className={`text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
-                                sel ? 'text-white border-transparent' : 'bg-white border-gray-300 text-gray-700 hover:border-gray-500'
-                              }`}
-                              style={sel ? { backgroundColor: COLOR } : undefined}
-                            >
-                              {c.nombre}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </details>
-                  )
-                })}
-              </div>
+              <p className="text-xs text-gray-500 mb-2">Toca <strong>+ Agregar comuna</strong> y escribe el nombre. Se sugerirán mientras tipees. Puedes agregar tantas como quieras.</p>
+              <ComunaPicker value={comunas} onChange={setComunas} color={COLOR} />
             </div>
 
             {/* Horarios */}
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">Días y horarios de disponibilidad <span className="text-red-500">*</span></label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-900">Días y horarios de disponibilidad <span className="text-red-500">*</span></label>
+                <button
+                  type="button"
+                  onClick={marcarTodaLaSemana}
+                  className="text-xs font-medium hover:underline"
+                  style={{ color: COLOR }}
+                >
+                  Marcar toda la semana
+                </button>
+              </div>
               <p className="text-xs text-gray-500 mb-2">Marca los turnos en los que podrías tomar una solicitud (AM = mañana / PM = tarde-noche).</p>
               <div className="border border-gray-300 rounded-lg overflow-hidden">
                 <table className="w-full text-sm">

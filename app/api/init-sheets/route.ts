@@ -147,7 +147,7 @@ const SHEETS: Record<string, string[]> = {
   // - rut: opcional, formato 12345678-9.
   // - origen: 'manual' (cargado por admin) | 'publico' (inscripto desde landing).
   vet_convenio_eutanasia: [
-    'id', 'nombre', 'email', 'telefono', 'rut',
+    'id', 'nombre', 'apellido', 'email', 'telefono', 'rut',
     'comunas', 'horarios',
     'activo', 'origen', 'notas',
     'total_servicios',
@@ -156,6 +156,33 @@ const SHEETS: Record<string, string[]> = {
   // Tabla de precios que se le paga al vet por servicio de eutanasia, segmentada
   // solo por tramo de peso (no por especie). Mismo precio para todos los vets.
   precios_eutanasia: ['id', 'peso_min', 'peso_max', 'precio'],
+  // Cotizaciones de eutanasia que ingresa el admin desde /servicios.
+  // - estado: creada | enviada | aceptada | confirmada | realizada | cancelada
+  // - vet_id_asignado: vacío hasta que un vet acepta; luego queda fijo.
+  // - precio_snapshot: monto que se paga al vet, congelado al momento de crear.
+  cotizaciones_eutanasia: [
+    'id',
+    'mascota_nombre', 'especie', 'peso',
+    'cliente_nombre', 'cliente_telefono', 'cliente_email',
+    'direccion', 'comuna',
+    'fecha_servicio', 'hora_servicio',
+    'notas',
+    'estado',
+    'vet_id_asignado', 'vet_nombre_asignado', 'vet_email_asignado',
+    'precio_snapshot',
+    'fecha_creacion', 'fecha_envio_cotizacion',
+    'fecha_aceptacion', 'fecha_confirmacion',
+    'fecha_realizacion', 'fecha_cancelacion',
+    'creado_por',
+  ],
+  // Log de a qué vets se envió cada cotización, con el resultado individual.
+  // estado_envio: enviada | aceptada | rechazada | expirada
+  cotizaciones_eutanasia_envios: [
+    'id', 'cotizacion_id', 'vet_id', 'vet_email',
+    'fecha_envio', 'fecha_respuesta',
+    'estado_envio',
+    'resend_message_id',
+  ],
 }
 
 export async function POST() {

@@ -7,7 +7,7 @@ import { buscarComuna } from '@/lib/comunas'
 
 const SHEET = 'vet_convenio_eutanasia'
 const COLS = [
-  'id', 'nombre', 'email', 'telefono', 'rut',
+  'id', 'nombre', 'apellido', 'email', 'telefono', 'rut',
   'comunas', 'horarios',
   'activo', 'origen', 'notas',
   'total_servicios',
@@ -114,6 +114,7 @@ export async function POST(req: NextRequest) {
     const row = {
       id,
       nombre: String(body.nombre).trim(),
+      apellido: String(body.apellido ?? '').trim(),
       email: String(body.email).trim().toLowerCase(),
       telefono: String(body.telefono ?? '').trim(),
       rut: String(body.rut ?? '').trim(),
@@ -146,6 +147,7 @@ export async function PATCH(req: NextRequest) {
 
     const partial: Record<string, string> = {}
     if (typeof updates.nombre === 'string') partial.nombre = updates.nombre.trim()
+    if (typeof updates.apellido === 'string') partial.apellido = updates.apellido.trim()
     if (typeof updates.email === 'string') {
       if (!validarEmail(updates.email)) return NextResponse.json({ error: 'email inválido' }, { status: 400 })
       partial.email = updates.email.trim().toLowerCase()

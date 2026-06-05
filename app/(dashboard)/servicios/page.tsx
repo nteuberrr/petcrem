@@ -3,15 +3,62 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Toggle } from '@/components/ui/Toggle'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
+import ComunaPicker from '@/components/ui/ComunaPicker'
 import { fmtPrecio } from '@/lib/format'
-import { COMUNAS, REGIONES } from '@/lib/comunas'
+import { formatDate, todayISO } from '@/lib/dates'
+import { COMUNAS } from '@/lib/comunas'
 
-const TABS = ['Veterinarios', 'Precios'] as const
+const TABS = ['Cotizaciones', 'Veterinarios', 'Precios'] as const
 type Tab = typeof TABS[number]
+
+type Cotizacion = {
+  id: string
+  mascota_nombre: string
+  especie: string
+  peso: string
+  cliente_nombre: string
+  cliente_telefono: string
+  cliente_email: string
+  direccion: string
+  comuna: string
+  fecha_servicio: string
+  hora_servicio: string
+  notas: string
+  estado: string
+  vet_id_asignado: string
+  vet_nombre_asignado: string
+  vet_email_asignado: string
+  precio_snapshot: string
+  fecha_creacion: string
+}
+
+type VetMatch = {
+  id: string
+  nombre: string
+  apellido: string
+  email: string
+  telefono: string
+  comunas: string[]
+}
+
+const ESTADOS_COTI = ['creada', 'enviada', 'aceptada', 'confirmada', 'realizada', 'cancelada'] as const
+
+function estadoColor(estado: string): string {
+  switch (estado) {
+    case 'creada': return 'bg-gray-100 text-gray-700'
+    case 'enviada': return 'bg-blue-100 text-blue-700'
+    case 'aceptada': return 'bg-amber-100 text-amber-700'
+    case 'confirmada': return 'bg-emerald-100 text-emerald-700'
+    case 'realizada': return 'bg-green-200 text-green-800'
+    case 'cancelada': return 'bg-red-100 text-red-700'
+    default: return 'bg-gray-100 text-gray-700'
+  }
+}
 
 type Vet = {
   id: string
   nombre: string
+  apellido: string
   email: string
   telefono: string
   rut: string
@@ -46,6 +93,7 @@ const horariosVacios = (): Horarios => ({})
 function vetFormDefault() {
   return {
     nombre: '',
+    apellido: '',
     email: '',
     telefono: '',
     rut: '',
@@ -56,8 +104,65 @@ function vetFormDefault() {
   }
 }
 
+/** Marca todos los días con AM y PM. Usado por el botón "Toda la semana". */
+function horariosTodos(): Horarios {
+  return {
+    lun: { am: true, pm: true },
+    mar: { am: true, pm: true },
+    mie: { am: true, pm: true },
+    jue: { am: true, pm: true },
+    vie: { am: true, pm: true },
+    sab: { am: true, pm: true },
+    dom: { am: true, pm: true },
+  }
+}
+
+function cotizacionFormDefault() {
+  return {
+    mascota_nombre: '',
+    especie: 'Perro',
+    peso: '',
+    cliente_nombre: '',
+    cliente_telefono: '',
+    cliente_email: '',
+    direccion: '',
+    comuna: '',
+    fecha_servicio: todayISO(),
+    hora_servicio: '',
+    notas: '',
+  }
+}
+
 export default function ServiciosEutanasiasPage() {
-  const [tab, setTab] = useState<Tab>('Veterinarios')
+  const [tab, setTab] = useState<Tab>('Cotizaciones')
+
+  // Cotizaciones
+  const [cotis, setCotis] = useState<Cotizacion[]>([])
+  const [loadingCotis, setLoadingCotis] = useState(false)
+  const [filtroEstadoCoti, setFiltroEstadoCoti] = useState('')
+  const [showCotiModal, setShowCotiModal] = useState(false)
+  const [cotiForm, setCotiForm] = useState(cotizacionFormDefault())
+  const [savingCoti, setSavingCoti] = useState(false)
+  const [cotiError, setCotiError] = useState('')
+
+  // Detalle cotización + matching
+  const [detalleCoti, setDetalleCoti] = useState<Cotizacion | null>(null)
+  const [matchingVets, setMatchingVets] = useState<VetMatch[]>([])
+  const [matchingLoading, setMatchingLoading] = useState(false)
+  const [vetsSeleccionados, setVetsSeleccionados] = useState<Set<string>>(new Set())
+  const [enviando, setEnviando] = useState(false)
+  const [resultEnvio, setResultEnvio] = useState<{ tipo: 'ok' | 'error'; mensaje: string } | null>(null)
+
+  const cargarCotis = useCallback(async () => {
+    setLoadingCotis(true)
+    try {
+      const r = await fetch('/api/eutanasias/cotizaciones', { cache: 'no-store' })
+      const d = await r.json()
+      setCotis(Array.isArray(d) ? d : [])
+    } finally {
+      setLoadingCotis(false)
+    }
+  }, [])
 
   // Veterinarios
   const [vets, setVets] = useState<Vet[]>([])
@@ -98,7 +203,122 @@ export default function ServiciosEutanasiasPage() {
   useEffect(() => {
     cargarVets()
     cargarTramos()
-  }, [cargarVets, cargarTramos])
+    cargarCotis()
+  }, [cargarVets, cargarTramos, cargarCotis])
+
+  // ─── Cotizaciones handlers ────────────────────────────────────────────────
+  function abrirNuevaCotizacion() {
+    setCotiForm(cotizacionFormDefault())
+    setCotiError('')
+    setShowCotiModal(true)
+  }
+
+  async function guardarCotizacion(e: React.FormEvent) {
+    e.preventDefault()
+    setCotiError('')
+    setSavingCoti(true)
+    try {
+      const r = await fetch('/api/eutanasias/cotizaciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...cotiForm, peso: parseFloat(cotiForm.peso) }),
+      })
+      const j = await r.json()
+      if (!r.ok) {
+        setCotiError(j.error || 'Error al crear la cotización')
+        return
+      }
+      setShowCotiModal(false)
+      await cargarCotis()
+      // Abrir detalle + buscar vets
+      await abrirDetalleCotizacion(j as Cotizacion)
+    } finally {
+      setSavingCoti(false)
+    }
+  }
+
+  async function abrirDetalleCotizacion(c: Cotizacion) {
+    setDetalleCoti(c)
+    setMatchingVets([])
+    setVetsSeleccionados(new Set())
+    setResultEnvio(null)
+    setMatchingLoading(true)
+    try {
+      const r = await fetch(`/api/eutanasias/cotizaciones/${c.id}/buscar-vets`, { method: 'POST' })
+      const j = await r.json()
+      const vetsRes: VetMatch[] = Array.isArray(j.vets) ? j.vets : []
+      setMatchingVets(vetsRes)
+      setVetsSeleccionados(new Set(vetsRes.map(v => v.id)))
+    } finally {
+      setMatchingLoading(false)
+    }
+  }
+
+  function toggleVetSeleccionado(id: string) {
+    setVetsSeleccionados(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }
+
+  async function enviarCotizacionAVets() {
+    if (!detalleCoti) return
+    if (vetsSeleccionados.size === 0) {
+      setResultEnvio({ tipo: 'error', mensaje: 'Selecciona al menos un veterinario.' })
+      return
+    }
+    setEnviando(true)
+    setResultEnvio(null)
+    try {
+      const r = await fetch(`/api/eutanasias/cotizaciones/${detalleCoti.id}/enviar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vet_ids: Array.from(vetsSeleccionados) }),
+      })
+      const j = await r.json()
+      if (!r.ok) {
+        setResultEnvio({ tipo: 'error', mensaje: j.error || 'Error al enviar' })
+        return
+      }
+      setResultEnvio({ tipo: 'ok', mensaje: `Enviada a ${j.enviados} veterinario${j.enviados === 1 ? '' : 's'}.` })
+      await cargarCotis()
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  async function cancelarCotizacion(id: string) {
+    if (!confirm('¿Cancelar esta cotización? No se reenviará a los vets ya notificados.')) return
+    await fetch(`/api/eutanasias/cotizaciones/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: 'cancelada' }),
+    })
+    await cargarCotis()
+  }
+
+  async function marcarRealizada(id: string) {
+    if (!confirm('¿Marcar como realizada?')) return
+    await fetch(`/api/eutanasias/cotizaciones/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: 'realizada' }),
+    })
+    await cargarCotis()
+  }
+
+  async function eliminarCotizacion(id: string) {
+    if (!confirm('¿Eliminar esta cotización? Los emails ya enviados no se podrán deshacer.')) return
+    await fetch(`/api/eutanasias/cotizaciones/${id}`, { method: 'DELETE' })
+    await cargarCotis()
+  }
+
+  const cotisFiltradas = useMemo(() => {
+    return filtroEstadoCoti
+      ? cotis.filter(c => c.estado === filtroEstadoCoti)
+      : cotis
+  }, [cotis, filtroEstadoCoti])
 
   // ─── Vets handlers ─────────────────────────────────────────────────────────
   function abrirNuevoVet() {
@@ -124,6 +344,7 @@ export default function ServiciosEutanasiasPage() {
     } catch { horariosObj = {} }
     setVetForm({
       nombre: v.nombre || '',
+      apellido: v.apellido || '',
       email: v.email || '',
       telefono: v.telefono || '',
       rut: v.rut || '',
@@ -146,26 +367,23 @@ export default function ServiciosEutanasiasPage() {
     })
   }
 
-  function toggleComuna(nombre: string) {
-    setVetForm(f => {
-      if (f.comunas.includes(nombre)) {
-        return { ...f, comunas: f.comunas.filter(c => c !== nombre) }
-      }
-      return { ...f, comunas: [...f.comunas, nombre] }
-    })
+  function setComunasForm(nuevo: string[]) {
+    setVetForm(f => ({ ...f, comunas: nuevo }))
   }
 
   async function guardarVet(e: React.FormEvent) {
     e.preventDefault()
     setVetError('')
     if (!vetForm.nombre.trim()) return setVetError('Nombre obligatorio')
+    if (!vetForm.apellido.trim()) return setVetError('Apellido obligatorio')
     if (!vetForm.email.trim()) return setVetError('Email obligatorio')
-    if (vetForm.comunas.length === 0) return setVetError('Selecciona al menos una comuna')
+    if (vetForm.comunas.length === 0) return setVetError('Agrega al menos una comuna')
     if (Object.keys(vetForm.horarios).length === 0) return setVetError('Selecciona al menos un día/horario')
 
     setSavingVet(true)
     const payload = {
       nombre: vetForm.nombre,
+      apellido: vetForm.apellido,
       email: vetForm.email,
       telefono: vetForm.telefono,
       rut: vetForm.rut,
@@ -208,7 +426,7 @@ export default function ServiciosEutanasiasPage() {
   const vetsFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
     return vets.filter(v => {
-      if (q && !(`${v.nombre} ${v.email} ${v.telefono}`).toLowerCase().includes(q)) return false
+      if (q && !(`${v.nombre} ${v.apellido} ${v.email} ${v.telefono}`).toLowerCase().includes(q)) return false
       if (filtroComuna) {
         const cs = v.comunas_array ?? safeParseArr(v.comunas)
         if (!cs.includes(filtroComuna)) return false
@@ -291,6 +509,101 @@ export default function ServiciosEutanasiasPage() {
         </nav>
       </div>
 
+      {tab === 'Cotizaciones' && (
+        <section>
+          <div className="flex flex-col md:flex-row gap-3 md:items-center justify-between mb-4">
+            <div className="flex gap-2 items-center flex-1">
+              <select
+                value={filtroEstadoCoti}
+                onChange={e => setFiltroEstadoCoti(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">Todos los estados</option>
+                {ESTADOS_COTI.map(e => <option key={e} value={e}>{e}</option>)}
+              </select>
+              <span className="text-xs text-gray-500">{cotisFiltradas.length} cotización{cotisFiltradas.length === 1 ? '' : 'es'}</span>
+            </div>
+            <button
+              onClick={abrirNuevaCotizacion}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
+            >
+              + Nueva cotización
+            </button>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            {loadingCotis ? (
+              <div className="p-8 text-center text-gray-500">Cargando…</div>
+            ) : cotisFiltradas.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                {cotis.length === 0 ? 'Aún no hay cotizaciones.' : 'No hay coincidencias.'}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                    <tr>
+                      <th className="px-3 py-2 text-left">ID</th>
+                      <th className="px-3 py-2 text-left">Mascota</th>
+                      <th className="px-3 py-2 text-left">Comuna</th>
+                      <th className="px-3 py-2 text-left">Fecha servicio</th>
+                      <th className="px-3 py-2 text-left">Estado</th>
+                      <th className="px-3 py-2 text-left">Vet asignado</th>
+                      <th className="px-3 py-2 text-right">Pago vet</th>
+                      <th className="px-3 py-2 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {cotisFiltradas.map(c => (
+                      <tr key={c.id} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 text-xs text-gray-500">#{c.id}</td>
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-gray-900">{c.mascota_nombre}</div>
+                          <div className="text-xs text-gray-500">{c.especie} · {c.peso} kg</div>
+                        </td>
+                        <td className="px-3 py-2 text-gray-700">{c.comuna}</td>
+                        <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                          {formatDate(c.fecha_servicio)} {c.hora_servicio}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${estadoColor(c.estado)}`}>
+                            {c.estado}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-600">
+                          {c.vet_nombre_asignado || <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-700">
+                          {fmtPrecio(parseInt(c.precio_snapshot, 10) || 0)}
+                        </td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          <button onClick={() => abrirDetalleCotizacion(c)} className="text-indigo-600 hover:text-indigo-800 text-xs font-medium mr-2">
+                            {c.estado === 'creada' || c.estado === 'enviada' ? 'Enviar' : 'Ver'}
+                          </button>
+                          {(c.estado === 'confirmada') && (
+                            <button onClick={() => marcarRealizada(c.id)} className="text-green-700 hover:text-green-900 text-xs font-medium mr-2">
+                              Realizada
+                            </button>
+                          )}
+                          {!['realizada', 'cancelada'].includes(c.estado) && (
+                            <button onClick={() => cancelarCotizacion(c.id)} className="text-amber-600 hover:text-amber-800 text-xs font-medium mr-2">
+                              Cancelar
+                            </button>
+                          )}
+                          <button onClick={() => eliminarCotizacion(c.id)} className="text-red-600 hover:text-red-800 text-xs font-medium">
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {tab === 'Veterinarios' && (
         <section>
           <div className="flex flex-col md:flex-row gap-3 md:items-center justify-between mb-4">
@@ -348,7 +661,7 @@ export default function ServiciosEutanasiasPage() {
                       const hs = v.horarios_obj ?? safeParseObj(v.horarios)
                       return (
                         <tr key={v.id} className="hover:bg-gray-50">
-                          <td className="px-3 py-2 font-medium text-gray-900">{v.nombre}</td>
+                          <td className="px-3 py-2 font-medium text-gray-900">{`${v.nombre || ''} ${v.apellido || ''}`.trim()}</td>
                           <td className="px-3 py-2 text-gray-600">
                             <div className="text-xs">{v.email}</div>
                             <div className="text-xs text-gray-500">{v.telefono}</div>
@@ -460,12 +773,159 @@ export default function ServiciosEutanasiasPage() {
         </section>
       )}
 
+      {/* Modal Nueva cotización */}
+      <Modal open={showCotiModal} onClose={() => setShowCotiModal(false)} title="Nueva cotización de eutanasia">
+        <form onSubmit={guardarCotizacion} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Nombre de la mascota" required>
+              <input type="text" required value={cotiForm.mascota_nombre} onChange={e => setCotiForm({ ...cotiForm, mascota_nombre: e.target.value })} className={inputCls} />
+            </Field>
+            <Field label="Especie" required>
+              <select required value={cotiForm.especie} onChange={e => setCotiForm({ ...cotiForm, especie: e.target.value })} className={inputCls}>
+                <option>Perro</option>
+                <option>Gato</option>
+                <option>Conejo</option>
+                <option>Hamster</option>
+                <option>Hurón</option>
+                <option>Ave</option>
+                <option>Otro</option>
+              </select>
+            </Field>
+            <Field label="Peso (kg)" required>
+              <input type="number" step="0.1" required value={cotiForm.peso} onChange={e => setCotiForm({ ...cotiForm, peso: e.target.value })} className={inputCls} />
+            </Field>
+            <Field label="Fecha" required>
+              <input type="date" required value={cotiForm.fecha_servicio} onChange={e => setCotiForm({ ...cotiForm, fecha_servicio: e.target.value })} className={inputCls} />
+            </Field>
+            <Field label="Hora" required>
+              <input type="time" required value={cotiForm.hora_servicio} onChange={e => setCotiForm({ ...cotiForm, hora_servicio: e.target.value })} className={inputCls} />
+            </Field>
+            <Field label="Comuna" required>
+              <input
+                type="text" required
+                value={cotiForm.comuna}
+                onChange={e => setCotiForm({ ...cotiForm, comuna: e.target.value })}
+                placeholder="Ej: Providencia"
+                className={inputCls}
+              />
+            </Field>
+          </div>
+          <Field label="Dirección" required>
+            <input type="text" required value={cotiForm.direccion} onChange={e => setCotiForm({ ...cotiForm, direccion: e.target.value })} placeholder="Calle, número, depto." className={inputCls} />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Nombre del cliente" required>
+              <input type="text" required value={cotiForm.cliente_nombre} onChange={e => setCotiForm({ ...cotiForm, cliente_nombre: e.target.value })} className={inputCls} />
+            </Field>
+            <Field label="Teléfono cliente (9 dígitos)" required>
+              <input type="tel" required value={cotiForm.cliente_telefono} onChange={e => setCotiForm({ ...cotiForm, cliente_telefono: e.target.value.replace(/\D/g, '').slice(0, 9) })} className={inputCls} />
+            </Field>
+            <Field label="Email cliente">
+              <input type="email" value={cotiForm.cliente_email} onChange={e => setCotiForm({ ...cotiForm, cliente_email: e.target.value })} className={inputCls} />
+            </Field>
+          </div>
+          <Field label="Notas internas">
+            <textarea value={cotiForm.notas} onChange={e => setCotiForm({ ...cotiForm, notas: e.target.value })} rows={2} className={inputCls} placeholder="Información adicional que ayude al vet" />
+          </Field>
+          {cotiError && <p className="text-sm text-red-600">{cotiError}</p>}
+          <div className="flex gap-2 justify-end pt-2">
+            <button type="button" onClick={() => setShowCotiModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
+            <button type="submit" disabled={savingCoti} className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg">
+              {savingCoti ? 'Creando…' : 'Crear y buscar vets'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal Detalle cotización + matching vets */}
+      <Modal
+        open={!!detalleCoti}
+        onClose={() => { setDetalleCoti(null); setResultEnvio(null) }}
+        title={detalleCoti ? `Cotización #${detalleCoti.id} — ${detalleCoti.mascota_nombre}` : ''}
+      >
+        {detalleCoti && (
+          <div className="space-y-4">
+            {/* Datos rápidos */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs space-y-1">
+              <div className="flex justify-between"><span className="text-gray-500">Especie / Peso</span><span>{detalleCoti.especie} · {detalleCoti.peso} kg</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Comuna</span><span>{detalleCoti.comuna}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Fecha / Hora</span><span>{formatDate(detalleCoti.fecha_servicio)} {detalleCoti.hora_servicio}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Pago al vet</span><span className="font-semibold">{fmtPrecio(parseInt(detalleCoti.precio_snapshot, 10) || 0)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Estado</span><span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${estadoColor(detalleCoti.estado)}`}>{detalleCoti.estado}</span></div>
+              {detalleCoti.vet_nombre_asignado && (
+                <div className="flex justify-between"><span className="text-gray-500">Asignado a</span><span className="font-semibold">{detalleCoti.vet_nombre_asignado}</span></div>
+              )}
+            </div>
+
+            {(detalleCoti.estado === 'creada' || detalleCoti.estado === 'enviada') && (
+              <>
+                <h3 className="text-sm font-semibold text-gray-900">Veterinarios disponibles</h3>
+                {matchingLoading ? (
+                  <p className="text-sm text-gray-500">Buscando coincidencias…</p>
+                ) : matchingVets.length === 0 ? (
+                  <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    No hay vets disponibles que cubran <strong>{detalleCoti.comuna}</strong> el {formatDate(detalleCoti.fecha_servicio)} {detalleCoti.hora_servicio}. Considera ampliar tu base de vets o ajustar la fecha/hora.
+                  </p>
+                ) : (
+                  <div className="border border-gray-200 rounded-lg divide-y max-h-72 overflow-y-auto">
+                    {matchingVets.map(v => {
+                      const sel = vetsSeleccionados.has(v.id)
+                      return (
+                        <label key={v.id} className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50 ${sel ? 'bg-indigo-50' : ''}`}>
+                          <input type="checkbox" checked={sel} onChange={() => toggleVetSeleccionado(v.id)} className="w-4 h-4" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900">{`${v.nombre} ${v.apellido}`.trim()}</p>
+                            <p className="text-xs text-gray-500 truncate">{v.email} · {v.telefono}</p>
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {resultEnvio && (
+                  <div className={`text-sm p-3 rounded-lg ${resultEnvio.tipo === 'ok' ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                    {resultEnvio.mensaje}
+                  </div>
+                )}
+
+                {matchingVets.length > 0 && (
+                  <div className="flex justify-between items-center pt-2">
+                    <p className="text-xs text-gray-500">{vetsSeleccionados.size} de {matchingVets.length} seleccionados</p>
+                    <button
+                      onClick={enviarCotizacionAVets}
+                      disabled={enviando || vetsSeleccionados.size === 0}
+                      className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg"
+                    >
+                      {enviando ? 'Enviando…' : `Enviar cotización a ${vetsSeleccionados.size}`}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {(detalleCoti.estado === 'aceptada' || detalleCoti.estado === 'confirmada' || detalleCoti.estado === 'realizada') && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-4 text-sm">
+                <p className="font-semibold mb-1">Cotización tomada por {detalleCoti.vet_nombre_asignado}</p>
+                <p className="text-xs">Email: {detalleCoti.vet_email_asignado}</p>
+                {detalleCoti.estado === 'aceptada' && <p className="text-xs mt-2">Esperando confirmación final del vet tras hablar con el cliente.</p>}
+                {detalleCoti.estado === 'confirmada' && <p className="text-xs mt-2">El vet confirmó que va a realizar el servicio.</p>}
+                {detalleCoti.estado === 'realizada' && <p className="text-xs mt-2">Servicio marcado como realizado.</p>}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
       {/* Modal vet */}
       <Modal open={showVetModal} onClose={() => setShowVetModal(false)} title={editingVet ? 'Editar veterinario' : 'Nuevo veterinario'}>
         <form onSubmit={guardarVet} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Nombre" required>
               <input type="text" required value={vetForm.nombre} onChange={e => setVetForm({ ...vetForm, nombre: e.target.value })} className={inputCls} />
+            </Field>
+            <Field label="Apellido" required>
+              <input type="text" required value={vetForm.apellido} onChange={e => setVetForm({ ...vetForm, apellido: e.target.value })} className={inputCls} />
             </Field>
             <Field label="Email" required>
               <input type="email" required value={vetForm.email} onChange={e => setVetForm({ ...vetForm, email: e.target.value })} className={inputCls} />
@@ -481,41 +941,21 @@ export default function ServiciosEutanasiasPage() {
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">
               Comunas donde atiende <span className="text-red-500">*</span>
-              {vetForm.comunas.length > 0 && <span className="ml-2 text-gray-500">({vetForm.comunas.length} seleccionadas)</span>}
             </label>
-            <div className="border border-gray-300 rounded-lg max-h-48 overflow-y-auto p-2 bg-gray-50">
-              {REGIONES.map(region => {
-                const cs = COMUNAS.filter(c => c.region === region)
-                return (
-                  <details key={region} className="mb-1">
-                    <summary className="text-xs font-semibold text-gray-700 cursor-pointer py-1 px-2 hover:bg-gray-100 rounded">
-                      {region} ({cs.filter(c => vetForm.comunas.includes(c.nombre)).length}/{cs.length})
-                    </summary>
-                    <div className="flex flex-wrap gap-1 mt-1 mb-2 px-2">
-                      {cs.map(c => {
-                        const sel = vetForm.comunas.includes(c.nombre)
-                        return (
-                          <button
-                            key={c.nombre}
-                            type="button"
-                            onClick={() => toggleComuna(c.nombre)}
-                            className={`text-xs px-2 py-1 rounded-full border transition-colors ${
-                              sel ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-300 text-gray-700 hover:border-indigo-400'
-                            }`}
-                          >
-                            {c.nombre}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </details>
-                )
-              })}
-            </div>
+            <ComunaPicker value={vetForm.comunas} onChange={setComunasForm} />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Días y horarios de disponibilidad <span className="text-red-500">*</span></label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-medium text-gray-700">Días y horarios de disponibilidad <span className="text-red-500">*</span></label>
+              <button
+                type="button"
+                onClick={() => setVetForm(f => ({ ...f, horarios: horariosTodos() }))}
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                Marcar toda la semana
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="text-xs border border-gray-200 rounded-lg w-full">
                 <thead className="bg-gray-50">

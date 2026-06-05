@@ -1,0 +1,129 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/lib/auth'
+import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { buscarComuna } from '@/lib/comunas'
+import { precioParaPeso } from '@/lib/eutanasia-matcher'
+
+const SHEET = 'cotizaciones_eutanasia'
+const COLS = [
+  'id',
+  'mascota_nombre', 'especie', 'peso',
+  'cliente_nombre', 'cliente_telefono', 'cliente_email',
+  'direccion', 'comuna',
+  'fecha_servicio', 'hora_servicio',
+  'notas',
+  'estado',
+  'vet_id_asignado', 'vet_nombre_asignado', 'vet_email_asignado',
+  'precio_snapshot',
+  'fecha_creacion', 'fecha_envio_cotizacion',
+  'fecha_aceptacion', 'fecha_confirmacion',
+  'fecha_realizacion', 'fecha_cancelacion',
+  'creado_por',
+]
+
+async function requireAdmin() {
+  const session = await getServerSession(authOptions)
+  if ((session?.user as { role?: string })?.role !== 'admin') {
+    return { denied: NextResponse.json({ error: 'Solo admin' }, { status: 403 }), session: null }
+  }
+  return { denied: null, session }
+}
+
+function nowISO(): string {
+  return new Date().toISOString()
+}
+
+function validarEmail(s: string): boolean {
+  return /^[^\s,;<>"()@]+@[^\s,;<>"()@]+\.[^\s,;<>"()@]+$/i.test(s.trim())
+}
+
+export async function GET(req: NextRequest) {
+  const { denied } = await requireAdmin()
+  if (denied) return denied
+  try {
+    await ensureSheet(SHEET)
+    await ensureColumns(SHEET, COLS)
+    const url = new URL(req.url)
+    const estado = url.searchParams.get('estado')
+    const rows = await getSheetData(SHEET)
+    const filtradas = estado ? rows.filter(r => r.estado === estado) : rows
+    filtradas.sort((a, b) => (b.fecha_creacion || '').localeCompare(a.fecha_creacion || ''))
+    return NextResponse.json(filtradas)
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 })
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const { denied, session } = await requireAdmin()
+  if (denied) return denied
+  try {
+    const body = await req.json()
+
+    const mascota = String(body.mascota_nombre ?? '').trim()
+    const especie = String(body.especie ?? '').trim()
+    const peso = parseFloat(String(body.peso ?? ''))
+    const cliNombre = String(body.cliente_nombre ?? '').trim()
+    const cliTel = String(body.cliente_telefono ?? '').replace(/\D/g, '').slice(-9)
+    const cliEmail = String(body.cliente_email ?? '').trim().toLowerCase()
+    const direccion = String(body.direccion ?? '').trim()
+    const comuna = String(body.comuna ?? '').trim()
+    const fecha = String(body.fecha_servicio ?? '').trim()
+    const hora = String(body.hora_servicio ?? '').trim()
+    const notas = String(body.notas ?? '').trim()
+
+    if (!mascota) return NextResponse.json({ error: 'Nombre de la mascota requerido' }, { status: 400 })
+    if (!especie) return NextResponse.json({ error: 'Especie requerida' }, { status: 400 })
+    if (!Number.isFinite(peso) || peso <= 0) return NextResponse.json({ error: 'Peso inválido' }, { status: 400 })
+    if (!cliNombre) return NextResponse.json({ error: 'Nombre del cliente requerido' }, { status: 400 })
+    if (cliTel.length !== 9) return NextResponse.json({ error: 'Teléfono del cliente debe tener 9 dígitos' }, { status: 400 })
+    if (cliEmail && !validarEmail(cliEmail)) return NextResponse.json({ error: 'Email del cliente inválido' }, { status: 400 })
+    if (!direccion) return NextResponse.json({ error: 'Dirección requerida' }, { status: 400 })
+    if (!comuna) return NextResponse.json({ error: 'Comuna requerida' }, { status: 400 })
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return NextResponse.json({ error: 'Fecha inválida' }, { status: 400 })
+    if (!/^\d{2}:\d{2}$/.test(hora)) return NextResponse.json({ error: 'Hora inválida' }, { status: 400 })
+
+    const comunaCanon = buscarComuna(comuna)?.nombre ?? comuna
+
+    // Snapshot del precio que se le paga al vet, según el peso
+    await ensureSheet('precios_eutanasia')
+    await ensureColumns('precios_eutanasia', ['id', 'peso_min', 'peso_max', 'precio'])
+    const tramos = await getSheetData('precios_eutanasia')
+    const precio = precioParaPeso(tramos, peso)
+
+    await ensureSheet(SHEET)
+    await ensureColumns(SHEET, COLS)
+    const id = await getNextId(SHEET)
+    const row = {
+      id,
+      mascota_nombre: mascota,
+      especie,
+      peso: String(peso),
+      cliente_nombre: cliNombre,
+      cliente_telefono: cliTel,
+      cliente_email: cliEmail,
+      direccion,
+      comuna: comunaCanon,
+      fecha_servicio: fecha,
+      hora_servicio: hora,
+      notas,
+      estado: 'creada',
+      vet_id_asignado: '',
+      vet_nombre_asignado: '',
+      vet_email_asignado: '',
+      precio_snapshot: String(precio),
+      fecha_creacion: nowISO(),
+      fecha_envio_cotizacion: '',
+      fecha_aceptacion: '',
+      fecha_confirmacion: '',
+      fecha_realizacion: '',
+      fecha_cancelacion: '',
+      creado_por: session?.user?.name || session?.user?.email || '',
+    }
+    await appendRow(SHEET, row)
+    return NextResponse.json({ ok: true, ...row }, { status: 201 })
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 400 })
+  }
+}
