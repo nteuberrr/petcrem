@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getSheetData } from './google-sheets'
+import { getAgenteConfig } from './mensajes'
 import { fmtPrecio } from './format'
 
 /**
@@ -112,13 +113,39 @@ function parseRespuesta(text: string): RespuestaAgente {
 export async function generarRespuesta(historial: TurnoMensaje[]): Promise<RespuestaAgente> {
   const mensajes = construirMensajes(historial.slice(-24))
   if (mensajes.length === 0) return { mensaje: '', escalar: false }
-  const tarifas = await bloqueTarifas()
-  const res = await getClient().messages.create({
-    model: MODEL,
-    max_tokens: 600,
-    system: [{ type: 'text', text: `${BASE}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } }],
-    messages: mensajes,
-  })
+  const [tarifas, cfg] = await Promise.all([bloqueTarifas(), getAgenteConfig().catch(() => null)])
+
+  // Bloque base + tarifas: cacheado (estable). Ajustes del operador/calibración: sin caché (cambian seguido).
+  const system: Anthropic.TextBlockParam[] = [
+    { type: 'text', text: `${BASE}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
+  ]
+  const ajustes = [
+    cfg?.instrucciones?.trim() && `INSTRUCCIONES DEL OPERADOR (tienen prioridad sobre lo anterior, EXCEPTO las REGLAS DURAS de no inventar precios y de escalar):\n${cfg.instrucciones.trim()}`,
+    cfg?.calibracion?.trim() && `GUÍA DE ESTILO APRENDIDA DE CONVERSACIONES REALES (orienta tono y respuestas; no contradice los precios ni las reglas duras):\n${cfg.calibracion.trim()}`,
+  ].filter(Boolean).join('\n\n')
+  if (ajustes) system.push({ type: 'text', text: ajustes })
+
+  const res = await getClient().messages.create({ model: MODEL, max_tokens: 600, system, messages: mensajes })
   const text = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('')
   return parseRespuesta(text)
+}
+
+const SYSTEM_CALIBRACION = `Eres analista de atención al cliente del Crematorio Alma Animal. Vas a recibir conversaciones reales de WhatsApp (Cliente = el tutor; Nosotros = nuestro equipo). Extrae una GUÍA DE CALIBRACIÓN accionable para un asistente automático que atiende este mismo canal.
+
+Reglas:
+- Español neutro, concreto, máximo ~450 palabras.
+- Organiza en secciones: TONO Y ESTILO (con frases reales que usamos), PREGUNTAS FRECUENTES Y MEJOR RESPUESTA, OBJECIONES Y CÓMO LAS MANEJAMOS, QUÉ LLEVA A QUE EL CLIENTE AGENDE.
+- NO inventes datos. Si ves precios, NO los cites como regla (los precios vienen de otra fuente, en vivo).
+- Devuelve SOLO la guía, sin preámbulos.`
+
+/** Analiza transcripciones reales y devuelve una guía de calibración (texto). */
+export async function calibrarDesdeTranscripts(transcripts: string[]): Promise<string> {
+  const corpus = transcripts.map((t, i) => `### Conversación ${i + 1}\n${t}`).join('\n\n').slice(0, 120000)
+  const res = await getClient().messages.create({
+    model: MODEL,
+    max_tokens: 1500,
+    system: SYSTEM_CALIBRACION,
+    messages: [{ role: 'user', content: `Conversaciones reales a analizar (${transcripts.length}):\n\n${corpus}` }],
+  })
+  return res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
 }

@@ -179,6 +179,72 @@ export async function marcarEstadoMensaje(providerMessageId: string, estado: str
   await sb.from(T_MSG).update({ estado }).eq('provider_message_id', providerMessageId)
 }
 
+const T_AGENTE = 'agente_config'
+
+export interface AgenteConfig {
+  instrucciones: string
+  calibracion: string
+  calibracion_at: string | null
+  calibracion_muestra: number | null
+  updated_at: string | null
+}
+
+const AGENTE_DEFAULT: AgenteConfig = { instrucciones: '', calibracion: '', calibracion_at: null, calibracion_muestra: null, updated_at: null }
+
+/** Lee la config del agente (fila única id=1). Tolera que la tabla aún no exista. */
+export async function getAgenteConfig(): Promise<AgenteConfig> {
+  const sb = getMensajesSupabase()
+  const { data, error } = await sb.from(T_AGENTE).select('*').eq('id', 1).maybeSingle()
+  if (error) {
+    console.warn('[mensajes] getAgenteConfig:', error.message)
+    return AGENTE_DEFAULT // tabla no creada todavía → defaults
+  }
+  if (!data) return AGENTE_DEFAULT
+  return {
+    instrucciones: data.instrucciones ?? '',
+    calibracion: data.calibracion ?? '',
+    calibracion_at: data.calibracion_at ?? null,
+    calibracion_muestra: data.calibracion_muestra ?? null,
+    updated_at: data.updated_at ?? null,
+  }
+}
+
+/** Actualiza la config del agente (upsert sobre id=1; preserva columnas no enviadas). */
+export async function updateAgenteConfig(patch: Partial<Pick<AgenteConfig, 'instrucciones' | 'calibracion' | 'calibracion_at' | 'calibracion_muestra'>>): Promise<AgenteConfig> {
+  const sb = getMensajesSupabase()
+  const { error } = await sb.from(T_AGENTE).upsert({ id: 1, ...patch, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+  if (error) throw new Error(error.message)
+  return getAgenteConfig()
+}
+
+/** Muestrea conversaciones recientes (históricas + nuevas) como transcripciones
+ *  para calibrar al agente. Recientes primero; solo intercambios reales (≥2 turnos). */
+export async function getTranscriptsParaCalibracion(maxConversaciones = 60, maxMsgsPorConv = 40): Promise<string[]> {
+  const sb = getMensajesSupabase()
+  const { data: convs, error } = await sb.from(T_CONV).select('id')
+    .order('ultimo_mensaje_at', { ascending: false, nullsFirst: false }).limit(maxConversaciones)
+  if (error) throw new Error(error.message)
+  const ids = (convs ?? []).map(c => (c as { id: number }).id)
+  if (!ids.length) return []
+  const { data: msgs, error: e2 } = await sb.from(T_MSG).select('conversacion_id, direccion, cuerpo, ts')
+    .in('conversacion_id', ids).not('cuerpo', 'is', null).order('ts', { ascending: true })
+  if (e2) throw new Error(e2.message)
+  const porConv = new Map<number, string[]>()
+  for (const m of (msgs ?? []) as Array<{ conversacion_id: number; direccion: Direccion; cuerpo: string | null }>) {
+    const txt = (m.cuerpo ?? '').trim().slice(0, 400)
+    if (!txt) continue
+    const arr = porConv.get(m.conversacion_id) ?? []
+    arr.push(`${m.direccion === 'entrante' ? 'Cliente' : 'Nosotros'}: ${txt}`)
+    porConv.set(m.conversacion_id, arr)
+  }
+  const transcripts: string[] = []
+  for (const id of ids) {
+    const lineas = (porConv.get(id) ?? []).slice(-maxMsgsPorConv)
+    if (lineas.length >= 2) transcripts.push(lineas.join('\n'))
+  }
+  return transcripts
+}
+
 /** Obtiene o crea la conversación de un contacto en un canal. */
 export async function getOrCreateConversacion(contactoId: number, canal: Canal, audiencia: Audiencia = 'A', fuente = 'whatsapp'): Promise<Conversacion> {
   const sb = getMensajesSupabase()

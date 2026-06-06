@@ -49,6 +49,21 @@ create table if not exists mensajes_mensajes (
 );
 create index if not exists idx_mmsg_conv on mensajes_mensajes(conversacion_id, ts);
 
+-- Configuración del agente IA del inbox (fila única, id=1).
+-- instrucciones: ajustes del operador en lenguaje natural (efecto inmediato).
+-- calibracion: guía de estilo extraída de conversaciones reales (históricas + nuevas).
+create table if not exists agente_config (
+  id                  int primary key default 1,
+  instrucciones       text not null default '',
+  calibracion         text not null default '',
+  calibracion_at      timestamptz,
+  calibracion_muestra int,
+  updated_at          timestamptz not null default now(),
+  constraint agente_config_singleton check (id = 1)
+);
+insert into agente_config (id) values (1) on conflict (id) do nothing;
+
 alter table mensajes_contactos      enable row level security;
 alter table mensajes_conversaciones enable row level security;
 alter table mensajes_mensajes       enable row level security;
+alter table agente_config           enable row level security;

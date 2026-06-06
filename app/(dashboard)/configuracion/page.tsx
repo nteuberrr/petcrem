@@ -5,9 +5,10 @@ import { Toggle } from '@/components/ui/Toggle'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
+import AgentesConfig from '@/components/AgentesConfig'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 
-const TABS = ['Precios', 'Productos', 'Especies', 'Tipos servicio', 'Otros servicios', 'Descuentos', 'Usuarios', 'Jornada', 'Datos personales', 'Mantenimiento'] as const
+const TABS = ['Precios', 'Productos', 'Especies', 'Tipos servicio', 'Otros servicios', 'Descuentos', 'Usuarios', 'Agentes', 'Jornada', 'Datos personales', 'Mantenimiento'] as const
 type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
 
@@ -865,6 +866,9 @@ export default function ConfiguracionPage() {
           </table>
         </div>
       )}
+
+      {/* ─── AGENTES ─── */}
+      {tab === 'Agentes' && <AgentesConfig />}
 
       {tab === 'Jornada' && (
         <div className="space-y-6 max-w-3xl">
