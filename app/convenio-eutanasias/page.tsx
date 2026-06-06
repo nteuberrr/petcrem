@@ -37,7 +37,12 @@ export default function ConvenioEutanasiasPage() {
   const [comunas, setComunas] = useState<string[]>([])
   const [horarios, setHorarios] = useState<Horarios>({})
   const [enviando, setEnviando] = useState(false)
-  const [resultado, setResultado] = useState<{ tipo: 'ok' | 'error' | 'duplicado'; mensaje: string } | null>(null)
+  const [resultado, setResultado] = useState<{
+    tipo: 'ok' | 'error' | 'duplicado'
+    mensaje: string
+    bienvenida_estado?: string
+    bienvenida_error?: string
+  } | null>(null)
 
   useEffect(() => {
     fetch('/api/eutanasias/precios').then(r => r.json()).then(d => setTramos(Array.isArray(d) ? d : []))
@@ -84,7 +89,12 @@ export default function ConvenioEutanasiasPage() {
       } else if (j.ya_inscrito) {
         setResultado({ tipo: 'duplicado', mensaje: j.mensaje })
       } else {
-        setResultado({ tipo: 'ok', mensaje: j.mensaje })
+        setResultado({
+          tipo: 'ok',
+          mensaje: j.mensaje,
+          bienvenida_estado: j.bienvenida_estado,
+          bienvenida_error: j.bienvenida_error,
+        })
         // Reset
         setForm({ nombre: '', apellido: '', email: '', telefono: '', rut: '', notas: '', website: '' })
         setComunas([])
@@ -101,22 +111,22 @@ export default function ConvenioEutanasiasPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header style={{ backgroundColor: COLOR }} className="text-white py-10 px-4">
+      <header style={{ backgroundColor: COLOR }} className="text-white py-8 sm:py-10 px-4">
         <div className="max-w-4xl mx-auto">
-          <p className="text-sm uppercase tracking-widest opacity-80">Alma Animal Crematorio · Convenio Veterinarios</p>
-          <h1 className="text-3xl md:text-4xl font-bold mt-2">Eutanasias a Domicilio</h1>
-          <p className="text-lg mt-3 opacity-95 max-w-2xl">
+          <p className="text-xs sm:text-sm uppercase tracking-widest opacity-80">Alma Animal Crematorio · Convenio Veterinarios</p>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mt-2">Eutanasias a Domicilio</h1>
+          <p className="text-base sm:text-lg mt-3 opacity-95 max-w-2xl">
             Únete a nuestra red de veterinarios para ofrecer un acompañamiento digno y cercano en el último momento de las mascotas.
           </p>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-10 space-y-12">
+      <main className="max-w-4xl mx-auto px-4 py-8 sm:py-10 space-y-10 sm:space-y-12">
 
         {/* Cómo funciona */}
         <section>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">¿Cómo funciona el convenio?</h2>
-          <div className="grid md:grid-cols-3 gap-4">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">¿Cómo funciona el convenio?</h2>
+          <div className="grid gap-4 md:grid-cols-3">
             <Card num="1" titulo="Te inscribes">
               Llenas este formulario indicando tus datos, las comunas en las que puedes atender y tus horarios de disponibilidad.
             </Card>
@@ -131,8 +141,8 @@ export default function ConvenioEutanasiasPage() {
 
         {/* Precios */}
         <section>
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">Precio que pagamos por servicio</h2>
-          <p className="text-gray-600 mb-4">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">Precio que pagamos por servicio</h2>
+          <p className="text-sm sm:text-base text-gray-600 mb-4">
             Estos son los montos fijos que <strong>te pagamos a ti</strong> por cada eutanasia a domicilio realizada, según el peso de la mascota.
             Son los mismos para todos los veterinarios del convenio.
           </p>
@@ -140,18 +150,18 @@ export default function ConvenioEutanasiasPage() {
             {tramos.length === 0 ? (
               <div className="p-6 text-center text-gray-400 text-sm">Cargando tarifas…</div>
             ) : (
-              <table className="w-full text-sm">
+              <table className="w-full text-sm sm:text-base">
                 <thead style={{ backgroundColor: COLOR }} className="text-white">
                   <tr>
-                    <th className="px-4 py-3 text-left">Peso de la mascota</th>
-                    <th className="px-4 py-3 text-right">Pago por servicio</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs sm:text-sm">Peso de la mascota</th>
+                    <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm">Pago por servicio</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {tramos.map(t => (
                     <tr key={t.id}>
-                      <td className="px-4 py-3 text-gray-700">{t.peso_min} – {t.peso_max} kg</td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{fmtPrecio(parseInt(t.precio, 10) || 0)}</td>
+                      <td className="px-3 sm:px-4 py-3 text-gray-700">{t.peso_min} – {t.peso_max} kg</td>
+                      <td className="px-3 sm:px-4 py-3 text-right font-semibold text-gray-900">{fmtPrecio(parseInt(t.precio, 10) || 0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -172,7 +182,7 @@ export default function ConvenioEutanasiasPage() {
             </div>
           )}
 
-          <form onSubmit={enviar} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-6">
+          <form onSubmit={enviar} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 space-y-5 sm:space-y-6">
             {/* Honeypot — invisible a usuarios humanos, los bots lo llenan */}
             <input
               type="text"
@@ -254,12 +264,12 @@ export default function ConvenioEutanasiasPage() {
               </div>
               <p className="text-xs text-gray-500 mb-2">Marca los turnos en los que podrías tomar una solicitud (AM = mañana / PM = tarde-noche).</p>
               <div className="border border-gray-300 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm sm:text-base">
                   <thead className="bg-gray-50 text-xs uppercase text-gray-600">
                     <tr>
-                      <th className="px-3 py-2 text-left">Día</th>
-                      <th className="px-3 py-2 text-center">AM</th>
-                      <th className="px-3 py-2 text-center">PM</th>
+                      <th className="px-3 py-2.5 text-left">Día</th>
+                      <th className="px-3 py-2.5 text-center">AM</th>
+                      <th className="px-3 py-2.5 text-center">PM</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -267,12 +277,12 @@ export default function ConvenioEutanasiasPage() {
                       const h = horarios[d.key] ?? { am: false, pm: false }
                       return (
                         <tr key={d.key} className="border-t border-gray-100">
-                          <td className="px-3 py-2 font-medium text-gray-800">{d.label}</td>
-                          <td className="px-3 py-2 text-center">
-                            <input type="checkbox" checked={h.am} onChange={() => toggleHorario(d.key, 'am')} className="w-4 h-4 cursor-pointer" />
+                          <td className="px-3 py-3 font-medium text-gray-800">{d.label}</td>
+                          <td className="px-3 py-3 text-center">
+                            <input type="checkbox" checked={h.am} onChange={() => toggleHorario(d.key, 'am')} className="w-5 h-5 cursor-pointer" />
                           </td>
-                          <td className="px-3 py-2 text-center">
-                            <input type="checkbox" checked={h.pm} onChange={() => toggleHorario(d.key, 'pm')} className="w-4 h-4 cursor-pointer" />
+                          <td className="px-3 py-3 text-center">
+                            <input type="checkbox" checked={h.pm} onChange={() => toggleHorario(d.key, 'pm')} className="w-5 h-5 cursor-pointer" />
                           </td>
                         </tr>
                       )
@@ -292,13 +302,13 @@ export default function ConvenioEutanasiasPage() {
             </FormField>
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2 border-t border-gray-100">
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 sm:flex-1">
                 Al enviar aceptas que te contactemos cuando llegue una solicitud que coincida con tu zona.
               </p>
               <button
                 type="submit"
                 disabled={enviando}
-                className="px-6 py-3 text-white font-medium rounded-lg disabled:opacity-60 transition-opacity"
+                className="w-full sm:w-auto px-6 py-3 text-white font-medium rounded-lg disabled:opacity-60 transition-opacity text-base"
                 style={{ backgroundColor: COLOR }}
               >
                 {enviando ? 'Enviando…' : 'Enviar inscripción'}
@@ -325,9 +335,18 @@ export default function ConvenioEutanasiasPage() {
               ? resultado.mensaje
               : 'Nos pondremos en contacto contigo cuando llegue una solicitud que coincida con tus comunas y horarios.'}
           </p>
-          {resultado?.tipo === 'ok' && (
+          {resultado?.tipo === 'ok' && resultado.bienvenida_estado === 'enviado' && (
             <p className="text-sm text-gray-500 mt-3">
-              Revisa tu correo: te enviamos los detalles del convenio.
+              Revisa tu correo: te enviamos los detalles del convenio (si no lo ves, mira la carpeta de spam).
+            </p>
+          )}
+          {resultado?.tipo === 'ok' && resultado.bienvenida_estado && resultado.bienvenida_estado !== 'enviado' && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3 text-left">
+              Tu inscripción quedó registrada, pero no pudimos enviarte el correo de bienvenida automáticamente.
+              Te contactaremos manualmente.<br/>
+              <span className="text-[10px] text-amber-600 mt-1 block">
+                (debug: {resultado.bienvenida_estado}{resultado.bienvenida_error ? ` — ${resultado.bienvenida_error}` : ''})
+              </span>
             </p>
           )}
           <button
@@ -365,4 +384,4 @@ function FormField({ label, required, hint, children }: { label: string; require
   )
 }
 
-const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none'
+const inputCls = 'w-full px-3 py-2.5 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none'

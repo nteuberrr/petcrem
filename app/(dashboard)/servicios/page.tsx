@@ -599,11 +599,11 @@ export default function ServiciosEutanasiasPage() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto">
-      <header className="mb-4">
+    <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
+      <header className="mb-4 pl-14 md:pl-0">
         <p className="text-xs uppercase tracking-wider text-gray-400">Servicios</p>
-        <h1 className="text-2xl font-bold text-gray-900 mt-1">Eutanasias</h1>
-        <p className="text-gray-500 text-sm mt-1">Convenio de eutanasias a domicilio: cotizaciones, veterinarios participantes y precios.</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">Eutanasias</h1>
+        <p className="text-gray-500 text-xs sm:text-sm mt-1">Convenio de eutanasias a domicilio: cotizaciones, veterinarios participantes y precios.</p>
       </header>
 
       {/* Selector de sub-módulo (por ahora único, preparado para más en el futuro). */}
@@ -616,13 +616,13 @@ export default function ServiciosEutanasiasPage() {
         </button>
       </div>
 
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex gap-6">
+      <div className="border-b border-gray-200 mb-6 overflow-x-auto">
+        <nav className="-mb-px flex gap-4 sm:gap-6 min-w-max">
           {TABS.map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 tab === t ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-800'
               }`}
             >
@@ -648,7 +648,7 @@ export default function ServiciosEutanasiasPage() {
             </div>
             <button
               onClick={abrirNuevaCotizacion}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
+              className="w-full md:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
             >
               + Nueva cotización
             </button>
@@ -733,18 +733,18 @@ export default function ServiciosEutanasiasPage() {
       {tab === 'Veterinarios' && (
         <section>
           <div className="flex flex-col md:flex-row gap-3 md:items-center justify-between mb-4">
-            <div className="flex gap-2 flex-1">
+            <div className="flex flex-col sm:flex-row gap-2 flex-1">
               <input
                 type="text"
                 value={busqueda}
                 onChange={e => setBusqueda(e.target.value)}
                 placeholder="Buscar nombre / email / teléfono…"
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm flex-1 max-w-md"
+                className="w-full sm:flex-1 sm:max-w-md px-3 py-2 border border-gray-300 rounded-lg text-base sm:text-sm"
               />
               <select
                 value={filtroComuna}
                 onChange={e => setFiltroComuna(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-base sm:text-sm"
               >
                 <option value="">Todas las comunas</option>
                 {COMUNAS.map(c => (
@@ -754,7 +754,7 @@ export default function ServiciosEutanasiasPage() {
             </div>
             <button
               onClick={abrirNuevoVet}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
+              className="w-full md:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
             >
               + Agregar veterinario
             </button>
@@ -848,14 +848,14 @@ export default function ServiciosEutanasiasPage() {
 
       {tab === 'Precios' && (
         <section>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
             <div>
               <p className="text-sm text-gray-600">Precio que <strong>se paga al veterinario</strong> por servicio de eutanasia, según peso de la mascota.</p>
               <p className="text-xs text-gray-500 mt-1">Este es el precio que verán los vets en el landing del convenio.</p>
             </div>
             <button
               onClick={abrirNuevoTramo}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
+              className="w-full md:w-auto md:shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
             >
               + Agregar tramo
             </button>
@@ -902,7 +902,7 @@ export default function ServiciosEutanasiasPage() {
       {/* Modal Nueva cotización */}
       <Modal open={showCotiModal} onClose={() => setShowCotiModal(false)} title="Nueva cotización de eutanasia">
         <form onSubmit={guardarCotizacion} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Nombre de la mascota" required>
               <input type="text" required value={cotiForm.mascota_nombre} onChange={e => setCotiForm({ ...cotiForm, mascota_nombre: e.target.value })} className={inputCls} />
             </Field>
@@ -954,7 +954,7 @@ export default function ServiciosEutanasiasPage() {
             {comunaWarn && <p className="text-xs text-amber-700 mt-1">{comunaWarn}</p>}
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Nombre del cliente" required>
               <input type="text" required value={cotiForm.cliente_nombre} onChange={e => setCotiForm({ ...cotiForm, cliente_nombre: e.target.value })} className={inputCls} />
             </Field>
@@ -1006,7 +1006,7 @@ export default function ServiciosEutanasiasPage() {
       <Modal open={!!editCoti} onClose={() => setEditCoti(null)} title={editCoti ? `Editar cotización N° ${editCoti.id}` : ''}>
         {editCoti && (
           <form onSubmit={guardarEdicion} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Mascota" required>
                 <input type="text" required value={editForm.mascota_nombre} onChange={e => setEditForm({ ...editForm, mascota_nombre: e.target.value })} className={inputCls} />
               </Field>
@@ -1031,7 +1031,7 @@ export default function ServiciosEutanasiasPage() {
             <Field label="Dirección" required>
               <input type="text" required value={editForm.direccion} onChange={e => setEditForm({ ...editForm, direccion: e.target.value })} className={inputCls} />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Nombre cliente" required>
                 <input type="text" required value={editForm.cliente_nombre} onChange={e => setEditForm({ ...editForm, cliente_nombre: e.target.value })} className={inputCls} />
               </Field>
@@ -1186,7 +1186,7 @@ export default function ServiciosEutanasiasPage() {
       {/* Modal vet */}
       <Modal open={showVetModal} onClose={() => setShowVetModal(false)} title={editingVet ? 'Editar veterinario' : 'Nuevo veterinario'}>
         <form onSubmit={guardarVet} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Nombre" required>
               <input type="text" required value={vetForm.nombre} onChange={e => setVetForm({ ...vetForm, nombre: e.target.value })} className={inputCls} />
             </Field>
@@ -1274,7 +1274,7 @@ export default function ServiciosEutanasiasPage() {
       {/* Modal tramo */}
       <Modal open={showTramoModal} onClose={() => setShowTramoModal(false)} title={editingTramo ? 'Editar tramo' : 'Nuevo tramo de precio'}>
         <form onSubmit={guardarTramo} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Peso mínimo (kg)" required>
               <input type="number" step="0.1" required value={tramoForm.peso_min} onChange={e => setTramoForm({ ...tramoForm, peso_min: e.target.value })} className={inputCls} />
             </Field>

@@ -1,4 +1,4 @@
-import { sendEmail, isResendConfigured } from './resend-mailer'
+import { sendEmail, isResendConfigured, getFromAddress } from './resend-mailer'
 
 const COLOR = '#143C64'
 
@@ -20,6 +20,10 @@ export interface BienvenidaResult {
   estado: 'enviado' | 'omitido_sin_resend' | 'error'
   message_id?: string
   error?: string
+  /** Para diagnóstico: from address que se usó (incluye sender configurado). */
+  from_used?: string
+  /** Para diagnóstico: dirección destinataria. */
+  to?: string
 }
 
 export async function enviarBienvenidaVet(args: {
@@ -27,31 +31,35 @@ export async function enviarBienvenidaVet(args: {
   apellido: string
   email: string
 }): Promise<BienvenidaResult> {
+  const to = args.email
   if (!isResendConfigured()) {
-    console.warn('[eutanasia-mailer] Resend no configurado, salto mail de bienvenida a', args.email)
-    return { ok: false, estado: 'omitido_sin_resend' }
+    console.warn('[eutanasia-mailer] Resend no configurado, salto mail de bienvenida a', to)
+    return { ok: false, estado: 'omitido_sin_resend', to }
   }
+  const fromUsed = (() => { try { return getFromAddress() } catch { return '(no resolvable)' } })()
   const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
   const nombreCompleto = `${args.nombre || ''} ${args.apellido || ''}`.trim() || 'Dr/a.'
 
+  console.log(`[eutanasia-mailer] enviando bienvenida → from=${fromUsed} to=${to}`)
+
   try {
     const res = await sendEmail({
-      to: args.email,
+      to,
       subject: 'Bienvenido al convenio de eutanasias - Alma Animal',
       html: renderBienvenida({ nombreCompleto, baseUrl }),
       tags: [{ name: 'tipo', value: 'eutanasia_bienvenida_vet' }],
     })
     if (res.ok) {
-      console.log(`[eutanasia-mailer] bienvenida enviada a ${args.email}, message_id=${res.message_id}`)
-      return { ok: true, estado: 'enviado', message_id: res.message_id }
+      console.log(`[eutanasia-mailer] OK bienvenida a ${to}, message_id=${res.message_id}`)
+      return { ok: true, estado: 'enviado', message_id: res.message_id, from_used: fromUsed, to }
     } else {
-      console.error(`[eutanasia-mailer] sendEmail devolvió error para ${args.email}:`, res.error)
-      return { ok: false, estado: 'error', error: res.error }
+      console.error(`[eutanasia-mailer] FAIL bienvenida a ${to} desde ${fromUsed}: ${res.error}`)
+      return { ok: false, estado: 'error', error: res.error, from_used: fromUsed, to }
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    console.error(`[eutanasia-mailer] excepción enviando bienvenida a ${args.email}:`, msg)
-    return { ok: false, estado: 'error', error: msg }
+    console.error(`[eutanasia-mailer] EXC bienvenida a ${to}:`, msg)
+    return { ok: false, estado: 'error', error: msg, from_used: fromUsed, to }
   }
 }
 

@@ -154,7 +154,9 @@ export async function POST(req: NextRequest) {
       id,
       bienvenida_estado: bienvenida.estado,
       bienvenida_error: bienvenida.error,
-      mensaje: '¡Bienvenido a la comunidad! Te enviamos un correo de bienvenida con todos los detalles. Nos pondremos en contacto contigo cuando llegue una solicitud que coincida con tus comunas y horarios.',
+      bienvenida_from: bienvenida.from_used,
+      bienvenida_to: bienvenida.to,
+      mensaje: '¡Bienvenido a la comunidad! Nos pondremos en contacto contigo cuando llegue una solicitud que coincida con tus comunas y horarios.',
     }, { status: 201 })
   } catch (e) {
     console.error('[inscribir vet eutanasia] error:', e)
