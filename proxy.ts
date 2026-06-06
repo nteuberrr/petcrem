@@ -30,8 +30,10 @@ export async function proxy(req: NextRequest) {
     pathname === '/api/eutanasias/vets/inscribir' ||
     pathname.startsWith('/eutanasia/aceptar/') ||
     pathname.startsWith('/eutanasia/confirmar/') ||
+    pathname.startsWith('/eutanasia/realizado/') ||
     pathname === '/api/eutanasias/cotizaciones/aceptar' ||
-    pathname === '/api/eutanasias/cotizaciones/confirmar'
+    pathname === '/api/eutanasias/cotizaciones/confirmar' ||
+    pathname === '/api/eutanasias/cotizaciones/realizado'
   ) {
     return NextResponse.next()
   }

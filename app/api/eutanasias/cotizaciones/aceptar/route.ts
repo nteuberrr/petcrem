@@ -183,7 +183,7 @@ function renderEmailConfirmar({ vetNombre, c, linkConfirmar }: { vetNombre: stri
         </a>
       </div>
 
-      <p style="margin:18px 0 0;font-size:12px;color:#64748b">Si después de hablar con la familia decides que no podés tomar el caso, simplemente ignora este correo — lo reasignaremos.</p>
+      <p style="margin:18px 0 0;font-size:12px;color:#64748b">Si después de hablar con la familia decides que no puedes tomar el caso, simplemente ignora este correo — lo reasignaremos.</p>
     </div>
   </div>
 </body>

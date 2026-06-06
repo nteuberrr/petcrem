@@ -90,7 +90,7 @@ export default function AceptarPage() {
               </div>
               <DatosCliente data={data} />
               <p className="text-xs text-gray-500 mt-4 text-center">
-                Si después de hablar con la familia no podés tomar el caso, ignora el correo de confirmación que acabamos de enviarte.
+                Si después de hablar con la familia no puedes tomar el caso, ignora el correo de confirmación que acabamos de enviarte.
               </p>
             </div>
           )}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateRow } from '@/lib/google-sheets'
-import { verifyToken } from '@/lib/eutanasia-tokens'
+import { verifyToken, createToken } from '@/lib/eutanasia-tokens'
+import { enviarMailRealizarServicio } from '@/lib/eutanasia-mailer'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
 
@@ -10,6 +11,8 @@ const SHEET_COTI = 'cotizaciones_eutanasia'
  *
  * Endpoint público. Segundo paso: el vet ya aceptó, llamó al cliente, y
  * confirma que va a realizar el servicio. Pasa estado 'aceptada' → 'confirmada'.
+ * Luego dispara el siguiente mail (con botón "Confirma aquí una vez realizado")
+ * que cierra el ciclo en el endpoint `realizado`.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -50,6 +53,38 @@ export async function POST(req: NextRequest) {
       estado: 'confirmada',
       fecha_confirmacion: ahora,
     })
+
+    // Disparar el siguiente correo: "Confirma aquí una vez realizado el servicio".
+    // Best-effort: si falla, igual marcamos confirmada (el vet ya hizo el clic
+    // importante en este endpoint).
+    const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
+    if (baseUrl) {
+      try {
+        const tokenRealizado = createToken(c.id, vet_id, 'realizado')
+        const linkRealizado = `${baseUrl}/eutanasia/realizado/${tokenRealizado}`
+        const vetNombre = c.vet_nombre_asignado || ''
+        const vetEmail = c.vet_email_asignado || ''
+        if (vetEmail) {
+          await enviarMailRealizarServicio({
+            vetEmail, vetNombre,
+            cotizacion: {
+              id: c.id,
+              mascota_nombre: c.mascota_nombre,
+              cliente_nombre: c.cliente_nombre,
+              cliente_telefono: c.cliente_telefono,
+              fecha_servicio: c.fecha_servicio,
+              hora_servicio: c.hora_servicio,
+              direccion: c.direccion,
+              comuna: c.comuna,
+              precio_snapshot: c.precio_snapshot,
+            },
+            linkRealizado,
+          })
+        }
+      } catch (e) {
+        console.error('[eutanasias/confirmar] error disparando mail realizarServicio:', e)
+      }
+    }
 
     return NextResponse.json({
       ok: true,
