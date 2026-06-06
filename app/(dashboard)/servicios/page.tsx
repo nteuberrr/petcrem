@@ -36,24 +36,46 @@ type Cotizacion = {
   fecha_creacion: string
 }
 
-const SUBTABS_COTI = ['Enviadas', 'Por confirmar', 'Por realizar', 'Histórico'] as const
-type SubTabCoti = typeof SUBTABS_COTI[number]
-
-/**
- * Mapea cada sub-pestaña a los estados que muestra:
- * - Enviadas → 'creada' (todavía sin enviar) + 'enviada' (esperando que un vet acepte)
- * - Por confirmar → 'aceptada' (vet aceptó, debe llamar al cliente)
- * - Por realizar → 'confirmada' (vet ya confirmó la cita con la familia)
- * - Histórico → 'realizada' + 'cancelada'
- */
-function pertenece(c: Cotizacion, sub: SubTabCoti): boolean {
-  switch (sub) {
-    case 'Enviadas': return c.estado === 'creada' || c.estado === 'enviada'
-    case 'Por confirmar': return c.estado === 'aceptada'
-    case 'Por realizar': return c.estado === 'confirmada'
-    case 'Histórico': return c.estado === 'realizada' || c.estado === 'cancelada'
-  }
+interface ColumnaConfig {
+  key: 'enviadas' | 'por_confirmar' | 'por_realizar' | 'historico'
+  titulo: string
+  descripcion: string
+  /** Color del header (Tailwind class). */
+  header: string
+  /** Acepta una cotización si pertenece a esta columna. */
+  matches: (c: Cotizacion) => boolean
 }
+
+const COLUMNAS_COTI: ColumnaConfig[] = [
+  {
+    key: 'enviadas',
+    titulo: 'Enviadas',
+    descripcion: 'Esperando que un veterinario acepte',
+    header: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+    matches: c => c.estado === 'creada' || c.estado === 'enviada',
+  },
+  {
+    key: 'por_confirmar',
+    titulo: 'Por confirmar con cliente',
+    descripcion: 'Veterinario aceptó, debe llamar a la familia',
+    header: 'bg-amber-50 text-amber-800 border-amber-200',
+    matches: c => c.estado === 'aceptada',
+  },
+  {
+    key: 'por_realizar',
+    titulo: 'Por realizar',
+    descripcion: 'Cita coordinada, servicio agendado',
+    header: 'bg-blue-50 text-blue-800 border-blue-200',
+    matches: c => c.estado === 'confirmada',
+  },
+  {
+    key: 'historico',
+    titulo: 'Histórico',
+    descripcion: 'Servicios realizados o cancelados',
+    header: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    matches: c => c.estado === 'realizada' || c.estado === 'cancelada',
+  },
+]
 
 type VetMatch = {
   id: string
@@ -160,7 +182,6 @@ export default function ServiciosEutanasiasPage() {
   // Cotizaciones
   const [cotis, setCotis] = useState<Cotizacion[]>([])
   const [loadingCotis, setLoadingCotis] = useState(false)
-  const [subTabCoti, setSubTabCoti] = useState<SubTabCoti>('Enviadas')
   const [showCotiModal, setShowCotiModal] = useState(false)
   const [cotiForm, setCotiForm] = useState(cotizacionFormDefault())
   const [savingCoti, setSavingCoti] = useState(false)
@@ -441,21 +462,18 @@ export default function ServiciosEutanasiasPage() {
     await cargarCotis()
   }
 
-  // Conteos por sub-pestaña (para mostrar el badge en cada tab).
-  const cotisCountBySubtab = useMemo(() => {
-    const r: Record<SubTabCoti, number> = { 'Enviadas': 0, 'Por confirmar': 0, 'Por realizar': 0, 'Histórico': 0 }
-    for (const c of cotis) {
-      for (const s of SUBTABS_COTI) {
-        if (pertenece(c, s)) { r[s]++; break }
-      }
+  // Cotizaciones agrupadas por columna (Kanban).
+  const cotisPorColumna = useMemo(() => {
+    const sorted = [...cotis].sort((a, b) => (b.fecha_creacion || '').localeCompare(a.fecha_creacion || ''))
+    const r: Record<ColumnaConfig['key'], Cotizacion[]> = {
+      enviadas: [], por_confirmar: [], por_realizar: [], historico: [],
+    }
+    for (const c of sorted) {
+      const col = COLUMNAS_COTI.find(col => col.matches(c))
+      if (col) r[col.key].push(c)
     }
     return r
   }, [cotis])
-
-  // Listado actual según sub-pestaña activa.
-  const cotisFiltradas = useMemo(() => {
-    return cotis.filter(c => pertenece(c, subTabCoti))
-  }, [cotis, subTabCoti])
 
   async function cambiarEstadoPago(id: string, nuevoEstadoPago: 'pendiente_pago' | 'pago_confirmado') {
     await fetch(`/api/eutanasias/cotizaciones/${id}`, {
@@ -673,142 +691,51 @@ export default function ServiciosEutanasiasPage() {
 
       {tab === 'Cotizaciones' && (
         <section>
-          {/* Sub-pestañas por grupo de estado */}
-          <div className="flex flex-col md:flex-row gap-3 md:items-center justify-between mb-4">
-            <div className="overflow-x-auto">
-              <div className="inline-flex gap-1 bg-gray-100 rounded-lg p-1 min-w-max">
-                {SUBTABS_COTI.map(s => {
-                  const active = subTabCoti === s
-                  const count = cotisCountBySubtab[s]
-                  return (
-                    <button
-                      key={s}
-                      onClick={() => setSubTabCoti(s)}
-                      className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium whitespace-nowrap transition-colors ${
-                        active ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    >
-                      {s}
-                      <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${
-                        active ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-600'
-                      }`}>
-                        {count}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
+          <div className="flex flex-col md:flex-row gap-3 md:items-end justify-between mb-5">
+            <div>
+              <p className="text-sm text-gray-600">Cada cotización avanza por las 4 columnas a medida que el veterinario va respondiendo los correos.</p>
             </div>
             <button
               onClick={abrirNuevaCotizacion}
-              className="w-full md:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
+              className="w-full md:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm"
             >
               + Nueva cotización
             </button>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            {loadingCotis ? (
-              <div className="p-8 text-center text-gray-500">Cargando…</div>
-            ) : cotisFiltradas.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                {cotis.length === 0 ? 'Aún no hay cotizaciones.' : `No hay cotizaciones en "${subTabCoti}".`}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                    <tr>
-                      <th className="px-3 py-2 text-left">N°</th>
-                      <th className="px-3 py-2 text-left">Mascota</th>
-                      <th className="px-3 py-2 text-left">Comuna</th>
-                      <th className="px-3 py-2 text-left">Fecha servicio</th>
-                      <th className="px-3 py-2 text-left">Estado</th>
-                      <th className="px-3 py-2 text-left">Vet asignado</th>
-                      <th className="px-3 py-2 text-right">Pago vet</th>
-                      {subTabCoti === 'Histórico' && (
-                        <th className="px-3 py-2 text-left">Pago</th>
-                      )}
-                      <th className="px-3 py-2 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {cotisFiltradas.map(c => (
-                      <tr key={c.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-xs text-gray-500">N° {c.id}</td>
-                        <td className="px-3 py-2">
-                          <div className="font-medium text-gray-900">{c.mascota_nombre}</div>
-                          <div className="text-xs text-gray-500">{c.especie} · {c.peso} kg</div>
-                        </td>
-                        <td className="px-3 py-2 text-gray-700">{c.comuna}</td>
-                        <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
-                          {formatDate(c.fecha_servicio)} · {formatHoraDia(c.hora_servicio)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${estadoColor(c.estado)}`}>
-                            {c.estado}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-600">
-                          {c.vet_nombre_asignado || <span className="text-gray-400">—</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right text-xs text-gray-700">
-                          {fmtPrecio(parseInt(c.precio_snapshot, 10) || 0)}
-                        </td>
-                        {subTabCoti === 'Histórico' && (
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {c.estado === 'realizada' ? (
-                              c.estado_pago === 'pago_confirmado' ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                                  ✓ Pago confirmado
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => cambiarEstadoPago(c.id, 'pago_confirmado')}
-                                  className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
-                                  title="Marcar como pagado"
-                                >
-                                  ⏱ Pendiente · marcar pagado
-                                </button>
-                              )
-                            ) : (
-                              <span className="text-[10px] text-gray-400">—</span>
-                            )}
-                          </td>
-                        )}
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
-                          <button onClick={() => abrirDetalleCotizacion(c)} className="text-indigo-600 hover:text-indigo-800 text-xs font-medium mr-2">
-                            {c.estado === 'creada' || c.estado === 'enviada' ? 'Enviar' : 'Ver'}
-                          </button>
-                          <button onClick={() => abrirEditarCotizacion(c)} className="text-gray-600 hover:text-gray-800 text-xs font-medium mr-2">
-                            Editar
-                          </button>
-                          {(c.estado === 'confirmada') && (
-                            <button onClick={() => marcarRealizada(c.id)} className="text-green-700 hover:text-green-900 text-xs font-medium mr-2">
-                              Realizada
-                            </button>
-                          )}
-                          {subTabCoti === 'Histórico' && c.estado === 'realizada' && c.estado_pago === 'pago_confirmado' && (
-                            <button onClick={() => cambiarEstadoPago(c.id, 'pendiente_pago')} className="text-amber-600 hover:text-amber-800 text-xs font-medium mr-2" title="Revertir a pendiente">
-                              Revertir pago
-                            </button>
-                          )}
-                          {!['realizada', 'cancelada'].includes(c.estado) && (
-                            <button onClick={() => cancelarCotizacion(c.id)} className="text-amber-600 hover:text-amber-800 text-xs font-medium mr-2">
-                              Cancelar
-                            </button>
-                          )}
-                          <button onClick={() => eliminarCotizacion(c.id)} className="text-red-600 hover:text-red-800 text-xs font-medium">
-                            Eliminar
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          {loadingCotis && cotis.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-500">Cargando…</div>
+          ) : (
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+              {COLUMNAS_COTI.map(col => {
+                const items = cotisPorColumna[col.key]
+                return (
+                  <div key={col.key} className="bg-gray-50/80 rounded-xl border border-gray-200/70 flex flex-col min-h-[200px]">
+                    <div className={`px-4 py-3 rounded-t-xl border-b ${col.header}`}>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold leading-tight">{col.titulo}</h3>
+                        <span className="text-[11px] font-bold bg-white/70 px-2 py-0.5 rounded-full">{items.length}</span>
+                      </div>
+                      <p className="text-[11px] opacity-80 mt-0.5">{col.descripcion}</p>
+                    </div>
+                    <div className="p-2 sm:p-3 space-y-2 sm:space-y-3 flex-1 max-h-[70vh] overflow-y-auto">
+                      {items.length === 0 ? (
+                        <p className="text-[11px] text-gray-400 text-center py-4">Sin cotizaciones</p>
+                      ) : items.map(c => (
+                        <CotizacionCard
+                          key={c.id}
+                          c={c}
+                          showPago={col.key === 'historico'}
+                          onOpen={() => abrirDetalleCotizacion(c)}
+                          onMarcarPagado={() => cambiarEstadoPago(c.id, 'pago_confirmado')}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </section>
       )}
 
@@ -1155,37 +1082,111 @@ export default function ServiciosEutanasiasPage() {
         )}
       </Modal>
 
-      {/* Modal Detalle cotización + matching vets */}
+      {/* Modal ficha completa de cotización */}
       <Modal
         open={!!detalleCoti}
         onClose={() => { setDetalleCoti(null); setResultEnvio(null) }}
-        title={detalleCoti ? `Cotización N° ${detalleCoti.id} — ${detalleCoti.mascota_nombre}` : ''}
+        title={detalleCoti ? `Cotización N° ${detalleCoti.id}` : ''}
       >
         {detalleCoti && (
           <div className="space-y-4">
-            {/* Datos rápidos */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs space-y-1">
-              <div className="flex justify-between"><span className="text-gray-500">Especie / Peso</span><span>{detalleCoti.especie} · {detalleCoti.peso} kg</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Comuna</span><span>{detalleCoti.comuna}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Fecha / Hora</span><span>{formatDate(detalleCoti.fecha_servicio)} · {formatHoraDia(detalleCoti.hora_servicio)}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Pago al vet</span><span className="font-semibold">{fmtPrecio(parseInt(detalleCoti.precio_snapshot, 10) || 0)}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Estado</span><span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${estadoColor(detalleCoti.estado)}`}>{detalleCoti.estado}</span></div>
-              {detalleCoti.vet_nombre_asignado && (
-                <div className="flex justify-between"><span className="text-gray-500">Asignado a</span><span className="font-semibold">{detalleCoti.vet_nombre_asignado}</span></div>
-              )}
+            {/* Hero: mascota + estado + acciones rápidas */}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">{detalleCoti.mascota_nombre}</h2>
+                <p className="text-xs text-gray-500 mt-0.5">{detalleCoti.especie} · {detalleCoti.peso} kg</p>
+              </div>
+              <span className={`text-[10px] font-semibold uppercase px-2 py-1 rounded ${estadoColor(detalleCoti.estado)}`}>
+                {detalleCoti.estado}
+              </span>
             </div>
 
+            {/* Bloque: Servicio */}
+            <FichaBloque titulo="Servicio">
+              <FichaRow label="Fecha y hora" value={`${formatDate(detalleCoti.fecha_servicio)} · ${formatHoraDia(detalleCoti.hora_servicio)}`} />
+              <FichaRow label="Dirección" value={
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${detalleCoti.direccion}, ${detalleCoti.comuna}, Chile`)}`}
+                  target="_blank" rel="noreferrer"
+                  className="text-indigo-600 hover:underline"
+                >
+                  {detalleCoti.direccion}, {detalleCoti.comuna}
+                </a>
+              } />
+              <FichaRow label="Pago al vet" value={<span className="font-semibold">{fmtPrecio(parseInt(detalleCoti.precio_snapshot, 10) || 0)}</span>} />
+              {detalleCoti.notas && <FichaRow label="Notas" value={detalleCoti.notas} />}
+            </FichaBloque>
+
+            {/* Bloque: Cliente */}
+            <FichaBloque titulo="Cliente">
+              <FichaRow label="Nombre" value={detalleCoti.cliente_nombre} />
+              <FichaRow label="Teléfono" value={
+                <a href={`tel:+56${detalleCoti.cliente_telefono}`} className="text-indigo-600 hover:underline">+56 {detalleCoti.cliente_telefono}</a>
+              } />
+              {detalleCoti.cliente_email && (
+                <FichaRow label="Email" value={
+                  <a href={`mailto:${detalleCoti.cliente_email}`} className="text-indigo-600 hover:underline break-all">{detalleCoti.cliente_email}</a>
+                } />
+              )}
+            </FichaBloque>
+
+            {/* Bloque: Veterinario asignado */}
+            {detalleCoti.vet_nombre_asignado && (
+              <FichaBloque titulo="Veterinario asignado">
+                <FichaRow label="Nombre" value={detalleCoti.vet_nombre_asignado} />
+                <FichaRow label="Email" value={
+                  <a href={`mailto:${detalleCoti.vet_email_asignado}`} className="text-indigo-600 hover:underline break-all">{detalleCoti.vet_email_asignado}</a>
+                } />
+                {detalleCoti.estado === 'aceptada' && <p className="text-xs text-amber-700 mt-1">⏳ Esperando que llame al cliente y confirme.</p>}
+                {detalleCoti.estado === 'confirmada' && <p className="text-xs text-blue-700 mt-1">📅 Cita coordinada con la familia. Esperando que marque el servicio como realizado.</p>}
+                {detalleCoti.estado === 'realizada' && <p className="text-xs text-emerald-700 mt-1">✓ Servicio realizado.</p>}
+              </FichaBloque>
+            )}
+
+            {/* Bloque: Pago (solo histórico) */}
+            {detalleCoti.estado === 'realizada' && (
+              <FichaBloque titulo="Pago">
+                <div className="flex items-center justify-between gap-3">
+                  {detalleCoti.estado_pago === 'pago_confirmado' ? (
+                    <>
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase px-3 py-1.5 rounded bg-emerald-100 text-emerald-700">
+                        ✓ Pago confirmado
+                      </span>
+                      <button
+                        onClick={() => { cambiarEstadoPago(detalleCoti.id, 'pendiente_pago') }}
+                        className="text-xs text-amber-600 hover:text-amber-800 font-medium"
+                      >
+                        Revertir
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase px-3 py-1.5 rounded bg-amber-100 text-amber-700">
+                        ⏱ Pendiente de pago
+                      </span>
+                      <button
+                        onClick={() => { cambiarEstadoPago(detalleCoti.id, 'pago_confirmado') }}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg"
+                      >
+                        Marcar como pagado
+                      </button>
+                    </>
+                  )}
+                </div>
+              </FichaBloque>
+            )}
+
+            {/* Bloque: matching y envío (solo si está sin asignar) */}
             {(detalleCoti.estado === 'creada' || detalleCoti.estado === 'enviada') && (
-              <>
-                <h3 className="text-sm font-semibold text-gray-900">Veterinarios disponibles</h3>
+              <FichaBloque titulo={`Veterinarios disponibles${matchingLoading ? '…' : ` (${matchingVets.length})`}`}>
                 {matchingLoading ? (
                   <p className="text-sm text-gray-500">Buscando coincidencias…</p>
                 ) : matchingVets.length === 0 ? (
-                  <div className="space-y-3">
-                    <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                      <p className="font-medium">Ningún vet matchea los criterios.</p>
+                  <div className="space-y-2">
+                    <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                      <p className="font-medium">Ningún veterinario cumple los criterios.</p>
                       {matchingDiag && (
-                        <p className="text-xs mt-1">
+                        <p className="mt-1">
                           Buscando para <strong>{matchingDiag.comuna_canonica}</strong>{' '}
                           {matchingDiag.dia_resuelto && <>el <strong>{matchingDiag.dia_resuelto}</strong> </>}
                           {matchingDiag.slot_resuelto && <>en <strong>{matchingDiag.slot_resuelto.toUpperCase()}</strong></>}
@@ -1193,9 +1194,9 @@ export default function ServiciosEutanasiasPage() {
                       )}
                     </div>
                     {matchingExcluidos.length > 0 && (
-                      <details className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs" open>
+                      <details className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs">
                         <summary className="cursor-pointer font-medium text-gray-700">
-                          Por qué se excluyeron los {matchingExcluidos.length} vet{matchingExcluidos.length === 1 ? '' : 's'} evaluado{matchingExcluidos.length === 1 ? '' : 's'}
+                          Por qué se excluyeron los {matchingExcluidos.length} veterinario{matchingExcluidos.length === 1 ? '' : 's'}
                         </summary>
                         <ul className="mt-2 space-y-1.5">
                           {matchingExcluidos.map(e => (
@@ -1210,57 +1211,64 @@ export default function ServiciosEutanasiasPage() {
                         </ul>
                       </details>
                     )}
-                    {matchingExcluidos.length === 0 && (
-                      <p className="text-xs text-gray-500">No tienes vets inscritos todavía. Carga uno en el tab "Veterinarios" o pasalo por el formulario público.</p>
-                    )}
                   </div>
                 ) : (
-                  <div className="border border-gray-200 rounded-lg divide-y max-h-72 overflow-y-auto">
-                    {matchingVets.map(v => {
-                      const sel = vetsSeleccionados.has(v.id)
-                      return (
-                        <label key={v.id} className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50 ${sel ? 'bg-indigo-50' : ''}`}>
-                          <input type="checkbox" checked={sel} onChange={() => toggleVetSeleccionado(v.id)} className="w-4 h-4" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900">{`${v.nombre} ${v.apellido}`.trim()}</p>
-                            <p className="text-xs text-gray-500 truncate">{v.email} · {v.telefono}</p>
-                          </div>
-                        </label>
-                      )
-                    })}
-                  </div>
-                )}
+                  <>
+                    <div className="border border-gray-200 rounded-lg divide-y max-h-60 overflow-y-auto">
+                      {matchingVets.map(v => {
+                        const sel = vetsSeleccionados.has(v.id)
+                        return (
+                          <label key={v.id} className={`flex items-center gap-3 p-2.5 cursor-pointer hover:bg-gray-50 ${sel ? 'bg-indigo-50' : ''}`}>
+                            <input type="checkbox" checked={sel} onChange={() => toggleVetSeleccionado(v.id)} className="w-4 h-4 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{`${v.nombre} ${v.apellido}`.trim()}</p>
+                              <p className="text-xs text-gray-500 truncate">{v.email} · {v.telefono}</p>
+                            </div>
+                          </label>
+                        )
+                      })}
+                    </div>
 
-                {resultEnvio && (
-                  <div className={`text-sm p-3 rounded-lg ${resultEnvio.tipo === 'ok' ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
-                    {resultEnvio.mensaje}
-                  </div>
-                )}
+                    {resultEnvio && (
+                      <div className={`text-xs p-2.5 rounded-lg mt-2 ${resultEnvio.tipo === 'ok' ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                        {resultEnvio.mensaje}
+                      </div>
+                    )}
 
-                {matchingVets.length > 0 && (
-                  <div className="flex justify-between items-center pt-2">
-                    <p className="text-xs text-gray-500">{vetsSeleccionados.size} de {matchingVets.length} seleccionados</p>
-                    <button
-                      onClick={enviarCotizacionAVets}
-                      disabled={enviando || vetsSeleccionados.size === 0}
-                      className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg"
-                    >
-                      {enviando ? 'Enviando…' : `Enviar cotización a ${vetsSeleccionados.size}`}
-                    </button>
-                  </div>
+                    <div className="flex justify-between items-center mt-3">
+                      <p className="text-xs text-gray-500">{vetsSeleccionados.size}/{matchingVets.length} seleccionados</p>
+                      <button
+                        onClick={enviarCotizacionAVets}
+                        disabled={enviando || vetsSeleccionados.size === 0}
+                        className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg"
+                      >
+                        {enviando ? 'Enviando…' : `Enviar a ${vetsSeleccionados.size}`}
+                      </button>
+                    </div>
+                  </>
                 )}
-              </>
+              </FichaBloque>
             )}
 
-            {(detalleCoti.estado === 'aceptada' || detalleCoti.estado === 'confirmada' || detalleCoti.estado === 'realizada') && (
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-4 text-sm">
-                <p className="font-semibold mb-1">Cotización tomada por {detalleCoti.vet_nombre_asignado}</p>
-                <p className="text-xs">Email: {detalleCoti.vet_email_asignado}</p>
-                {detalleCoti.estado === 'aceptada' && <p className="text-xs mt-2">Esperando confirmación final del vet tras hablar con el cliente.</p>}
-                {detalleCoti.estado === 'confirmada' && <p className="text-xs mt-2">El vet confirmó que va a realizar el servicio.</p>}
-                {detalleCoti.estado === 'realizada' && <p className="text-xs mt-2">Servicio marcado como realizado.</p>}
-              </div>
-            )}
+            {/* Acciones administrativas */}
+            <div className="flex flex-wrap gap-2 justify-end pt-2 border-t border-gray-100">
+              <button onClick={() => { abrirEditarCotizacion(detalleCoti); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">
+                Editar
+              </button>
+              {detalleCoti.estado === 'confirmada' && (
+                <button onClick={() => { marcarRealizada(detalleCoti.id); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium">
+                  Marcar realizada
+                </button>
+              )}
+              {!['realizada', 'cancelada'].includes(detalleCoti.estado) && (
+                <button onClick={() => { cancelarCotizacion(detalleCoti.id); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 border border-amber-200 rounded-lg font-medium">
+                  Cancelar
+                </button>
+              )}
+              <button onClick={() => { eliminarCotizacion(detalleCoti.id); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg font-medium">
+                Eliminar
+              </button>
+            </div>
           </div>
         )}
       </Modal>
@@ -1381,6 +1389,109 @@ export default function ServiciosEutanasiasPage() {
 }
 
 const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none'
+
+/** Sección agrupada dentro de la ficha completa de cotización. */
+function FichaBloque({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-gray-50/70 border border-gray-200 rounded-xl p-3">
+      <h3 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">{titulo}</h3>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  )
+}
+
+/** Fila label-valor dentro de un FichaBloque. */
+function FichaRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between gap-3 text-xs">
+      <span className="text-gray-500 shrink-0">{label}</span>
+      <span className="text-gray-900 text-right min-w-0">{value}</span>
+    </div>
+  )
+}
+
+/**
+ * Tarjeta compacta de cotización para el Kanban. Muestra el resumen
+ * pedido por el usuario (mascota, vet, fecha+hora, dirección+comuna) y
+ * abre la ficha completa al hacer clic. En histórico además se ve el
+ * estado de pago con un botón inline para marcar pagado.
+ */
+function CotizacionCard({
+  c, showPago, onOpen, onMarcarPagado,
+}: {
+  c: Cotizacion
+  showPago: boolean
+  onOpen: () => void
+  onMarcarPagado: () => void
+}) {
+  const cancelada = c.estado === 'cancelada'
+  return (
+    <div
+      onClick={onOpen}
+      className={`bg-white rounded-lg border shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer p-3 ${
+        cancelada ? 'border-gray-200 opacity-70' : 'border-gray-200'
+      }`}
+    >
+      {/* Header: mascota + N° */}
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900 truncate leading-tight">
+            {c.mascota_nombre || '(sin nombre)'}
+          </p>
+          <p className="text-[11px] text-gray-500 mt-0.5">
+            {c.especie} · {c.peso} kg
+          </p>
+        </div>
+        <span className="text-[10px] text-gray-400 font-medium shrink-0">N° {c.id}</span>
+      </div>
+
+      {/* Vet asignado */}
+      {c.vet_nombre_asignado && (
+        <p className="text-xs text-gray-700 mt-1 flex items-center gap-1">
+          <span className="text-gray-400">🩺</span>
+          <span className="truncate">{c.vet_nombre_asignado}</span>
+        </p>
+      )}
+
+      {/* Fecha y hora */}
+      <p className="text-xs text-gray-600 mt-1 flex items-center gap-1">
+        <span className="text-gray-400">📅</span>
+        {formatDate(c.fecha_servicio)} · {formatHoraDia(c.hora_servicio)}
+      </p>
+
+      {/* Dirección + comuna */}
+      <p className="text-xs text-gray-600 mt-1 flex items-start gap-1">
+        <span className="text-gray-400 shrink-0">📍</span>
+        <span className="truncate">{c.direccion}, {c.comuna}</span>
+      </p>
+
+      {/* Footer: estado de pago (solo histórico) */}
+      {showPago && c.estado === 'realizada' && (
+        <div className="mt-2 pt-2 border-t border-gray-100">
+          {c.estado_pago === 'pago_confirmado' ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-1 rounded bg-emerald-100 text-emerald-700">
+              ✓ Pago confirmado
+            </span>
+          ) : (
+            <button
+              onClick={e => { e.stopPropagation(); onMarcarPagado() }}
+              className="w-full text-[11px] font-semibold uppercase px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+            >
+              ⏱ Pendiente · marcar pagado
+            </button>
+          )}
+        </div>
+      )}
+      {showPago && c.estado === 'cancelada' && (
+        <div className="mt-2 pt-2 border-t border-gray-100">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-1 rounded bg-red-50 text-red-600">
+            Cancelada
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
