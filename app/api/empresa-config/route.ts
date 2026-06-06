@@ -5,7 +5,7 @@ import { getSheetData, appendRow, updateRow, ensureSheet, ensureColumns } from '
 import { todayISO } from '@/lib/dates'
 
 const SHEET = 'empresa_config'
-const COLS = ['id', 'nombre', 'rut', 'giro', 'direccion', 'comuna', 'telefono', 'correo', 'web', 'instagram', 'facebook', 'fecha_actualizacion']
+const COLS = ['id', 'nombre', 'rut', 'giro', 'direccion', 'comuna', 'telefono', 'correo', 'web', 'instagram', 'facebook', 'google_review_url', 'fecha_actualizacion']
 
 type EmpresaConfig = {
   id?: string
@@ -19,6 +19,8 @@ type EmpresaConfig = {
   web?: string
   instagram?: string
   facebook?: string
+  /** Link directo a "escribir reseña" del Perfil de Empresa de Google (botón "Evalúanos" en el correo de entrega). */
+  google_review_url?: string
   fecha_actualizacion?: string
 }
 
@@ -27,6 +29,7 @@ const EMPTY: EmpresaConfig = {
   direccion: '', comuna: '',
   telefono: '', correo: '',
   web: '', instagram: '', facebook: '',
+  google_review_url: '',
   fecha_actualizacion: '',
 }
 
@@ -68,6 +71,7 @@ export async function PUT(req: NextRequest) {
       web: body.web ?? '',
       instagram: body.instagram ?? '',
       facebook: body.facebook ?? '',
+      google_review_url: body.google_review_url ?? '',
       fecha_actualizacion: todayISO(),
     }
 

@@ -1,7 +1,6 @@
 'use client'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { fmtNumero } from '@/lib/format'
 import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
@@ -16,9 +15,17 @@ type Cliente = {
   fecha_retiro?: string
 }
 
+type Parada = { cliente_id: string; orden: number; lat?: number; lng?: number; direccion?: string }
+type EstadoRuta = 'guardada' | 'en_curso' | 'terminada'
 type Despacho = {
   id: string; fecha: string; numero_recorrido: string; numero_global?: string
   mascotas_ids: string[]; nota: string; fecha_creacion: string
+  estado_ruta?: EstadoRuta
+  paradas?: Parada[]
+  entregas?: Record<string, { fecha_hora: string }>
+  origen_direccion?: string; origen_lat?: string; origen_lng?: string
+  destino_direccion?: string; destino_lat?: string; destino_lng?: string
+  hora_inicio_ruta?: string; hora_termino_ruta?: string; fecha_realizada?: string
 }
 
 type ParadaOptim = {
@@ -95,6 +102,19 @@ export default function DespachosTab() {
 
   useEffect(() => { fetchDespachos() }, [fetchDespachos])
 
+  // Mascotas ya asignadas a una ruta no terminada: no se ofrecen para otra ruta
+  // ni aparecen en el calendario (evita re-rutearlas).
+  const enRutaActiva = useMemo(() => {
+    const s = new Set<string>()
+    for (const d of despachos) {
+      if ((d.estado_ruta || 'guardada') === 'terminada') continue
+      for (const mid of d.mascotas_ids) s.add(mid)
+    }
+    return s
+  }, [despachos])
+
+  const [routeBusy, setRouteBusy] = useState<string | null>(null)
+
   // ─── Calendario de entregas ───
   const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([])
   const [allClientes, setAllClientes] = useState<Cliente[]>([])
@@ -128,6 +148,7 @@ export default function DespachosTab() {
     // desde el momento del retiro.
     for (const c of allClientes) {
       if (c.estado === 'despachado') continue // ya salió, no la mostramos
+      if (enRutaActiva.has(c.id)) continue // ya está en una ruta activa
       const codigo = (c.codigo_servicio || 'CI').toUpperCase()
       if (codigo === 'SD') continue // Sin Devolución, no se entrega
       const isoRetiro = c.fecha_retiro ? formatDateForSheet(c.fecha_retiro) : ''
@@ -151,7 +172,7 @@ export default function DespachosTab() {
     }
 
     return dias.map(d => buckets.get(isoFecha(d))!)
-  }, [tiposServicio, allClientes])
+  }, [tiposServicio, allClientes, enRutaActiva])
 
   async function abrirModal() {
     setShowModal(true)
@@ -162,7 +183,7 @@ export default function DespachosTab() {
     const all = await fetch('/api/clientes?estado=cremado').then(r => r.json())
     const seleIds = seleccionadas.map(s => s.id)
     setDisponibles(Array.isArray(all)
-      ? all.filter((c: Cliente) => !seleIds.includes(c.id) && c.codigo_servicio !== 'SD')
+      ? all.filter((c: Cliente) => !seleIds.includes(c.id) && c.codigo_servicio !== 'SD' && !enRutaActiva.has(c.id))
       : [])
     setCargando(false)
   }
@@ -226,7 +247,7 @@ export default function DespachosTab() {
     setEditMascotas(actuales)
     // Disponibles para agregar al recorrido: cremados, excluyendo SD (no se despachan)
     const cremadosLibres = (Array.isArray(all) ? all : [])
-      .filter((c: Cliente) => c.estado === 'cremado' && c.codigo_servicio !== 'SD')
+      .filter((c: Cliente) => c.estado === 'cremado' && c.codigo_servicio !== 'SD' && !enRutaActiva.has(c.id))
     setEditDisponibles(cremadosLibres)
   }
 
@@ -342,6 +363,118 @@ export default function DespachosTab() {
     })
     if (all.length > 0) u.set('waypoints', all.map(fmt).join('|'))
     return `https://www.google.com/maps/dir/?${u.toString()}`
+  }
+
+  // ─── Ruta viva: guardar desde el optimizador + tracking de entregas ───
+  async function optimGuardarRuta() {
+    if (!optimResult) return
+    const picks = optimResult.candidatas.filter(c => optimPicks.has(c.cliente_id))
+    const paradas = [
+      ...optimResult.obligatorias.map(o => ({ cliente_id: o.cliente_id, orden: o.order, lat: o.lat, lng: o.lng, direccion: o.formatted_address })),
+      ...picks.map((c, i) => ({ cliente_id: c.cliente_id, orden: optimResult.obligatorias.length + i + 1, lat: c.lat, lng: c.lng, direccion: c.formatted_address })),
+    ]
+    if (paradas.length === 0) { alert('La ruta no tiene paradas para guardar.'); return }
+    setSaving(true)
+    const res = await fetch('/api/despachos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fecha: optimFechaBase,
+        paradas,
+        origen: optimResult.origin,
+        destino: optimResult.destination,
+      }),
+    })
+    setSaving(false)
+    if (res.ok) {
+      setOptimResult(null)
+      setOptimOpen(false)
+      await fetchDespachos()
+      alert('Ruta guardada. La encontrarás en "Rutas" para iniciarla y marcar las entregas.')
+    } else {
+      const err = await res.json().catch(() => ({}))
+      alert(`Error al guardar la ruta: ${err.error ?? res.status}`)
+    }
+  }
+
+  /** Paradas de la ruta ordenadas; opcionalmente solo las no entregadas. */
+  function paradasOrdenadas(d: Despacho, soloPendientes: boolean): Parada[] {
+    const base = (d.paradas && d.paradas.length > 0)
+      ? [...d.paradas]
+      : d.mascotas_ids.map((id, i) => ({ cliente_id: id, orden: i + 1 } as Parada))
+    return base
+      .sort((a, b) => a.orden - b.orden)
+      .filter(p => soloPendientes ? !d.entregas?.[p.cliente_id] : true)
+  }
+
+  /** URL de Google Maps de la ruta. Usa coords si las hay, si no la dirección. */
+  function rutaMapsUrl(d: Despacho, soloPendientes: boolean): string {
+    const ptStr = (p: Parada) =>
+      (p.lat != null && p.lng != null) ? `${p.lat},${p.lng}`
+        : (p.direccion || [clientesMap[p.cliente_id]?.direccion_despacho, clientesMap[p.cliente_id]?.comuna].filter(Boolean).join(', ') || '')
+    const stops = paradasOrdenadas(d, soloPendientes).map(ptStr).filter(Boolean)
+    if (stops.length === 0) return ''
+    const u = new URLSearchParams({ api: '1', travelmode: 'driving' })
+    const origen = (d.origen_lat && d.origen_lng) ? `${d.origen_lat},${d.origen_lng}` : (d.origen_direccion || '')
+    const destino = (d.destino_lat && d.destino_lng) ? `${d.destino_lat},${d.destino_lng}` : (d.destino_direccion || origen)
+    if (origen) {
+      u.set('origin', origen)
+      u.set('destination', destino || origen)
+      u.set('waypoints', stops.join('|'))
+    } else {
+      // Ruta sin origen definido (manual): la primera parada es el origen y la
+      // última el destino; el resto, waypoints intermedios.
+      u.set('origin', stops[0])
+      u.set('destination', stops[stops.length - 1])
+      if (stops.length > 2) u.set('waypoints', stops.slice(1, -1).join('|'))
+    }
+    return `https://www.google.com/maps/dir/?${u.toString()}`
+  }
+
+  /** Carga clientesMap para una ruta si faltan datos (para Maps por dirección). */
+  async function asegurarClientes(d: Despacho) {
+    const faltan = d.mascotas_ids.some(id => !clientesMap[id])
+    if (!faltan) return
+    const all = await fetch('/api/clientes').then(r => r.json()).catch(() => [])
+    if (Array.isArray(all)) {
+      const map: Record<string, Cliente> = {}
+      all.forEach((c: Cliente) => { map[c.id] = c })
+      setClientesMap(m => ({ ...m, ...map }))
+    }
+  }
+
+  async function iniciarRuta(d: Despacho) {
+    if (!confirm(`¿Iniciar la ruta N°${d.numero_recorrido}? Se enviará a cada tutor el correo avisando que su mascota va en camino.`)) return
+    setRouteBusy(d.id)
+    const res = await fetch(`/api/despachos/${d.id}/iniciar`, { method: 'POST' })
+    setRouteBusy(null)
+    if (res.ok) await fetchDespachos()
+    else alert('No se pudo iniciar la ruta.')
+  }
+
+  async function toggleEntrega(d: Despacho, clienteId: string, entregadaActual: boolean) {
+    setRouteBusy(d.id + ':' + clienteId)
+    const res = await fetch(`/api/despachos/${d.id}/entregar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cliente_id: clienteId, deshacer: entregadaActual }),
+    })
+    setRouteBusy(null)
+    if (res.ok) await fetchDespachos()
+    else { const e = await res.json().catch(() => ({})); alert(`Error: ${e.error ?? res.status}`) }
+  }
+
+  async function terminarRuta(d: Despacho) {
+    const pendientes = d.mascotas_ids.filter(id => !d.entregas?.[id]).length
+    const msg = pendientes > 0
+      ? `Quedan ${pendientes} mascota(s) sin marcar como entregadas. ¿Terminar la ruta de todas formas?`
+      : '¿Terminar la ruta de entrega? Se registrará la hora de término.'
+    if (!confirm(msg)) return
+    setRouteBusy(d.id)
+    const res = await fetch(`/api/despachos/${d.id}/terminar`, { method: 'POST' })
+    setRouteBusy(null)
+    if (res.ok) await fetchDespachos()
+    else alert('No se pudo terminar la ruta.')
   }
 
   const editDisponiblesFiltradas = editDisponibles.filter(p => {
@@ -490,7 +623,7 @@ export default function DespachosTab() {
       {/* Historial */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Historial de recorridos</h2>
+          <h2 className="text-base font-semibold text-gray-900">Rutas de entrega</h2>
         </div>
         {despachos.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">Sin recorridos registrados</div>
@@ -499,20 +632,30 @@ export default function DespachosTab() {
           <table className="w-full text-sm min-w-[680px]">
             <thead className="bg-gray-50">
               <tr>
-                {['N° Global', 'N° Recorrido', 'Fecha', 'Mascotas', 'Nota', 'Acciones', ''].map(h => (
+                {['N° Global', 'N° Recorrido', 'Fecha', 'Estado', 'Entregas', 'Nota', 'Acciones', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {despachos.map(d => (
+              {despachos.map(d => {
+                const estado = (d.estado_ruta || 'guardada') as EstadoRuta
+                const total = d.mascotas_ids.length
+                const entregadas = d.mascotas_ids.filter(id => d.entregas?.[id]).length
+                const badge = ESTADO_BADGE[estado]
+                return (
                 <Fragment key={d.id}>
                   <tr className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs text-indigo-700 font-bold cursor-pointer" onClick={() => toggleExpandir(d)}>#{d.numero_global || '—'}</td>
                     <td className="px-4 py-3 font-semibold text-gray-900 cursor-pointer" onClick={() => toggleExpandir(d)}>N° {d.numero_recorrido}</td>
                     <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(d)}>{formatDate(d.fecha)}</td>
-                    <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(d)}>{fmtNumero(d.mascotas_ids.length)}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate cursor-pointer" onClick={() => toggleExpandir(d)}>{d.nota || '—'}</td>
+                    <td className="px-4 py-3 cursor-pointer" onClick={() => toggleExpandir(d)}>
+                      <span className={`inline-block text-[10px] font-bold uppercase tracking-wide rounded px-1.5 py-0.5 ${badge.cls}`}>{badge.label}</span>
+                    </td>
+                    <td className="px-4 py-3 cursor-pointer" onClick={() => toggleExpandir(d)}>
+                      <span className={entregadas === total && total > 0 ? 'text-green-700 font-semibold' : 'text-gray-700'}>{entregadas}/{total}</span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500 max-w-[12rem] truncate cursor-pointer" onClick={() => toggleExpandir(d)}>{d.nota || '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button onClick={(e) => { e.stopPropagation(); abrirEditar(d) }}
@@ -529,36 +672,66 @@ export default function DespachosTab() {
                   </tr>
                   {expandido === d.id && (
                     <tr>
-                      <td colSpan={7} className="px-6 py-4 bg-gray-50">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="text-gray-500">
-                              {['Código', 'Mascota', 'Tutor', 'Teléfono', 'Dirección entrega', 'Comuna'].map(h => (
-                                <th key={h} className="text-left py-2 font-semibold">{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {d.mascotas_ids.map(mid => {
-                              const m = clientesMap[mid]
-                              return (
-                                <tr key={mid}>
-                                  <td className="py-1.5 font-mono text-indigo-700 font-semibold">{m?.codigo ?? mid}</td>
-                                  <td className="py-1.5 text-gray-900">{m?.nombre_mascota ?? '—'}</td>
-                                  <td className="py-1.5 text-gray-700">{m?.nombre_tutor ?? '—'}</td>
-                                  <td className="py-1.5 text-gray-700">{m?.telefono ?? '—'}</td>
-                                  <td className="py-1.5 text-gray-700">{m?.direccion_despacho ?? '—'}</td>
-                                  <td className="py-1.5 text-gray-700">{m?.comuna ?? '—'}</td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
+                      <td colSpan={8} className="px-6 py-4 bg-gray-50">
+                        {/* Barra de acciones de la ruta */}
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                          {estado === 'guardada' && (
+                            <button onClick={() => iniciarRuta(d)} disabled={routeBusy === d.id}
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg px-3 py-1.5 disabled:opacity-50">
+                              {routeBusy === d.id ? 'Iniciando…' : '▶ Iniciar ruta'}
+                            </button>
+                          )}
+                          {(() => { const url = rutaMapsUrl(d, true); const pend = total - entregadas; return (
+                            <a href={url || undefined} target="_blank" rel="noopener noreferrer"
+                              onClick={e => { if (!url) { e.preventDefault(); alert('No hay paradas pendientes.') } }}
+                              className={`text-xs font-semibold rounded-lg px-3 py-1.5 ${pend > 0 ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                              🗺 Abrir en Maps ({pend} {pend === 1 ? 'pendiente' : 'pendientes'})
+                            </a>
+                          ) })()}
+                          {estado !== 'terminada' && (
+                            <button onClick={() => terminarRuta(d)} disabled={routeBusy === d.id}
+                              className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg px-3 py-1.5 disabled:opacity-50">
+                              🏁 Terminar ruta
+                            </button>
+                          )}
+                          <span className="text-[11px] text-gray-500 ml-auto">
+                            {d.hora_inicio_ruta && <>Inicio {horaCorta(d.hora_inicio_ruta)}</>}
+                            {d.hora_inicio_ruta && d.hora_termino_ruta && <> · Término {horaCorta(d.hora_termino_ruta)} · {duracion(d.hora_inicio_ruta, d.hora_termino_ruta)}</>}
+                          </span>
+                        </div>
+
+                        {/* Paradas en orden con toggle de entrega */}
+                        <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                          {paradasOrdenadas(d, false).map((p, i) => {
+                            const m = clientesMap[p.cliente_id]
+                            const ent = d.entregas?.[p.cliente_id]
+                            const busy = routeBusy === d.id + ':' + p.cliente_id
+                            return (
+                              <div key={p.cliente_id} className={`flex items-start gap-3 px-3 py-2 border-t first:border-t-0 border-gray-100 ${ent ? 'bg-green-50/50' : ''}`}>
+                                <span className="shrink-0 w-6 h-6 bg-indigo-600 text-white text-xs font-bold rounded-full flex items-center justify-center">{i + 1}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-sm text-gray-900">{m?.nombre_mascota ?? p.cliente_id}</span>
+                                    <span className="text-xs text-gray-500 font-mono">{m?.codigo ?? ''}</span>
+                                    {ent && <span className="text-[10px] uppercase font-bold bg-green-100 text-green-800 rounded px-1.5 py-0.5">Entregada {horaCorta(ent.fecha_hora)}</span>}
+                                  </div>
+                                  <div className="text-xs text-gray-600 truncate">{m?.nombre_tutor ?? '—'} · {m?.telefono || 'sin teléfono'}</div>
+                                  <div className="text-xs text-gray-500 truncate">{p.direccion || [m?.direccion_despacho, m?.comuna].filter(Boolean).join(', ') || '—'}</div>
+                                </div>
+                                <button onClick={() => toggleEntrega(d, p.cliente_id, !!ent)} disabled={busy}
+                                  className={`shrink-0 text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50 ${ent ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-green-600 hover:bg-green-700 text-white'}`}>
+                                  {busy ? '…' : ent ? 'Deshacer' : '✓ Entregar'}
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </td>
                     </tr>
                   )}
                 </Fragment>
-              ))}
+                )
+              })}
             </tbody>
           </table>
           </div>
@@ -892,18 +1065,54 @@ export default function DespachosTab() {
               )}
 
               {/* Acción final */}
-              <a
-                href={optimGmapsUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full text-center bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg py-2.5 text-sm shadow-md transition-colors"
-              >
-                Abrir en Google Maps ({optimResult.obligatorias.length + optimPicks.size} {optimResult.obligatorias.length + optimPicks.size === 1 ? 'parada' : 'paradas'})
-              </a>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <a
+                  href={optimGmapsUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 text-center bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg py-2.5 text-sm shadow-md transition-colors"
+                >
+                  Abrir en Google Maps ({optimResult.obligatorias.length + optimPicks.size} {optimResult.obligatorias.length + optimPicks.size === 1 ? 'parada' : 'paradas'})
+                </a>
+                <button
+                  type="button"
+                  onClick={optimGuardarRuta}
+                  disabled={saving || (optimResult.obligatorias.length + optimPicks.size === 0)}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg py-2.5 text-sm shadow-md transition-colors disabled:opacity-50"
+                >
+                  {saving ? 'Guardando…' : '💾 Guardar ruta'}
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500 text-center">Guardar la ruta te permite seguirla, marcar entregas e ir avisando a cada tutor.</p>
             </div>
           )}
         </div>
       </Modal>
     </>
   )
+}
+
+const ESTADO_BADGE: Record<EstadoRuta, { label: string; cls: string }> = {
+  guardada: { label: 'Guardada', cls: 'bg-gray-100 text-gray-600' },
+  en_curso: { label: 'En curso', cls: 'bg-amber-100 text-amber-800' },
+  terminada: { label: 'Terminada', cls: 'bg-green-100 text-green-800' },
+}
+
+/** "HH:MM" en hora local a partir de un ISO. Vacío si no parsea. */
+function horaCorta(iso?: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/** Duración legible entre dos ISO, ej. "1 h 25 min". */
+function duracion(inicioIso?: string, finIso?: string): string {
+  if (!inicioIso || !finIso) return ''
+  const a = new Date(inicioIso).getTime()
+  const b = new Date(finIso).getTime()
+  if (isNaN(a) || isNaN(b) || b < a) return ''
+  const min = Math.round((b - a) / 60000)
+  if (min < 60) return `${min} min`
+  return `${Math.floor(min / 60)} h ${min % 60} min`
 }

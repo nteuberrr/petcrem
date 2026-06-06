@@ -163,6 +163,9 @@ export async function generarCertificadoBuffer(data: CertificadoData): Promise<B
   const logoPath = join(base, 'logo_alma_animal.png')
   if (!existsSync(logoPath)) throw new Error(`Logo no encontrado: ${logoPath}`)
   const logoBytes = readFileSync(logoPath)
+  // Sello oficial (timbre circular) opcional para la esquina inferior derecha.
+  const selloPath = join(base, 'sello_alma_animal.png')
+  const selloBytes = existsSync(selloPath) ? readFileSync(selloPath) : null
 
   const fecha = parseFecha(data.fecha_cremacion_raw)
   const fechaTexto = format(fecha, "d 'de' MMMM, yyyy", { locale: es })
@@ -176,6 +179,7 @@ export async function generarCertificadoBuffer(data: CertificadoData): Promise<B
   const page = pdfDoc.addPage([PAGE_W, PAGE_H])
 
   const logo = await pdfDoc.embedPng(logoBytes)
+  const sello = selloBytes ? await pdfDoc.embedPng(selloBytes) : null
   const serif       = await pdfDoc.embedFont(StandardFonts.TimesRoman)
   const serifBold   = await pdfDoc.embedFont(StandardFonts.TimesRomanBold)
   const serifItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic)
@@ -367,11 +371,15 @@ export async function generarCertificadoBuffer(data: CertificadoData): Promise<B
     })
   }
 
-  // --- Logo marca de agua en esquina inferior derecha (alpha 0.18) ---
-  const wmSize = 55
-  const wmX = PAGE_W - mI - wmSize - 18
-  const wmY = mI + 22
-  page.drawImage(logo, { x: wmX, y: wmY, width: wmSize, height: wmSize, opacity: 0.18 })
+  // --- Sello oficial (timbre) en esquina inferior derecha ---
+  // Reemplaza al antiguo logo marca de agua. Si el archivo del sello no está,
+  // no se dibuja nada (no rompemos la emisión).
+  if (sello) {
+    const selloSize = 96
+    const selloX = PAGE_W - mI - selloSize - 12
+    const selloY = mI + 14
+    page.drawImage(sello, { x: selloX, y: selloY, width: selloSize, height: selloSize, opacity: 0.95 })
+  }
 
   // --- Footer con lema ---
   drawTrackedCentered(page, 'ALMA ANIMAL  ·  HUELLAS QUE NO SE BORRAN', PAGE_W / 2, 38, serif, 8, 3, GOLD)

@@ -1798,6 +1798,7 @@ type EmpresaCfg = {
   direccion: string; comuna: string
   telefono: string; correo: string
   web: string; instagram: string; facebook: string
+  google_review_url: string
   fecha_actualizacion?: string
 }
 
@@ -1806,6 +1807,7 @@ const EMPRESA_EMPTY: EmpresaCfg = {
   direccion: '', comuna: '',
   telefono: '', correo: '',
   web: '', instagram: '', facebook: '',
+  google_review_url: '',
 }
 
 function DatosPersonalesPanel() {
@@ -1825,6 +1827,7 @@ function DatosPersonalesPanel() {
           direccion: d.direccion || '', comuna: d.comuna || '',
           telefono: d.telefono || '', correo: d.correo || '',
           web: d.web || '', instagram: d.instagram || '', facebook: d.facebook || '',
+          google_review_url: d.google_review_url || '',
           fecha_actualizacion: d.fecha_actualizacion || '',
         })
       }
@@ -1900,6 +1903,16 @@ function DatosPersonalesPanel() {
           <Field label="Instagram" value={form.instagram} onChange={v => setForm(f => ({ ...f, instagram: v }))} placeholder="@almaanimal" />
           <Field label="Facebook" value={form.facebook} onChange={v => setForm(f => ({ ...f, facebook: v }))} placeholder="facebook.com/almaanimal" />
         </Row>
+      </Section>
+
+      <Section title="Reseñas">
+        <Field
+          label="Link de reseña de Google"
+          value={form.google_review_url}
+          onChange={v => setForm(f => ({ ...f, google_review_url: v }))}
+          placeholder="https://g.page/r/…/review"
+        />
+        <p className="text-[11px] text-gray-500">Se usa en el botón “Evalúanos aquí” del correo de entrega. Pégalo desde tu Perfil de Empresa de Google → Pedir reseñas.</p>
       </Section>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{error}</div>}

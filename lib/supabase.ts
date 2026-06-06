@@ -19,6 +19,28 @@ export function isSupabaseConfigured(): boolean {
   return !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
 }
 
+// ─── Proyecto Supabase dedicado al módulo "Mensajes" ──────────────────────────
+// Aislado del proyecto del mailing: otra base, otras credenciales. Así el MCP en
+// modo escritura sobre Mensajes no toca el mailing.
+let cachedMensajes: SupabaseClient | null = null
+
+export function getMensajesSupabase(): SupabaseClient {
+  if (cachedMensajes) return cachedMensajes
+  const url = process.env.MENSAJES_SUPABASE_URL
+  const key = process.env.MENSAJES_SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) {
+    throw new Error('Supabase de Mensajes no configurado: faltan MENSAJES_SUPABASE_URL o MENSAJES_SUPABASE_SERVICE_ROLE_KEY')
+  }
+  cachedMensajes = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  return cachedMensajes
+}
+
+export function isMensajesSupabaseConfigured(): boolean {
+  return !!process.env.MENSAJES_SUPABASE_URL && !!process.env.MENSAJES_SUPABASE_SERVICE_ROLE_KEY
+}
+
 /** Shape de un log row según el schema en Supabase. Todos los timestamps son ISO strings. */
 export interface MailingLog {
   id: number

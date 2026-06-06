@@ -35,6 +35,8 @@ All Sheets I/O goes through [lib/google-sheets.ts](lib/google-sheets.ts). Key co
 
 There is no migration system. Schema changes happen by editing the `init-sheets` map and re-hitting `GET /api/init-sheets`, which adds missing columns without touching existing data.
 
+**Supabase (Postgres) coexists with Sheets for two things that don't fit Sheets:** (1) the **mailing logs** (`mailing_logs`, reconciled by the Resend webhook) — project `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`, client `getSupabase()` in [lib/supabase.ts](lib/supabase.ts); (2) the **Mensajes inbox** (WhatsApp/IG/FB) — a **separate** Supabase project (`MENSAJES_SUPABASE_URL` / `MENSAJES_SUPABASE_SERVICE_ROLE_KEY`, client `getMensajesSupabase()`), tables `mensajes_contactos / mensajes_conversaciones / mensajes_mensajes` (DDL in [supabase/mensajes-schema.sql](supabase/mensajes-schema.sql), run manually in the SQL editor — no migration tool). Both use the service_role key server-side only; RLS is on with no policies (anon blocked). Sheets remains the system of record for everything else.
+
 ## Auth & route access
 
 [proxy.ts](proxy.ts) gates everything (renamed from `middleware.ts` in Next 16; the file convention is `proxy.ts` now, named export `proxy`). Two roles:
@@ -90,10 +92,12 @@ lib/
   bancos-cl.ts        # Chilean bank list + account types (vet datos-pago form)
   route-optimizer.ts  # despachos delivery route ordering
   resend-mailer.ts    # Resend client wrapper — sendEmail / sendBatch (≤100), reads MAILING_FROM_* env, tags for webhook correlation
+  email-layout.ts     # SHARED visual shell for ALL transactional emails (clientes + vets): navy header (logo right + title) + gold rule + footer (contact from empresa_config + sello bottom-right). Brand assets (logo/sello) hosted on R2 — see scripts/upload-brand-assets.ts. Exports renderEmailLayout / getContacto / escapeHtml / BRAND
+  cliente-mailer.ts   # transactional emails to the tutor at 4 hitos: registro (código) / inicio cremación (ciclos POST) / inicio ruta de despacho (despachos/[id]/iniciar) / entrega confirmada + reseña Google (despachos/[id]/entregar) — best-effort, contact data from empresa_config. Uses email-layout
   mailing-render.ts   # {{var}} template substitution for campaign HTML; vars derived from a vet row (nombre, primer_nombre, email, veterinaria, comuna, telefono, categoria)
   eutanasia-tokens.ts # HMAC tokens (signed with NEXTAUTH_SECRET) for vet action links — 72h default, 90d for datos-pago
   eutanasia-matcher.ts # match a cotización to eligible vets by comuna + day/time availability
-  eutanasia-mailer.ts  # email templates + sending for the eutanasia workflow (vet invites, client/vet notifications)
+  eutanasia-mailer.ts  # email templates + sending for the eutanasia workflow (vet invites, client/vet notifications). Centralizes ALL eutanasia render fns (incl. renderCotizacionEmail/renderCoordinarEmail used by the cotizaciones routes); uses email-layout
 components/
   Sidebar.tsx · TimelineStatus.tsx · VehiculoTab.tsx · DespachosTab.tsx · SessionProvider.tsx (NextAuth client wrapper in root layout) · ui/ (Modal, Badge, Toggle, ComunaPicker, AddressAutocomplete)
 scripts/
@@ -103,6 +107,10 @@ scripts/
                           #   normalize-telefonos — normalize phone column to 9-digit form
                           #   inspect-clientes-headers / check-peso-kg-unique / delete-col-peso-kg — one-off schema audits
                           #   verify-r2 — R2 PUT/HEAD/public-URL/DELETE health check
+  *.ts                    # run with `npx tsx scripts/<name>.ts` (no auto env load — they `import './_env-preload'` first):
+                          #   _env-preload — side-effect: loads .env.local into process.env BEFORE libs that read env at module-eval (e.g. google-sheets)
+                          #   upload-brand-assets — trim + upload logo / sello / white-paw to R2 brand/ (the images used by every email)
+                          #   preview-correos-cliente — send sample client + vet emails (real data, redirected to a test inbox) to preview templates
 ```
 
 ## Eutanasias a domicilio (vet network)
@@ -121,8 +129,24 @@ A separate domain from the cremation business: a marketplace matching at-home eu
 - **Numbers**: format via [lib/format.ts](lib/format.ts) (`fmtPrecio`, `fmtNumero`, `fmtKg`, `fmtLitros`). Litros stored/displayed as integers; ratios with 1 decimal. Wrap litros differences in `Math.abs()` (carga direction is not enforced).
 - **React lists**: when a `.map()` returns multiple sibling rows (e.g. main `<tr>` + expansion `<tr>`), wrap them in `<Fragment key={...}>` — bare `<>` triggers the duplicate-key warning.
 - **Peso**: `peso_ingreso` (real) takes precedence over `peso_declarado` for price/ratio math; both are persisted. The ficha shows a price-delta alert when `peso_ingreso` falls in a higher tramo. Use `||` not `??` when reading either, since the sheet returns `''` (empty string), which `??` won't bypass.
-- **Despachos** mutate `clientes.estado` (`cremado` ↔ `despachado`) and write `despacho_id`. Deleting a despacho reverts the affected mascotas.
+- **Despachos = rutas vivas.** A despacho is a delivery route with `estado_ruta` `guardada → en_curso → terminada`. Created from the optimizer ("Guardar ruta" → stores ordered `paradas` with coords + `origen`/`destino`) or manually. Creating a route does **not** change `clientes.estado` — the mascota stays `cremado` but is hidden from the calendar/selection/optimizer while in a non-terminada route (so it isn't re-routed; see `enRutaActiva` in DespachosTab + the exclusion in [lib/route-optimizer.ts](lib/route-optimizer.ts)). Per-stop endpoints under `/api/despachos/[id]/`: **iniciar** (sets `hora_inicio_ruta`, emails "vamos en camino" to all), **entregar** (`{cliente_id}`: records the delivery in `entregas`, flips that mascota to `despachado`+`despacho_id`, emails entrega+reseña; `deshacer:true` reverts), **terminar** (sets `hora_termino_ruta`/`fecha_realizada`). "Abrir en Maps" builds the dir URL from the **pending** stops only. Deleting a route reverts only the already-delivered mascotas (`despachado`→`cremado`).
 - **Language**: all user-facing text (UI strings, email bodies, validation messages) is **neutral Spanish** — no Argentine voseo. Match the surrounding copy.
+- **The pet always has a name**: in client-facing copy (emails, UI, messages) refer to a specific pet by its `nombre_mascota` (in the subject and the body). For the generic noun use **"tu mascota"** (tuteo) — not the cold "su mascota" / "la mascota", and not "compañero/a" (client decision; see *Marca, propósito y voz*).
+
+## Marca, propósito y voz (copy de cara al cliente)
+
+Fuente de verdad completa: **`C:\dev\alma-animal-marketing/_docs/biblia-visual-alma-animal.md`** (repo separado del sistema de marketing — léela antes de escribir/rediseñar piezas de cara al público). Resumen accionable para el copy que vive en este repo (correos, landing `/convenio-eutanasias`, textos de UI):
+
+- **Qué es:** Crematorio Alma Animal — cremación de mascotas en Recoleta (Santiago), cobertura RM, todos los días 08:00–23:00. Tagline (ya en el logo): **"Huellas que no se borran"**.
+- **Promesa / diferenciadores a comunicar:** servicio cercano, rápido y responsable, todo bajo control directo, con respeto absoluto. Puntos duros: **entrega en 4 días hábiles**, **instalaciones propias** (no se externaliza), **trazabilidad total**, **tecnología de punta**.
+- **Dos audiencias (toda pieza declara cuál):**
+  - **Tutores (B2C)** — adultos ~28–60 en duelo, serios y sensibles; buscan información y confianza, no consuelo. Voz: **tuteo, cercano pero contenido, profesional y humano**; nunca infantil ni solemne en exceso.
+  - **Veterinarios (B2B)** — clínicas en convenio; son el motor comercial. Voz: **profesional, técnica, eficiente**, de socio confiable (datos, plazos, procesos), con menos adornos emocionales.
+- **Tono:** cercano y conversacional con base profesional. **Sin humor. Sin referencias religiosas** ("alma" aquí es metafórico, no teológico). **Sin clichés del rubro** (nada de "puente del arcoíris", "angelitos", "tu ángel", "ya no sufre").
+- **Vocabulario** — SÍ: ***mascota / tu mascota*** (es el genérico que usamos), *partió / falleció*, *despedida*, *recuerdos / huellas*, *en buenas manos*, *como corresponde*. NO: *muerto / cadáver / restos*, *perdiste / perdió*, eufemismos infantiles. → La mascota va **por su nombre** cuando hablamos de una en particular (en asunto y cuerpo); como genérico usamos **"tu mascota"** (tuteo), no la versión fría *"la mascota" / "su mascota"*. **Decisión del cliente:** usamos *mascota / tu mascota* aunque la biblia de marca prefiera *"compañero/a"* y evite *"mascota"* — en este sistema prima esta convención.
+- **Paleta del sistema** (la que usamos aquí, canónica para el repo): Azul Alma `#143C64`, Dorado/ámbar `#F2B84B`, Crema `#FBF8F3` — definidas en `BRAND` en [lib/email-layout.ts](lib/email-layout.ts). Regla 60–70 % blanco/crema · 20–30 % azul (estructura) · 5–10 % dorado (acento). (La biblia de marca lista variantes cercanas `#F0B45A` / `#FAF6F0`, pero **por decisión del cliente mantenemos las del código**.)
+- **Símbolo:** huella con halo dorado + un corazón de línea continua (el vínculo que no se corta). Vive como **sello** en la esquina inferior derecha (correos + certificado) y como **logo** en el header de correos y sidebar. Assets en R2 `brand/` + `public/brand/` (ver `scripts/upload-brand-assets.ts`).
+- **Cómo atendemos al cliente:** [docs/playbook-atencion.md](docs/playbook-atencion.md) — flujo de atención, plantillas, FAQ y precios, derivado de 354 chats reales de WhatsApp. **Los precios se cotizan siempre desde `precios_generales`** (Configuración → Precios) por peso + tipo de servicio, nunca montos históricos. Insumo para el futuro módulo "Mensajes".
 
 ## Environment variables
 
@@ -135,5 +159,9 @@ Digital signing of certificates (optional but recommended): `CERT_P12_BASE64` (t
 Mailing (required only if the `/mailing` module is exercised): `RESEND_API_KEY` — without it `sendEmail`/`sendBatch` throw "RESEND_API_KEY no configurada". Optional: `MAILING_FROM_EMAIL` (defaults to `onboarding@resend.dev`, the sandbox sender — use a verified domain for prod), `MAILING_FROM_NAME` (defaults to `Alma Animal`), `RESEND_WEBHOOK_SECRET` for verifying the `svix-*`-signed webhook payload that Resend POSTs to `/api/mailing/webhooks/resend`. Campaign HTML is stored in R2 (not in the Sheet — the Sheet only holds `html_key` / `html_url`); the webhook joins events back to campaigns via `mailing_logs.resend_message_id` and increments the aggregate counters on `mailing_campanas`.
 
 Google Maps / Places (required only if address autocomplete + geocoding are exercised — used by the eutanasias address fields and the `places` API): `GOOGLE_MAPS_API_KEY`. Results are cached in the `geocoding_cache` sheet to limit billed calls.
+
+Supabase: `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (mailing logs project) and `MENSAJES_SUPABASE_URL` + `MENSAJES_SUPABASE_SERVICE_ROLE_KEY` (the **separate** Mensajes/inbox project). The Mensajes module ([lib/mensajes.ts](lib/mensajes.ts), `/mensajes` UI, `/api/mensajes/*`, importer `scripts/importar-whatsapp.ts`) only works with the `MENSAJES_*` pair set. **The `/mensajes` UI + `/api/mensajes/*` are admin-only** (not in the operator allowlist) — except **`/api/mensajes/webhook`, which is a PUBLIC route** (Meta calls it; authenticity = `X-Hub-Signature-256` HMAC against `META_APP_SECRET` + the `hub.verify_token` on the GET challenge).
+
+WhatsApp Cloud API (Meta directo, [lib/whatsapp.ts](lib/whatsapp.ts)): `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `META_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` (lo elegimos nosotros, debe coincidir en el panel de Meta); opcional `WHATSAPP_BUSINESS_ACCOUNT_ID`, `WHATSAPP_API_VERSION` (default `v22.0`). Inbound → webhook upserts contacto/conversación/mensaje (media → R2). Outbound desde el compose: texto libre (válido solo dentro de la ventana de 24h; fuera de ella Meta exige plantilla aprobada — pendiente). Sin estas vars, el compose solo registra el mensaje sin enviar. IG/FB Messenger quedan para una fase posterior (otro app review de Meta).
 
 Deploy target is Vercel; backups are handled out-of-band by the Apps Script in [scripts/apps_script_backup.gs](scripts/apps_script_backup.gs) (every 48h at 00:00 America/Santiago → Drive folder "DataBase AlmaAnimal Systems"), not by Vercel cron.

@@ -13,7 +13,10 @@ import { formatHoraDia, parseFecha } from './dates'
  * 1. El vet debe estar activo (activo === 'TRUE').
  * 2. La comuna debe estar en sus comunas atendidas (normalizada via canónica).
  * 3. La fecha cae en un día de la semana → el vet debe tener al menos el slot
- *    AM o PM activo según la hora. AM = 00:00-11:59, PM = 12:00-23:59.
+ *    AM o PM activo según la hora. Corte a las 13:00:
+ *      - AM = 00:00 a 12:59
+ *      - PM = 13:01 a 23:59
+ *      - 13:00 EXACTO pertenece a ambos turnos (sirve un vet AM o PM).
  */
 
 export type DiaKey = 'lun' | 'mar' | 'mie' | 'jue' | 'vie' | 'sab' | 'dom'
@@ -39,7 +42,7 @@ export interface VetMatch {
  * - Acepta horaHHMM como "HH:MM", como fracción decimal de día ("0.5" → 12:00)
  *   o como dígitos sin punto ("5" → 12:00).
  */
-export function diaYSlotPara(fechaISO: string, horaHHMM: string): { dia: DiaKey; slot: Slot } | null {
+export function diaYSlotPara(fechaISO: string, horaHHMM: string): { dia: DiaKey; slots: Slot[] } | null {
   if (!fechaISO || !horaHHMM) return null
 
   // Normalizar la hora a "HH:MM"
@@ -56,8 +59,12 @@ export function diaYSlotPara(fechaISO: string, horaHHMM: string): { dia: DiaKey;
   // del baseDate (que ya está en local) y aplicamos la hora encima.
   const dt = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), hh, mm || 0, 0, 0)
   const dia = DIA_KEYS[dt.getDay()]
-  const slot: Slot = hh < 12 ? 'am' : 'pm'
-  return { dia, slot }
+  // Corte AM/PM a las 13:00. Las 13:00 en punto cuentan para ambos turnos.
+  let slots: Slot[]
+  if (hh < 13) slots = ['am']
+  else if (hh === 13 && (mm || 0) === 0) slots = ['am', 'pm']
+  else slots = ['pm']
+  return { dia, slots }
 }
 
 export type RazonExclusion =
@@ -80,7 +87,7 @@ export interface MatchResultado {
   excluidos: VetExcluido[]
   comuna_canonica: string
   /** Si fue null, no pudimos parsear la fecha/hora — caso degenerado. */
-  horario_ref: { dia: DiaKey; slot: Slot } | null
+  horario_ref: { dia: DiaKey; slots: Slot[] } | null
 }
 
 /**
@@ -138,20 +145,18 @@ export function matchVetsConDiagnostico(
       })
       continue
     }
-    if (horarioRef.slot === 'am' && !diaH.am) {
-      excluidos.push({
-        ...baseExc,
-        razon: 'sin_slot_am',
-        detalle: `Atiende los ${nombreDia(horarioRef.dia)} solo en PM (la cotización es AM).`,
-      })
-      continue
-    }
-    if (horarioRef.slot === 'pm' && !diaH.pm) {
-      excluidos.push({
-        ...baseExc,
-        razon: 'sin_slot_pm',
-        detalle: `Atiende los ${nombreDia(horarioRef.dia)} solo en AM (la cotización es PM).`,
-      })
+    // El vet sirve si tiene activo AL MENOS UNO de los turnos requeridos.
+    // Para una hora normal hay un solo turno requerido; a las 13:00 en punto
+    // se requieren ambos (am|pm), por lo que cualquier vet con turno ese día sirve.
+    const slots = horarioRef.slots
+    if (!slots.some(s => diaH[s])) {
+      if (slots.length === 1 && slots[0] === 'am') {
+        excluidos.push({ ...baseExc, razon: 'sin_slot_am', detalle: `Atiende los ${nombreDia(horarioRef.dia)} solo en PM (la cotización es AM).` })
+      } else if (slots.length === 1 && slots[0] === 'pm') {
+        excluidos.push({ ...baseExc, razon: 'sin_slot_pm', detalle: `Atiende los ${nombreDia(horarioRef.dia)} solo en AM (la cotización es PM).` })
+      } else {
+        excluidos.push({ ...baseExc, razon: 'sin_horario_en_dia', detalle: `No tiene turnos activos los ${nombreDia(horarioRef.dia)}.` })
+      }
       continue
     }
 

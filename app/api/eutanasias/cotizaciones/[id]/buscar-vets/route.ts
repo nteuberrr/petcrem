@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       diagnostico: {
         comuna_canonica: resultado.comuna_canonica,
         dia_resuelto: resultado.horario_ref?.dia ?? null,
-        slot_resuelto: resultado.horario_ref?.slot ?? null,
+        slot_resuelto: resultado.horario_ref?.slots.join('+') ?? null,
       },
     })
   } catch (e) {

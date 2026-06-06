@@ -36,6 +36,16 @@ const SHEETS: Record<string, string[]> = {
   ],
   despachos: [
     'id', 'fecha', 'numero_recorrido', 'numero_global', 'mascotas_ids', 'nota', 'fecha_creacion',
+    // Ruta viva: estado del recorrido y datos de la ruta optimizada.
+    // estado_ruta: guardada | en_curso | terminada
+    'estado_ruta',
+    'origen_direccion', 'origen_lat', 'origen_lng',
+    'destino_direccion', 'destino_lat', 'destino_lng',
+    // paradas: JSON ordenado [{cliente_id, lat, lng, direccion, orden}]
+    'paradas',
+    // entregas: JSON { [cliente_id]: { fecha_hora: ISO } } — solo las ya entregadas
+    'entregas',
+    'hora_inicio_ruta', 'hora_termino_ruta', 'fecha_realizada',
   ],
   rendiciones: [
     'id', 'usuario', 'descripcion', 'fecha', 'monto', 'tipo_documento',

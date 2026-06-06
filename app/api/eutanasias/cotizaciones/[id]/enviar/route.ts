@@ -4,9 +4,9 @@ import { authOptions } from '@/lib/auth'
 import { getSheetData, updateRow, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
 import { sendBatch, isResendConfigured } from '@/lib/resend-mailer'
 import { createToken, createVetToken } from '@/lib/eutanasia-tokens'
-import { fmtPrecio } from '@/lib/format'
 import { formatDate, formatHoraDia } from '@/lib/dates'
-import { nombreCompletoVet } from '@/lib/eutanasia-mailer'
+import { nombreCompletoVet, renderCotizacionEmail } from '@/lib/eutanasia-mailer'
+import { getContacto } from '@/lib/email-layout'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
 const SHEET_ENVIOS = 'cotizaciones_eutanasia_envios'
@@ -60,6 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const envíosExistentes = await getSheetData(SHEET_ENVIOS)
 
     // Construir los emails
+    const contacto = await getContacto()
     const emails = vetsSeleccionados.map(v => {
       const token = createToken(c.id, v.id, 'aceptar')
       const linkAceptar = `${baseUrl}/eutanasia/aceptar/${token}`
@@ -73,12 +74,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return {
         to: v.email,
         subject: `Solicitud de eutanasia en ${c.comuna} — ${formatDate(c.fecha_servicio)} ${formatHoraDia(c.hora_servicio)}`,
-        html: renderEmailCotizacion({
+        html: renderCotizacionEmail({
           vetNombre: nombreCompletoVet(v.nombre, v.apellido),
           c,
           linkAceptar,
           linkDatosPago,
+          contacto,
         }),
+        preview_text: `Solicitud de eutanasia para ${c.mascota_nombre} en ${c.comuna}.`,
         reply_to: process.env.MAILING_REPLY_TO || undefined,
         tags: [
           { name: 'tipo', value: 'eutanasia_cotizacion' },
@@ -131,87 +134,4 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     console.error('[eutanasias/enviar] error:', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
-}
-
-interface RenderArgs {
-  vetNombre: string
-  c: Record<string, string>
-  linkAceptar: string
-  /** Si está vacío, no se muestra el bloque "Aún no registras tus datos…". */
-  linkDatosPago: string
-}
-
-function renderEmailCotizacion({ vetNombre, c, linkAceptar, linkDatosPago }: RenderArgs): string {
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${c.direccion}, ${c.comuna}, Chile`)}`
-  const precio = parseInt(c.precio_snapshot || '0', 10)
-  const COLOR = '#143C64'
-  const fechaLeg = formatDate(c.fecha_servicio)
-  return `<!doctype html>
-<html lang="es">
-<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width" /></head>
-<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f5f6f8;color:#222">
-  <div style="max-width:600px;margin:0 auto;padding:24px 16px">
-    <div style="background:${COLOR};color:#fff;padding:24px;border-radius:12px 12px 0 0">
-      <p style="margin:0;font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:.85">Alma Animal · Convenio Eutanasias</p>
-      <h1 style="margin:6px 0 0;font-size:22px;font-weight:700">Nueva solicitud de eutanasia</h1>
-    </div>
-    <div style="background:#fff;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e5e7eb;border-top:0">
-      <p style="margin:0 0 16px;font-size:15px">Hola <strong>${escapeHtml(vetNombre || 'Dr/a.')}</strong>,</p>
-      <p style="margin:0 0 16px;font-size:14px;line-height:1.55">Tenemos una solicitud que coincide con tus comunas y horarios disponibles. Estos son los datos:</p>
-
-      <table style="width:100%;border-collapse:collapse;margin:16px 0">
-        <tbody>
-          ${row('Mascota', `${escapeHtml(c.mascota_nombre)} (${escapeHtml(c.especie)})`)}
-          ${row('Peso', `${escapeHtml(c.peso)} kg`)}
-          ${row('Fecha y hora', `${escapeHtml(fechaLeg)} ${escapeHtml(formatHoraDia(c.hora_servicio))} hs`)}
-          ${row('Comuna', escapeHtml(c.comuna))}
-          ${row('Dirección', `<a href="${mapsUrl}" target="_blank" style="color:${COLOR};text-decoration:underline">${escapeHtml(c.direccion)} (ver mapa)</a>`)}
-          ${row('Cliente', escapeHtml(c.cliente_nombre))}
-          ${c.notas ? row('Notas', escapeHtml(c.notas)) : ''}
-        </tbody>
-      </table>
-
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin:20px 0">
-        <p style="margin:0;font-size:13px;color:#475569">Pago al veterinario por este servicio:</p>
-        <p style="margin:4px 0 0;font-size:22px;font-weight:700;color:${COLOR}">${escapeHtml(fmtPrecio(precio))}</p>
-      </div>
-
-      <p style="margin:20px 0 8px;font-size:14px">¿Puedes tomar esta solicitud?</p>
-
-      <div style="text-align:center;margin:18px 0 8px">
-        <a href="${linkAceptar}" style="display:inline-block;background:${COLOR};color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 28px;border-radius:10px">
-          Confirma que puedes aquí
-        </a>
-      </div>
-
-      <p style="margin:20px 0 0;font-size:12px;color:#64748b">Si no puedes tomarla, simplemente ignora este correo. Otros veterinarios del convenio también lo recibieron y el primero en confirmar queda asignado.</p>
-      <p style="margin:12px 0 0;font-size:11px;color:#94a3b8">Este enlace expira en 72 horas. Si tienes dudas, escríbenos a info@crematorioalmaanimal.cl.</p>
-
-      ${linkDatosPago ? `
-      <div style="margin:24px 0 0;padding-top:18px;border-top:1px dashed #e2e8f0;text-align:center">
-        <p style="margin:0 0 10px;font-size:13px;color:#475569">¿Aún no registras tus datos para transferirte los pagos?</p>
-        <a href="${linkDatosPago}" style="display:inline-block;color:${COLOR};font-weight:600;font-size:13px;padding:8px 14px;border:1px solid ${COLOR};border-radius:6px;text-decoration:none">
-          Regístralos aquí
-        </a>
-      </div>` : ''}
-    </div>
-  </div>
-</body>
-</html>`
-}
-
-function row(label: string, value: string): string {
-  return `<tr>
-    <td style="padding:6px 12px 6px 0;font-size:12px;color:#64748b;width:120px;vertical-align:top">${label}</td>
-    <td style="padding:6px 0;font-size:14px;color:#0f172a">${value}</td>
-  </tr>`
-}
-
-function escapeHtml(s: string): string {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }

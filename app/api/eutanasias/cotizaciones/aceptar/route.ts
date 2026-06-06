@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateRow, ensureSheet, ensureColumns } from '@/lib/google-sheets'
 import { verifyToken, createToken, createVetToken } from '@/lib/eutanasia-tokens'
 import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
-import { formatDate, formatHoraDia } from '@/lib/dates'
-import { nombreCompletoVet } from '@/lib/eutanasia-mailer'
+import { nombreCompletoVet, renderCoordinarEmail } from '@/lib/eutanasia-mailer'
+import { getContacto } from '@/lib/email-layout'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
 const SHEET_ENVIOS = 'cotizaciones_eutanasia_envios'
@@ -107,15 +107,18 @@ export async function POST(req: NextRequest) {
         ? ''
         : `${baseUrl}/eutanasia/datos-pago/${createVetToken(vet.id, 'datos_pago')}`
       try {
+        const contacto = await getContacto()
         await sendEmail({
           to: vet.email,
           subject: `Coordina con la familia — Eutanasia ${c.mascota_nombre}`,
-          html: renderEmailConfirmar({
+          html: renderCoordinarEmail({
             vetNombre: vetNombreCompleto || 'Dr/a.',
             c,
             linkConfirmar,
             linkDatosPago,
+            contacto,
           }),
+          preview_text: `Datos de contacto de la familia de ${c.mascota_nombre}.`,
           tags: [
             { name: 'tipo', value: 'eutanasia_post_aceptar' },
             { name: 'cotizacion_id', value: String(c.id) },
@@ -144,85 +147,4 @@ export async function POST(req: NextRequest) {
     console.error('[eutanasias/aceptar] error:', msg)
     return NextResponse.json({ ok: false, error: 'Error procesando tu confirmación.' }, { status: 500 })
   }
-}
-
-interface ConfirmarRenderArgs {
-  vetNombre: string
-  c: Record<string, string>
-  linkConfirmar: string
-  /** Si está vacío, no se muestra el bloque "Aún no registras tus datos…". */
-  linkDatosPago: string
-}
-
-function renderEmailConfirmar({ vetNombre, c, linkConfirmar, linkDatosPago }: ConfirmarRenderArgs): string {
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${c.direccion}, ${c.comuna}, Chile`)}`
-  const fechaLeg = formatDate(c.fecha_servicio)
-  const horaLeg = formatHoraDia(c.hora_servicio)
-  const COLOR = '#143C64'
-  return `<!doctype html>
-<html lang="es">
-<head><meta charset="utf-8" /></head>
-<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f5f6f8;color:#222">
-  <div style="max-width:600px;margin:0 auto;padding:24px 16px">
-    <div style="background:${COLOR};color:#fff;padding:24px;border-radius:12px 12px 0 0">
-      <p style="margin:0;font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:.85">Alma Animal · Convenio Eutanasias</p>
-      <h1 style="margin:6px 0 0;font-size:20px;font-weight:700">Tomaste la solicitud — siguiente paso</h1>
-    </div>
-    <div style="background:#fff;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e5e7eb;border-top:0">
-      <p style="margin:0 0 12px;font-size:15px">Hola ${escapeHtml(vetNombre)},</p>
-      <p style="margin:0 0 14px;font-size:14px;line-height:1.55">Gracias por confirmar tu disponibilidad. Ahora <strong>contacta directamente a la familia</strong> para evaluar el caso y coordinar.</p>
-
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin:16px 0">
-        <p style="margin:0 0 6px;font-size:12px;color:#64748b">Contacto del cliente</p>
-        <p style="margin:0;font-size:15px;font-weight:600">${escapeHtml(c.cliente_nombre)}</p>
-        <p style="margin:4px 0 0;font-size:14px"><a href="tel:+56${escapeHtml(c.cliente_telefono)}" style="color:${COLOR}">+56 ${escapeHtml(c.cliente_telefono)}</a></p>
-        ${c.cliente_email ? `<p style="margin:2px 0 0;font-size:13px;color:#475569">${escapeHtml(c.cliente_email)}</p>` : ''}
-      </div>
-
-      <table style="width:100%;border-collapse:collapse;margin:12px 0">
-        <tbody>
-          ${row('Mascota', `${escapeHtml(c.mascota_nombre)} (${escapeHtml(c.especie)}, ${escapeHtml(c.peso)} kg)`)}
-          ${row('Fecha y hora', `${escapeHtml(fechaLeg)} ${escapeHtml(horaLeg)} hs`)}
-          ${row('Dirección', `<a href="${mapsUrl}" target="_blank" style="color:${COLOR}">${escapeHtml(c.direccion)}, ${escapeHtml(c.comuna)} (ver mapa)</a>`)}
-          ${c.notas ? row('Notas', escapeHtml(c.notas)) : ''}
-        </tbody>
-      </table>
-
-      <p style="margin:20px 0 8px;font-size:14px">Una vez que hayas hablado con la familia y confirmen que vas a realizar el servicio, marca acá:</p>
-
-      <div style="text-align:center;margin:18px 0 8px">
-        <a href="${linkConfirmar}" style="display:inline-block;background:${COLOR};color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 28px;border-radius:10px">
-          Confirma servicio aquí
-        </a>
-      </div>
-
-      <p style="margin:18px 0 0;font-size:12px;color:#64748b">Si después de hablar con la familia decides que no puedes tomar el caso, simplemente ignora este correo — lo reasignaremos.</p>
-
-      ${linkDatosPago ? `
-      <div style="margin:24px 0 0;padding-top:18px;border-top:1px dashed #e2e8f0;text-align:center">
-        <p style="margin:0 0 10px;font-size:13px;color:#475569">¿Aún no registras tus datos para transferirte los pagos?</p>
-        <a href="${linkDatosPago}" style="display:inline-block;color:${COLOR};font-weight:600;font-size:13px;padding:8px 14px;border:1px solid ${COLOR};border-radius:6px;text-decoration:none">
-          Regístralos aquí
-        </a>
-      </div>` : ''}
-    </div>
-  </div>
-</body>
-</html>`
-}
-
-function row(label: string, value: string): string {
-  return `<tr>
-    <td style="padding:6px 12px 6px 0;font-size:12px;color:#64748b;width:120px;vertical-align:top">${label}</td>
-    <td style="padding:6px 0;font-size:14px;color:#0f172a">${value}</td>
-  </tr>`
-}
-
-function escapeHtml(s: string): string {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }

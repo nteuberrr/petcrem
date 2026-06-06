@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSheetData, appendRow, getNextId, ensureColumns } from '@/lib/google-sheets'
 import { generarCodigo } from '@/lib/codigo-generator'
+import { enviarRegistroMascota } from '@/lib/cliente-mailer'
 import { todayISO } from '@/lib/dates'
 import { calcularSnapshotFicha, type AdicionalItem } from '@/lib/price-calculator'
 
@@ -124,6 +125,20 @@ export async function POST(req: NextRequest) {
       fecha_creacion: now,
     }
     await appendRow('clientes', row)
+
+    // Mail de bienvenida al tutor con el código de su mascota (best-effort:
+    // no bloquea la creación de la ficha si Resend falla o no está configurado).
+    try {
+      await enviarRegistroMascota({
+        email: row.email,
+        nombreMascota: row.nombre_mascota,
+        nombreTutor: row.nombre_tutor,
+        codigo: row.codigo,
+      })
+    } catch (e) {
+      console.warn('[clientes POST] fallo mail registro (no bloqueante):', e)
+    }
+
     return NextResponse.json({ ...row }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })

@@ -1,0 +1,185 @@
+'use client'
+import { useCallback, useEffect, useState } from 'react'
+
+type Canal = 'whatsapp' | 'instagram' | 'facebook'
+type Contacto = { id: number; nombre: string | null; telefono: string | null; audiencia: string; cliente_id: string | null }
+type Conversacion = {
+  id: number; contacto_id: number; canal: Canal; audiencia: string
+  estado: 'abierta' | 'cerrada'; etiquetas: string[]; fuente: string
+  ultimo_mensaje_at: string | null; contacto: Contacto | null
+}
+type Mensaje = {
+  id: number; direccion: 'entrante' | 'saliente'; cuerpo: string | null
+  tipo: string; estado: string | null; enviado_por: string | null; ts: string
+}
+
+const ETIQUETAS = ['consulta', 'cotizacion', 'agendado', 'seguimiento', 'urgente', 'convenio']
+const CANAL_LABEL: Record<Canal, string> = { whatsapp: 'WhatsApp', instagram: 'Instagram', facebook: 'Facebook' }
+const CANAL_CLS: Record<Canal, string> = {
+  whatsapp: 'bg-green-100 text-green-800', instagram: 'bg-pink-100 text-pink-800', facebook: 'bg-blue-100 text-blue-800',
+}
+
+function fecha(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso); if (isNaN(d.getTime())) return ''
+  return d.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+export default function MensajesView() {
+  const [convs, setConvs] = useState<Conversacion[]>([])
+  const [estado, setEstado] = useState<'abierta' | 'cerrada' | ''>('abierta')
+  const [buscar, setBuscar] = useState('')
+  const [sel, setSel] = useState<number | null>(null)
+  const [conv, setConv] = useState<Conversacion | null>(null)
+  const [msgs, setMsgs] = useState<Mensaje[]>([])
+  const [texto, setTexto] = useState('')
+  const [cargando, setCargando] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState('')
+
+  const fetchConvs = useCallback(async () => {
+    setCargando(true); setError('')
+    try {
+      const p = new URLSearchParams()
+      if (estado) p.set('estado', estado)
+      if (buscar) p.set('buscar', buscar)
+      const r = await fetch(`/api/mensajes?${p}`, { cache: 'no-store' })
+      const j = await r.json()
+      if (!r.ok) { setError(j.error || 'Error al cargar'); setConvs([]) }
+      else setConvs(Array.isArray(j) ? j : [])
+    } catch { setError('Error de red') }
+    setCargando(false)
+  }, [estado, buscar])
+
+  useEffect(() => { fetchConvs() }, [fetchConvs])
+
+  const abrir = useCallback(async (id: number) => {
+    setSel(id); setConv(null); setMsgs([])
+    const r = await fetch(`/api/mensajes/${id}`, { cache: 'no-store' })
+    const j = await r.json()
+    if (r.ok) { setConv(j.conversacion); setMsgs(j.mensajes || []) }
+  }, [])
+
+  async function enviar() {
+    if (!sel || !texto.trim()) return
+    setEnviando(true)
+    const r = await fetch(`/api/mensajes/${sel}/mensaje`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cuerpo: texto }),
+    })
+    const j = await r.json().catch(() => ({}))
+    if (r.ok) { setTexto(''); await abrir(sel); if (j.aviso) alert(j.aviso) }
+    else alert(j.error || 'No se pudo registrar el mensaje')
+    setEnviando(false)
+  }
+
+  async function patch(body: Record<string, unknown>) {
+    if (!sel) return
+    await fetch(`/api/mensajes/${sel}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    await abrir(sel); await fetchConvs()
+  }
+
+  function toggleEtiqueta(e: string) {
+    if (!conv) return
+    const set = new Set(conv.etiquetas)
+    if (set.has(e)) set.delete(e); else set.add(e)
+    patch({ etiquetas: Array.from(set) })
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-4 h-[calc(100vh-180px)]">
+      {/* Lista */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
+        <div className="p-3 border-b border-gray-100 space-y-2">
+          <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar por nombre o teléfono…"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <div className="flex gap-1 text-xs">
+            {(['abierta', 'cerrada', ''] as const).map(s => (
+              <button key={s || 'todas'} onClick={() => setEstado(s)}
+                className={`px-2.5 py-1 rounded-md font-medium ${estado === s ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                {s === '' ? 'Todas' : s === 'abierta' ? 'Abiertas' : 'Cerradas'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+          {cargando ? <p className="p-4 text-sm text-gray-400">Cargando…</p>
+            : error ? <p className="p-4 text-sm text-red-600">{error}</p>
+            : convs.length === 0 ? <p className="p-4 text-sm text-gray-400">Sin conversaciones</p>
+            : convs.map(c => (
+              <button key={c.id} onClick={() => abrir(c.id)}
+                className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 ${sel === c.id ? 'bg-indigo-50' : ''}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-sm text-gray-900 truncate">{c.contacto?.nombre || c.contacto?.telefono || 'Contacto'}</span>
+                  <span className={`text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${CANAL_CLS[c.canal]}`}>{CANAL_LABEL[c.canal]}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-0.5">
+                  <span className="text-[11px] text-gray-400 truncate">{c.contacto?.telefono || ''}</span>
+                  <span className="text-[10px] text-gray-400 shrink-0">{fecha(c.ultimo_mensaje_at)}</span>
+                </div>
+                {c.etiquetas.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {c.etiquetas.map(e => <span key={e} className="text-[9px] uppercase bg-amber-100 text-amber-800 rounded px-1 py-0.5">{e}</span>)}
+                  </div>
+                )}
+              </button>
+            ))}
+        </div>
+      </div>
+
+      {/* Conversación */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
+        {!conv ? (
+          <div className="flex-1 flex items-center justify-center text-sm text-gray-400">Selecciona una conversación</div>
+        ) : (
+          <>
+            <div className="p-3 border-b border-gray-100">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-900 truncate">{conv.contacto?.nombre || conv.contacto?.telefono || 'Contacto'}</p>
+                  <p className="text-xs text-gray-400">{conv.contacto?.telefono} · {CANAL_LABEL[conv.canal]} · audiencia {conv.audiencia}{conv.fuente === 'historico' ? ' · histórico' : ''}</p>
+                </div>
+                <button onClick={() => patch({ estado: conv.estado === 'abierta' ? 'cerrada' : 'abierta' })}
+                  className="text-xs font-semibold rounded-lg px-3 py-1.5 bg-slate-700 text-white shrink-0">
+                  {conv.estado === 'abierta' ? 'Cerrar' : 'Reabrir'}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-2">
+                {ETIQUETAS.map(e => (
+                  <button key={e} onClick={() => toggleEtiqueta(e)}
+                    className={`text-[10px] uppercase rounded px-1.5 py-0.5 font-medium ${conv.etiquetas.includes(e) ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-500'}`}>{e}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50">
+              {msgs.map(m => (
+                <div key={m.id} className={`flex ${m.direccion === 'saliente' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direccion === 'saliente' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-800'}`}>
+                    {m.tipo !== 'texto' && <span className="text-[10px] opacity-70 italic">[{m.tipo}] </span>}
+                    {m.cuerpo || ''}
+                    <div className={`text-[9px] mt-0.5 ${m.direccion === 'saliente' ? 'text-indigo-200' : 'text-gray-400'}`}>{fecha(m.ts)}{m.estado ? ` · ${m.estado}` : ''}</div>
+                  </div>
+                </div>
+              ))}
+              {msgs.length === 0 && <p className="text-center text-xs text-gray-400 py-6">Sin mensajes</p>}
+            </div>
+
+            <div className="p-3 border-t border-gray-100">
+              <div className="flex gap-2">
+                <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }}
+                  placeholder="Escribe un mensaje…"
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <button onClick={enviar} disabled={enviando || !texto.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                  {enviando ? '…' : 'Registrar'}
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1">Envío en vivo por WhatsApp: se habilita al conectar la API de Meta. Por ahora el mensaje queda registrado en el hilo.</p>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

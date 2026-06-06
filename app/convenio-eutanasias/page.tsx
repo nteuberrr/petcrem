@@ -20,6 +20,11 @@ type DiaKey = typeof DIAS[number]['key']
 type Horarios = Partial<Record<DiaKey, { am: boolean; pm: boolean }>>
 
 const COLOR = '#143C64'
+const AMBER = '#F2B84B'
+const CREAM = '#FBF8F3'
+const HAIRLINE = '#ece6db'
+const LOGO = '/brand/logo-alma-animal.png'
+const SELLO = '/brand/sello-alma-animal.png'
 
 export default function ConvenioEutanasiasPage() {
   const [tramos, setTramos] = useState<Tramo[]>([])
@@ -109,24 +114,28 @@ export default function ConvenioEutanasiasPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+    <div className="min-h-screen" style={{ backgroundColor: CREAM }}>
+      {/* Header — misma identidad que los correos: barra navy + logo + filete dorado */}
       <header style={{ backgroundColor: COLOR }} className="text-white py-8 sm:py-10 px-4">
-        <div className="max-w-4xl mx-auto">
-          <p className="text-xs sm:text-sm uppercase tracking-widest opacity-80">Alma Animal Crematorio · Convenio Veterinarios</p>
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mt-2">Eutanasias a Domicilio</h1>
-          <p className="text-base sm:text-lg mt-3 opacity-95 max-w-2xl">
-            Únete a nuestra red de veterinarios para ofrecer un acompañamiento digno y cercano en el último momento de las mascotas.
-          </p>
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>🐾 Alma Animal · Convenio Veterinarios</p>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mt-2">Eutanasias a Domicilio</h1>
+            <p className="text-base sm:text-lg mt-3 opacity-95 max-w-2xl">
+              Únete a nuestra red de veterinarios para ofrecer un acompañamiento digno y cercano en el último momento de las mascotas.
+            </p>
+          </div>
+          <img src={LOGO} alt="Alma Animal" className="hidden sm:block h-24 w-auto shrink-0" />
         </div>
       </header>
+      <div style={{ backgroundColor: AMBER }} className="h-1" />
 
       <main className="max-w-4xl mx-auto px-4 py-8 sm:py-10 space-y-10 sm:space-y-12">
 
         {/* Cómo funciona */}
         <section>
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">¿Cómo funciona el convenio?</h2>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card num="1" titulo="Te inscribes">
               Llenas este formulario indicando tus datos, las comunas en las que puedes atender y tus horarios de disponibilidad.
             </Card>
@@ -134,7 +143,10 @@ export default function ConvenioEutanasiasPage() {
               Cuando una familia nos llama por una eutanasia en tu zona y horario, te enviamos un correo con los datos del caso.
             </Card>
             <Card num="3" titulo="Confirmas y atiendes">
-              Si puedes tomar el caso, confirmas en un clic, te contactas con la familia y recibes el pago acordado por el servicio.
+              Si puedes tomar el caso, confirmas en un clic, te contactas con la familia y realizas el servicio.
+            </Card>
+            <Card num="4" titulo="Confirmas y te pagamos">
+              Cuando termines, confirmas que el servicio se realizó y recibes el pago el día hábil siguiente.
             </Card>
           </div>
         </section>
@@ -317,8 +329,11 @@ export default function ConvenioEutanasiasPage() {
           </form>
         </section>
 
-        <footer className="text-center text-xs text-gray-500 pt-6 border-t border-gray-200">
-          ¿Dudas? Escríbenos a <a href="mailto:info@crematorioalmaanimal.cl" className="text-gray-700 underline">info@crematorioalmaanimal.cl</a>
+        <footer className="text-center pt-8 border-t" style={{ borderColor: HAIRLINE }}>
+          <img src={SELLO} alt="Sello Crematorio Alma Animal — proceso con amor y respeto" className="mx-auto h-20 w-20 mb-3" />
+          <p className="text-xs text-gray-500">
+            ¿Dudas? Escríbenos a <a href="mailto:info@crematorioalmaanimal.cl" className="underline" style={{ color: COLOR }}>info@crematorioalmaanimal.cl</a>
+          </p>
         </footer>
       </main>
 
@@ -364,8 +379,13 @@ export default function ConvenioEutanasiasPage() {
 
 function Card({ num, titulo, children }: { num: string; titulo: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
-      <div className="text-3xl font-bold mb-2" style={{ color: COLOR }}>{num}</div>
+    <div className="bg-white rounded-xl p-5 border shadow-sm" style={{ borderColor: HAIRLINE }}>
+      <div
+        className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-base mb-3"
+        style={{ backgroundColor: COLOR, color: AMBER }}
+      >
+        {num}
+      </div>
       <h3 className="font-semibold text-gray-900 mb-1">{titulo}</h3>
       <p className="text-sm text-gray-600">{children}</p>
     </div>
@@ -384,4 +404,4 @@ function FormField({ label, required, hint, children }: { label: string; require
   )
 }
 
-const inputCls = 'w-full px-3 py-2.5 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none'
+const inputCls = 'w-full px-3 py-2.5 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-[#143C64] focus:border-[#143C64] outline-none'

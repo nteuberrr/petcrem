@@ -79,11 +79,20 @@ async function clasificarClientes(opts: { dias_recomendadas: number; fecha_base_
   candidatas: ClienteRow[]
   plazoMap: Map<string, number>
 }> {
-  const [clientes, tiposServicio, veterinarios] = await Promise.all([
+  const [clientes, tiposServicio, veterinarios, despachos] = await Promise.all([
     getSheetData('clientes'),
     getSheetData('tipos_servicio'),
     getSheetData('veterinarios'),
+    getSheetData('despachos'),
   ])
+
+  // Mascotas que ya están en una ruta no terminada: no deben volver a sugerirse
+  // (evita re-rutearlas mientras una ruta abierta las tiene asignadas).
+  const enRutaActiva = new Set<string>()
+  for (const d of despachos) {
+    if ((d.estado_ruta || 'guardada') === 'terminada') continue
+    try { for (const mid of JSON.parse(d.mascotas_ids || '[]')) enRutaActiva.add(String(mid)) } catch { /* */ }
+  }
 
   const plazoMap = new Map<string, number>()
   for (const t of tiposServicio) {
@@ -104,6 +113,9 @@ async function clasificarClientes(opts: { dias_recomendadas: number; fecha_base_
 
   for (const c of clientes as ClienteRow[]) {
     if (c.estado === 'despachado') continue
+    // Saltar las que ya están asignadas a una ruta activa (salvo que el operador
+    // las fuerce explícitamente como extra).
+    if (enRutaActiva.has(c.id) && !opts.incluir_extras_ids.has(c.id)) continue
     const codigo = (c.codigo_servicio || 'CI').toUpperCase()
     if (codigo === 'SD') continue
     if (!c.fecha_retiro) continue

@@ -23,6 +23,7 @@ export async function proxy(req: NextRequest) {
     pathname === '/api/init-sheets' ||
     pathname === '/api/reorder-columns' ||
     pathname === '/api/mailing/webhooks/resend' ||
+    pathname === '/api/mensajes/webhook' ||
     pathname.startsWith('/api/mailing/pixel/') ||
     pathname.startsWith('/api/mailing/click/') ||
     pathname === '/convenio-eutanasias' ||

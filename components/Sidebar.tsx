@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: false },
   { href: '/clientes', label: 'Clientes', icon: '🐾', adminOnly: false },
+  { href: '/mensajes', label: 'Mensajes', icon: '💬', adminOnly: true },
   { href: '/operaciones', label: 'Operaciones', icon: '🔥', adminOnly: false },
   { href: '/asistencia', label: 'Asistencia', icon: '🕐', adminOnly: false },
   { href: '/rendiciones', label: 'Rendiciones', icon: '🧾', adminOnly: true },
@@ -55,7 +56,9 @@ export default function Sidebar() {
           open ? 'translate-x-0' : '-translate-x-full'
         } md:translate-x-0`}
       >
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-800">
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-800">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/logo-alma-animal.png" alt="Alma Animal" className="h-12 w-auto shrink-0" />
           <Link href="/dashboard" className="block flex-1 hover:opacity-80 transition-opacity">
             <h1 className="text-lg font-bold tracking-tight">Alma Animal</h1>
             <p className="text-gray-400 text-xs mt-0.5">Gestión crematorio</p>

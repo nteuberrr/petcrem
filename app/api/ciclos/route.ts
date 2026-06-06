@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSheetData, appendRow, updateRow, getNextId, ensureColumns, deleteRow } from '@/lib/google-sheets'
+import { enviarInicioCremacion } from '@/lib/cliente-mailer'
 import { todayISO } from '@/lib/dates'
 import { parsePeso } from '@/lib/numbers'
 
@@ -89,6 +90,22 @@ export async function POST(req: NextRequest) {
         })
       })
     )
+
+    // Mail a cada tutor del ciclo: se inició la cremación de su mascota
+    // (best-effort, no bloquea la creación del ciclo).
+    try {
+      const destinatarios = data.mascotas_ids
+        .map((mid) => idxById.get(mid))
+        .filter((i): i is number => i !== undefined)
+        .map((i) => ({
+          email: clientes[i].email,
+          nombreMascota: clientes[i].nombre_mascota,
+          nombreTutor: clientes[i].nombre_tutor,
+        }))
+      await enviarInicioCremacion(destinatarios)
+    } catch (e) {
+      console.warn('[ciclos POST] fallo mail inicio cremación (no bloqueante):', e)
+    }
 
     return NextResponse.json(row, { status: 201 })
   } catch (e) {
