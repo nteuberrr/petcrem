@@ -88,8 +88,8 @@ export default function MensajesView() {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-4 h-[calc(100vh-180px)]">
-      {/* Lista */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
+      {/* Lista — en móvil se oculta cuando hay una conversación abierta */}
+      <div className={`bg-white rounded-xl border border-gray-100 shadow-sm flex-col overflow-hidden ${sel !== null ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-3 border-b border-gray-100 space-y-2">
           <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar por nombre o teléfono…"
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
@@ -127,17 +127,22 @@ export default function MensajesView() {
         </div>
       </div>
 
-      {/* Conversación */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
+      {/* Conversación — en móvil ocupa toda la pantalla; en desktop, panel derecho */}
+      <div className={`bg-white rounded-xl border border-gray-100 shadow-sm flex-col overflow-hidden ${sel !== null ? 'flex' : 'hidden md:flex'}`}>
         {!conv ? (
           <div className="flex-1 flex items-center justify-center text-sm text-gray-400">Selecciona una conversación</div>
         ) : (
           <>
             <div className="p-3 border-b border-gray-100">
               <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">{conv.contacto?.nombre || conv.contacto?.telefono || 'Contacto'}</p>
-                  <p className="text-xs text-gray-400">{conv.contacto?.telefono} · {CANAL_LABEL[conv.canal]} · audiencia {conv.audiencia}{conv.fuente === 'historico' ? ' · histórico' : ''}</p>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <button onClick={() => { setSel(null); setConv(null); setMsgs([]) }}
+                    aria-label="Volver a la lista"
+                    className="md:hidden shrink-0 text-gray-500 hover:text-gray-800 text-2xl leading-none px-1">‹</button>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{conv.contacto?.nombre || conv.contacto?.telefono || 'Contacto'}</p>
+                    <p className="text-xs text-gray-400 truncate">{conv.contacto?.telefono} · {CANAL_LABEL[conv.canal]} · audiencia {conv.audiencia}{conv.fuente === 'historico' ? ' · histórico' : ''}</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button onClick={() => toggleEtiqueta('pausado')}
