@@ -35,6 +35,8 @@ const CAMPOS_EDITABLES = [
   'fecha_servicio', 'hora_servicio',
   'notas',
   'estado',
+  // estado de pago (aplicable cuando estado=realizada): pendiente_pago | pago_confirmado
+  'estado_pago',
 ] as const
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -92,8 +94,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (partial.estado === 'realizada' && !rows[idx].fecha_realizacion) {
       partial.fecha_realizacion = new Date().toISOString()
     }
+    // Al pasar a 'realizada' inicializamos el estado de pago si no lo tenía,
+    // así aparece automáticamente en el listado histórico esperando que el
+    // admin marque 'pago_confirmado' luego de transferir.
+    if (partial.estado === 'realizada' && !rows[idx].estado_pago && !partial.estado_pago) {
+      partial.estado_pago = 'pendiente_pago'
+    }
     if (partial.estado === 'cancelada' && !rows[idx].fecha_cancelacion) {
       partial.fecha_cancelacion = new Date().toISOString()
+    }
+    // Al marcar pago_confirmado sellamos fecha_pago si no estaba.
+    if (partial.estado_pago === 'pago_confirmado' && !rows[idx].fecha_pago) {
+      partial.fecha_pago = new Date().toISOString()
     }
     const updated = { ...rows[idx], ...partial }
     await updateRow(SHEET, idx, updated)

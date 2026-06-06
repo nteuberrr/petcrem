@@ -66,6 +66,9 @@ export async function POST(req: NextRequest) {
       ...c,
       estado: 'realizada',
       fecha_realizacion: ahora,
+      // Inicializamos el estado de pago para que aparezca en el listado
+      // histórico esperando que el admin marque "pago confirmado".
+      estado_pago: 'pendiente_pago',
     })
 
     // Disparar correo de agradecimiento. Best-effort.

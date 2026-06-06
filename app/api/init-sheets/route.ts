@@ -174,6 +174,10 @@ const SHEETS: Record<string, string[]> = {
     'estado',
     'vet_id_asignado', 'vet_nombre_asignado', 'vet_email_asignado',
     'precio_snapshot',
+    // Estado de pago, aplicable cuando estado='realizada'. Valores:
+    // 'pendiente_pago' (default al marcar realizada) | 'pago_confirmado'
+    // (el admin lo marca después de transferir).
+    'estado_pago', 'fecha_pago',
     'fecha_creacion', 'fecha_envio_cotizacion',
     'fecha_aceptacion', 'fecha_confirmacion',
     'fecha_realizacion', 'fecha_cancelacion',

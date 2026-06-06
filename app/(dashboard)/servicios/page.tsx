@@ -30,7 +30,29 @@ type Cotizacion = {
   vet_nombre_asignado: string
   vet_email_asignado: string
   precio_snapshot: string
+  estado_pago?: string
+  fecha_pago?: string
+  fecha_realizacion?: string
   fecha_creacion: string
+}
+
+const SUBTABS_COTI = ['Enviadas', 'Por confirmar', 'Por realizar', 'Histórico'] as const
+type SubTabCoti = typeof SUBTABS_COTI[number]
+
+/**
+ * Mapea cada sub-pestaña a los estados que muestra:
+ * - Enviadas → 'creada' (todavía sin enviar) + 'enviada' (esperando que un vet acepte)
+ * - Por confirmar → 'aceptada' (vet aceptó, debe llamar al cliente)
+ * - Por realizar → 'confirmada' (vet ya confirmó la cita con la familia)
+ * - Histórico → 'realizada' + 'cancelada'
+ */
+function pertenece(c: Cotizacion, sub: SubTabCoti): boolean {
+  switch (sub) {
+    case 'Enviadas': return c.estado === 'creada' || c.estado === 'enviada'
+    case 'Por confirmar': return c.estado === 'aceptada'
+    case 'Por realizar': return c.estado === 'confirmada'
+    case 'Histórico': return c.estado === 'realizada' || c.estado === 'cancelada'
+  }
 }
 
 type VetMatch = {
@@ -41,8 +63,6 @@ type VetMatch = {
   telefono: string
   comunas: string[]
 }
-
-const ESTADOS_COTI = ['creada', 'enviada', 'aceptada', 'confirmada', 'realizada', 'cancelada'] as const
 
 function estadoColor(estado: string): string {
   switch (estado) {
@@ -140,7 +160,7 @@ export default function ServiciosEutanasiasPage() {
   // Cotizaciones
   const [cotis, setCotis] = useState<Cotizacion[]>([])
   const [loadingCotis, setLoadingCotis] = useState(false)
-  const [filtroEstadoCoti, setFiltroEstadoCoti] = useState('')
+  const [subTabCoti, setSubTabCoti] = useState<SubTabCoti>('Enviadas')
   const [showCotiModal, setShowCotiModal] = useState(false)
   const [cotiForm, setCotiForm] = useState(cotizacionFormDefault())
   const [savingCoti, setSavingCoti] = useState(false)
@@ -421,11 +441,30 @@ export default function ServiciosEutanasiasPage() {
     await cargarCotis()
   }
 
+  // Conteos por sub-pestaña (para mostrar el badge en cada tab).
+  const cotisCountBySubtab = useMemo(() => {
+    const r: Record<SubTabCoti, number> = { 'Enviadas': 0, 'Por confirmar': 0, 'Por realizar': 0, 'Histórico': 0 }
+    for (const c of cotis) {
+      for (const s of SUBTABS_COTI) {
+        if (pertenece(c, s)) { r[s]++; break }
+      }
+    }
+    return r
+  }, [cotis])
+
+  // Listado actual según sub-pestaña activa.
   const cotisFiltradas = useMemo(() => {
-    return filtroEstadoCoti
-      ? cotis.filter(c => c.estado === filtroEstadoCoti)
-      : cotis
-  }, [cotis, filtroEstadoCoti])
+    return cotis.filter(c => pertenece(c, subTabCoti))
+  }, [cotis, subTabCoti])
+
+  async function cambiarEstadoPago(id: string, nuevoEstadoPago: 'pendiente_pago' | 'pago_confirmado') {
+    await fetch(`/api/eutanasias/cotizaciones/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado_pago: nuevoEstadoPago }),
+    })
+    await cargarCotis()
+  }
 
   // Vets activos disponibles para asignación manual.
   const vetsActivos = useMemo(() => vets.filter(v => v.activo !== 'FALSE'), [vets])
@@ -634,17 +673,31 @@ export default function ServiciosEutanasiasPage() {
 
       {tab === 'Cotizaciones' && (
         <section>
+          {/* Sub-pestañas por grupo de estado */}
           <div className="flex flex-col md:flex-row gap-3 md:items-center justify-between mb-4">
-            <div className="flex gap-2 items-center flex-1">
-              <select
-                value={filtroEstadoCoti}
-                onChange={e => setFiltroEstadoCoti(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              >
-                <option value="">Todos los estados</option>
-                {ESTADOS_COTI.map(e => <option key={e} value={e}>{e}</option>)}
-              </select>
-              <span className="text-xs text-gray-500">{cotisFiltradas.length} cotización{cotisFiltradas.length === 1 ? '' : 'es'}</span>
+            <div className="overflow-x-auto">
+              <div className="inline-flex gap-1 bg-gray-100 rounded-lg p-1 min-w-max">
+                {SUBTABS_COTI.map(s => {
+                  const active = subTabCoti === s
+                  const count = cotisCountBySubtab[s]
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => setSubTabCoti(s)}
+                      className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium whitespace-nowrap transition-colors ${
+                        active ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      {s}
+                      <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${
+                        active ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
             <button
               onClick={abrirNuevaCotizacion}
@@ -659,7 +712,7 @@ export default function ServiciosEutanasiasPage() {
               <div className="p-8 text-center text-gray-500">Cargando…</div>
             ) : cotisFiltradas.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
-                {cotis.length === 0 ? 'Aún no hay cotizaciones.' : 'No hay coincidencias.'}
+                {cotis.length === 0 ? 'Aún no hay cotizaciones.' : `No hay cotizaciones en "${subTabCoti}".`}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -673,6 +726,9 @@ export default function ServiciosEutanasiasPage() {
                       <th className="px-3 py-2 text-left">Estado</th>
                       <th className="px-3 py-2 text-left">Vet asignado</th>
                       <th className="px-3 py-2 text-right">Pago vet</th>
+                      {subTabCoti === 'Histórico' && (
+                        <th className="px-3 py-2 text-left">Pago</th>
+                      )}
                       <th className="px-3 py-2 text-right">Acciones</th>
                     </tr>
                   </thead>
@@ -699,6 +755,27 @@ export default function ServiciosEutanasiasPage() {
                         <td className="px-3 py-2 text-right text-xs text-gray-700">
                           {fmtPrecio(parseInt(c.precio_snapshot, 10) || 0)}
                         </td>
+                        {subTabCoti === 'Histórico' && (
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {c.estado === 'realizada' ? (
+                              c.estado_pago === 'pago_confirmado' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                                  ✓ Pago confirmado
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => cambiarEstadoPago(c.id, 'pago_confirmado')}
+                                  className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                                  title="Marcar como pagado"
+                                >
+                                  ⏱ Pendiente · marcar pagado
+                                </button>
+                              )
+                            ) : (
+                              <span className="text-[10px] text-gray-400">—</span>
+                            )}
+                          </td>
+                        )}
                         <td className="px-3 py-2 text-right whitespace-nowrap">
                           <button onClick={() => abrirDetalleCotizacion(c)} className="text-indigo-600 hover:text-indigo-800 text-xs font-medium mr-2">
                             {c.estado === 'creada' || c.estado === 'enviada' ? 'Enviar' : 'Ver'}
@@ -709,6 +786,11 @@ export default function ServiciosEutanasiasPage() {
                           {(c.estado === 'confirmada') && (
                             <button onClick={() => marcarRealizada(c.id)} className="text-green-700 hover:text-green-900 text-xs font-medium mr-2">
                               Realizada
+                            </button>
+                          )}
+                          {subTabCoti === 'Histórico' && c.estado === 'realizada' && c.estado_pago === 'pago_confirmado' && (
+                            <button onClick={() => cambiarEstadoPago(c.id, 'pendiente_pago')} className="text-amber-600 hover:text-amber-800 text-xs font-medium mr-2" title="Revertir a pendiente">
+                              Revertir pago
                             </button>
                           )}
                           {!['realizada', 'cancelada'].includes(c.estado) && (
