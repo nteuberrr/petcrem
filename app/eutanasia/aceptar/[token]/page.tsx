@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { formatDate, formatHoraDia } from '@/lib/dates'
 
 const COLOR = '#143C64'
 
@@ -115,7 +116,7 @@ function DatosCliente({ data }: { data: Resultado }) {
       {data.cliente_email && <p className="text-xs text-slate-600 mt-0.5">{data.cliente_email}</p>}
       <hr className="my-3 border-slate-200" />
       <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Servicio</p>
-      <p className="text-sm text-slate-900">{data.mascota_nombre} · {data.fecha_servicio} {data.hora_servicio} hs</p>
+      <p className="text-sm text-slate-900">{data.mascota_nombre} · {formatDate(data.fecha_servicio || '')} {formatHoraDia(data.hora_servicio)} hs</p>
       <p className="text-sm mt-1">
         <a href={mapsUrl} target="_blank" rel="noreferrer" style={{ color: COLOR }} className="underline">
           {data.direccion}, {data.comuna} (mapa)

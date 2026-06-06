@@ -5,7 +5,8 @@ import { getSheetData, updateRow, appendRow, getNextId, ensureSheet, ensureColum
 import { sendBatch, isResendConfigured } from '@/lib/resend-mailer'
 import { createToken, createVetToken } from '@/lib/eutanasia-tokens'
 import { fmtPrecio } from '@/lib/format'
-import { formatDate } from '@/lib/dates'
+import { formatDate, formatHoraDia } from '@/lib/dates'
+import { nombreCompletoVet } from '@/lib/eutanasia-mailer'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
 const SHEET_ENVIOS = 'cotizaciones_eutanasia_envios'
@@ -71,9 +72,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         : `${baseUrl}/eutanasia/datos-pago/${createVetToken(v.id, 'datos_pago')}`
       return {
         to: v.email,
-        subject: `Solicitud de eutanasia en ${c.comuna} — ${c.fecha_servicio} ${c.hora_servicio}`,
+        subject: `Solicitud de eutanasia en ${c.comuna} — ${formatDate(c.fecha_servicio)} ${formatHoraDia(c.hora_servicio)}`,
         html: renderEmailCotizacion({
-          vetNombre: `${v.nombre || ''} ${v.apellido || ''}`.trim(),
+          vetNombre: nombreCompletoVet(v.nombre, v.apellido),
           c,
           linkAceptar,
           linkDatosPago,
@@ -162,7 +163,7 @@ function renderEmailCotizacion({ vetNombre, c, linkAceptar, linkDatosPago }: Ren
         <tbody>
           ${row('Mascota', `${escapeHtml(c.mascota_nombre)} (${escapeHtml(c.especie)})`)}
           ${row('Peso', `${escapeHtml(c.peso)} kg`)}
-          ${row('Fecha y hora', `${escapeHtml(fechaLeg)} ${escapeHtml(c.hora_servicio)} hs`)}
+          ${row('Fecha y hora', `${escapeHtml(fechaLeg)} ${escapeHtml(formatHoraDia(c.hora_servicio))} hs`)}
           ${row('Comuna', escapeHtml(c.comuna))}
           ${row('Dirección', `<a href="${mapsUrl}" target="_blank" style="color:${COLOR};text-decoration:underline">${escapeHtml(c.direccion)} (ver mapa)</a>`)}
           ${row('Cliente', escapeHtml(c.cliente_nombre))}

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { formatDate, formatHoraDia } from '@/lib/dates'
 
 const COLOR = '#143C64'
 
@@ -77,7 +78,7 @@ export default function ConfirmarPage() {
               <p className="text-sm text-gray-600 mt-2">
                 {data.ya_confirmada
                   ? data.mensaje
-                  : `Confirmaste el servicio para ${data.mascota_nombre} (${data.cliente_nombre}) el ${data.fecha_servicio} a las ${data.hora_servicio} hs.`}
+                  : `Confirmaste el servicio para ${data.mascota_nombre} (${data.cliente_nombre}) el ${formatDate(data.fecha_servicio || '')} a las ${formatHoraDia(data.hora_servicio)} hs.`}
               </p>
               <p className="text-xs text-gray-500 mt-4">Gracias por sumarte al convenio. Cualquier cosa, escríbenos a info@crematorioalmaanimal.cl.</p>
             </>

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateRow, ensureSheet, ensureColumns } from '@/lib/google-sheets'
-import { verifyToken, createToken } from '@/lib/eutanasia-tokens'
+import { verifyToken, createToken, createVetToken } from '@/lib/eutanasia-tokens'
 import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
-import { fmtPrecio } from '@/lib/format'
-import { formatDate } from '@/lib/dates'
+import { formatDate, formatHoraDia } from '@/lib/dates'
+import { nombreCompletoVet } from '@/lib/eutanasia-mailer'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
 const SHEET_ENVIOS = 'cotizaciones_eutanasia_envios'
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
 
     // Marcar cotización como aceptada
     const ahora = new Date().toISOString()
-    const vetNombreCompleto = `${vet.nombre || ''} ${vet.apellido || ''}`.trim()
+    const vetNombreCompleto = nombreCompletoVet(vet.nombre, vet.apellido)
     await updateRow(SHEET_COTI, idx, {
       ...c,
       estado: 'aceptada',
@@ -101,6 +101,11 @@ export async function POST(req: NextRequest) {
     if (isResendConfigured() && baseUrl) {
       const tokenConfirmar = createToken(c.id, vet.id, 'confirmar')
       const linkConfirmar = `${baseUrl}/eutanasia/confirmar/${tokenConfirmar}`
+      // CTA de datos bancarios solo si el vet aún no los completó.
+      const tieneDatosPago = (vet.datos_pago_completos ?? '').toUpperCase() === 'TRUE'
+      const linkDatosPago = tieneDatosPago
+        ? ''
+        : `${baseUrl}/eutanasia/datos-pago/${createVetToken(vet.id, 'datos_pago')}`
       try {
         await sendEmail({
           to: vet.email,
@@ -109,6 +114,7 @@ export async function POST(req: NextRequest) {
             vetNombre: vetNombreCompleto || 'Dr/a.',
             c,
             linkConfirmar,
+            linkDatosPago,
           }),
           tags: [
             { name: 'tipo', value: 'eutanasia_post_aceptar' },
@@ -140,11 +146,19 @@ export async function POST(req: NextRequest) {
   }
 }
 
-function renderEmailConfirmar({ vetNombre, c, linkConfirmar }: { vetNombre: string; c: Record<string, string>; linkConfirmar: string }): string {
+interface ConfirmarRenderArgs {
+  vetNombre: string
+  c: Record<string, string>
+  linkConfirmar: string
+  /** Si está vacío, no se muestra el bloque "Aún no registras tus datos…". */
+  linkDatosPago: string
+}
+
+function renderEmailConfirmar({ vetNombre, c, linkConfirmar, linkDatosPago }: ConfirmarRenderArgs): string {
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${c.direccion}, ${c.comuna}, Chile`)}`
   const fechaLeg = formatDate(c.fecha_servicio)
+  const horaLeg = formatHoraDia(c.hora_servicio)
   const COLOR = '#143C64'
-  const precio = parseInt(c.precio_snapshot || '0', 10)
   return `<!doctype html>
 <html lang="es">
 <head><meta charset="utf-8" /></head>
@@ -168,9 +182,8 @@ function renderEmailConfirmar({ vetNombre, c, linkConfirmar }: { vetNombre: stri
       <table style="width:100%;border-collapse:collapse;margin:12px 0">
         <tbody>
           ${row('Mascota', `${escapeHtml(c.mascota_nombre)} (${escapeHtml(c.especie)}, ${escapeHtml(c.peso)} kg)`)}
-          ${row('Fecha y hora', `${escapeHtml(fechaLeg)} ${escapeHtml(c.hora_servicio)} hs`)}
+          ${row('Fecha y hora', `${escapeHtml(fechaLeg)} ${escapeHtml(horaLeg)} hs`)}
           ${row('Dirección', `<a href="${mapsUrl}" target="_blank" style="color:${COLOR}">${escapeHtml(c.direccion)}, ${escapeHtml(c.comuna)} (ver mapa)</a>`)}
-          ${row('Pago acordado', `<strong>${escapeHtml(fmtPrecio(precio))}</strong>`)}
           ${c.notas ? row('Notas', escapeHtml(c.notas)) : ''}
         </tbody>
       </table>
@@ -184,6 +197,14 @@ function renderEmailConfirmar({ vetNombre, c, linkConfirmar }: { vetNombre: stri
       </div>
 
       <p style="margin:18px 0 0;font-size:12px;color:#64748b">Si después de hablar con la familia decides que no puedes tomar el caso, simplemente ignora este correo — lo reasignaremos.</p>
+
+      ${linkDatosPago ? `
+      <div style="margin:24px 0 0;padding-top:18px;border-top:1px dashed #e2e8f0;text-align:center">
+        <p style="margin:0 0 10px;font-size:13px;color:#475569">¿Aún no registras tus datos para transferirte los pagos?</p>
+        <a href="${linkDatosPago}" style="display:inline-block;color:${COLOR};font-weight:600;font-size:13px;padding:8px 14px;border:1px solid ${COLOR};border-radius:6px;text-decoration:none">
+          Regístralos aquí
+        </a>
+      </div>` : ''}
     </div>
   </div>
 </body>

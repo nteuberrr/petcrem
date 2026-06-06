@@ -1,8 +1,29 @@
 import { sendEmail, isResendConfigured, getFromAddress } from './resend-mailer'
 import { agregarDiasHabiles } from './dias-habiles'
-import { formatDate } from './dates'
+import { formatDate, formatHoraDia } from './dates'
 import { fmtPrecio } from './format'
 import { createVetToken } from './eutanasia-tokens'
+
+/**
+ * Arma el nombre completo del vet evitando duplicar el apellido cuando el
+ * usuario, al inscribirse, lo metió en ambos campos (caso real: el vet escribe
+ * "Nicolás Teuber" en el campo "nombre" y "Teuber" en "apellido" → quedaba
+ * "Nicolás Teuber Teuber" en los saludos).
+ *
+ * Comportamiento:
+ * - Si nombre y apellido están vacíos → 'Dr/a.'
+ * - Si nombre ya termina con apellido (case-insensitive) → solo nombre
+ * - En otro caso → "nombre apellido"
+ */
+export function nombreCompletoVet(nombre: string | undefined, apellido: string | undefined): string {
+  const n = (nombre || '').trim()
+  const a = (apellido || '').trim()
+  if (!n && !a) return 'Dr/a.'
+  if (!a) return n
+  if (!n) return a
+  if (n.toLowerCase().endsWith(a.toLowerCase())) return n
+  return `${n} ${a}`
+}
 
 const COLOR = '#143C64'
 const TELEFONO = process.env.EMPRESA_TELEFONO_CONTACTO || '+56 9 4053 8499'
@@ -47,7 +68,7 @@ export async function enviarBienvenidaVet(args: {
   }
   const fromUsed = (() => { try { return getFromAddress() } catch { return '(no resolvable)' } })()
   const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
-  const nombreCompleto = `${args.nombre || ''} ${args.apellido || ''}`.trim() || 'Dr/a.'
+  const nombreCompleto = nombreCompletoVet(args.nombre, args.apellido)
 
   // Token firmado largo (90d) para que el vet pueda completar sus datos
   // bancarios desde el correo sin tener que hacer login.
@@ -260,7 +281,7 @@ function renderRealizarServicio(args: RealizarServicioArgs): string {
       <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin:14px 0">
         <p style="margin:0 0 4px;font-size:12px;color:#64748b">Servicio</p>
         <p style="margin:0;font-size:14px;font-weight:600">${escapeHtml(c.mascota_nombre)} · ${escapeHtml(c.cliente_nombre)}</p>
-        <p style="margin:4px 0 0;font-size:13px;color:#475569">${escapeHtml(formatDate(c.fecha_servicio))} ${escapeHtml(c.hora_servicio)} hs · ${escapeHtml(c.direccion)}, ${escapeHtml(c.comuna)}</p>
+        <p style="margin:4px 0 0;font-size:13px;color:#475569">${escapeHtml(formatDate(c.fecha_servicio))} ${escapeHtml(formatHoraDia(c.hora_servicio))} hs · ${escapeHtml(c.direccion)}, ${escapeHtml(c.comuna)}</p>
         ${precio > 0 ? `<p style="margin:8px 0 0;font-size:13px"><strong>Pago acordado:</strong> ${escapeHtml(fmtPrecio(precio))}</p>` : ''}
       </div>
 
@@ -360,7 +381,9 @@ export function fechaProximoPago(fechaRealizacionISO: string): string {
 
 function renderAgradecimiento(args: AgradecimientoArgs): string {
   const c = args.cotizacion
-  const precio = parseInt(c.precio_snapshot || '0', 10)
+  // Nota: precio intencionalmente NO se muestra en este correo. El vet ya lo
+  // vio en la cotización inicial y en el mail "confirma realización"; aquí
+  // solo nos interesa transmitir agradecimiento + fecha del próximo pago.
   const fechaPago = fechaProximoPago(args.fechaRealizacionISO)
   const datosPago = process.env.EUTANASIA_DATOS_PAGO || ''
   return `<!doctype html>
@@ -378,7 +401,7 @@ function renderAgradecimiento(args: AgradecimientoArgs): string {
       <p style="margin:0 0 14px;font-size:15px">Hola <strong>${escapeHtml(args.vetNombre || 'Dr/a.')}</strong>,</p>
 
       <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
-        Confirmamos la realización del servicio para <strong>${escapeHtml(c.mascota_nombre)}</strong>.
+        Confirmamos la realización del servicio para <strong>${escapeHtml(args.cotizacion.mascota_nombre)}</strong>.
         Juntos damos apoyo a familias en momentos difíciles y tu disponibilidad
         hace que este acompañamiento sea posible.
       </p>
@@ -390,7 +413,6 @@ function renderAgradecimiento(args: AgradecimientoArgs): string {
 
       <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:18px;margin:18px 0">
         <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#047857;font-weight:600">Tu pago</p>
-        ${precio > 0 ? `<p style="margin:0 0 6px;font-size:20px;font-weight:700;color:#0f172a">${escapeHtml(fmtPrecio(precio))}</p>` : ''}
         <p style="margin:0;font-size:14px;color:#0f172a;line-height:1.5">
           Recibirás el pago <strong>${escapeHtml(fechaPago)}</strong> (día hábil siguiente al servicio)${datosPago ? `, en la cuenta:` : '.'}
         </p>
