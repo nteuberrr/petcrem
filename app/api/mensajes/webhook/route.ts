@@ -1,12 +1,47 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { verificarFirmaWebhook, descargarMedia, tipoInterno } from '@/lib/whatsapp'
+import { NextRequest, NextResponse, after } from 'next/server'
+import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, isWhatsappConfigured } from '@/lib/whatsapp'
 import {
-  upsertContacto, getOrCreateConversacion, insertarMensaje,
+  upsertContacto, getOrCreateConversacion, insertarMensaje, getMensajes,
   actualizarConversacion, existeMensajePorProvider, marcarEstadoMensaje,
+  type Conversacion, type Contacto,
 } from '@/lib/mensajes'
+import { isAgenteConfigurado, generarRespuesta } from '@/lib/agente-mensajes'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Auto-respuesta del agente IA (corre en after(), tras devolver 200 a Meta).
+ * Guardrails: kill-switch global (AGENTE_AUTO_RESPONDER), agente + WhatsApp
+ * configurados, canal whatsapp, y la conversación no pausada (etiqueta 'pausado').
+ */
+async function autoResponder(conv: Conversacion, contacto: Contacto) {
+  if (process.env.AGENTE_AUTO_RESPONDER === 'false') return
+  if (!isAgenteConfigurado() || !isWhatsappConfigured()) return
+  if (conv.canal !== 'whatsapp') return
+  if ((conv.etiquetas || []).includes('pausado')) return
+  const destino = (contacto.wa_id || contacto.telefono || '').replace(/\D/g, '')
+  if (!destino) return
+
+  const historial = (await getMensajes(conv.id))
+    .filter(m => m.cuerpo)
+    .map(m => ({ rol: (m.direccion === 'entrante' ? 'cliente' : 'nosotros') as 'cliente' | 'nosotros', texto: m.cuerpo as string }))
+  if (historial.length === 0) return
+
+  let r
+  try { r = await generarRespuesta(historial) } catch (e) { console.error('[agente] generarRespuesta:', e); return }
+  if (!r.mensaje) return
+
+  const env = await enviarTextoWhatsapp(destino, r.mensaje)
+  await insertarMensaje({
+    conversacion_id: conv.id, direccion: 'saliente', cuerpo: r.mensaje,
+    tipo: 'texto', estado: env.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
+  })
+  if (r.escalar) {
+    const tags = Array.from(new Set([...(conv.etiquetas || []), 'pausado', 'requiere-humano']))
+    await actualizarConversacion(conv.id, { etiquetas: tags })
+  }
+}
 
 /** Verificación del webhook (Meta hace un GET con hub.* al configurarlo). */
 export async function GET(req: NextRequest) {
@@ -79,6 +114,11 @@ async function procesarEntrante(value: Record<string, unknown>, msg: MetaMsg) {
     provider_message_id: msg.id,
     ts: new Date(Number(msg.timestamp) * 1000 || Date.now()).toISOString(),
   })
+
+  // Auto-respuesta del agente solo para mensajes de texto, tras responder a Meta.
+  if (msg.type === 'text' && cuerpo) {
+    after(() => autoResponder(conv, contacto).catch(e => console.error('[agente] autoResponder:', e)))
+  }
 }
 
 /** Recepción de eventos (mensajes entrantes + cambios de estado). */

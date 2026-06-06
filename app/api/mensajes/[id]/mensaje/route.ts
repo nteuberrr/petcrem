@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getConversacion, insertarMensaje } from '@/lib/mensajes'
+import { getConversacion, insertarMensaje, actualizarConversacion } from '@/lib/mensajes'
 import { isWhatsappConfigured, enviarTextoWhatsapp } from '@/lib/whatsapp'
 
 export const dynamic = 'force-dynamic'
@@ -55,6 +55,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       provider_message_id: providerId,
       enviado_por: enviadoPor,
     })
+    // Un humano respondió manualmente → pausa el agente IA en esta conversación.
+    if (!(conv.etiquetas || []).includes('pausado')) {
+      await actualizarConversacion(conv.id, { etiquetas: [...(conv.etiquetas || []), 'pausado'] })
+    }
     return NextResponse.json({ ok: true, mensaje: msg, aviso })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })

@@ -139,10 +139,17 @@ export default function MensajesView() {
                   <p className="font-semibold text-gray-900 truncate">{conv.contacto?.nombre || conv.contacto?.telefono || 'Contacto'}</p>
                   <p className="text-xs text-gray-400">{conv.contacto?.telefono} · {CANAL_LABEL[conv.canal]} · audiencia {conv.audiencia}{conv.fuente === 'historico' ? ' · histórico' : ''}</p>
                 </div>
-                <button onClick={() => patch({ estado: conv.estado === 'abierta' ? 'cerrada' : 'abierta' })}
-                  className="text-xs font-semibold rounded-lg px-3 py-1.5 bg-slate-700 text-white shrink-0">
-                  {conv.estado === 'abierta' ? 'Cerrar' : 'Reabrir'}
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => toggleEtiqueta('pausado')}
+                    title={conv.etiquetas.includes('pausado') ? 'El agente está en pausa (responde un humano). Clic para reactivarlo.' : 'El agente responde automáticamente. Clic para pausarlo y atender tú.'}
+                    className={`text-xs font-semibold rounded-lg px-3 py-1.5 ${conv.etiquetas.includes('pausado') ? 'bg-gray-200 text-gray-600' : 'bg-emerald-600 text-white'}`}>
+                    {conv.etiquetas.includes('pausado') ? '🤖 Agente en pausa' : '🤖 Agente activo'}
+                  </button>
+                  <button onClick={() => patch({ estado: conv.estado === 'abierta' ? 'cerrada' : 'abierta' })}
+                    className="text-xs font-semibold rounded-lg px-3 py-1.5 bg-slate-700 text-white">
+                    {conv.estado === 'abierta' ? 'Cerrar' : 'Reabrir'}
+                  </button>
+                </div>
               </div>
               <div className="flex flex-wrap gap-1 mt-2">
                 {ETIQUETAS.map(e => (
@@ -158,7 +165,7 @@ export default function MensajesView() {
                   <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direccion === 'saliente' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-800'}`}>
                     {m.tipo !== 'texto' && <span className="text-[10px] opacity-70 italic">[{m.tipo}] </span>}
                     {m.cuerpo || ''}
-                    <div className={`text-[9px] mt-0.5 ${m.direccion === 'saliente' ? 'text-indigo-200' : 'text-gray-400'}`}>{fecha(m.ts)}{m.estado ? ` · ${m.estado}` : ''}</div>
+                    <div className={`text-[9px] mt-0.5 ${m.direccion === 'saliente' ? 'text-indigo-200' : 'text-gray-400'}`}>{fecha(m.ts)}{m.enviado_por === 'agente' ? ' · 🤖' : ''}{m.estado ? ` · ${m.estado}` : ''}</div>
                   </div>
                 </div>
               ))}
