@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, updateRow, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
 import { sendBatch, isResendConfigured } from '@/lib/resend-mailer'
-import { createToken } from '@/lib/eutanasia-tokens'
+import { createToken, createVetToken } from '@/lib/eutanasia-tokens'
 import { fmtPrecio } from '@/lib/format'
 import { formatDate } from '@/lib/dates'
 
@@ -62,6 +62,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const emails = vetsSeleccionados.map(v => {
       const token = createToken(c.id, v.id, 'aceptar')
       const linkAceptar = `${baseUrl}/eutanasia/aceptar/${token}`
+      // Si el vet aún no completó datos bancarios, agregamos un CTA al final
+      // del mail con un link a /eutanasia/datos-pago. Si ya los tiene, no
+      // ensuciamos el mail con un mensaje irrelevante.
+      const tieneDatosPago = (v.datos_pago_completos ?? '').toUpperCase() === 'TRUE'
+      const linkDatosPago = tieneDatosPago
+        ? ''
+        : `${baseUrl}/eutanasia/datos-pago/${createVetToken(v.id, 'datos_pago')}`
       return {
         to: v.email,
         subject: `Solicitud de eutanasia en ${c.comuna} — ${c.fecha_servicio} ${c.hora_servicio}`,
@@ -69,6 +76,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           vetNombre: `${v.nombre || ''} ${v.apellido || ''}`.trim(),
           c,
           linkAceptar,
+          linkDatosPago,
         }),
         reply_to: process.env.MAILING_REPLY_TO || undefined,
         tags: [
@@ -128,9 +136,11 @@ interface RenderArgs {
   vetNombre: string
   c: Record<string, string>
   linkAceptar: string
+  /** Si está vacío, no se muestra el bloque "Aún no registras tus datos…". */
+  linkDatosPago: string
 }
 
-function renderEmailCotizacion({ vetNombre, c, linkAceptar }: RenderArgs): string {
+function renderEmailCotizacion({ vetNombre, c, linkAceptar, linkDatosPago }: RenderArgs): string {
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${c.direccion}, ${c.comuna}, Chile`)}`
   const precio = parseInt(c.precio_snapshot || '0', 10)
   const COLOR = '#143C64'
@@ -175,6 +185,14 @@ function renderEmailCotizacion({ vetNombre, c, linkAceptar }: RenderArgs): strin
 
       <p style="margin:20px 0 0;font-size:12px;color:#64748b">Si no puedes tomarla, simplemente ignora este correo. Otros veterinarios del convenio también lo recibieron y el primero en confirmar queda asignado.</p>
       <p style="margin:12px 0 0;font-size:11px;color:#94a3b8">Este enlace expira en 72 horas. Si tienes dudas, escríbenos a info@crematorioalmaanimal.cl.</p>
+
+      ${linkDatosPago ? `
+      <div style="margin:24px 0 0;padding-top:18px;border-top:1px dashed #e2e8f0;text-align:center">
+        <p style="margin:0 0 10px;font-size:13px;color:#475569">¿Aún no registras tus datos para transferirte los pagos?</p>
+        <a href="${linkDatosPago}" style="display:inline-block;color:${COLOR};font-weight:600;font-size:13px;padding:8px 14px;border:1px solid ${COLOR};border-radius:6px;text-decoration:none">
+          Regístralos aquí
+        </a>
+      </div>` : ''}
     </div>
   </div>
 </body>

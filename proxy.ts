@@ -31,9 +31,11 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith('/eutanasia/aceptar/') ||
     pathname.startsWith('/eutanasia/confirmar/') ||
     pathname.startsWith('/eutanasia/realizado/') ||
+    pathname.startsWith('/eutanasia/datos-pago/') ||
     pathname === '/api/eutanasias/cotizaciones/aceptar' ||
     pathname === '/api/eutanasias/cotizaciones/confirmar' ||
-    pathname === '/api/eutanasias/cotizaciones/realizado'
+    pathname === '/api/eutanasias/cotizaciones/realizado' ||
+    pathname === '/api/eutanasias/vets/datos-pago'
   ) {
     return NextResponse.next()
   }

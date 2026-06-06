@@ -151,6 +151,10 @@ const SHEETS: Record<string, string[]> = {
     'comunas', 'horarios',
     'activo', 'origen', 'notas',
     'total_servicios',
+    // Datos bancarios para transferencia del pago. Se completan vía
+    // /eutanasia/datos-pago/<token> desde el link del mail de bienvenida.
+    'banco', 'tipo_cuenta', 'numero_cuenta',
+    'datos_pago_completos', 'fecha_datos_pago',
     'fecha_inscripcion', 'fecha_creacion',
   ],
   // Tabla de precios que se le paga al vet por servicio de eutanasia, segmentada

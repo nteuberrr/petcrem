@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
     }
     await appendRow(SHEET, row)
     // Mail de bienvenida — await para que el serverless no mate la promise.
-    const bienvenida = await enviarBienvenidaVet({ nombre: row.nombre, apellido: row.apellido, email: row.email })
+    const bienvenida = await enviarBienvenidaVet({ vetId: row.id, nombre: row.nombre, apellido: row.apellido, email: row.email })
     return NextResponse.json({
       ...row,
       bienvenida_estado: bienvenida.estado,

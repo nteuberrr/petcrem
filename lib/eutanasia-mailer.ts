@@ -2,6 +2,7 @@ import { sendEmail, isResendConfigured, getFromAddress } from './resend-mailer'
 import { agregarDiasHabiles } from './dias-habiles'
 import { formatDate } from './dates'
 import { fmtPrecio } from './format'
+import { createVetToken } from './eutanasia-tokens'
 
 const COLOR = '#143C64'
 const TELEFONO = process.env.EMPRESA_TELEFONO_CONTACTO || '+56 9 4053 8499'
@@ -33,6 +34,8 @@ export interface BienvenidaResult {
 }
 
 export async function enviarBienvenidaVet(args: {
+  /** Necesario para generar el link firmado a /eutanasia/datos-pago/<token>. */
+  vetId: string
   nombre: string
   apellido: string
   email: string
@@ -46,13 +49,25 @@ export async function enviarBienvenidaVet(args: {
   const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
   const nombreCompleto = `${args.nombre || ''} ${args.apellido || ''}`.trim() || 'Dr/a.'
 
+  // Token firmado largo (90d) para que el vet pueda completar sus datos
+  // bancarios desde el correo sin tener que hacer login.
+  let linkDatosPago = ''
+  try {
+    if (baseUrl && args.vetId) {
+      const token = createVetToken(args.vetId, 'datos_pago')
+      linkDatosPago = `${baseUrl}/eutanasia/datos-pago/${token}`
+    }
+  } catch (e) {
+    console.warn('[eutanasia-mailer] no se pudo crear token datos_pago:', e)
+  }
+
   console.log(`[eutanasia-mailer] enviando bienvenida → from=${fromUsed} to=${to}`)
 
   try {
     const res = await sendEmail({
       to,
       subject: 'Bienvenido al convenio de eutanasias - Alma Animal',
-      html: renderBienvenida({ nombreCompleto, baseUrl }),
+      html: renderBienvenida({ nombreCompleto, baseUrl, linkDatosPago }),
       tags: [{ name: 'tipo', value: 'eutanasia_bienvenida_vet' }],
     })
     if (res.ok) {
@@ -69,7 +84,7 @@ export async function enviarBienvenidaVet(args: {
   }
 }
 
-function renderBienvenida({ nombreCompleto, baseUrl }: { nombreCompleto: string; baseUrl: string }): string {
+function renderBienvenida({ nombreCompleto, baseUrl, linkDatosPago }: { nombreCompleto: string; baseUrl: string; linkDatosPago: string }): string {
   const landingUrl = baseUrl ? `${baseUrl}/convenio-eutanasias` : 'https://crematorioalmaanimal.cl/convenio-eutanasias'
   return `<!doctype html>
 <html lang="es">
@@ -130,6 +145,17 @@ function renderBienvenida({ nombreCompleto, baseUrl }: { nombreCompleto: string;
           <a href="${landingUrl}" style="color:${COLOR};font-weight:600">Ver tabla de precios →</a>
         </p>
       </div>
+
+      ${linkDatosPago ? `
+      <div style="background:#fff;border:2px solid ${COLOR};border-radius:10px;padding:18px;margin:18px 0;text-align:center">
+        <p style="margin:0 0 12px;font-size:14px;color:#0f172a;line-height:1.5">
+          Para que podamos transferirte los pagos, necesitamos tus datos bancarios.
+        </p>
+        <a href="${linkDatosPago}" style="display:inline-block;background:${COLOR};color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">
+          Ingresa tus datos para transferirte los pagos
+        </a>
+        <p style="margin:10px 0 0;font-size:11px;color:#64748b">Este enlace es personal y válido por 90 días.</p>
+      </div>` : ''}
 
       <h2 style="margin:28px 0 12px;font-size:16px;color:${COLOR}">¿Necesitas ajustar algo?</h2>
       <p style="margin:0;font-size:14px;line-height:1.55">

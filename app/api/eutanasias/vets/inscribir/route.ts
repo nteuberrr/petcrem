@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
     // Mail de bienvenida — esperamos el envío porque en serverless el handler
     // termina al return y mata el promise pendiente. Si falla, no abortamos
     // la inscripción (la fila ya quedó), pero loggeamos el detalle.
-    const bienvenida = await enviarBienvenidaVet({ nombre, apellido, email })
+    const bienvenida = await enviarBienvenidaVet({ vetId: id, nombre, apellido, email })
 
     return NextResponse.json({
       ok: true,

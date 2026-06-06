@@ -17,7 +17,7 @@ import crypto from 'crypto'
 
 const DEFAULT_TTL_SECONDS = 72 * 3600 // 72h
 
-export type AccionToken = 'aceptar' | 'confirmar' | 'realizado'
+export type AccionToken = 'aceptar' | 'confirmar' | 'realizado' | 'datos_pago'
 
 export interface TokenPayload {
   cotizacion_id: string
@@ -51,6 +51,9 @@ function sign(data: string): string {
 /**
  * Crea un token firmado. Formato: `<payload_b64url>.<signature_b64url>`
  * donde payload es JSON.stringify(TokenPayload).
+ *
+ * Para acciones ligadas a una cotización, pasa cotizacion_id; para acciones
+ * generales por vet (como 'datos_pago'), pasa '' o usa createVetToken.
  */
 export function createToken(
   cotizacion_id: string,
@@ -63,6 +66,19 @@ export function createToken(
   const payloadB64 = b64url(Buffer.from(JSON.stringify(payload), 'utf8'))
   const sig = sign(payloadB64)
   return `${payloadB64}.${sig}`
+}
+
+/**
+ * Helper para acciones a nivel vet (no ligadas a una cotización).
+ * TTL default: 90 días, así el vet puede usar el link del mail de bienvenida
+ * incluso si tarda algunos días en completar sus datos bancarios.
+ */
+export function createVetToken(
+  vet_id: string,
+  accion: AccionToken,
+  ttlSeconds: number = 90 * 24 * 3600,
+): string {
+  return createToken('', vet_id, accion, ttlSeconds)
 }
 
 export interface VerifyResult {
@@ -92,7 +108,12 @@ export function verifyToken(token: string): VerifyResult {
   if (typeof payload.exp !== 'number' || payload.exp < Math.floor(Date.now() / 1000)) {
     return { ok: false, error: 'expired' }
   }
-  if (!payload.cotizacion_id || !payload.vet_id || !['aceptar', 'confirmar', 'realizado'].includes(payload.accion)) {
+  if (!payload.vet_id || !['aceptar', 'confirmar', 'realizado', 'datos_pago'].includes(payload.accion)) {
+    return { ok: false, error: 'bad_payload' }
+  }
+  // cotizacion_id es opcional para 'datos_pago' (no aplica a una cotización
+  // específica). Para las otras acciones sigue siendo obligatorio.
+  if (payload.accion !== 'datos_pago' && !payload.cotizacion_id) {
     return { ok: false, error: 'bad_payload' }
   }
   return { ok: true, payload }
