@@ -28,6 +28,9 @@ export async function proxy(req: NextRequest) {
     pathname === '/convenio-eutanasias' ||
     pathname === '/api/eutanasias/precios' ||
     pathname === '/api/eutanasias/vets/inscribir' ||
+    // Autocomplete de comunas usado tanto en el landing público como en el
+    // form del datos-pago. Sin esto, mobile sin sesión recibe HTML de /login.
+    pathname === '/api/eutanasias/comunas/buscar' ||
     pathname.startsWith('/eutanasia/aceptar/') ||
     pathname.startsWith('/eutanasia/confirmar/') ||
     pathname.startsWith('/eutanasia/realizado/') ||

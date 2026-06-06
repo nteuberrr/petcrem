@@ -48,13 +48,23 @@ export default function ComunaPicker({ value, onChange, color, placeholder }: Pr
       setLoading(true)
       try {
         const r = await fetch(`/api/eutanasias/comunas/buscar?q=${encodeURIComponent(q.trim())}`)
+        const ct = r.headers.get('content-type') || ''
+        if (!r.ok || !ct.includes('application/json')) {
+          // Si el endpoint no devuelve JSON (ej. redirect a login porque
+          // la ruta no está en el whitelist público), dejamos el log
+          // para diagnóstico futuro pero evitamos crashear el JSON.parse.
+          console.warn('[ComunaPicker] respuesta no-JSON', r.status, ct)
+          setSugs([])
+          return
+        }
         const d = await r.json()
         if (Array.isArray(d)) {
           setSugs(d.filter((s: Sugerencia) => !value.includes(s.nombre)))
         } else {
           setSugs([])
         }
-      } catch {
+      } catch (e) {
+        console.warn('[ComunaPicker] error fetch sugerencias:', e)
         setSugs([])
       } finally {
         setLoading(false)
