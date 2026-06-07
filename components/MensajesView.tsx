@@ -213,8 +213,8 @@ export default function MensajesView() {
                   onChange={e => { const f = e.target.files?.[0]; if (f) enviarArchivo(f); e.target.value = '' }} />
                 <button onClick={() => fileRef.current?.click()} disabled={subiendo || enviando}
                   title="Adjuntar foto, video o documento (máx ~4 MB)"
-                  className="shrink-0 w-9 h-9 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center text-lg">
-                  {subiendo ? '…' : '📎'}
+                  className="shrink-0 w-9 h-9 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center text-2xl leading-none font-light">
+                  {subiendo ? '…' : '+'}
                 </button>
                 <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }}
                   placeholder="Escribe un mensaje…"
