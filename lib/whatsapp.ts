@@ -28,17 +28,16 @@ export interface EnvioResult {
   fuera_de_ventana?: boolean
 }
 
-/** Envía un texto libre (solo válido dentro de la ventana de 24h). */
-export async function enviarTextoWhatsapp(to: string, body: string): Promise<EnvioResult> {
+/** POST genérico a /messages (texto o media). Maneja el error de ventana de 24h. */
+async function postMensaje(payload: Record<string, unknown>): Promise<EnvioResult> {
   const token = process.env.WHATSAPP_TOKEN
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID
   if (!token || !phoneId) return { ok: false, error: 'WhatsApp no configurado' }
-  const dest = to.replace(/[^\d]/g, '')
   try {
     const res = await fetch(`${GRAPH}/${version()}/${phoneId}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: dest, type: 'text', text: { preview_url: false, body } }),
+      body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', ...payload }),
     })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) {
@@ -52,6 +51,30 @@ export async function enviarTextoWhatsapp(to: string, body: string): Promise<Env
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
+}
+
+/** Envía un texto libre (solo válido dentro de la ventana de 24h). */
+export async function enviarTextoWhatsapp(to: string, body: string): Promise<EnvioResult> {
+  return postMensaje({ to: to.replace(/[^\d]/g, ''), type: 'text', text: { preview_url: false, body } })
+}
+
+export type WaMediaTipo = 'image' | 'video' | 'audio' | 'document'
+
+/** Envía un media por URL pública (link); WhatsApp la descarga. Dentro de la ventana de 24h. */
+export async function enviarMediaWhatsapp(to: string, opts: { tipo: WaMediaTipo; link: string; caption?: string; filename?: string }): Promise<EnvioResult> {
+  const media: Record<string, unknown> = { link: opts.link }
+  if (opts.caption && opts.tipo !== 'audio') media.caption = opts.caption
+  if (opts.tipo === 'document' && opts.filename) media.filename = opts.filename
+  return postMensaje({ to: to.replace(/[^\d]/g, ''), type: opts.tipo, [opts.tipo]: media })
+}
+
+/** Decide el tipo de media de WhatsApp (+ nuestro tipo interno) según el mime. */
+export function waMediaDeMime(mime: string): { tipo: WaMediaTipo; tipoInterno: string } {
+  const m = (mime || '').toLowerCase()
+  if (m === 'image/jpeg' || m === 'image/png') return { tipo: 'image', tipoInterno: 'imagen' }
+  if (m === 'video/mp4' || m === 'video/3gpp') return { tipo: 'video', tipoInterno: 'video' }
+  if (m.startsWith('audio/')) return { tipo: 'audio', tipoInterno: 'audio' }
+  return { tipo: 'document', tipoInterno: 'documento' } // pdf, office, gif, webp, etc.
 }
 
 /** Verifica la firma HMAC del webhook (X-Hub-Signature-256). */

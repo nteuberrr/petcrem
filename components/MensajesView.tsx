@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 type Canal = 'whatsapp' | 'instagram' | 'facebook'
 type Contacto = { id: number; nombre: string | null; telefono: string | null; audiencia: string; cliente_id: string | null }
@@ -11,6 +11,7 @@ type Conversacion = {
 type Mensaje = {
   id: number; direccion: 'entrante' | 'saliente'; cuerpo: string | null
   tipo: string; estado: string | null; enviado_por: string | null; ts: string
+  media_url: string | null
 }
 
 const ETIQUETAS = ['consulta', 'cotizacion', 'agendado', 'seguimiento', 'urgente', 'convenio']
@@ -35,7 +36,9 @@ export default function MensajesView() {
   const [texto, setTexto] = useState('')
   const [cargando, setCargando] = useState(false)
   const [enviando, setEnviando] = useState(false)
+  const [subiendo, setSubiendo] = useState(false)
   const [error, setError] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const fetchConvs = useCallback(async () => {
     setCargando(true); setError('')
@@ -71,6 +74,19 @@ export default function MensajesView() {
     if (r.ok) { setTexto(''); await abrir(sel); if (j.aviso) alert(j.aviso) }
     else alert(j.error || 'No se pudo registrar el mensaje')
     setEnviando(false)
+  }
+
+  async function enviarArchivo(file: File) {
+    if (!sel || !file) return
+    setSubiendo(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    if (texto.trim()) fd.append('caption', texto.trim())
+    const r = await fetch(`/api/mensajes/${sel}/media`, { method: 'POST', body: fd })
+    const j = await r.json().catch(() => ({}))
+    if (r.ok) { setTexto(''); await abrir(sel); if (j.aviso) alert(j.aviso) }
+    else alert(j.error || 'No se pudo enviar el archivo')
+    setSubiendo(false)
   }
 
   async function patch(body: Record<string, unknown>) {
@@ -168,8 +184,21 @@ export default function MensajesView() {
               {msgs.map(m => (
                 <div key={m.id} className={`flex ${m.direccion === 'saliente' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direccion === 'saliente' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-800'}`}>
-                    {m.tipo !== 'texto' && <span className="text-[10px] opacity-70 italic">[{m.tipo}] </span>}
-                    {m.cuerpo || ''}
+                    {m.media_url ? (
+                      m.tipo === 'imagen' ? (
+                        <a href={m.media_url} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={m.media_url} alt="" className="rounded-md max-w-full max-h-56" />
+                        </a>
+                      ) : m.tipo === 'video' ? (
+                        <video src={m.media_url} controls className="rounded-md max-w-full max-h-56" />
+                      ) : m.tipo === 'audio' ? (
+                        <audio src={m.media_url} controls className="max-w-full" />
+                      ) : (
+                        <a href={m.media_url} target="_blank" rel="noreferrer" className="underline break-all">📎 Abrir archivo</a>
+                      )
+                    ) : (m.tipo !== 'texto' && <span className="text-[10px] opacity-70 italic">[{m.tipo}]</span>)}
+                    {m.cuerpo ? <div className={m.media_url ? 'mt-1' : ''}>{m.cuerpo}</div> : null}
                     <div className={`text-[9px] mt-0.5 ${m.direccion === 'saliente' ? 'text-indigo-200' : 'text-gray-400'}`}>{fecha(m.ts)}{m.enviado_por === 'agente' ? ' · 🤖' : ''}{m.estado ? ` · ${m.estado}` : ''}</div>
                   </div>
                 </div>
@@ -178,16 +207,24 @@ export default function MensajesView() {
             </div>
 
             <div className="p-3 border-t border-gray-100">
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                <input ref={fileRef} type="file" className="hidden"
+                  accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) enviarArchivo(f); e.target.value = '' }} />
+                <button onClick={() => fileRef.current?.click()} disabled={subiendo || enviando}
+                  title="Adjuntar foto, video o documento (máx ~4 MB)"
+                  className="shrink-0 w-9 h-9 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center text-lg">
+                  {subiendo ? '…' : '📎'}
+                </button>
                 <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }}
                   placeholder="Escribe un mensaje…"
                   className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                <button onClick={enviar} disabled={enviando || !texto.trim()}
+                <button onClick={enviar} disabled={enviando || subiendo || !texto.trim()}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-                  {enviando ? '…' : 'Registrar'}
+                  {enviando ? '…' : 'Enviar'}
                 </button>
               </div>
-              <p className="text-[10px] text-gray-400 mt-1">Envío en vivo por WhatsApp: se habilita al conectar la API de Meta. Por ahora el mensaje queda registrado en el hilo.</p>
+              <p className="text-[10px] text-gray-400 mt-1">📎 Adjunta fotos, videos o documentos (máx ~4 MB); si escribes texto, va como comentario del archivo. El envío en vivo requiere WhatsApp conectado y la ventana de 24h abierta.</p>
             </div>
           </>
         )}
