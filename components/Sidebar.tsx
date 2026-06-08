@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import { useState, useEffect } from 'react'
+import { esAdmin } from '@/lib/roles'
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: false },
@@ -23,7 +24,7 @@ export default function Sidebar() {
   const { data: session } = useSession()
   const userName = session?.user?.name ?? session?.user?.email ?? ''
   const role = session?.user?.role ?? 'operador'
-  const isAdmin = role === 'admin'
+  const isAdmin = esAdmin(role)
   const initials = userName.slice(0, 2).toUpperCase()
   const items = nav.filter(n => !n.adminOnly || isAdmin)
   const [open, setOpen] = useState(false)

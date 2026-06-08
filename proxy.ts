@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
+import { esApiAvanzada } from '@/lib/roles'
 
 // Rutas permitidas para rol 'operador'. Todo lo demás en el dashboard es solo admin.
 const OPERADOR_ALLOWED = ['/dashboard', '/clientes', '/operaciones', '/asistencia']
@@ -55,8 +56,17 @@ export async function proxy(req: NextRequest) {
 
   const role = (token.role as string) ?? 'operador'
 
-  // Admin tiene acceso total
+  // Admin (1) tiene acceso total
   if (role === 'admin') return NextResponse.next()
+
+  // Admin 2: igual que admin, pero NO puede tocar el backend de "Configuración Avanzada"
+  // (Datos personales, Agentes, Mantenimiento). El resto, acceso total.
+  if (role === 'admin2') {
+    if (pathname.startsWith('/api/') && esApiAvanzada(pathname)) {
+      return NextResponse.json({ error: 'No autorizado: Configuración Avanzada es solo del administrador.' }, { status: 403 })
+    }
+    return NextResponse.next()
+  }
 
   // Operador: solo dashboard, clientes, operaciones y asistencia
   if (role === 'operador') {

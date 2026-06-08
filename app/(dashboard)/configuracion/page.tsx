@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import AgentesConfig from '@/components/AgentesConfig'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
+import { esAdmin, esAdminTotal, ROLES, ROL_LABEL, MATRIZ_ACCESOS } from '@/lib/roles'
 
 const TABS = ['Precios', 'Artículos', 'Descuentos', 'Usuarios', 'Jornada', 'Configuración Avanzada'] as const
 type Tab = typeof TABS[number]
@@ -27,7 +28,9 @@ type Usuario = { id: string; nombre: string; email: string; rol: string; activo:
 
 export default function ConfiguracionPage() {
   const { data: session, status } = useSession()
-  const isAdmin = status === 'authenticated' && (session?.user?.role === 'admin' || session?.user?.role === undefined)
+  const rolActual = session?.user?.role
+  const isAdmin = status === 'authenticated' && (esAdmin(rolActual) || rolActual === undefined)
+  const isAdminTotal = status === 'authenticated' && (esAdminTotal(rolActual) || rolActual === undefined)
 
   const [tab, setTab] = useState<Tab>('Precios')
   const [precioTab, setPrecioTab] = useState<PrecioSubTab>('general')
@@ -390,7 +393,7 @@ export default function ConfiguracionPage() {
 
       {/* Tabs principales */}
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl overflow-x-auto">
-        {TABS.map(t => (
+        {TABS.filter(t => t !== 'Configuración Avanzada' || isAdminTotal).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${tab === t ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
             {t}
@@ -421,7 +424,7 @@ export default function ConfiguracionPage() {
         </div>
       )}
       {/* Sub-pestañas de Configuración Avanzada */}
-      {tab === 'Configuración Avanzada' && (
+      {tab === 'Configuración Avanzada' && isAdminTotal && (
         <div className="flex gap-2 flex-wrap mb-4">
           {([['datos', 'Datos Personales'], ['agentes', 'Agentes'], ['mantenimiento', 'Mantenimiento']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setAvanzadaTab(k)}
@@ -866,6 +869,7 @@ export default function ConfiguracionPage() {
 
       {/* ─── USUARIOS ─── */}
       {tab === 'Usuarios' && (
+        <div className="space-y-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-900">Usuarios del sistema</h2>
@@ -909,24 +913,28 @@ export default function ConfiguracionPage() {
                   <td className="px-4 py-3 font-medium text-gray-900">{u.nombre}</td>
                   <td className="px-4 py-3 text-gray-600 text-xs">{u.email}</td>
                   <td className="px-4 py-3">
-                    <Badge variant={u.rol === 'admin' ? 'purple' : 'blue'}>{u.rol}</Badge>
+                    <Badge variant={u.rol === 'operador' ? 'blue' : 'purple'}>{ROL_LABEL[u.rol] || u.rol}</Badge>
                   </td>
                   <td className="px-4 py-3">
-                    <Toggle checked={u.activo === 'TRUE'} onChange={val => patch('/api/usuarios', { id: u.id, activo: val ? 'TRUE' : 'FALSE' })} />
+                    {(isAdminTotal || u.rol === 'operador')
+                      ? <Toggle checked={u.activo === 'TRUE'} onChange={val => patch('/api/usuarios', { id: u.id, activo: val ? 'TRUE' : 'FALSE' })} />
+                      : <span className={`text-xs font-medium ${u.activo === 'TRUE' ? 'text-emerald-700' : 'text-gray-400'}`}>{u.activo === 'TRUE' ? 'activo' : 'inactivo'}</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => { setEditingUsuario(u); setUsuarioForm({ nombre: u.nombre, email: u.email, password: '', rol: u.rol }); setShowUsuarioModal(true) }}
-                        className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => { if (confirm(`¿Eliminar al usuario "${u.nombre}"?`)) del(`/api/usuarios?id=${u.id}`) }}
-                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
-                        Eliminar
-                      </button>
-                    </div>
+                    {(isAdminTotal || u.rol === 'operador') ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => { setEditingUsuario(u); setUsuarioForm({ nombre: u.nombre, email: u.email, password: '', rol: u.rol }); setShowUsuarioModal(true) }}
+                          className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => { if (confirm(`¿Eliminar al usuario "${u.nombre}"?`)) del(`/api/usuarios?id=${u.id}`) }}
+                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                          Eliminar
+                        </button>
+                      </div>
+                    ) : <span className="text-xs text-gray-400">—</span>}
                   </td>
                 </tr>
               ))}
@@ -936,10 +944,59 @@ export default function ConfiguracionPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Informe de accesos — solo Admin (1) */}
+        {isAdminTotal && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="font-semibold text-gray-900">Informe de accesos</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Qué puede ver/usar cada rol. Se actualiza a medida que sumamos módulos.</p>
+              </div>
+              <button onClick={() => window.print()}
+                className="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0">
+                🖨 Imprimir
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Módulo</th>
+                    {['Admin', 'Admin 2', 'Operador'].map(h => (
+                      <th key={h} className="text-center px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {MATRIZ_ACCESOS.map(m => (
+                    <tr key={m.modulo} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5 text-gray-800">
+                        {m.modulo}
+                        {m.nota && <span className="block text-[10px] text-amber-600">{m.nota}</span>}
+                      </td>
+                      {(['admin', 'admin2', 'operador'] as const).map(r => (
+                        <td key={r} className="px-4 py-2.5 text-center">
+                          {m.roles.includes(r)
+                            ? <span className="text-emerald-600 font-bold">✓</span>
+                            : <span className="text-gray-300">✗</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-500">
+              Usuarios creados: {usuarios.length} · {usuarios.filter(u => u.rol === 'admin').length} Admin · {usuarios.filter(u => u.rol === 'admin2').length} Admin 2 · {usuarios.filter(u => u.rol === 'operador').length} Operador
+            </div>
+          </div>
+        )}
+        </div>
       )}
 
       {/* ─── AGENTES ─── */}
-      {tab === 'Configuración Avanzada' && avanzadaTab === 'agentes' && <AgentesConfig />}
+      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'agentes' && <AgentesConfig />}
 
       {tab === 'Jornada' && (
         <div className="space-y-6 max-w-3xl">
@@ -1081,9 +1138,9 @@ export default function ConfiguracionPage() {
         </div>
       )}
 
-      {tab === 'Configuración Avanzada' && avanzadaTab === 'datos' && <DatosPersonalesPanel />}
+      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'datos' && <DatosPersonalesPanel />}
 
-      {tab === 'Configuración Avanzada' && avanzadaTab === 'mantenimiento' && (
+      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'mantenimiento' && (
         <div className="space-y-6 max-w-3xl">
         <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
           <h2 className="text-base font-bold text-gray-900 mb-2">Actualizar base de datos</h2>
@@ -1819,8 +1876,9 @@ export default function ConfiguracionPage() {
             <label className="text-xs font-medium text-gray-700">Rol</label>
             <select value={usuarioForm.rol} onChange={e => setUsuarioForm(f => ({ ...f, rol: e.target.value }))}
               className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="operador">Operador</option>
-              <option value="admin">Administrador</option>
+              {ROLES.filter(r => isAdminTotal || r.value === 'operador').map(r => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
             </select>
           </div>
           <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
