@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
 import { buscarComuna } from '@/lib/comunas'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
+import { esAdmin } from '@/lib/roles'
 
 const SHEET = 'cotizaciones_eutanasia'
 const COLS = [
@@ -24,7 +25,7 @@ const COLS = [
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return { denied: NextResponse.json({ error: 'Solo admin' }, { status: 403 }), session: null }
   }
   return { denied: null, session }

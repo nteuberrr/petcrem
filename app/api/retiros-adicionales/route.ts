@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, updateRow, deleteRow, getNextId, ensureColumns, ensureSheet } from '@/lib/google-sheets'
 import { todayISO, formatDateForSheet, formatHora } from '@/lib/dates'
+import { esAdmin } from '@/lib/roles'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
 
     // Operador solo ve sus propios registros
     const role = (session.user as { role?: string })?.role
-    if (role !== 'admin') {
+    if (!esAdmin(role)) {
       const myId = (session.user as { id?: string })?.id ?? ''
       if (!myId) return NextResponse.json([])
       filtered = filtered.filter(r => r.usuario_id === myId)
@@ -105,7 +106,7 @@ export async function PATCH(req: NextRequest) {
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
 
     const role = (session.user as { role?: string })?.role
-    const isAdmin = role === 'admin'
+    const isAdmin = esAdmin(role)
     const myId = (session.user as { id?: string })?.id ?? '0'
     if (!isAdmin && rows[idx].usuario_id !== myId) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
@@ -143,7 +144,7 @@ export async function DELETE(req: NextRequest) {
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     const role = (session.user as { role?: string })?.role
     const myId = (session.user as { id?: string })?.id ?? '0'
-    if (role !== 'admin' && rows[idx].usuario_id !== myId) {
+    if (!esAdmin(role) && rows[idx].usuario_id !== myId) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
     }
     if (rows[idx].pago_id) {

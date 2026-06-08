@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { google, sheets_v4 } from 'googleapis'
 import { getSheetData, appendRow, getNextId, ensureColumns, ensureSheet } from '@/lib/google-sheets'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
+import { esAdmin } from '@/lib/roles'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,7 +86,7 @@ async function setPagoIdEnRetiros(sheets: sheets_v4.Sheets, retiroIds: Set<strin
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user?.role !== 'admin') {
+    if (!session || !esAdmin(session.user?.role)) {
       return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
     }
     await ensure()
@@ -114,7 +115,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user?.role !== 'admin') {
+    if (!session || !esAdmin(session.user?.role)) {
       return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
     }
     const body = await req.json()
@@ -186,7 +187,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user?.role !== 'admin') {
+    if (!session || !esAdmin(session.user?.role)) {
       return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
     }
     const { searchParams } = new URL(req.url)

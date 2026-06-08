@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, updateRow, deleteRow, getNextId, ensureColumns, ensureSheet } from '@/lib/google-sheets'
 import { todayISO, formatDateForSheet, formatHora } from '@/lib/dates'
 import type { JornadaConfig } from '@/lib/asistencia'
+import { esAdmin } from '@/lib/roles'
 
 const HOJA = 'jornada_config'
 const COLS = ['id', 'vigente_desde', 'hora_entrada', 'hora_salida', 'precio_hora_extra', 'tolerancia_minutos', 'precio_retiro_adicional', 'creado_por', 'fecha_creacion']
@@ -17,7 +18,7 @@ export async function GET() {
   try {
     await ensure()
     const session = await getServerSession(authOptions)
-    const isAdmin = session?.user?.role === 'admin'
+    const isAdmin = esAdmin(session?.user?.role)
     const rows = await getSheetData(HOJA)
     // Normalizar fechas y números. Operadores no deben ver precio_hora_extra.
     const configs: JornadaConfig[] = rows.map(r => ({
@@ -40,7 +41,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user?.role !== 'admin') {
+    if (!session || !esAdmin(session.user?.role)) {
       return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
     }
     const body = await req.json()
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user?.role !== 'admin') {
+    if (!session || !esAdmin(session.user?.role)) {
       return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
     }
     const body = await req.json()
@@ -99,7 +100,7 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user?.role !== 'admin') {
+    if (!session || !esAdmin(session.user?.role)) {
       return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
     }
     const { searchParams } = new URL(req.url)

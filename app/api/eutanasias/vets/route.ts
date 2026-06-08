@@ -5,6 +5,7 @@ import { getSheetData, appendRow, updateRow, deleteRow, getNextId, ensureSheet, 
 import { todayISO } from '@/lib/dates'
 import { buscarComuna } from '@/lib/comunas'
 import { enviarBienvenidaVet } from '@/lib/eutanasia-mailer'
+import { esAdmin } from '@/lib/roles'
 
 const SHEET = 'vet_convenio_eutanasia'
 const COLS = [
@@ -17,7 +18,7 @@ const COLS = [
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   return null

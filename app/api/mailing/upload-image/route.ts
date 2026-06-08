@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
+import { esAdmin } from '@/lib/roles'
 
 /**
  * POST /api/mailing/upload-image
@@ -39,7 +40,7 @@ function safeBase(name: string | undefined): string {
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
 

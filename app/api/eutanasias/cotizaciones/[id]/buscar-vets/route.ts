@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData } from '@/lib/google-sheets'
 import { matchVetsConDiagnostico } from '@/lib/eutanasia-matcher'
+import { esAdmin } from '@/lib/roles'
 
 /**
  * POST /api/eutanasias/cotizaciones/[id]/buscar-vets
@@ -17,7 +18,7 @@ import { matchVetsConDiagnostico } from '@/lib/eutanasia-matcher'
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   void req

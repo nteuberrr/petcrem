@@ -7,6 +7,7 @@ import { createToken, createVetToken } from '@/lib/eutanasia-tokens'
 import { formatDate, formatHoraDia } from '@/lib/dates'
 import { nombreCompletoVet, renderCotizacionEmail } from '@/lib/eutanasia-mailer'
 import { getContacto } from '@/lib/email-layout'
+import { esAdmin } from '@/lib/roles'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
 const SHEET_ENVIOS = 'cotizaciones_eutanasia_envios'
@@ -26,7 +27,7 @@ const COLS_ENVIOS = ['id', 'cotizacion_id', 'vet_id', 'vet_email', 'fecha_envio'
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   if (!isResendConfigured()) {

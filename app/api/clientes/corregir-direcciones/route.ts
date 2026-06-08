@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, updateRow } from '@/lib/google-sheets'
 import { geocodeAddress } from '@/lib/google-maps'
+import { esAdmin } from '@/lib/roles'
 
 interface CambioRegistro {
   id: string
@@ -27,7 +28,7 @@ async function intentarCorregir(direccion: string, comuna: string): Promise<stri
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if ((session?.user as { role?: string })?.role !== 'admin') {
+    if (!esAdmin((session?.user as { role?: string })?.role)) {
       return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
     }
 

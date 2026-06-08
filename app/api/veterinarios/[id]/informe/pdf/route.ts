@@ -8,6 +8,7 @@ import { generarInformeVeterinaria, type InformeVeterinaria } from '@/lib/inform
 import { appendRow, ensureSheet, ensureColumns, getSheetData, getNextId } from '@/lib/google-sheets'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 import { todayISO } from '@/lib/dates'
+import { esAdmin } from '@/lib/roles'
 
 const INFORMES_COLS = [
   'id', 'veterinaria_id', 'veterinaria_nombre',
@@ -632,7 +633,7 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions)
     const role = (session?.user as { role?: string })?.role
-    if (role !== 'admin') {
+    if (!esAdmin(role)) {
       return NextResponse.json({ error: 'Solo administradores pueden generar informes' }, { status: 403 })
     }
 

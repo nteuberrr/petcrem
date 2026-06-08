@@ -7,6 +7,7 @@ import { sendBatch, isResendConfigured } from '@/lib/resend-mailer'
 import { renderForVet } from '@/lib/mailing-render'
 import { getSupabase, type MailingLogInsert } from '@/lib/supabase'
 import { todayISO } from '@/lib/dates'
+import { esAdmin } from '@/lib/roles'
 
 interface Filtros {
   categoria?: string
@@ -29,7 +30,7 @@ function filtrarVets(vets: Record<string, string>[], filtros: Filtros): Record<s
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   if (!isResendConfigured()) {

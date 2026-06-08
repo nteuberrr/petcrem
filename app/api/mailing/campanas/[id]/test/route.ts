@@ -5,10 +5,11 @@ import { getSheetData } from '@/lib/google-sheets'
 import { getFromR2 } from '@/lib/cloudflare-r2'
 import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
 import { renderForVet } from '@/lib/mailing-render'
+import { esAdmin } from '@/lib/roles'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   if (!isResendConfigured()) {

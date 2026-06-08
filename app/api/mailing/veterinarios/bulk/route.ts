@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, updateRow, deleteRow } from '@/lib/google-sheets'
+import { esAdmin } from '@/lib/roles'
 
 const SHEET = 'mailing_veterinarios'
 
@@ -15,7 +16,7 @@ interface BulkBody {
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
 

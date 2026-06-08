@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
 import { getSheetData } from '@/lib/google-sheets'
+import { esAdmin } from '@/lib/roles'
 
 /**
  * GET /api/mailing/debug?campana_id=X
@@ -18,7 +19,7 @@ import { getSheetData } from '@/lib/google-sheets'
  */
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
 

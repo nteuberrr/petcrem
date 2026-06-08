@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { isResendConfigured } from '@/lib/resend-mailer'
 import { isSupabaseConfigured } from '@/lib/supabase'
+import { esAdmin } from '@/lib/roles'
 
 /**
  * GET /api/mailing/diagnostics
@@ -12,7 +13,7 @@ import { isSupabaseConfigured } from '@/lib/supabase'
  */
 export async function GET() {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
 

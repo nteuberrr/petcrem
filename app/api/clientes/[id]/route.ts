@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getSheetData, updateRow, ensureColumns, deleteRow } from '@/lib/google-sheets'
 import { parseDecimal } from '@/lib/numbers'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
+import { esAdmin } from '@/lib/roles'
 
 export async function GET(
   _req: NextRequest,
@@ -123,7 +124,7 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions)
     const role = (session?.user as { role?: string })?.role
-    if (role !== 'admin') {
+    if (!esAdmin(role)) {
       return NextResponse.json({ error: 'Solo administradores pueden eliminar fichas' }, { status: 403 })
     }
 

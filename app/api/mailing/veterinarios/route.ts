@@ -3,13 +3,14 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
 import { todayISO } from '@/lib/dates'
+import { esAdmin } from '@/lib/roles'
 
 const SHEET = 'mailing_veterinarios'
 const COLS = ['id', 'nombre', 'email', 'veterinaria', 'comuna', 'telefono', 'categoria', 'suscrito', 'notas', 'fecha_creacion']
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   return null

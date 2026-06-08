@@ -5,6 +5,7 @@ import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 import { todayISO } from '@/lib/dates'
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
+import { esAdmin } from '@/lib/roles'
 
 const SHEET = 'mailing_campanas'
 const COLS = [
@@ -17,7 +18,7 @@ const COLS = [
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return { denied: NextResponse.json({ error: 'Solo admin' }, { status: 403 }), session: null }
   }
   return { denied: null, session }

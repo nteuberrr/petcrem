@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getSheetData, updateRow, deleteRow, ensureSheet, ensureColumns } from '@/lib/google-sheets'
 import { uploadToR2, deleteFromR2 } from '@/lib/cloudflare-r2'
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
+import { esAdmin } from '@/lib/roles'
 
 const SHEET = 'mailing_campanas'
 const COLS = [
@@ -16,7 +17,7 @@ const COLS = [
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
-  if ((session?.user as { role?: string })?.role !== 'admin') {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   return null
