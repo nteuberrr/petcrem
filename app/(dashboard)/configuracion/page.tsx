@@ -158,6 +158,12 @@ export default function ConfiguracionPage() {
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null)
   const [syncError, setSyncError] = useState('')
 
+  // Seguimiento en vivo de correos (BCC de transaccionales a un correo personal)
+  const [segActivo, setSegActivo] = useState(false)
+  const [segEmail, setSegEmail] = useState('')
+  const [segSaving, setSegSaving] = useState(false)
+  const [segMsg, setSegMsg] = useState<{ ok: boolean; texto: string } | null>(null)
+
   async function ejecutarSync() {
     if (!confirm('Esto va a normalizar las hojas: clientes (estados vacíos → "pendiente"), vehiculo_cargas y cargas_petroleo (números string → number con coma decimal). ¿Continuar?')) return
     setSyncing(true)
@@ -173,6 +179,25 @@ export default function ConfiguracionPage() {
     } finally {
       setSyncing(false)
     }
+  }
+
+  async function guardarSeguimiento() {
+    if (segActivo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(segEmail.trim())) {
+      setSegMsg({ ok: false, texto: 'Ingresa un correo válido para activar el seguimiento.' })
+      return
+    }
+    setSegSaving(true); setSegMsg(null)
+    try {
+      const res = await fetch('/api/empresa-config', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email_seguimiento_activo: segActivo ? 'TRUE' : 'FALSE', email_seguimiento: segEmail.trim() }),
+      })
+      const d = await res.json()
+      if (res.ok) setSegMsg({ ok: true, texto: 'Guardado.' })
+      else setSegMsg({ ok: false, texto: d?.error || 'Error al guardar' })
+    } catch (e) {
+      setSegMsg({ ok: false, texto: String(e) })
+    } finally { setSegSaving(false) }
   }
 
   const [productos, setProductos] = useState<Producto[]>([])
@@ -275,6 +300,12 @@ export default function ConfiguracionPage() {
 
   useEffect(() => { fetchAll() }, [fetchAll])
   useEffect(() => { fetchJornada() }, [fetchJornada])
+  useEffect(() => {
+    fetch('/api/empresa-config').then(r => r.json()).then(d => {
+      setSegActivo(String(d?.email_seguimiento_activo || '').toUpperCase() === 'TRUE')
+      setSegEmail(d?.email_seguimiento || '')
+    }).catch(() => {})
+  }, [])
 
   // Detecta a partir de la URL qué hoja refrescar después de mutar (evita refetchear todo)
   function refreshKeyForUrl(url: string): RefreshKey {
@@ -1013,7 +1044,8 @@ export default function ConfiguracionPage() {
       {tab === 'Datos personales' && <DatosPersonalesPanel />}
 
       {tab === 'Mantenimiento' && (
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 max-w-3xl">
+        <div className="space-y-6 max-w-3xl">
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
           <h2 className="text-base font-bold text-gray-900 mb-2">Actualizar base de datos</h2>
           <p className="text-sm text-gray-600 mb-4">
             Si editaste la hoja de Google Sheets directamente (por ejemplo, agregaste filas
@@ -1280,6 +1312,31 @@ export default function ConfiguracionPage() {
               )}
             </div>
           )}
+        </div>
+
+        {/* Seguimiento en vivo de correos enviados */}
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
+          <h2 className="text-base font-bold text-gray-900 mb-1">Seguimiento en vivo de correos electrónicos enviados</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Si está activo, te llega una <b>copia oculta (BCC)</b> a tu correo de <b>cada email transaccional</b> que envíe el sistema (registro, inicio de cremación, despachos, eutanasias, informes de veterinaria…). <b>No incluye</b> el mailing masivo.
+          </p>
+          <div className="flex items-center gap-3 mb-4">
+            <Toggle checked={segActivo} onChange={setSegActivo} />
+            <span className="text-sm font-medium text-gray-700">{segActivo ? 'Activado' : 'Desactivado'}</span>
+          </div>
+          <label className="text-xs font-semibold text-gray-700">Reenviar copia a este correo</label>
+          <input type="email" value={segEmail} onChange={e => setSegEmail(e.target.value)}
+            placeholder="tucorreo@ejemplo.com"
+            className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <div className="flex items-center gap-3 mt-4">
+            <button onClick={guardarSeguimiento} disabled={segSaving}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+              {segSaving ? 'Guardando…' : 'Guardar'}
+            </button>
+            {segMsg && <span className={`text-sm ${segMsg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{segMsg.texto}</span>}
+          </div>
+          <p className="text-[11px] text-gray-400 mt-2">El cambio puede tardar hasta ~1 minuto en aplicarse a los envíos.</p>
+        </div>
         </div>
       )}
 

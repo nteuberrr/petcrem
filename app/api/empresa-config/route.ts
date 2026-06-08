@@ -5,7 +5,7 @@ import { getSheetData, appendRow, updateRow, ensureSheet, ensureColumns } from '
 import { todayISO } from '@/lib/dates'
 
 const SHEET = 'empresa_config'
-const COLS = ['id', 'nombre', 'rut', 'giro', 'direccion', 'comuna', 'telefono', 'correo', 'web', 'instagram', 'facebook', 'google_review_url', 'fecha_actualizacion']
+const COLS = ['id', 'nombre', 'rut', 'giro', 'direccion', 'comuna', 'telefono', 'correo', 'web', 'instagram', 'facebook', 'google_review_url', 'email_seguimiento', 'email_seguimiento_activo', 'fecha_actualizacion']
 
 type EmpresaConfig = {
   id?: string
@@ -21,6 +21,9 @@ type EmpresaConfig = {
   facebook?: string
   /** Link directo a "escribir reseña" del Perfil de Empresa de Google (botón "Evalúanos" en el correo de entrega). */
   google_review_url?: string
+  /** Correo al que se reenvía copia (BCC) de cada email transaccional, si email_seguimiento_activo='TRUE'. */
+  email_seguimiento?: string
+  email_seguimiento_activo?: string
   fecha_actualizacion?: string
 }
 
@@ -30,6 +33,7 @@ const EMPTY: EmpresaConfig = {
   telefono: '', correo: '',
   web: '', instagram: '', facebook: '',
   google_review_url: '',
+  email_seguimiento: '', email_seguimiento_activo: 'FALSE',
   fecha_actualizacion: '',
 }
 
@@ -59,20 +63,16 @@ export async function PUT(req: NextRequest) {
     const rows = await getSheetData(SHEET)
     const idx = rows.findIndex(r => r.id === '1')
 
-    const data: Record<string, string> = {
-      id: '1',
-      nombre: body.nombre ?? '',
-      rut: body.rut ?? '',
-      giro: body.giro ?? '',
-      direccion: body.direccion ?? '',
-      comuna: body.comuna ?? '',
-      telefono: body.telefono ?? '',
-      correo: body.correo ?? '',
-      web: body.web ?? '',
-      instagram: body.instagram ?? '',
-      facebook: body.facebook ?? '',
-      google_review_url: body.google_review_url ?? '',
-      fecha_actualizacion: todayISO(),
+    // Merge: solo sobreescribe los campos presentes en el body; preserva el resto
+    // de la fila existente (así guardar "Datos personales" no borra el seguimiento
+    // de correos y viceversa).
+    const existing: Record<string, string> = (idx === -1 ? {} : rows[idx]) as Record<string, string>
+    const bodyRec = body as Record<string, unknown>
+    const data: Record<string, string> = { id: '1', fecha_actualizacion: todayISO() }
+    for (const col of COLS) {
+      if (col === 'id' || col === 'fecha_actualizacion') continue
+      const v = bodyRec[col]
+      data[col] = (v !== undefined && v !== null) ? String(v) : (existing[col] ?? '')
     }
 
     if (idx === -1) {

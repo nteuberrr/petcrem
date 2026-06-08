@@ -119,6 +119,7 @@ const SHEETS: Record<string, string[]> = {
     'direccion', 'comuna',
     'telefono', 'correo',
     'web', 'instagram', 'facebook',
+    'google_review_url', 'email_seguimiento', 'email_seguimiento_activo',
     'fecha_actualizacion',
   ],
   mailing_veterinarios: [

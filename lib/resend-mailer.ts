@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { getSheetData } from './google-sheets'
 
 let cached: Resend | null = null
 
@@ -155,13 +156,36 @@ function buildAttachmentsPayload(attachments: AttachmentSpec[] | undefined) {
   })
 }
 
+/**
+ * "Seguimiento en vivo": correo al que se reenvía copia OCULTA (BCC) de cada
+ * email transaccional, si está activo en empresa_config. Cacheado ~60s.
+ * Solo aplica a sendEmail (transaccional), NUNCA al mailing masivo (sendBatch).
+ */
+let segCache: { ts: number; bcc: string | null } | null = null
+async function getSeguimientoBcc(): Promise<string | null> {
+  try {
+    if (segCache && Date.now() - segCache.ts < 60000) return segCache.bcc
+    const rows = await getSheetData('empresa_config')
+    const row = rows.find(r => r.id === '1') || rows[0]
+    const activo = String(row?.email_seguimiento_activo || '').toUpperCase() === 'TRUE'
+    const bcc = activo ? sanitizarEmail(row?.email_seguimiento) : null
+    segCache = { ts: Date.now(), bcc }
+    return bcc
+  } catch (e) {
+    console.warn('[resend-mailer] no se pudo leer seguimiento de correos:', e)
+    return null
+  }
+}
+
 export async function sendEmail(opts: SendOpts): Promise<SendResult> {
   try {
     const client = getClient()
     const html = prepararHtml(opts)
+    const bcc = await getSeguimientoBcc()
     const res = await client.emails.send({
       from: opts.from || getFromAddress(),
       to: opts.to,
+      bcc: bcc || undefined,
       subject: opts.subject,
       html,
       replyTo: opts.reply_to,
