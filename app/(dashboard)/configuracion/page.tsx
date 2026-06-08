@@ -8,9 +8,12 @@ import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import AgentesConfig from '@/components/AgentesConfig'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 
-const TABS = ['Precios', 'Productos', 'Especies', 'Tipos servicio', 'Otros servicios', 'Descuentos', 'Usuarios', 'Agentes', 'Jornada', 'Datos personales', 'Mantenimiento'] as const
+const TABS = ['Precios', 'Artículos', 'Descuentos', 'Usuarios', 'Jornada', 'Configuración Avanzada'] as const
 type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
+type ArticuloTab = 'servicios' | 'bodega' | 'otros'
+type ServiciosTab = 'tipos' | 'especies'
+type AvanzadaTab = 'datos' | 'agentes' | 'mantenimiento'
 
 type Producto = { id: string; nombre: string; precio: string; foto_url: string; stock: string; categoria?: string; activo: string }
 type CategoriaProducto = { id: string; nombre: string; activo: string; fecha_creacion: string }
@@ -28,6 +31,9 @@ export default function ConfiguracionPage() {
 
   const [tab, setTab] = useState<Tab>('Precios')
   const [precioTab, setPrecioTab] = useState<PrecioSubTab>('general')
+  const [articuloTab, setArticuloTab] = useState<ArticuloTab>('servicios')
+  const [serviciosTab, setServiciosTab] = useState<ServiciosTab>('tipos')
+  const [avanzadaTab, setAvanzadaTab] = useState<AvanzadaTab>('datos')
 
   // Jornada (config + histórico)
   type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hora_salida: string; precio_hora_extra: number; tolerancia_minutos: number; precio_retiro_adicional: number }
@@ -392,6 +398,40 @@ export default function ConfiguracionPage() {
         ))}
       </div>
 
+      {/* Sub-pestañas de Artículos */}
+      {tab === 'Artículos' && (
+        <div className="flex gap-2 flex-wrap mb-4">
+          {([['servicios', 'Servicios Generales'], ['bodega', 'Bodega'], ['otros', 'Otros Productos']] as const).map(([k, label]) => (
+            <button key={k} onClick={() => setArticuloTab(k)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${articuloTab === k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Sub-sub-pestañas de Servicios Generales */}
+      {tab === 'Artículos' && articuloTab === 'servicios' && (
+        <div className="flex gap-2 flex-wrap mb-4">
+          {([['tipos', 'Tipos de servicio'], ['especies', 'Especies']] as const).map(([k, label]) => (
+            <button key={k} onClick={() => setServiciosTab(k)}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${serviciosTab === k ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Sub-pestañas de Configuración Avanzada */}
+      {tab === 'Configuración Avanzada' && (
+        <div className="flex gap-2 flex-wrap mb-4">
+          {([['datos', 'Datos Personales'], ['agentes', 'Agentes'], ['mantenimiento', 'Mantenimiento']] as const).map(([k, label]) => (
+            <button key={k} onClick={() => setAvanzadaTab(k)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${avanzadaTab === k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ─── PRECIOS ─── */}
       {tab === 'Precios' && (
         <div className="space-y-4">
@@ -528,7 +568,7 @@ export default function ConfiguracionPage() {
       )}
 
       {/* ─── PRODUCTOS ─── */}
-      {tab === 'Productos' && (
+      {tab === 'Artículos' && articuloTab === 'bodega' && (
         <div className="space-y-4">
 
         {/* Categorías */}
@@ -589,7 +629,7 @@ export default function ConfiguracionPage() {
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">Productos adicionales</h2>
+            <h2 className="font-semibold text-gray-900">Bodega</h2>
             <button onClick={() => { setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '' }); setShowProdModal(true) }}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
@@ -663,7 +703,7 @@ export default function ConfiguracionPage() {
       )}
 
       {/* ─── ESPECIES ─── */}
-      {tab === 'Especies' && (
+      {tab === 'Artículos' && articuloTab === 'servicios' && serviciosTab === 'especies' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-900">Especies</h2>
@@ -701,7 +741,7 @@ export default function ConfiguracionPage() {
       )}
 
       {/* ─── TIPOS SERVICIO ─── */}
-      {tab === 'Tipos servicio' && (
+      {tab === 'Artículos' && articuloTab === 'servicios' && serviciosTab === 'tipos' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-900">Tipos de servicio</h2>
@@ -740,10 +780,10 @@ export default function ConfiguracionPage() {
       )}
 
       {/* ─── OTROS SERVICIOS ─── */}
-      {tab === 'Otros servicios' && (
+      {tab === 'Artículos' && articuloTab === 'otros' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">Otros servicios</h2>
+            <h2 className="font-semibold text-gray-900">Otros Productos</h2>
             <button onClick={() => { setEditingOtro(null); setOtroForm({ nombre: '', precio: '' }); setShowOtroModal(true) }}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
@@ -899,7 +939,7 @@ export default function ConfiguracionPage() {
       )}
 
       {/* ─── AGENTES ─── */}
-      {tab === 'Agentes' && <AgentesConfig />}
+      {tab === 'Configuración Avanzada' && avanzadaTab === 'agentes' && <AgentesConfig />}
 
       {tab === 'Jornada' && (
         <div className="space-y-6 max-w-3xl">
@@ -1041,9 +1081,9 @@ export default function ConfiguracionPage() {
         </div>
       )}
 
-      {tab === 'Datos personales' && <DatosPersonalesPanel />}
+      {tab === 'Configuración Avanzada' && avanzadaTab === 'datos' && <DatosPersonalesPanel />}
 
-      {tab === 'Mantenimiento' && (
+      {tab === 'Configuración Avanzada' && avanzadaTab === 'mantenimiento' && (
         <div className="space-y-6 max-w-3xl">
         <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
           <h2 className="text-base font-bold text-gray-900 mb-2">Actualizar base de datos</h2>
