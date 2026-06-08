@@ -387,7 +387,7 @@ export default function OperacionesPage() {
           </div>
 
           {/* Horario */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="text-xs font-medium text-gray-700">Hora inicio</label>
               <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)}
@@ -753,7 +753,7 @@ export default function OperacionesPage() {
           {/* Modal editar carga de petróleo */}
           <Modal open={!!editPetId} onClose={() => setEditPetId(null)} title="Editar carga de petróleo">
             <form onSubmit={guardarEdicionCarga} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Fecha</label>
                   <input type="date" required value={editPetForm.fecha} onChange={e => setEditPetForm(f => ({ ...f, fecha: e.target.value }))}

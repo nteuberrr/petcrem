@@ -30,3 +30,15 @@ select:focus,
 textarea:focus {
   border-color: #4f46e5; /* indigo-600 */
 }
+
+/* Responsive: en móvil las tablas scrollean horizontalmente en vez de romper
+   el ancho de la página (cubre todas las tablas del dashboard de una vez). */
+@media (max-width: 768px) {
+  main table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+}
