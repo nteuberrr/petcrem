@@ -104,7 +104,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const videoInputRef = useRef<HTMLInputElement>(null)
   const [subiendoVideo, setSubiendoVideo] = useState(false)
   const [videoError, setVideoError] = useState('')
-  const [adjuntarVideo, setAdjuntarVideo] = useState(true)
+  // Viñeta de confirmación para adjuntar el video del servicio al correo del certificado.
+  const [confirmVideoOpen, setConfirmVideoOpen] = useState(false)
   const certInputRef = useRef<HTMLInputElement>(null)
   const [form, setForm] = useState<Partial<ClienteDetalle>>({})
   const [veterinarias, setVeterinarias] = useState<Veterinario[]>([])
@@ -296,7 +297,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     }
   }
 
-  async function enviarCertificadoCorreo() {
+  async function enviarCertificadoCorreo(adjuntarVideo: boolean) {
     setFeedbackCert(null)
     setEnviandoCert(true)
     try {
@@ -371,7 +372,12 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       )
       if (!ok) return
     }
-    enviarCertificadoCorreo()
+    // Si hay video del servicio, preguntamos si adjuntarlo (viñeta). Si no hay, envía directo.
+    if (videosServicio.length > 0) {
+      setConfirmVideoOpen(true)
+      return
+    }
+    enviarCertificadoCorreo(false)
   }
 
   async function eliminarFicha() {
@@ -636,44 +642,32 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 >
                   {subiendoVideo ? '⌛ Subiendo…' : '🎬 Subir video'}
                 </button>
-                {/* Enviar + opción de adjuntar video, agrupados */}
-                <div className="flex flex-col items-start gap-1">
-                  <button
-                    onClick={intentarEnviarCertificado}
-                    disabled={enviandoCert || !cliente.email || !certUltimo}
-                    title={
-                      !cliente.email
-                        ? 'El cliente no tiene email registrado'
-                        : !certUltimo
-                          ? 'Generá primero un certificado para poder enviarlo'
-                          : certUltimo.enviado_ultima_fecha
-                            ? `Ya enviado — al hacer click te pedimos confirmación para reenviar`
-                            : `Enviar a ${cliente.email}`
-                    }
-                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                      certUltimo?.enviado_ultima_fecha
-                        ? 'bg-gray-500 hover:bg-gray-600 text-white'
-                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                    }`}
-                  >
-                    {enviandoCert
-                      ? '⌛ Enviando…'
-                      : certUltimo?.enviado_ultima_fecha
-                        ? '🔄 Reenviar certificado al correo'
-                        : '📧 Enviar certificado al correo'}
-                  </button>
-                  {videosServicio.length > 0 && (
-                    <label className="inline-flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer pl-0.5">
-                      <input
-                        type="checkbox"
-                        checked={adjuntarVideo}
-                        onChange={e => setAdjuntarVideo(e.target.checked)}
-                        className="w-3.5 h-3.5 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      Adjuntar video al enviar
-                    </label>
-                  )}
-                </div>
+                {/* Enviar certificado. Si hay video del servicio, al hacer click
+                    se abre una viñeta preguntando si adjuntarlo. */}
+                <button
+                  onClick={intentarEnviarCertificado}
+                  disabled={enviandoCert || !cliente.email || !certUltimo}
+                  title={
+                    !cliente.email
+                      ? 'El cliente no tiene email registrado'
+                      : !certUltimo
+                        ? 'Generá primero un certificado para poder enviarlo'
+                        : certUltimo.enviado_ultima_fecha
+                          ? `Ya enviado — al hacer click te pedimos confirmación para reenviar`
+                          : `Enviar a ${cliente.email}`
+                  }
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    certUltimo?.enviado_ultima_fecha
+                      ? 'bg-gray-500 hover:bg-gray-600 text-white'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  }`}
+                >
+                  {enviandoCert
+                    ? '⌛ Enviando…'
+                    : certUltimo?.enviado_ultima_fecha
+                      ? '🔄 Reenviar certificado al correo'
+                      : '📧 Enviar certificado al correo'}
+                </button>
               </div>
             )}
           </div>
@@ -686,6 +680,31 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               {feedbackCert.msg}
             </div>
           )}
+
+          {/* Viñeta: ¿adjuntar el video del servicio al correo del certificado? */}
+          <Modal open={confirmVideoOpen} onClose={() => setConfirmVideoOpen(false)} title="Adjuntar video al correo">
+            <div className="space-y-4">
+              <p className="text-sm text-gray-700">
+                Esta ficha tiene {videosServicio.length === 1 ? 'un video' : `${videosServicio.length} videos`} del servicio.
+                ¿Quieres adjuntar el video en el correo del certificado?
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  onClick={() => { setConfirmVideoOpen(false); enviarCertificadoCorreo(true) }}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2 text-sm font-semibold transition-colors"
+                >
+                  Sí, adjuntar el video
+                </button>
+                <button
+                  onClick={() => { setConfirmVideoOpen(false); enviarCertificadoCorreo(false) }}
+                  className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors"
+                >
+                  No, enviar sin el video
+                </button>
+              </div>
+            </div>
+          </Modal>
+
           {/* Banner permanente: solo aparece cuando hay un envío real registrado
               en sheet `certificados` (vía POST /api/clientes/[id]/certificado/enviar).
               Estado 'despachado' por sí solo no implica envío. */}
