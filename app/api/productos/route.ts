@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, getNextId, ensureColumn, ensureColumns, deleteRow } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, getNextId, ensureColumn, ensureColumns, deleteRow } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 
 export async function GET() {

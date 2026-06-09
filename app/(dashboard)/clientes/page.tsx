@@ -374,10 +374,12 @@ export default function ClientesPage() {
     const maxPesoMin = Math.max(...tabla.map(t => parseFloat(t.peso_min) || 0))
     const tramoTope = tabla.find(t => (parseFloat(t.peso_min) || 0) === maxPesoMin)
     if (tramoTope && peso >= maxPesoMin) return tramoTope
+    // Regla de borde: intervalos [min, max) → en el límite exacto gana el tramo
+    // MAYOR (ej. 15 kg entre 10–15 y 15–25 → usa 15–25). Igual que lib/price-calculator.
     return tabla.find(t => {
       const min = parseFloat(t.peso_min) || 0
       const max = parseFloat(t.peso_max) || 0
-      return peso >= min && peso <= max
+      return peso >= min && peso < max
     }) ?? null
   }
   function precioDelTramo(t: Tramo | null, codigo: string): number {

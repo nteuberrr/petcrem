@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 import { esAdmin } from '@/lib/roles'
 

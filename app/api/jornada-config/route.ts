@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, appendRow, updateRow, deleteRow, getNextId, ensureColumns, ensureSheet } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, deleteRow, getNextId, ensureColumns, ensureSheet } from '@/lib/datastore'
 import { todayISO, formatDateForSheet, formatHora } from '@/lib/dates'
 import type { JornadaConfig } from '@/lib/asistencia'
 import { esAdmin } from '@/lib/roles'

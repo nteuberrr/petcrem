@@ -259,11 +259,53 @@ export default function ServiciosEutanasiasPage() {
     setTramos(Array.isArray(d) ? d : [])
   }, [])
 
+  // Cargo fijo del cliente: precio_cliente = precio_vet (tramo) + fijo.
+  const [fijo, setFijo] = useState<number>(0)
+  const [fijoInput, setFijoInput] = useState('')
+  const [savingFijo, setSavingFijo] = useState(false)
+  const [fijoMsg, setFijoMsg] = useState('')
+
+  const cargarFijo = useCallback(async () => {
+    const r = await fetch('/api/eutanasias/config', { cache: 'no-store' })
+    if (!r.ok) return
+    const d = await r.json().catch(() => null)
+    if (d && typeof d.fijo === 'number') {
+      setFijo(d.fijo)
+      setFijoInput(String(d.fijo))
+    }
+  }, [])
+
+  async function guardarFijo() {
+    setSavingFijo(true)
+    setFijoMsg('')
+    try {
+      const valor = parseInt(fijoInput, 10)
+      if (isNaN(valor) || valor < 0) { setFijoMsg('Valor inválido'); return }
+      const r = await fetch('/api/eutanasias/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fijo: valor }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok) {
+        setFijo(d.fijo ?? valor)
+        setFijoInput(String(d.fijo ?? valor))
+        setFijoMsg('Guardado ✓')
+        setTimeout(() => setFijoMsg(''), 2500)
+      } else {
+        setFijoMsg(d.error || 'Error al guardar')
+      }
+    } finally {
+      setSavingFijo(false)
+    }
+  }
+
   useEffect(() => {
     cargarVets()
     cargarTramos()
+    cargarFijo()
     cargarCotis()
-  }, [cargarVets, cargarTramos, cargarCotis])
+  }, [cargarVets, cargarTramos, cargarFijo, cargarCotis])
 
   // ─── Cotizaciones handlers ────────────────────────────────────────────────
   function abrirNuevaCotizacion() {
@@ -855,10 +897,40 @@ export default function ServiciosEutanasiasPage() {
 
       {tab === 'Precios' && (
         <section>
+          {/* Cargo fijo al cliente */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 mb-5 max-w-2xl">
+            <h3 className="text-sm font-semibold text-gray-900">Cargo fijo al cliente</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Se <strong>suma</strong> al precio del tramo (lo que se paga al vet) para dar el precio que se le cobra al cliente final.
+              <br />
+              <span className="text-gray-400">Precio al cliente = precio del vet + cargo fijo.</span>
+            </p>
+            <div className="flex items-center gap-2 mt-3">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                <input
+                  type="number" min="0" step="1000"
+                  value={fijoInput}
+                  onChange={e => setFijoInput(e.target.value)}
+                  className="w-40 pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-base sm:text-sm"
+                  placeholder="0"
+                />
+              </div>
+              <button
+                onClick={guardarFijo}
+                disabled={savingFijo}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-sm font-medium rounded-lg"
+              >
+                {savingFijo ? 'Guardando…' : 'Guardar'}
+              </button>
+              {fijoMsg && <span className={`text-xs font-medium ${fijoMsg.includes('✓') ? 'text-emerald-600' : 'text-red-600'}`}>{fijoMsg}</span>}
+            </div>
+          </div>
+
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
             <div>
               <p className="text-sm text-gray-600">Precio que <strong>se paga al veterinario</strong> por servicio de eutanasia, según peso de la mascota.</p>
-              <p className="text-xs text-gray-500 mt-1">Este es el precio que verán los vets en el landing del convenio.</p>
+              <p className="text-xs text-gray-500 mt-1">Este es el precio que verán los vets en el landing del convenio. La columna <strong>“Al cliente”</strong> ya incluye el cargo fijo de {fmtPrecio(fijo)}.</p>
             </div>
             <button
               onClick={abrirNuevoTramo}
@@ -872,22 +944,29 @@ export default function ServiciosEutanasiasPage() {
             {tramos.length === 0 ? (
               <div className="p-8 text-center text-gray-500">No hay tramos de precio definidos.</div>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[480px]">
                 <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                   <tr>
                     <th className="px-4 py-2 text-left">Peso (kg)</th>
-                    <th className="px-4 py-2 text-right">Precio</th>
+                    <th className="px-4 py-2 text-right">Pago al vet</th>
+                    <th className="px-4 py-2 text-right">Al cliente</th>
                     <th className="px-4 py-2 text-right w-32">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {tramos.map(t => (
+                  {tramos.map(t => {
+                    const precioVet = parseInt(t.precio, 10) || 0
+                    return (
                     <tr key={t.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-gray-900">
                         {t.peso_min} – {t.peso_max} kg
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-gray-900">
-                        {fmtPrecio(parseInt(t.precio, 10) || 0)}
+                        {fmtPrecio(precioVet)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-indigo-700">
+                        {fmtPrecio(precioVet + fijo)}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <button onClick={() => abrirEditarTramo(t)} className="text-indigo-600 hover:text-indigo-800 text-xs font-medium mr-3">
@@ -898,9 +977,10 @@ export default function ServiciosEutanasiasPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </section>

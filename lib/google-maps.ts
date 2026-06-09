@@ -1,4 +1,4 @@
-import { getSheetData, appendRow, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, appendRow, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 
 const CACHE_SHEET = 'geocoding_cache'

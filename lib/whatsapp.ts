@@ -58,6 +58,30 @@ export async function enviarTextoWhatsapp(to: string, body: string): Promise<Env
   return postMensaje({ to: to.replace(/[^\d]/g, ''), type: 'text', text: { preview_url: false, body } })
 }
 
+/** Número de WhatsApp del admin que confirma/rechaza solicitudes (solo dígitos). */
+export function adminWhatsapp(): string {
+  return (process.env.ADMIN_WHATSAPP || '56978640811').replace(/\D/g, '')
+}
+
+export interface BotonWa { id: string; title: string }
+
+/**
+ * Envía un mensaje con botones interactivos de respuesta rápida (máx. 3).
+ * Solo válido dentro de la ventana de 24h (igual que el texto libre). El `id`
+ * de cada botón vuelve en el webhook como `interactive.button_reply.id`.
+ */
+export async function enviarBotonesWhatsapp(to: string, body: string, botones: BotonWa[]): Promise<EnvioResult> {
+  const buttons = botones.slice(0, 3).map(b => ({
+    type: 'reply',
+    reply: { id: b.id.slice(0, 256), title: b.title.slice(0, 20) },
+  }))
+  return postMensaje({
+    to: to.replace(/[^\d]/g, ''),
+    type: 'interactive',
+    interactive: { type: 'button', body: { text: body.slice(0, 1024) }, action: { buttons } },
+  })
+}
+
 export type WaMediaTipo = 'image' | 'video' | 'audio' | 'document'
 
 /** Envía un media por URL pública (link); WhatsApp la descarga. Dentro de la ventana de 24h. */

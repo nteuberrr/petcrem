@@ -548,8 +548,8 @@ export default function ReportesPage() {
                         <tr key={r.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 font-medium text-gray-900">{r.usuario_nombre}</td>
                           <td className="px-4 py-3 text-gray-700">{fmtFecha(r.fecha)}</td>
-                          <td className="px-4 py-3 text-gray-700">{r.hora_entrada}</td>
-                          <td className="px-4 py-3 text-gray-700">{r.hora_salida}</td>
+                          <td className="px-4 py-3 text-gray-700">{formatHora(r.hora_entrada)}</td>
+                          <td className="px-4 py-3 text-gray-700">{formatHora(r.hora_salida)}</td>
                           <td className="px-4 py-3 font-bold text-amber-700">{fmtMinutos(parseFloat(r.minutos_extra) || 0)}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
@@ -732,7 +732,7 @@ function RetirosTab({
                   <tr key={r.id}>
                     <td className="px-4 py-3 font-medium text-gray-900">{r.usuario_nombre}</td>
                     <td className="px-4 py-3 text-gray-700">{fmtFecha(r.fecha)}</td>
-                    <td className="px-4 py-3 text-gray-700">{r.hora || '—'}</td>
+                    <td className="px-4 py-3 text-gray-700">{r.hora ? formatHora(r.hora) : '—'}</td>
                     <td className="px-4 py-3 text-gray-700">{r.cliente_nombre}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{r.comentario || '—'}</td>
                   </tr>

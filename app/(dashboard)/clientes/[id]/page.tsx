@@ -61,6 +61,8 @@ type ClienteDetalle = {
   notas: string
   tipo_pago: string
   estado_pago: string
+  fotos_mascota?: string
+  videos_servicio?: string
   ciclo?: {
     id: string
     fecha: string
@@ -95,8 +97,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [descargandoCert, setDescargandoCert] = useState(false)
   const [showCertModal, setShowCertModal] = useState(false)
   const [certFoto, setCertFoto] = useState<File | null>(null)
-  const [certSinFoto, setCertSinFoto] = useState(false)
+  // URL de una foto que el tutor subió (desde /subir-foto) y el operador elige.
+  const [certFotoUrl, setCertFotoUrl] = useState<string | null>(null)
   const [certError, setCertError] = useState('')
+  // Video del servicio: subida directa a R2 (prefirmada) + adjuntar al correo.
+  const videoInputRef = useRef<HTMLInputElement>(null)
+  const [subiendoVideo, setSubiendoVideo] = useState(false)
+  const [videoError, setVideoError] = useState('')
+  const [adjuntarVideo, setAdjuntarVideo] = useState(true)
   const certInputRef = useRef<HTMLInputElement>(null)
   const [form, setForm] = useState<Partial<ClienteDetalle>>({})
   const [veterinarias, setVeterinarias] = useState<Veterinario[]>([])
@@ -149,6 +157,18 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     if (!res || !res.ok) return
     const data = await res.json().catch(() => [])
     setCertificadosEmitidos(Array.isArray(data) ? data : [])
+  }, [id])
+
+  // Recarga solo la ficha del cliente (usado tras subir/eliminar un video).
+  const recargarCliente = useCallback(async () => {
+    const d = await fetch(`/api/clientes/${id}`).then(r => r.json()).catch(() => null)
+    if (!d || d.error) return
+    setCliente({
+      ...d,
+      fecha_retiro: formatDateForSheet(d.fecha_retiro) || d.fecha_retiro || '',
+      fecha_defuncion: formatDateForSheet(d.fecha_defuncion) || d.fecha_defuncion || '',
+      fecha_creacion: formatDateForSheet(d.fecha_creacion) || d.fecha_creacion || '',
+    })
   }, [id])
 
   useEffect(() => {
@@ -236,7 +256,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
   function abrirModalCertificado() {
     setCertFoto(null)
-    setCertSinFoto(false)
+    setCertFotoUrl(null)
     setCertError('')
     setShowCertModal(true)
   }
@@ -244,15 +264,15 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   async function generarCertificado(e: React.FormEvent) {
     e.preventDefault()
     setCertError('')
-    if (!certSinFoto && !certFoto) {
-      setCertError('Subí una foto o tildá "Generar sin foto"')
-      return
-    }
     setDescargandoCert(true)
     try {
+      // Por defecto SIN foto; solo lleva foto si el operador eligió una (subida
+      // por el tutor) o subió una nueva.
+      const sinFoto = !certFoto && !certFotoUrl
       const fd = new FormData()
-      fd.append('sin_foto', certSinFoto ? 'true' : 'false')
-      if (!certSinFoto && certFoto) fd.append('foto', certFoto)
+      fd.append('sin_foto', sinFoto ? 'true' : 'false')
+      if (certFoto) fd.append('foto', certFoto)
+      else if (certFotoUrl) fd.append('foto_url', certFotoUrl)
 
       const res = await fetch(`/api/clientes/${id}/certificado`, { method: 'POST', body: fd })
       if (!res.ok) {
@@ -280,7 +300,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     setFeedbackCert(null)
     setEnviandoCert(true)
     try {
-      const res = await fetch(`/api/clientes/${id}/certificado/enviar`, { method: 'POST' })
+      const res = await fetch(`/api/clientes/${id}/certificado/enviar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adjuntar_video: adjuntarVideo }),
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setFeedbackCert({ kind: 'error', msg: data?.error ?? 'No se pudo enviar el correo' })
@@ -294,6 +318,40 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     } finally {
       setEnviandoCert(false)
     }
+  }
+
+  async function subirVideo(file: File) {
+    setVideoError('')
+    setSubiendoVideo(true)
+    try {
+      // 1) URL prefirmada
+      const pres = await fetch(`/api/clientes/${id}/video/presign`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content_type: file.type, filename: file.name }),
+      })
+      const pd = await pres.json().catch(() => ({}))
+      if (!pres.ok) { setVideoError(pd.error || 'No se pudo preparar la subida'); return }
+      // 2) PUT directo a R2
+      const put = await fetch(pd.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
+      if (!put.ok) { setVideoError('Falló la subida del video a R2. Verifica la configuración CORS del bucket.'); return }
+      // 3) Registrar la URL en la ficha
+      const reg = await fetch(`/api/clientes/${id}/video`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: pd.publicUrl }),
+      })
+      if (!reg.ok) { const rd = await reg.json().catch(() => ({})); setVideoError(rd.error || 'No se pudo registrar el video'); return }
+      await recargarCliente()
+    } catch {
+      setVideoError('Error subiendo el video. Inténtalo de nuevo.')
+    } finally {
+      setSubiendoVideo(false)
+    }
+  }
+
+  async function eliminarVideo(url: string) {
+    if (!confirm('¿Eliminar este video del servicio?')) return
+    await fetch(`/api/clientes/${id}/video?url=${encodeURIComponent(url)}`, { method: 'DELETE' }).catch(() => {})
+    await recargarCliente()
   }
 
   function intentarEnviarCertificado() {
@@ -487,6 +545,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
   const certUltimo = certificadosEmitidos[0]
   const puedeGenerarCert = cliente.estado === 'cremado' || cliente.estado === 'despachado'
+  const videosServicio: string[] = (() => {
+    try { const x = JSON.parse(cliente.videos_servicio || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
+  })()
   const estadoVariant: 'green' | 'blue' | 'yellow' =
     cliente.estado === 'cremado' ? 'green'
     : cliente.estado === 'despachado' ? 'blue'
@@ -569,6 +630,21 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                       ? '🔄 Reenviar al correo'
                       : '📧 Enviar al correo'}
                 </button>
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/webm"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) subirVideo(f); e.target.value = '' }}
+                />
+                <button
+                  onClick={() => videoInputRef.current?.click()}
+                  disabled={subiendoVideo}
+                  className="inline-flex items-center gap-2 border-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
+                  title="Subir un video del servicio (se guarda en la ficha y se puede adjuntar al certificado)"
+                >
+                  {subiendoVideo ? '⌛ Subiendo video…' : '🎬 Subir video'}
+                </button>
               </div>
             )}
           </div>
@@ -596,6 +672,44 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   <span className="text-emerald-700"> · reenviado {parseInt(certUltimo.enviado_cantidad || '0', 10) - 1} {parseInt(certUltimo.enviado_cantidad || '0', 10) - 1 === 1 ? 'vez' : 'veces'}</span>
                 )}
               </div>
+            </div>
+          )}
+
+          {videoError && (
+            <div className="mt-4 rounded-lg px-3 py-2 text-xs font-medium bg-red-50 border border-red-200 text-red-800">{videoError}</div>
+          )}
+
+          {/* Videos del servicio subidos a R2 + opción de adjuntarlos al certificado */}
+          {videosServicio.length > 0 && (
+            <div className="mt-4 rounded-xl border-2 border-gray-200 bg-gray-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+                  🎬 Videos del servicio ({videosServicio.length})
+                </p>
+                <label className="inline-flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={adjuntarVideo}
+                    onChange={e => setAdjuntarVideo(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  Adjuntar el video al enviar el certificado
+                </label>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {videosServicio.map((url, i) => (
+                  <div key={url + i} className="w-44">
+                    <video src={url} controls preload="metadata" className="w-44 h-28 rounded-lg border border-gray-300 bg-black object-cover" />
+                    <div className="flex items-center justify-between mt-1">
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-indigo-600 hover:underline">Abrir</a>
+                      <button type="button" onClick={() => eliminarVideo(url)} className="text-[11px] text-red-600 hover:text-red-800 font-semibold">Eliminar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {adjuntarVideo && (
+                <p className="text-[11px] text-gray-500 mt-2">Se adjuntará el video más reciente al correo del certificado.</p>
+              )}
             </div>
           )}
         </div>
@@ -1152,46 +1266,75 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             Mascota: <b>{cliente.nombre_mascota}</b> · {cliente.codigo}
           </div>
 
-          {!certSinFoto && (
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Foto de la mascota (jpg/png)</label>
-              <div className="mt-1 flex items-center gap-3">
-                <input
-                  ref={certInputRef}
-                  type="file"
-                  accept="image/jpeg,image/jpg,image/png"
-                  onChange={e => setCertFoto(e.target.files?.[0] ?? null)}
-                  className="hidden"
-                />
-                <button type="button" onClick={() => certInputRef.current?.click()}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors">
-                  📷 Subir foto
-                </button>
-                {certFoto ? (
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-xs text-gray-700 truncate">{certFoto.name}</span>
-                    <button type="button" onClick={() => setCertFoto(null)}
-                      className="text-xs text-red-600 hover:text-red-800 font-semibold">Quitar</button>
+          {(() => {
+            let fotosSubidas: string[] = []
+            try { const x = JSON.parse(cliente.fotos_mascota || '[]'); if (Array.isArray(x)) fotosSubidas = x } catch { /* */ }
+            return (
+              <>
+                {/* Fotos que el tutor subió desde el link del correo */}
+                {fotosSubidas.length > 0 && (
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700">
+                      Fotos enviadas por el tutor — tocá una para usarla
+                    </label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {fotosSubidas.map((url, i) => {
+                        const sel = certFotoUrl === url
+                        return (
+                          <button
+                            key={url + i}
+                            type="button"
+                            onClick={() => {
+                              if (sel) { setCertFotoUrl(null) }
+                              else { setCertFotoUrl(url); setCertFoto(null) }
+                            }}
+                            className={`relative w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${sel ? 'border-amber-600 ring-2 ring-amber-300' : 'border-gray-200 hover:border-amber-400'}`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
+                            {sel && <span className="absolute top-0.5 right-0.5 bg-amber-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">✓</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1">O sube una nueva foto abajo.</p>
                   </div>
-                ) : (
-                  <span className="text-xs text-gray-400">Ninguna foto seleccionada</span>
                 )}
-              </div>
-            </div>
-          )}
 
-          <div className="flex items-center gap-2 pt-1 border-t-2 border-gray-100">
-            <input
-              type="checkbox"
-              id="cert-sin-foto"
-              checked={certSinFoto}
-              onChange={e => { setCertSinFoto(e.target.checked); if (e.target.checked) setCertFoto(null) }}
-              className="w-4 h-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
-            />
-            <label htmlFor="cert-sin-foto" className="text-sm font-medium text-gray-700">
-              Generar sin foto
-            </label>
-          </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Foto de la mascota (jpg/png)</label>
+                  <div className="mt-1 flex items-center gap-3">
+                    <input
+                      ref={certInputRef}
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png"
+                      onChange={e => { setCertFoto(e.target.files?.[0] ?? null); setCertFotoUrl(null) }}
+                      className="hidden"
+                    />
+                    <button type="button" onClick={() => certInputRef.current?.click()}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors">
+                      📷 Subir foto
+                    </button>
+                    {certFoto ? (
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="text-xs text-gray-700 truncate">{certFoto.name}</span>
+                        <button type="button" onClick={() => setCertFoto(null)}
+                          className="text-xs text-red-600 hover:text-red-800 font-semibold">Quitar</button>
+                      </div>
+                    ) : certFotoUrl ? (
+                      <span className="text-xs text-amber-700 font-medium">Usando una foto enviada por el tutor</span>
+                    ) : (
+                      <span className="text-xs text-gray-400">Ninguna foto seleccionada</span>
+                    )}
+                  </div>
+                </div>
+              </>
+            )
+          })()}
+
+          <p className="text-[11px] text-gray-500 pt-1 border-t-2 border-gray-100">
+            Si no eliges ninguna foto, el certificado se genera <strong>sin foto</strong>.
+          </p>
 
           {certError && (
             <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{certError}</p>

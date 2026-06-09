@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, updateRow, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { verifyToken, createToken, createVetToken } from '@/lib/eutanasia-tokens'
 import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
-import { nombreCompletoVet, renderCoordinarEmail } from '@/lib/eutanasia-mailer'
+import { nombreCompletoVet, renderCoordinarEmail, enviarClienteVetAsignado } from '@/lib/eutanasia-mailer'
 import { getContacto } from '@/lib/email-layout'
+import { enviarTextoWhatsapp, isWhatsappConfigured } from '@/lib/whatsapp'
+import { formatDate } from '@/lib/dates'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
 const SHEET_ENVIOS = 'cotizaciones_eutanasia_envios'
@@ -128,6 +130,32 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         console.warn('[aceptar] error mandando mail de confirmación:', e)
       }
+    }
+
+    // Avisar al CLIENTE (tutor) que un vet tomó su caso, con los datos del vet.
+    // Best-effort: WhatsApp si la cotización nació del bot (cliente_wa_id) + correo.
+    const vetTel = (vet.telefono || '').replace(/\D/g, '').slice(-9)
+    const waCliente = (c.cliente_wa_id || '').replace(/\D/g, '')
+    if (waCliente && isWhatsappConfigured()) {
+      const msgWa =
+        `Buenas noticias 🐾 Un veterinario de nuestra red confirmó su disponibilidad para acompañar a ${c.mascota_nombre}.\n\n` +
+        `Se pondrá en contacto contigo para coordinar:\n` +
+        `${vetNombreCompleto}${vetTel ? ` · +56 ${vetTel}` : ''}\n\n` +
+        `Cualquier duda, escríbenos por aquí.`
+      try { await enviarTextoWhatsapp(waCliente, msgWa) } catch (e) { console.warn('[aceptar] WhatsApp al cliente falló:', e) }
+    }
+    if (c.cliente_email) {
+      try {
+        await enviarClienteVetAsignado({
+          clienteEmail: c.cliente_email,
+          clienteNombre: c.cliente_nombre,
+          mascotaNombre: c.mascota_nombre,
+          vetNombre: vetNombreCompleto,
+          vetTelefono: vet.telefono || '',
+          fechaServicio: formatDate(c.fecha_servicio),
+          horaServicio: c.hora_servicio,
+        })
+      } catch (e) { console.warn('[aceptar] correo al cliente falló:', e) }
     }
 
     return NextResponse.json({

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, moveRow } from '@/lib/google-sheets'
+import { getSheetData, moveRow } from '@/lib/datastore'
 
 export async function POST(req: NextRequest) {
   try {

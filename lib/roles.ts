@@ -41,7 +41,7 @@ export function puedeConfigAvanzada(r?: string | null): boolean {
 }
 
 /** Prefijos de API que SOLO el admin (1) puede tocar (backend de Configuración Avanzada). */
-export const APIS_AVANZADAS = ['/api/empresa-config', '/api/mensajes/agente', '/api/sync-database']
+export const APIS_AVANZADAS = ['/api/empresa-config', '/api/mensajes/agente', '/api/sync-database', '/api/correos']
 
 export function esApiAvanzada(pathname: string): boolean {
   return APIS_AVANZADAS.some(p => pathname.startsWith(p))

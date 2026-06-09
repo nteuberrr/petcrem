@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSheetData } from '@/lib/google-sheets'
+import { getSheetData } from '@/lib/datastore'
 import { formatDateForSheet, horaToMinutos } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso, parseMonto } from '@/lib/numbers'
 

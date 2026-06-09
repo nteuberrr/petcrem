@@ -1,4 +1,4 @@
-import { getSheetData } from './google-sheets'
+import { getSheetData } from './datastore'
 
 /**
  * Genera un código único para un cliente nuevo del estilo "G64-CI".

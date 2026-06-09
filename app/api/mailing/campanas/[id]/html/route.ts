@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData } from '@/lib/google-sheets'
+import { getSheetData } from '@/lib/datastore'
 import { getFromR2 } from '@/lib/cloudflare-r2'
 import { esAdmin } from '@/lib/roles'
 

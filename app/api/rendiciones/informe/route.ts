@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSheetData } from '@/lib/google-sheets'
+import { getSheetData } from '@/lib/datastore'
 import { formatDate } from '@/lib/dates'
 import * as XLSX from 'xlsx-js-style'
 

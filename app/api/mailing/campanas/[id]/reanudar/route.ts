@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, updateRow } from '@/lib/google-sheets'
+import { getSheetData, updateRow } from '@/lib/datastore'
 import { getFromR2 } from '@/lib/cloudflare-r2'
 import { sendBatch, isResendConfigured } from '@/lib/resend-mailer'
 import { renderForVet } from '@/lib/mailing-render'

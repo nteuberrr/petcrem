@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSheetData, appendRow, updateRow, getNextId, deleteRow } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, getNextId, deleteRow } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 
 const VetSchema = z.object({

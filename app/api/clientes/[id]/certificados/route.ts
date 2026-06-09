@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSheetData, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, ensureSheet, ensureColumns } from '@/lib/datastore'
 
 const CERT_COLS = [
   'id', 'cliente_id', 'codigo_mascota', 'nombre_mascota',

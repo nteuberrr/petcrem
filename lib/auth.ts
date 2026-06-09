@@ -1,6 +1,6 @@
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import { getSheetData } from '@/lib/google-sheets'
+import { getSheetData } from '@/lib/datastore'
 
 export const authOptions: NextAuthOptions = {
   providers: [

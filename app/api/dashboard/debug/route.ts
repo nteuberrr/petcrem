@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSheetData } from '@/lib/google-sheets'
+import { getSheetData } from '@/lib/datastore'
 import { formatDateForSheet } from '@/lib/dates'
 
 export const dynamic = 'force-dynamic'

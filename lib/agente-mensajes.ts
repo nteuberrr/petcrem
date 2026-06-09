@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { getSheetData } from './google-sheets'
+import { getSheetData } from './datastore'
 import { getAgenteConfig } from './mensajes'
 import { fmtPrecio } from './format'
 
@@ -49,10 +49,16 @@ FLUJO DE ATENCIÓN (síguelo con naturalidad, sin sonar a robot)
 4. Invita a agendar.
 5. Para coordinar el retiro pide NOMBRE + DIRECCIÓN + COMUNA y pregunta día/hora. La entrega es en 4 días hábiles.
 
+AGENDAMIENTO (usa las herramientas SOLO cuando tengas TODOS los datos; si falta uno, pídelo y no llames la herramienta todavía)
+- RETIRO DE CREMACIÓN (lo normal): reúne nombre del tutor, dirección + comuna, peso y nombre de la mascota, y fecha + hora de retiro. Con todo eso, regístralo con la herramienta "solicitar_retiro_cremacion". El equipo lo confirma y luego se le avisa al cliente; no le digas que ya está confirmado, dile que estamos validando la solicitud.
+- EUTANASIA A DOMICILIO: si el cliente la pide o la necesita, ofrécela con naturalidad. Si pregunta el precio, dáselo con la herramienta "cotizar_eutanasia" (NO uses las tarifas de cremación). Para agendar reúne nombre del tutor, nombre + especie + peso de la mascota, comuna, dirección, fecha y franja (mañana=AM / tarde=PM). Con todo eso, agéndala con la herramienta "agendar_eutanasia": contactamos a nuestra red de veterinarios y le avisamos apenas uno confirme.
+- Si una herramienta no está disponible en este momento, sigue coordinando por mensaje y, si hace falta, escala a un humano.
+
 REGLAS DURAS
 - NUNCA inventes precios, plazos ni servicios. Usa SOLO la tabla "TARIFAS VIGENTES" que te entrego abajo. Si no tienes el peso, pídelo antes de cotizar.
+- Las TARIFAS VIGENTES son SOLO de cremación. NO las uses para cotizar una eutanasia a domicilio (la eutanasia tiene otro precio, que se entrega por separado).
 - No prometas nada que no esté en esta información.
-- ESCALA a un humano (escalar=true) si: el cliente está molesto o hace un reclamo; pide hablar con una persona; es un tema sensible, legal o de pago/transferencia que no puedes resolver; o algo se sale del flujo de cremación. En ese caso tu "mensaje" debe ser una línea breve y cálida avisando que un miembro del equipo le responderá a la brevedad.
+- Para ESCALAR a un humano, llama a la herramienta "escalar_a_humano" (no escribas JSON). Escala si: el cliente está molesto o hace un reclamo; pide hablar con una persona; es un tema sensible, legal o de pago/transferencia que no puedes resolver; o algo se sale del flujo de cremación/eutanasia. Aun así, envía una línea breve y cálida avisando que un miembro del equipo le responderá a la brevedad.
 - Una sola respuesta por turno.
 
 SOBRE NOSOTROS Y EL SERVICIO (usa lo que aplique para responder dudas; no lo recites entero)
@@ -71,9 +77,8 @@ CONTACTO (dalo si lo piden): +56 9 7864 0811 · contacto@crematorioalmaanimal.cl
 
 SI ESCRIBE UNA CLÍNICA / VETERINARIO: tenemos convenios para clínicas (servicio directo, o derivación con comisión) y una red para eutanasia y evaluación médica a domicilio. Si es una clínica interesada en convenio, ofrécele que el equipo la contacte y escala a un humano.
 
-FORMATO DE SALIDA (OBLIGATORIO)
-Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni \`\`\`:
-{"mensaje": "<texto exacto a enviar al cliente>", "escalar": true|false}`
+FORMATO DE RESPUESTA
+Responde con el texto natural del mensaje al cliente, tal cual se enviará por WhatsApp: sin JSON, sin comillas alrededor y sin prefijos. Una sola respuesta por turno. Para registrar un retiro, agendar una eutanasia o escalar, usa las herramientas disponibles.`
 
 /** Construye el bloque de tarifas vigentes desde la planilla. */
 async function bloqueTarifas(): Promise<string> {
@@ -99,8 +104,124 @@ Tipos de servicio: ${nombres}. (Lo que incluye cada modalidad está en la secci�
   }
 }
 
-export interface RespuestaAgente { mensaje: string; escalar: boolean }
+export interface RespuestaAgente {
+  mensaje: string
+  escalar: boolean
+  /** Nombres de las herramientas que el modelo ejecutó en este turno. */
+  acciones: string[]
+}
 export interface TurnoMensaje { rol: 'cliente' | 'nosotros'; texto: string }
+
+// ─── Tool-use: contexto, datos de cada acción y handlers inyectables ──────────
+// El loop del agente expone herramientas al modelo. Los HANDLERS reales (que
+// crean la cotización, avisan al admin, etc.) los inyecta el caller (webhook);
+// si no se inyecta el handler de una acción, esa herramienta NO se le ofrece al
+// modelo. La herramienta de escalar siempre está disponible.
+
+export interface CtxAgente {
+  /** wa_id del contacto (teléfono WhatsApp), para notificaciones posteriores. */
+  waId?: string
+  /** Nombre del contacto según el inbox, como respaldo si el modelo no lo captó. */
+  nombreContacto?: string
+}
+
+export interface AccionRetiro {
+  nombre_tutor: string
+  direccion: string
+  comuna: string
+  peso: number
+  nombre_mascota: string
+  fecha: string   // YYYY-MM-DD
+  hora: string    // HH:MM
+  tipo_servicio?: string  // CI | CP | SD
+}
+
+export interface AccionEutanasia {
+  nombre_tutor: string
+  nombre_mascota: string
+  especie: string
+  peso: number
+  comuna: string
+  direccion: string
+  fecha: string   // YYYY-MM-DD
+  franja: 'AM' | 'PM'
+  email?: string
+}
+
+/**
+ * Handlers que el caller inyecta. Cada uno ejecuta el efecto real y devuelve un
+ * texto de resultado que se le pasa de vuelta al modelo como tool_result (le
+ * sirve para redactar la respuesta final al cliente). Pueden lanzar: el loop
+ * captura el error y se lo informa al modelo para que se disculpe / escale.
+ */
+export interface AccionCotizarEutanasia {
+  peso: number
+}
+
+export interface HandlersAgente {
+  solicitarRetiro?: (a: AccionRetiro, ctx: CtxAgente) => Promise<string>
+  agendarEutanasia?: (a: AccionEutanasia, ctx: CtxAgente) => Promise<string>
+  cotizarEutanasia?: (a: AccionCotizarEutanasia, ctx: CtxAgente) => Promise<string>
+}
+
+const TOOL_COTIZAR_EUTANASIA: Anthropic.Tool = {
+  name: 'cotizar_eutanasia',
+  description: 'Devuelve el precio al cliente del servicio de eutanasia a domicilio para una mascota de cierto peso. Úsala cuando el cliente pregunte el valor de la eutanasia, antes de agendar. NO uses las TARIFAS de cremación para esto.',
+  input_schema: {
+    type: 'object',
+    properties: { peso: { type: 'number', description: 'Peso aproximado de la mascota en kg.' } },
+    required: ['peso'],
+  },
+}
+
+const TOOL_ESCALAR: Anthropic.Tool = {
+  name: 'escalar_a_humano',
+  description: 'Deriva la conversación a una persona del equipo. Úsala ante reclamos, clientes molestos, cuando piden hablar con una persona, temas sensibles/legales/de pago que no puedes resolver, o cuando algo se sale del flujo de cremación/eutanasia. Tras llamarla, igual envía un mensaje breve y cálido avisando que un miembro del equipo responderá pronto.',
+  input_schema: {
+    type: 'object',
+    properties: { motivo: { type: 'string', description: 'Motivo breve de la derivación.' } },
+    required: ['motivo'],
+  },
+}
+
+const TOOL_RETIRO: Anthropic.Tool = {
+  name: 'solicitar_retiro_cremacion',
+  description: 'Registra una solicitud de retiro para cremación normal (NO eutanasia) y la envía al equipo para confirmación. Llámala SOLO cuando ya tengas TODOS los datos requeridos. Si falta alguno, pídelo primero y NO la llames.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      nombre_tutor: { type: 'string', description: 'Nombre del tutor (la persona).' },
+      direccion: { type: 'string', description: 'Dirección de retiro (calle y número).' },
+      comuna: { type: 'string' },
+      peso: { type: 'number', description: 'Peso aproximado de la mascota en kg.' },
+      nombre_mascota: { type: 'string' },
+      fecha: { type: 'string', description: 'Fecha de retiro en formato YYYY-MM-DD.' },
+      hora: { type: 'string', description: 'Hora de retiro en formato HH:MM (24h).' },
+      tipo_servicio: { type: 'string', description: 'Opcional: CI (Individual), CP (Premium) o SD (Sin Devolución) si el cliente ya eligió.' },
+    },
+    required: ['nombre_tutor', 'direccion', 'comuna', 'peso', 'nombre_mascota', 'fecha', 'hora'],
+  },
+}
+
+const TOOL_EUTANASIA: Anthropic.Tool = {
+  name: 'agendar_eutanasia',
+  description: 'Crea una solicitud de eutanasia a domicilio y la envía a la red de veterinarios en convenio. Llámala SOLO cuando tengas TODOS los datos requeridos. Si falta alguno, pídelo primero y NO la llames.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      nombre_tutor: { type: 'string' },
+      nombre_mascota: { type: 'string' },
+      especie: { type: 'string', description: 'Perro, Gato, etc.' },
+      peso: { type: 'number', description: 'Peso aproximado en kg.' },
+      comuna: { type: 'string' },
+      direccion: { type: 'string', description: 'Dirección donde se realizará el servicio.' },
+      fecha: { type: 'string', description: 'Fecha deseada en formato YYYY-MM-DD.' },
+      franja: { type: 'string', enum: ['AM', 'PM'], description: 'Franja horaria: AM (mañana) o PM (tarde).' },
+      email: { type: 'string', description: 'Opcional: correo del tutor para enviarle confirmaciones.' },
+    },
+    required: ['nombre_tutor', 'nombre_mascota', 'especie', 'peso', 'comuna', 'direccion', 'fecha', 'franja'],
+  },
+}
 
 /** Mapea el historial a mensajes de Anthropic, fusionando turnos consecutivos
  *  del mismo rol y asegurando que empiece por 'user'. */
@@ -117,19 +238,39 @@ function construirMensajes(historial: TurnoMensaje[]): Anthropic.MessageParam[] 
   return out
 }
 
-function parseRespuesta(text: string): RespuestaAgente {
-  const limpio = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
-  try {
-    const o = JSON.parse(limpio)
-    if (typeof o?.mensaje === 'string') return { mensaje: o.mensaje.trim(), escalar: !!o.escalar }
-  } catch { /* fallthrough */ }
-  // Fallback: usar el texto crudo como mensaje (sin escalar).
-  return { mensaje: limpio, escalar: false }
+/** Limpia el texto final del modelo (quita fences y desarma JSON heredado). */
+function limpiarTexto(text: string): string {
+  const t = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
+  if (t.startsWith('{') && t.includes('"mensaje"')) {
+    try {
+      const o = JSON.parse(t)
+      if (typeof o?.mensaje === 'string') return o.mensaje.trim()
+    } catch { /* no era JSON, devolvemos tal cual */ }
+  }
+  return t
 }
 
-export async function generarRespuesta(historial: TurnoMensaje[]): Promise<RespuestaAgente> {
-  const mensajes = construirMensajes(historial.slice(-24))
-  if (mensajes.length === 0) return { mensaje: '', escalar: false }
+export interface OpcionesAgente {
+  /** Handlers de acciones. Solo se ofrecen al modelo las herramientas con handler. */
+  handlers?: HandlersAgente
+  /** Contexto del contacto para las acciones. */
+  ctx?: CtxAgente
+}
+
+/**
+ * Genera la respuesta del agente con tool-use. El modelo puede:
+ *  - responder en texto plano (caso normal),
+ *  - llamar `escalar_a_humano` (siempre disponible) → marca escalar=true,
+ *  - llamar `solicitar_retiro_cremacion` / `agendar_eutanasia` si el caller
+ *    inyectó su handler → se ejecuta el efecto y el resultado vuelve al modelo,
+ *    que redacta el mensaje final al cliente.
+ */
+export async function generarRespuesta(
+  historial: TurnoMensaje[],
+  opts: OpcionesAgente = {},
+): Promise<RespuestaAgente> {
+  const base = construirMensajes(historial.slice(-24))
+  if (base.length === 0) return { mensaje: '', escalar: false, acciones: [] }
   const [tarifas, cfg] = await Promise.all([bloqueTarifas(), getAgenteConfig().catch(() => null)])
 
   // Bloque base + tarifas: cacheado (estable). Ajustes del operador/calibración: sin caché (cambian seguido).
@@ -142,9 +283,54 @@ export async function generarRespuesta(historial: TurnoMensaje[]): Promise<Respu
   ].filter(Boolean).join('\n\n')
   if (ajustes) system.push({ type: 'text', text: ajustes })
 
-  const res = await getClient().messages.create({ model: MODEL, max_tokens: 600, system, messages: mensajes })
-  const text = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('')
-  return parseRespuesta(text)
+  const tools: Anthropic.Tool[] = [TOOL_ESCALAR]
+  if (opts.handlers?.solicitarRetiro) tools.push(TOOL_RETIRO)
+  if (opts.handlers?.cotizarEutanasia) tools.push(TOOL_COTIZAR_EUTANASIA)
+  if (opts.handlers?.agendarEutanasia) tools.push(TOOL_EUTANASIA)
+
+  const convo: Anthropic.MessageParam[] = [...base]
+  const acciones: string[] = []
+  let escalar = false
+  let textoFinal = ''
+
+  // Loop agéntico: el modelo puede encadenar herramienta → resultado → texto.
+  for (let iter = 0; iter < 5; iter++) {
+    const res = await getClient().messages.create({ model: MODEL, max_tokens: 700, system, messages: convo, tools })
+
+    const texto = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
+    if (texto) textoFinal = texto
+
+    if (res.stop_reason !== 'tool_use') break
+    const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+    if (toolUses.length === 0) break
+
+    convo.push({ role: 'assistant', content: res.content })
+    const results: Anthropic.ToolResultBlockParam[] = []
+    for (const tu of toolUses) {
+      acciones.push(tu.name)
+      let resultText = 'ok'
+      try {
+        if (tu.name === 'escalar_a_humano') {
+          escalar = true
+          resultText = 'Listo, conversación derivada al equipo. Ahora envía una línea breve y cálida avisando al cliente que un miembro del equipo le responderá a la brevedad.'
+        } else if (tu.name === 'solicitar_retiro_cremacion' && opts.handlers?.solicitarRetiro) {
+          resultText = await opts.handlers.solicitarRetiro(tu.input as unknown as AccionRetiro, opts.ctx ?? {})
+        } else if (tu.name === 'cotizar_eutanasia' && opts.handlers?.cotizarEutanasia) {
+          resultText = await opts.handlers.cotizarEutanasia(tu.input as unknown as AccionCotizarEutanasia, opts.ctx ?? {})
+        } else if (tu.name === 'agendar_eutanasia' && opts.handlers?.agendarEutanasia) {
+          resultText = await opts.handlers.agendarEutanasia(tu.input as unknown as AccionEutanasia, opts.ctx ?? {})
+        } else {
+          resultText = 'Esa herramienta no está disponible ahora. Continúa la coordinación por mensaje o escala a un humano.'
+        }
+      } catch (e) {
+        resultText = `No se pudo completar la acción: ${e instanceof Error ? e.message : String(e)}. Discúlpate brevemente con el cliente y dile que un miembro del equipo lo contactará.`
+      }
+      results.push({ type: 'tool_result', tool_use_id: tu.id, content: resultText })
+    }
+    convo.push({ role: 'user', content: results })
+  }
+
+  return { mensaje: limpiarTexto(textoFinal), escalar, acciones }
 }
 
 const SYSTEM_CALIBRACION = `Eres analista de atención al cliente del Crematorio Alma Animal. Vas a recibir conversaciones reales de WhatsApp (Cliente = el tutor; Nosotros = nuestro equipo). Extrae una GUÍA DE CALIBRACIÓN accionable para un asistente automático que atiende este mismo canal.

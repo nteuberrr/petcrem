@@ -1,4 +1,4 @@
-import { getSheetData } from './google-sheets'
+import { getSheetData } from './datastore'
 import { PrecioTramo } from '@/types'
 
 export async function calcularPrecio(
@@ -24,8 +24,10 @@ export async function calcularPrecio(
     }))
   }
 
-  const tramo = tramos.find((t) => peso > t.peso_min && peso <= t.peso_max)
-    ?? tramos[tramos.length - 1]
+  // Regla de borde: en el límite exacto entre dos tramos se usa el tramo MAYOR
+  // (intervalos [min, max) ), con fallback al tramo tope cuando el peso lo iguala
+  // o supera. Ver findTramo() más abajo y la nota en CLAUDE.md.
+  const tramo = findTramo(tramos as unknown as TramoRaw[], peso) as unknown as PrecioTramo | null
 
   if (!tramo) return 0
 
@@ -78,16 +80,22 @@ function num(v: unknown): number {
 
 function findTramo(tabla: TramoRaw[], peso: number): TramoRaw | null {
   if (!tabla.length || !Number.isFinite(peso) || peso <= 0) return null
+  // Tramo tope = el de mayor peso_min. Si el peso lo iguala o supera, es el que
+  // aplica (cubre el borde superior y los pesos por encima de la tabla).
   let maxMin = -Infinity
   let tramoTope: TramoRaw | null = null
   for (const t of tabla) {
     const min = num(t.peso_min)
-    const max = num(t.peso_max)
     if (min > maxMin) { maxMin = min; tramoTope = t }
-    if (peso >= min && peso <= max) return t
   }
-  // Por encima del último tramo → usamos ese (tabla.peso_max < peso)
   if (tramoTope && peso >= maxMin) return tramoTope
+  // Regla de borde: intervalos [min, max). En el límite exacto (ej. 15 kg entre
+  // 10–15 y 15–25) gana SIEMPRE el tramo MAYOR, porque 15 ya no cae en [10,15).
+  for (const t of tabla) {
+    const min = num(t.peso_min)
+    const max = num(t.peso_max)
+    if (peso >= min && peso < max) return t
+  }
   return null
 }
 

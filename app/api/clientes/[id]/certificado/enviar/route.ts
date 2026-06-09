@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, ensureSheet, ensureColumns, updateRow } from '@/lib/google-sheets'
+import { getSheetData, ensureSheet, ensureColumns, updateRow } from '@/lib/datastore'
 import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
 import { fmtFecha } from '@/lib/format'
 import { todayISO } from '@/lib/dates'
-import { renderEmailLayout, getContacto, escapeHtml, BRAND, type Contacto } from '@/lib/email-layout'
+import { getContacto } from '@/lib/email-layout'
+import { buildCertificado } from '@/lib/cliente-mailer'
 
 const CERT_COLS = [
   'id', 'cliente_id', 'codigo_mascota', 'nombre_mascota',
@@ -17,30 +18,13 @@ const CERT_COLS = [
 
 const FROM_DEFAULT = 'Crematorio Alma Animal <contacto@crematorioalmaanimal.cl>'
 
-function bodyTemplate(opts: { nombreMascota: string; nombreTutor: string; fechaCremacion: string; contacto: Contacto }): string {
-  const { nombreMascota, nombreTutor, fechaCremacion, contacto } = opts
-  const mascota = escapeHtml(nombreMascota)
-  const cuerpo = `
-      <p style="margin:0 0 14px;font-size:15px">Estimado(a) ${nombreTutor ? `<strong>${escapeHtml(nombreTutor)}</strong>` : 'tutor(a)'},</p>
-      <p style="margin:0 0 14px;font-size:14px;line-height:1.6">
-        Reciba nuestro más sentido pésame por la partida de <strong>${mascota}</strong>.
-        Fue un privilegio para nuestro equipo acompañarles en este momento y brindar el servicio
-        de cremación con el cuidado y respeto que ${mascota} merecía.
-      </p>
-      <p style="margin:0 0 14px;font-size:14px;line-height:1.6">
-        Adjunto a este correo encontrará el <strong>Certificado de Cremación</strong> de ${mascota},
-        correspondiente al servicio realizado el ${escapeHtml(fechaCremacion)}. Este documento queda
-        registrado para sus archivos.
-      </p>
-      <p style="margin:0;font-size:14px;line-height:1.6">
-        Si necesita una copia adicional o tiene cualquier consulta posterior, no dude en escribirnos.
-      </p>`
-  return renderEmailLayout({ titulo: `Certificado de cremación de ${nombreMascota}`, bodyHtml: cuerpo, contacto })
+const VIDEO_MIME: Record<string, string> = {
+  mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', '3gp': 'video/3gpp', mkv: 'video/x-matroska',
 }
 
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -48,6 +32,8 @@ export async function POST(
       return NextResponse.json({ error: 'RESEND_API_KEY no configurada' }, { status: 500 })
     }
     const { id } = await params
+    const reqBody = await req.json().catch(() => ({}))
+    const adjuntarVideo = reqBody?.adjuntar_video === true
 
     // Asegurar schema una sola vez antes de leer (con caché interno del lib se vuelve idempotente).
     await ensureSheet('certificados')
@@ -80,27 +66,42 @@ export async function POST(
     const ciclo = ciclos.find(c => c.id === cliente.ciclo_id)
     const fechaCremacion = ciclo ? fmtFecha(ciclo.fecha) : '—'
 
-    const contacto = await getContacto()
-    const html = bodyTemplate({
-      nombreMascota: cliente.nombre_mascota,
-      nombreTutor: cliente.nombre_tutor,
-      fechaCremacion,
-      contacto,
-    })
-
     const filename = `Certificado_${cliente.nombre_mascota || 'mascota'}_${cliente.codigo || cliente.id}.pdf`
 
-    const attachments: Parameters<typeof sendEmail>[0]['attachments'] = [
+    const attachments: NonNullable<Parameters<typeof sendEmail>[0]['attachments']> = [
       { filename, path: cert.pdf_url, content_type: 'application/pdf' },
     ]
 
+    // Adjuntar el video del servicio (el más reciente) si se pidió y existe.
+    let videoAdjuntado = false
+    if (adjuntarVideo) {
+      let videos: string[] = []
+      try { const x = JSON.parse(cliente.videos_servicio || '[]'); if (Array.isArray(x)) videos = x } catch { /* */ }
+      const videoUrl = videos[videos.length - 1]
+      if (videoUrl) {
+        const ext = (videoUrl.split('.').pop() || 'mp4').toLowerCase()
+        attachments.push({
+          filename: `Video_${cliente.nombre_mascota || 'mascota'}_${cliente.codigo || cliente.id}.${ext}`,
+          path: videoUrl,
+          content_type: VIDEO_MIME[ext] || 'video/mp4',
+        })
+        videoAdjuntado = true
+      }
+    }
+
+    const contacto = await getContacto()
+    const opts = buildCertificado({
+      email: cliente.email,
+      nombreMascota: cliente.nombre_mascota,
+      nombreTutor: cliente.nombre_tutor,
+      fechaCremacion,
+      conVideo: videoAdjuntado,
+    }, contacto)
+
     const res = await sendEmail({
-      to: cliente.email,
-      subject: `Certificado de cremación — ${cliente.nombre_mascota}`,
-      html,
+      ...opts,
       from: FROM_DEFAULT,
       reply_to: 'contacto@crematorioalmaanimal.cl',
-      preview_text: `Adjuntamos el certificado de cremación de ${cliente.nombre_mascota}.`,
       attachments,
     })
 

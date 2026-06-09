@@ -52,7 +52,31 @@ export async function enviarRegistroMascota(args: RegistroArgs): Promise<void> {
     return
   }
   const contacto = await getContacto()
+  try {
+    const res = await sendEmail(buildRegistro(args, contacto))
+    if (res.ok) console.log(`[cliente-mailer] OK registro a ${args.email}, message_id=${res.message_id}`)
+    else console.error(`[cliente-mailer] FAIL registro a ${args.email}: ${res.error}`)
+  } catch (e) {
+    console.error(`[cliente-mailer] EXC registro a ${args.email}:`, e instanceof Error ? e.message : String(e))
+  }
+}
+
+/** Arma el correo de registro (código + botón para subir foto). */
+export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts {
   const mascota = escapeHtml(args.nombreMascota)
+  // Link al landing público para subir una foto de la mascota (se incluye en el
+  // certificado de cremación). Si no hay base URL configurada, omitimos el botón.
+  const base = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
+  const linkFoto = base ? `${base}/subir-foto?codigo=${encodeURIComponent(args.codigo)}` : ''
+  const bloqueFoto = linkFoto ? `
+      <div style="text-align:center;margin:22px 0 6px">
+        <a href="${linkFoto}" style="display:inline-block;background:${BRAND.amber};color:${BRAND.navy};text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">
+          📷 Sube una foto de ${mascota}
+        </a>
+      </div>
+      <p style="margin:8px 0 0;font-size:13px;color:${BRAND.muted};text-align:center;line-height:1.5">
+        Si quieres, sube una foto de ${mascota} y la incluiremos en su certificado de cremación.
+      </p>` : ''
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">${saludo(args.nombreTutor)}</p>
       <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
@@ -65,19 +89,14 @@ export async function enviarRegistroMascota(args: RegistroArgs): Promise<void> {
       </div>
       <p style="margin:0;font-size:14px;line-height:1.6">
         Guarda este código: nos permite identificar a ${mascota} durante todo el proceso.
-      </p>`
-  try {
-    const res = await sendEmail({
-      to: args.email,
-      subject: `Gracias por confiar en nosotros — ${args.nombreMascota}`,
-      html: renderEmailLayout({ titulo: '¡Gracias por confiar en nosotros!', bodyHtml: cuerpo, contacto }),
-      preview_text: `Te dejamos el código asociado a ${args.nombreMascota}.`,
-      tags: [{ name: 'tipo', value: 'cliente_registro' }],
-    })
-    if (res.ok) console.log(`[cliente-mailer] OK registro a ${args.email}, message_id=${res.message_id}`)
-    else console.error(`[cliente-mailer] FAIL registro a ${args.email}: ${res.error}`)
-  } catch (e) {
-    console.error(`[cliente-mailer] EXC registro a ${args.email}:`, e instanceof Error ? e.message : String(e))
+      </p>
+      ${bloqueFoto}`
+  return {
+    to: args.email,
+    subject: `Gracias por confiar en nosotros — ${args.nombreMascota}`,
+    html: renderEmailLayout({ titulo: '¡Gracias por confiar en nosotros!', bodyHtml: cuerpo, contacto }),
+    preview_text: `Te dejamos el código asociado a ${args.nombreMascota}.`,
+    tags: [{ name: 'tipo', value: 'cliente_registro' }],
   }
 }
 
@@ -100,7 +119,7 @@ export async function enviarInicioCremacion(destinatarios: DestinatarioTutor[]):
   await enviarEnLotes(emails, 'inicio cremación')
 }
 
-function buildCremacion(d: DestinatarioTutor, contacto: Contacto): SendOpts {
+export function buildCremacion(d: DestinatarioTutor, contacto: Contacto): SendOpts {
   const mascota = escapeHtml(d.nombreMascota)
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">${saludo(d.nombreTutor)}</p>
@@ -138,7 +157,7 @@ export async function enviarInicioDespacho(destinatarios: DestinatarioTutor[]): 
   await enviarEnLotes(emails, 'inicio despacho')
 }
 
-function buildDespacho(d: DestinatarioTutor, contacto: Contacto): SendOpts {
+export function buildDespacho(d: DestinatarioTutor, contacto: Contacto): SendOpts {
   const mascota = escapeHtml(d.nombreMascota)
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">${saludo(d.nombreTutor)}</p>
@@ -181,6 +200,17 @@ export async function enviarEntregaConfirmada(args: EntregaArgs): Promise<void> 
     return
   }
   const contacto = await getContacto()
+  try {
+    const res = await sendEmail(buildEntrega(args, contacto))
+    if (res.ok) console.log(`[cliente-mailer] OK entrega a ${args.email}, message_id=${res.message_id}`)
+    else console.error(`[cliente-mailer] FAIL entrega a ${args.email}: ${res.error}`)
+  } catch (e) {
+    console.error(`[cliente-mailer] EXC entrega a ${args.email}:`, e instanceof Error ? e.message : String(e))
+  }
+}
+
+/** Arma el correo de entrega confirmada + botón de reseña (si está configurada). */
+export function buildEntrega(args: EntregaArgs, contacto: Contacto): SendOpts {
   const mascota = escapeHtml(args.nombreMascota)
   // Nombre con el código entre paréntesis, ej. "Molly (G79-CI)".
   const mascotaCodigo = args.codigo ? `${mascota} (${escapeHtml(args.codigo)})` : mascota
@@ -205,18 +235,57 @@ export async function enviarEntregaConfirmada(args: EntregaArgs): Promise<void> 
         Gracias por confiar en nosotros y por preferirnos.
       </p>
       ${reseña}`
-  try {
-    const res = await sendEmail({
-      to: args.email,
-      subject: `Hemos entregado a ${args.nombreMascota} — gracias por confiar en nosotros`,
-      html: renderEmailLayout({ titulo: `Entrega confirmada de ${args.codigo ? `${args.nombreMascota} (${args.codigo})` : args.nombreMascota}`, bodyHtml: cuerpo, contacto }),
-      preview_text: `El ánfora de ${args.nombreMascota} fue entregada. ¡Gracias!`,
-      tags: [{ name: 'tipo', value: 'cliente_entrega' }],
-    })
-    if (res.ok) console.log(`[cliente-mailer] OK entrega a ${args.email}, message_id=${res.message_id}`)
-    else console.error(`[cliente-mailer] FAIL entrega a ${args.email}: ${res.error}`)
-  } catch (e) {
-    console.error(`[cliente-mailer] EXC entrega a ${args.email}:`, e instanceof Error ? e.message : String(e))
+  return {
+    to: args.email,
+    subject: `Hemos entregado a ${args.nombreMascota} — gracias por confiar en nosotros`,
+    html: renderEmailLayout({ titulo: `Entrega confirmada de ${args.codigo ? `${args.nombreMascota} (${args.codigo})` : args.nombreMascota}`, bodyHtml: cuerpo, contacto }),
+    preview_text: `El ánfora de ${args.nombreMascota} fue entregada. ¡Gracias!`,
+    tags: [{ name: 'tipo', value: 'cliente_entrega' }],
+  }
+}
+
+// ─── 5. Envío del certificado de cremación (con PDF y, opcional, video) ───────
+
+export interface CertificadoEmailArgs {
+  email: string
+  nombreMascota: string
+  nombreTutor: string
+  /** Fecha de cremación ya formateada (DD/MM/YYYY). */
+  fechaCremacion: string
+  /** true si además se adjunta el video del servicio (cambia el texto). */
+  conVideo: boolean
+}
+
+/**
+ * Arma el correo con el que se envía el certificado de cremación. Los adjuntos
+ * (PDF + video) los agrega la ruta que lo envía; acá solo va el cuerpo. La
+ * ruta /api/clientes/[id]/certificado/enviar lo usa como única fuente del texto.
+ */
+export function buildCertificado(args: CertificadoEmailArgs, contacto: Contacto): SendOpts {
+  const mascota = escapeHtml(args.nombreMascota)
+  const adjuntos = args.conVideo
+    ? `el <strong>Certificado de Cremación</strong> y un <strong>video del servicio</strong> de ${mascota}`
+    : `el <strong>Certificado de Cremación</strong> de ${mascota}`
+  const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">Estimado(a) ${args.nombreTutor ? `<strong>${escapeHtml(args.nombreTutor)}</strong>` : 'tutor(a)'},</p>
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.6">
+        Reciba nuestro más sentido pésame por la partida de <strong>${mascota}</strong>.
+        Fue un privilegio para nuestro equipo acompañarles en este momento y brindar el servicio
+        de cremación con el cuidado y respeto que ${mascota} merecía.
+      </p>
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.6">
+        Adjunto a este correo encontrará ${adjuntos},
+        correspondiente al servicio realizado el ${escapeHtml(args.fechaCremacion)}.${args.conVideo ? '' : ' Este documento queda registrado para sus archivos.'}
+      </p>
+      <p style="margin:0;font-size:14px;line-height:1.6">
+        Si necesita una copia adicional o tiene cualquier consulta posterior, no dude en escribirnos.
+      </p>`
+  return {
+    to: args.email,
+    subject: `Certificado de cremación — ${args.nombreMascota}`,
+    html: renderEmailLayout({ titulo: `Certificado de cremación de ${args.nombreMascota}`, bodyHtml: cuerpo, contacto }),
+    preview_text: `Adjuntamos el certificado de cremación de ${args.nombreMascota}.`,
+    tags: [{ name: 'tipo', value: 'cliente_certificado' }],
   }
 }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { google, sheets_v4 } from 'googleapis'
-import { ensureColumns, ensureSheet } from '@/lib/google-sheets'
+import { ensureColumns, ensureSheet } from '@/lib/datastore'
 import { parseMonto, parsePeso, parseDecimalOr0 } from '@/lib/numbers'
 import { formatDateForSheet, formatHora } from '@/lib/dates'
 import { calcularMinutos, configVigente, type JornadaConfig } from '@/lib/asistencia'

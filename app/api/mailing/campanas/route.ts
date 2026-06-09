@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 import { todayISO } from '@/lib/dates'
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow } from '@/lib/google-sheets'
+import { getSheetData, updateRow } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
 import { bancoValido, tipoCuentaValido } from '@/lib/bancos-cl'
 import { todayISO } from '@/lib/dates'

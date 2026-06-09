@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, getNextId, ensureColumns, ensureSheet } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, getNextId, ensureColumns, ensureSheet } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 
 const HOJA_PAGOS = 'pagos_rendicion'

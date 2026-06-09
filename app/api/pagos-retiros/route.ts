@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { google, sheets_v4 } from 'googleapis'
-import { getSheetData, appendRow, getNextId, ensureColumns, ensureSheet } from '@/lib/google-sheets'
+import { getSheetData, appendRow, getNextId, ensureColumns, ensureSheet } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { esAdmin } from '@/lib/roles'
 

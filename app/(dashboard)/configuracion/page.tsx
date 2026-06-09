@@ -6,7 +6,9 @@ import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import AgentesConfig from '@/components/AgentesConfig'
+import CorreosConfig from '@/components/CorreosConfig'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
+import { formatDate, formatHora } from '@/lib/dates'
 import { esAdmin, esAdminTotal, ROLES, ROL_LABEL, MATRIZ_ACCESOS } from '@/lib/roles'
 
 const TABS = ['Precios', 'Artículos', 'Descuentos', 'Usuarios', 'Jornada', 'Configuración Avanzada'] as const
@@ -14,7 +16,7 @@ type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
 type ArticuloTab = 'servicios' | 'bodega' | 'otros'
 type ServiciosTab = 'tipos' | 'especies'
-type AvanzadaTab = 'datos' | 'agentes' | 'mantenimiento'
+type AvanzadaTab = 'datos' | 'agentes' | 'correos' | 'mantenimiento'
 
 type Producto = { id: string; nombre: string; precio: string; foto_url: string; stock: string; categoria?: string; activo: string }
 type CategoriaProducto = { id: string; nombre: string; activo: string; fecha_creacion: string }
@@ -426,7 +428,7 @@ export default function ConfiguracionPage() {
       {/* Sub-pestañas de Configuración Avanzada */}
       {tab === 'Configuración Avanzada' && isAdminTotal && (
         <div className="flex gap-2 flex-wrap mb-4">
-          {([['datos', 'Datos Personales'], ['agentes', 'Agentes'], ['mantenimiento', 'Mantenimiento']] as const).map(([k, label]) => (
+          {([['datos', 'Datos Personales'], ['agentes', 'Agentes'], ['correos', 'Correos'], ['mantenimiento', 'Mantenimiento']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setAvanzadaTab(k)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${avanzadaTab === k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               {label}
@@ -997,6 +999,7 @@ export default function ConfiguracionPage() {
 
       {/* ─── AGENTES ─── */}
       {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'agentes' && <AgentesConfig />}
+      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'correos' && <CorreosConfig />}
 
       {tab === 'Jornada' && (
         <div className="space-y-6 max-w-3xl">
@@ -1011,11 +1014,11 @@ export default function ConfiguracionPage() {
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase">Entrada</p>
-                  <p className="text-gray-900 font-medium mt-0.5">{jornadaVigente.hora_entrada}</p>
+                  <p className="text-gray-900 font-medium mt-0.5">{formatHora(jornadaVigente.hora_entrada)}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase">Salida</p>
-                  <p className="text-gray-900 font-medium mt-0.5">{jornadaVigente.hora_salida}</p>
+                  <p className="text-gray-900 font-medium mt-0.5">{formatHora(jornadaVigente.hora_salida)}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase">Hora extra</p>
@@ -1111,8 +1114,8 @@ export default function ConfiguracionPage() {
                     {jornadaConfigs.map(c => (
                       <tr key={c.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-900 font-medium">{c.vigente_desde}</td>
-                        <td className="px-4 py-3 text-gray-700">{c.hora_entrada}</td>
-                        <td className="px-4 py-3 text-gray-700">{c.hora_salida}</td>
+                        <td className="px-4 py-3 text-gray-700">{formatHora(c.hora_entrada)}</td>
+                        <td className="px-4 py-3 text-gray-700">{formatHora(c.hora_salida)}</td>
                         <td className="px-4 py-3 text-gray-700">{fmtPrecio(c.precio_hora_extra)}</td>
                         <td className="px-4 py-3 text-gray-700">{c.tolerancia_minutos || 0} min</td>
                         <td className="px-4 py-3 text-gray-700">{fmtPrecio(c.precio_retiro_adicional || 0)}</td>
@@ -1226,7 +1229,7 @@ export default function ConfiguracionPage() {
                     {syncResult.vehiculo.cambios.map(c => (
                       <li key={c.id} className="text-xs text-gray-700 py-1">
                         <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
-                        <span>{c.fecha}</span>{' '}
+                        <span>{formatDate(c.fecha)}</span>{' '}
                         <span className="text-gray-500">→ {c.campos.join(', ')}</span>
                       </li>
                     ))}
@@ -1249,7 +1252,7 @@ export default function ConfiguracionPage() {
                     {syncResult.petroleo.cambios.map(c => (
                       <li key={c.id} className="text-xs text-gray-700 py-1">
                         <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
-                        <span>{c.fecha}</span>{' '}
+                        <span>{formatDate(c.fecha)}</span>{' '}
                         <span className="text-gray-500">→ {c.campos.join(', ')}</span>
                       </li>
                     ))}
@@ -1272,7 +1275,7 @@ export default function ConfiguracionPage() {
                     {syncResult.despachos.cambios.map(c => (
                       <li key={c.id} className="text-xs text-gray-700 py-1">
                         <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
-                        <span>{c.fecha}</span>{' '}
+                        <span>{formatDate(c.fecha)}</span>{' '}
                         <span className="text-gray-500">→ {c.campos.join(', ')}</span>
                       </li>
                     ))}
@@ -1359,7 +1362,7 @@ export default function ConfiguracionPage() {
                     {syncResult.ciclos.cambios.map(c => (
                       <li key={c.id} className="text-xs text-gray-700 py-1">
                         <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
-                        <span>{c.fecha}</span>{' '}
+                        <span>{formatDate(c.fecha)}</span>{' '}
                         <span className="text-gray-500">→ {c.campos.join(', ')}</span>
                       </li>
                     ))}
@@ -1383,7 +1386,7 @@ export default function ConfiguracionPage() {
                       <li key={c.id} className="text-xs text-gray-700 py-1">
                         <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
                         <span className="font-semibold">{c.usuario_nombre}</span>{' '}
-                        <span>{c.fecha}</span>{' '}
+                        <span>{formatDate(c.fecha)}</span>{' '}
                         <span className="text-gray-500">→ {c.campos.join(', ')}</span>
                       </li>
                     ))}
@@ -1400,7 +1403,7 @@ export default function ConfiguracionPage() {
                       <li key={i} className="text-xs text-amber-900 py-1">
                         <span className="font-mono font-bold">#{w.id}</span>{' '}
                         <span className="font-semibold">{w.usuario_nombre || '(sin nombre)'}</span>{' '}
-                        <span>{w.fecha}</span>{' '}
+                        <span>{formatDate(w.fecha)}</span>{' '}
                         <span>— {w.aviso}</span>
                       </li>
                     ))}
@@ -2084,7 +2087,7 @@ function DatosPersonalesPanel() {
         {savedMsg && <span className="text-sm text-green-600 font-medium">✓ {savedMsg}</span>}
         {form.fecha_actualizacion && (
           <span className="text-xs text-gray-500 ml-auto">
-            Última actualización: {form.fecha_actualizacion}
+            Última actualización: {formatDate(form.fecha_actualizacion)}
           </span>
         )}
       </div>

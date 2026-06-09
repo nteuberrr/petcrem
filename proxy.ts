@@ -28,6 +28,13 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith('/api/mailing/pixel/') ||
     pathname.startsWith('/api/mailing/click/') ||
     pathname === '/convenio-eutanasias' ||
+    // Registro público de mascota (auto-atención del tutor) + su endpoint de
+    // metadata/creación. Cliente general "sin veterinaria", sin sesión.
+    pathname === '/registro-mascota' ||
+    pathname === '/api/clientes/publico' ||
+    // Subida pública de la foto de la mascota (link del correo de registro).
+    pathname === '/subir-foto' ||
+    pathname === '/api/clientes/foto' ||
     pathname === '/api/eutanasias/precios' ||
     pathname === '/api/eutanasias/vets/inscribir' ||
     // Autocomplete de comunas usado tanto en el landing público como en el

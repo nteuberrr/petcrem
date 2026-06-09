@@ -1,4 +1,4 @@
-import { getSheetData } from '@/lib/google-sheets'
+import { getSheetData } from '@/lib/datastore'
 import { formatDateForSheet, todayISO } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso, parseMonto } from '@/lib/numbers'
 

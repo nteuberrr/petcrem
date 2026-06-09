@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse, after } from 'next/server'
-import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, isWhatsappConfigured } from '@/lib/whatsapp'
+import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, isWhatsappConfigured, adminWhatsapp } from '@/lib/whatsapp'
 import {
   upsertContacto, getOrCreateConversacion, insertarMensaje, getMensajes,
   actualizarConversacion, existeMensajePorProvider, marcarEstadoMensaje,
   type Conversacion, type Contacto,
 } from '@/lib/mensajes'
 import { isAgenteConfigurado, generarRespuesta } from '@/lib/agente-mensajes'
+import { handlersAgente } from '@/lib/agente-acciones'
+import { getSheetData, updateRow } from '@/lib/datastore'
+import { formatDate } from '@/lib/dates'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 
 export const dynamic = 'force-dynamic'
@@ -29,7 +32,12 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
   if (historial.length === 0) return
 
   let r
-  try { r = await generarRespuesta(historial) } catch (e) { console.error('[agente] generarRespuesta:', e); return }
+  try {
+    r = await generarRespuesta(historial, {
+      handlers: handlersAgente(),
+      ctx: { waId: destino, nombreContacto: contacto.nombre ?? undefined },
+    })
+  } catch (e) { console.error('[agente] generarRespuesta:', e); return }
   if (!r.mensaje) return
 
   const env = await enviarTextoWhatsapp(destino, r.mensaje)
@@ -70,7 +78,76 @@ interface MetaMsg {
   voice?: { id: string; mime_type?: string }
   video?: { id: string; caption?: string; mime_type?: string }
   document?: { id: string; caption?: string; filename?: string; mime_type?: string }
+  interactive?: { type?: string; button_reply?: { id: string; title: string }; list_reply?: { id: string; title: string } }
   [k: string]: unknown
+}
+
+/**
+ * Flujo A — el admin tocó un botón ✅/❌ en la solicitud de retiro que le envió
+ * el agente. Si el botón es nuestro y viene del número admin, procesa la
+ * confirmación/rechazo: avisa al cliente por WhatsApp y cierra la solicitud.
+ * Devuelve true si consumió el mensaje (no debe seguir el flujo normal).
+ */
+async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
+  const br = msg.interactive?.button_reply
+  if (!br?.id) return false
+  const m = /^retiro_(ok|no):(\d+)$/.exec(br.id)
+  if (!m) return false
+  // Solo el número admin puede confirmar/rechazar.
+  if (msg.from.replace(/\D/g, '') !== adminWhatsapp()) return true
+
+  const accion = m[1]
+  const solicitudId = m[2]
+  const rows = await getSheetData('solicitudes_retiro')
+  const idx = rows.findIndex(r => r.id === solicitudId)
+  if (idx === -1) {
+    await enviarTextoWhatsapp(adminWhatsapp(), `No encontré la solicitud N° ${solicitudId}.`)
+    return true
+  }
+  const sol = rows[idx]
+  if (sol.estado !== 'pendiente') {
+    await enviarTextoWhatsapp(adminWhatsapp(), `La solicitud N° ${solicitudId} ya estaba ${sol.estado}.`)
+    return true
+  }
+
+  const waCliente = (sol.cliente_wa_id || '').replace(/\D/g, '')
+  const base = (process.env.NEXTAUTH_URL || 'https://petcrem.vercel.app').replace(/\/$/, '')
+  const confirmado = accion === 'ok'
+
+  const msgCliente = confirmado
+    ? `Tu retiro quedó confirmado para el ${formatDate(sol.fecha_retiro)} a las ${sol.hora_retiro}.\n\n` +
+      `Por favor completa el registro de tu mascota aquí:\n${base}/registro-mascota\n\n` +
+      `Nuestro chofer te contactará cuando esté pronto a llegar. Gracias por confiar en nosotros 🐾`
+    : `Gracias por escribirnos. Un agente de nuestro equipo se pondrá en contacto contigo a la brevedad para coordinar. 🐾`
+
+  // Avisar al cliente + registrar en su conversación del inbox.
+  if (waCliente) {
+    const env = await enviarTextoWhatsapp(waCliente, msgCliente)
+    try {
+      const cont = await upsertContacto({ wa_id: waCliente, telefono: waCliente, audiencia: 'A' })
+      const conv = await getOrCreateConversacion(cont.id, 'whatsapp', cont.audiencia, 'whatsapp')
+      await insertarMensaje({
+        conversacion_id: conv.id, direccion: 'saliente', cuerpo: msgCliente,
+        tipo: 'texto', estado: env.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
+      })
+    } catch (e) { console.warn('[webhook] no se pudo registrar aviso al cliente:', e) }
+  }
+
+  // Cerrar la solicitud.
+  await updateRow('solicitudes_retiro', idx, {
+    ...sol,
+    estado: confirmado ? 'confirmada' : 'rechazada',
+    fecha_resolucion: new Date().toISOString(),
+  })
+
+  // Acuse al admin.
+  await enviarTextoWhatsapp(
+    adminWhatsapp(),
+    confirmado
+      ? `✅ Retiro N° ${solicitudId} confirmado. Le enviamos al cliente el link de registro.`
+      : `❌ Retiro N° ${solicitudId} rechazado. Avisamos al cliente que un agente lo contactará.`,
+  )
+  return true
 }
 
 async function procesarEntrante(value: Record<string, unknown>, msg: MetaMsg) {
@@ -139,6 +216,8 @@ export async function POST(req: NextRequest) {
           if (st.id && st.status && ESTADO_MAP[st.status]) await marcarEstadoMensaje(st.id, ESTADO_MAP[st.status])
         }
         for (const msg of (value.messages as MetaMsg[]) ?? []) {
+          // Flujo A: respuesta del admin a una solicitud de retiro (botón ✅/❌).
+          if (msg.type === 'interactive' && await procesarBotonAdmin(msg)) continue
           await procesarEntrante(value, msg)
         }
       }

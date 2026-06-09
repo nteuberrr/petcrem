@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { buscarComuna } from '@/lib/comunas'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { esAdmin } from '@/lib/roles'
@@ -10,7 +10,7 @@ const SHEET = 'cotizaciones_eutanasia'
 const COLS = [
   'id',
   'mascota_nombre', 'especie', 'peso',
-  'cliente_nombre', 'cliente_telefono', 'cliente_email',
+  'cliente_nombre', 'cliente_telefono', 'cliente_email', 'cliente_wa_id',
   'direccion', 'comuna',
   'fecha_servicio', 'hora_servicio',
   'notas',

@@ -97,7 +97,7 @@ export async function enviarBienvenidaVet(args: {
   }
 }
 
-function renderBienvenida({ nombreCompleto, baseUrl, linkDatosPago, contacto }: { nombreCompleto: string; baseUrl: string; linkDatosPago: string; contacto: Contacto }): string {
+export function renderBienvenida({ nombreCompleto, baseUrl, linkDatosPago, contacto }: { nombreCompleto: string; baseUrl: string; linkDatosPago: string; contacto: Contacto }): string {
   const landingUrl = baseUrl ? `${baseUrl}/convenio-eutanasias` : 'https://crematorioalmaanimal.cl/convenio-eutanasias'
   const card = (n: string, titulo: string, texto: string) => `
       <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:10px;padding:16px;margin-bottom:14px">
@@ -199,7 +199,7 @@ export async function enviarMailRealizarServicio(args: RealizarServicioArgs): Pr
   }
 }
 
-function renderRealizarServicio(args: RealizarServicioArgs, contacto: Contacto): string {
+export function renderRealizarServicio(args: RealizarServicioArgs, contacto: Contacto): string {
   const c = args.cotizacion
   const precio = parseInt(c.precio_snapshot || '0', 10)
   const cuerpo = `
@@ -289,6 +289,70 @@ export function fechaProximoPago(fechaRealizacionISO: string): string {
   }
   const proximo = agregarDiasHabiles(base, 1)
   return formatDate(proximo)
+}
+
+// ─── Mail al CLIENTE: un vet de la red tomó su solicitud ─────────────────────
+
+export interface ClienteVetAsignadoArgs {
+  clienteEmail: string
+  clienteNombre: string
+  mascotaNombre: string
+  vetNombre: string
+  vetTelefono: string
+  fechaServicio: string
+  horaServicio: string
+}
+
+/**
+ * Avisa al cliente (tutor) que un veterinario de la red confirmó disponibilidad
+ * para la eutanasia a domicilio, entregándole los datos de contacto del vet.
+ * Best-effort.
+ */
+export async function enviarClienteVetAsignado(args: ClienteVetAsignadoArgs): Promise<BienvenidaResult> {
+  const to = args.clienteEmail
+  if (!to) return { ok: false, estado: 'omitido_sin_resend', to }
+  if (!isResendConfigured()) {
+    console.warn('[eutanasia-mailer] Resend no configurado, salto aviso al cliente', to)
+    return { ok: false, estado: 'omitido_sin_resend', to }
+  }
+  try {
+    const contacto = await getContacto()
+    const res = await sendEmail({
+      to,
+      subject: `Un veterinario confirmó la atención de ${args.mascotaNombre}`,
+      html: renderClienteVetAsignado(args, contacto),
+      preview_text: `Un veterinario de la red se contactará contigo por ${args.mascotaNombre}.`,
+      tags: [{ name: 'tipo', value: 'eutanasia_cliente_vet_asignado' }],
+    })
+    return res.ok
+      ? { ok: true, estado: 'enviado', message_id: res.message_id, to }
+      : { ok: false, estado: 'error', error: res.error, to }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[eutanasia-mailer] EXC aviso cliente vet asignado:', msg)
+    return { ok: false, estado: 'error', error: msg, to }
+  }
+}
+
+export function renderClienteVetAsignado(args: ClienteVetAsignadoArgs, contacto: Contacto): string {
+  const mascota = escapeHtml(args.mascotaNombre)
+  const telLimpio = (args.vetTelefono || '').replace(/\D/g, '').slice(-9)
+  const saludo = args.clienteNombre ? `Hola <strong>${escapeHtml(args.clienteNombre)}</strong>,` : 'Hola,'
+  const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">${saludo}</p>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+        Un veterinario de nuestra red confirmó su disponibilidad para acompañar a <strong>${mascota}</strong>
+        en su despedida. Se pondrá en contacto contigo para coordinar los detalles.
+      </p>
+      <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:10px;padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px;font-size:12px;color:${BRAND.muted}">Veterinario asignado</p>
+        <p style="margin:0;font-size:15px;font-weight:600">${escapeHtml(args.vetNombre || 'Veterinario de la red')}</p>
+        ${telLimpio ? `<p style="margin:4px 0 0;font-size:14px"><a href="tel:+56${telLimpio}" style="color:${BRAND.navy}">+56 ${telLimpio}</a></p>` : ''}
+      </div>
+      <p style="margin:0;font-size:14px;line-height:1.6">
+        Si tienes cualquier duda, escríbenos. Estamos para acompañarte.
+      </p>`
+  return renderEmailLayout({ titulo: 'Tu solicitud fue tomada', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
 }
 
 // ─── Render compartido: cotización a vet + coordina con la familia ───────────
@@ -413,7 +477,7 @@ export function renderCoordinarEmail({ vetNombre, c, linkConfirmar, linkDatosPag
   return renderEmailLayout({ titulo: 'Tomaste la solicitud — siguiente paso', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
 }
 
-function renderAgradecimiento(args: AgradecimientoArgs, contacto: Contacto): string {
+export function renderAgradecimiento(args: AgradecimientoArgs, contacto: Contacto): string {
   // Nota: precio intencionalmente NO se muestra en este correo.
   const fechaPago = fechaProximoPago(args.fechaRealizacionISO)
   const datosPago = process.env.EUTANASIA_DATOS_PAGO || ''

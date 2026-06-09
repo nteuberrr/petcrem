@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, getNextId, deleteRow, ensureColumns, ensureSheet, updateRow } from '@/lib/google-sheets'
+import { getSheetData, appendRow, getNextId, deleteRow, ensureColumns, ensureSheet, updateRow } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 
 const HOJA = 'cargas_petroleo'

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { reorderColumns } from '@/lib/google-sheets'
+import { reorderColumns } from '@/lib/datastore'
 
 // Mapa de schemas por hoja. Debe quedar sincronizado con init-sheets/route.ts.
 const SCHEMAS: Record<string, string[]> = {

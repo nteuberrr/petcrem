@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSheetData, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, ensureSheet, ensureColumns } from '@/lib/datastore'
 
 const INFORMES_COLS = [
   'id', 'veterinaria_id', 'veterinaria_nombre',

@@ -1,5 +1,6 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { formatDateTime } from '@/lib/dates'
 
 type Canal = 'whatsapp' | 'instagram' | 'facebook'
 type Contacto = { id: number; nombre: string | null; telefono: string | null; audiencia: string; cliente_id: string | null }
@@ -21,9 +22,7 @@ const CANAL_CLS: Record<Canal, string> = {
 }
 
 function fecha(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso); if (isNaN(d.getTime())) return ''
-  return d.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return formatDateTime(iso) // dd-mm-yyyy HH:MM (vacío si no hay)
 }
 
 export default function MensajesView() {

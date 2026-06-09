@@ -1,4 +1,4 @@
-import { getSheetData } from './google-sheets'
+import { getSheetData } from './datastore'
 
 /**
  * Estructura visual compartida por TODOS los correos (clientes, veterinarios,

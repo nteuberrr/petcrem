@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow } from '@/lib/google-sheets'
+import { getSheetData, updateRow } from '@/lib/datastore'
 import { enviarEntregaConfirmada } from '@/lib/cliente-mailer'
 
 export const dynamic = 'force-dynamic'

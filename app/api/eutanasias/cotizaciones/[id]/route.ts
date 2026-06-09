@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, updateRow, deleteRow } from '@/lib/google-sheets'
+import { getSheetData, updateRow, deleteRow } from '@/lib/datastore'
 import { esAdmin } from '@/lib/roles'
 
 const SHEET = 'cotizaciones_eutanasia'

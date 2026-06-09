@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, appendRow, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, appendRow, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { generarCertificadoBuffer, checkCertificateAssets, type FirmaInfo } from '@/lib/certificate-generator'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 import { firmarPDF, getSignerInfo, isSigningEnabled } from '@/lib/sign-pdf'
@@ -200,11 +200,20 @@ export async function POST(
     const form = await req.formData()
     const sinFoto = form.get('sin_foto') === 'true'
     const fotoField = form.get('foto')
+    const fotoUrl = String(form.get('foto_url') || '').trim()
 
     let fotoBytes: Uint8Array | undefined
     if (!sinFoto && fotoField && fotoField instanceof File && fotoField.size > 0) {
       const ab = await fotoField.arrayBuffer()
       fotoBytes = new Uint8Array(ab)
+    } else if (!sinFoto && fotoUrl) {
+      // Foto subida por el tutor (URL de R2): la descargamos para incrustarla.
+      try {
+        const r = await fetch(fotoUrl)
+        if (r.ok) fotoBytes = new Uint8Array(await r.arrayBuffer())
+      } catch (e) {
+        console.warn('[certificado] no se pudo descargar foto_url:', e)
+      }
     }
 
     const efectivoSinFoto = sinFoto || !fotoBytes

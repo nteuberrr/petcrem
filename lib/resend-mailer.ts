@@ -1,5 +1,5 @@
 import { Resend } from 'resend'
-import { getSheetData } from './google-sheets'
+import { getSheetData } from './datastore'
 
 let cached: Resend | null = null
 

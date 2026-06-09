@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow } from '@/lib/google-sheets'
+import { getSheetData, updateRow } from '@/lib/datastore'
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
 
 // 1x1 transparent GIF — el byte payload mínimo posible (43 bytes)

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSheetData, appendRow, getNextId, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, appendRow, getNextId, ensureColumns } from '@/lib/datastore'
 import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota } from '@/lib/cliente-mailer'
 import { todayISO } from '@/lib/dates'

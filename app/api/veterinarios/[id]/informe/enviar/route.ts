@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
 import { formatDate } from '@/lib/dates'
 import { renderEmailLayout, getContacto, escapeHtml, BRAND, type Contacto } from '@/lib/email-layout'

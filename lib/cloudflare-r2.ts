@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 let cachedClient: S3Client | null = null
 
@@ -39,6 +40,39 @@ export async function uploadToR2(
   }))
 
   return { key, url: `${publicBase}/${key}` }
+}
+
+export type R2PresignedPut = { uploadUrl: string; publicUrl: string; key: string }
+
+/**
+ * Genera una URL prefirmada para que el navegador suba un objeto a R2 con un
+ * PUT directo (evita el límite de body de las funciones de Vercel — necesario
+ * para videos). El bucket R2 debe tener una política CORS que permita PUT desde
+ * el origen de la app. Devuelve también la URL pública final.
+ */
+export async function getPresignedPutUrl(
+  key: string,
+  contentType: string,
+  expiresSeconds = 900,
+): Promise<R2PresignedPut> {
+  const bucket = process.env.R2_BUCKET_NAME
+  const publicBase = (process.env.R2_PUBLIC_URL || '').replace(/\/$/, '')
+  if (!bucket) throw new Error('R2 no configurado: falta R2_BUCKET_NAME')
+  if (!publicBase) throw new Error('R2 no configurado: falta R2_PUBLIC_URL')
+  const client = getClient()
+  const uploadUrl = await getSignedUrl(
+    client,
+    new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
+    { expiresIn: expiresSeconds },
+  )
+  return { uploadUrl, publicUrl: `${publicBase}/${key}`, key }
+}
+
+/** Deriva la key de R2 a partir de su URL pública (o null si no corresponde). */
+export function keyFromPublicUrl(url: string): string | null {
+  const publicBase = (process.env.R2_PUBLIC_URL || '').replace(/\/$/, '')
+  if (!publicBase || !url.startsWith(publicBase + '/')) return null
+  return url.slice(publicBase.length + 1)
 }
 
 export async function getFromR2(key: string): Promise<Buffer | null> {

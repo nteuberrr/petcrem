@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { formatDateTime } from '@/lib/dates'
 
 type Cfg = {
   instrucciones: string
@@ -10,10 +11,7 @@ type Cfg = {
 }
 
 function fmtFechaHora(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return formatDateTime(iso) || '—' // dd-mm-yyyy HH:MM
 }
 
 export default function AgentesConfig() {

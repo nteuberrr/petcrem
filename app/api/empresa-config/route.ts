@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, appendRow, updateRow, ensureSheet, ensureColumns } from '@/lib/google-sheets'
+import { getSheetData, appendRow, updateRow, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 
 const SHEET = 'empresa_config'
@@ -73,6 +73,14 @@ export async function PUT(req: NextRequest) {
       if (col === 'id' || col === 'fecha_actualizacion') continue
       const v = bodyRec[col]
       data[col] = (v !== undefined && v !== null) ? String(v) : (existing[col] ?? '')
+    }
+
+    // Sheets (valueInputOption USER_ENTERED) interpreta un valor que empieza con
+    // "+", "=" o "@" como fórmula y se "come" el "+" del teléfono. Forzamos texto
+    // con un apóstrofo inicial: Sheets lo guarda como texto y NO lo devuelve al
+    // leer, así el "+56..." persiste y se muestra tal cual.
+    if (data.telefono && /^[+=@]/.test(data.telefono.trim())) {
+      data.telefono = `'${data.telefono.trim()}`
     }
 
     if (idx === -1) {

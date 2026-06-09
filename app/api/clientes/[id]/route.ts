@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, updateRow, ensureColumns, deleteRow } from '@/lib/google-sheets'
+import { getSheetData, updateRow, ensureColumns, deleteRow } from '@/lib/datastore'
 import { parseDecimal } from '@/lib/numbers'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 import { esAdmin } from '@/lib/roles'
