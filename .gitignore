@@ -42,6 +42,9 @@ yarn-error.log*
 # preview/temp PDFs generados localmente
 tmp_*.pdf
 
+# respaldos de la planilla (contienen datos personales — NO commitear)
+/respaldo sheets/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
