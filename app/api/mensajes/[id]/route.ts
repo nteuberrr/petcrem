@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getConversacion, getMensajes, actualizarConversacion, vincularCliente, type EstadoConv } from '@/lib/mensajes'
+import { getConversacion, getMensajes, actualizarConversacion, vincularCliente, eliminarConversacion, type EstadoConv } from '@/lib/mensajes'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -33,6 +33,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     if ('cliente_id' in body) await vincularCliente(conv.contacto_id, body.cliente_id ? String(body.cliente_id) : null)
 
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
+  }
+}
+
+/** DELETE: elimina la conversación y todos sus mensajes (no borra el contacto). */
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params
+    await eliminarConversacion(Number(id))
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })

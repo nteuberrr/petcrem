@@ -38,60 +38,131 @@ export default function MensajesView() {
   const [subiendo, setSubiendo] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  // >0 mientras hay una mutación del usuario en curso: suprime el polling para que
+  // un refresco viejo no sobrescriba el estado recién cambiado (ej. activar el agente).
+  const pausaRef = useRef(0)
 
-  const fetchConvs = useCallback(async () => {
-    setCargando(true); setError('')
+  const fetchConvs = useCallback(async (silent = false) => {
+    if (!silent) { setCargando(true); setError('') }
     try {
       const p = new URLSearchParams()
       if (estado) p.set('estado', estado)
       if (buscar) p.set('buscar', buscar)
       const r = await fetch(`/api/mensajes?${p}`, { cache: 'no-store' })
       const j = await r.json()
-      if (!r.ok) { setError(j.error || 'Error al cargar'); setConvs([]) }
+      if (!r.ok) { if (!silent) { setError(j.error || 'Error al cargar'); setConvs([]) } }
       else setConvs(Array.isArray(j) ? j : [])
-    } catch { setError('Error de red') }
-    setCargando(false)
+    } catch { if (!silent) setError('Error de red') }
+    if (!silent) setCargando(false)
   }, [estado, buscar])
 
   useEffect(() => { fetchConvs() }, [fetchConvs])
 
   const abrir = useCallback(async (id: number) => {
-    setSel(id); setConv(null); setMsgs([])
-    const r = await fetch(`/api/mensajes/${id}`, { cache: 'no-store' })
-    const j = await r.json()
-    if (r.ok) { setConv(j.conversacion); setMsgs(j.mensajes || []) }
+    pausaRef.current++
+    try {
+      setSel(id); setConv(null); setMsgs([])
+      const r = await fetch(`/api/mensajes/${id}`, { cache: 'no-store' })
+      const j = await r.json()
+      if (r.ok) { setConv(j.conversacion); setMsgs(j.mensajes || []) }
+    } finally { pausaRef.current-- }
   }, [])
+
+  // Refresco SILENCIOSO de la conversación abierta (no resetea ni parpadea).
+  // Solo reemplaza los mensajes si cambió el último o la cantidad → evita re-render inútil.
+  // Se salta si hay una mutación del usuario en curso (evita pisar un cambio recién hecho).
+  const refrescarAbierta = useCallback(async () => {
+    if (sel == null || pausaRef.current > 0) return
+    try {
+      const r = await fetch(`/api/mensajes/${sel}`, { cache: 'no-store' })
+      if (!r.ok || pausaRef.current > 0) return
+      const j = await r.json()
+      if (pausaRef.current > 0) return
+      const nuevos: Mensaje[] = j.mensajes || []
+      setMsgs(prev => {
+        const a = prev[prev.length - 1]
+        const b = nuevos[nuevos.length - 1]
+        if (prev.length === nuevos.length && a?.id === b?.id) return prev
+        return nuevos
+      })
+      if (j.conversacion) setConv(j.conversacion)
+    } catch { /* silencioso */ }
+  }, [sel])
+
+  // Polling en vivo: refresca la lista y la conversación abierta cada 5s.
+  useEffect(() => {
+    const t = setInterval(() => {
+      fetchConvs(true)
+      refrescarAbierta()
+    }, 5000)
+    return () => clearInterval(t)
+  }, [fetchConvs, refrescarAbierta])
+
+  // Auto-scroll al final cuando llegan/envían mensajes nuevos (no al releer historial).
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const prevLenRef = useRef(0)
+  useEffect(() => {
+    if (msgs.length > prevLenRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    prevLenRef.current = msgs.length
+  }, [msgs])
 
   async function enviar() {
     if (!sel || !texto.trim()) return
-    setEnviando(true)
-    const r = await fetch(`/api/mensajes/${sel}/mensaje`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cuerpo: texto }),
-    })
-    const j = await r.json().catch(() => ({}))
-    if (r.ok) { setTexto(''); await abrir(sel); if (j.aviso) alert(j.aviso) }
-    else alert(j.error || 'No se pudo registrar el mensaje')
-    setEnviando(false)
+    setEnviando(true); pausaRef.current++
+    try {
+      const r = await fetch(`/api/mensajes/${sel}/mensaje`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cuerpo: texto }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok) { setTexto(''); await abrir(sel); if (j.aviso) alert(j.aviso) }
+      else alert(j.error || 'No se pudo registrar el mensaje')
+    } finally { pausaRef.current--; setEnviando(false) }
   }
 
   async function enviarArchivo(file: File) {
     if (!sel || !file) return
-    setSubiendo(true)
-    const fd = new FormData()
-    fd.append('file', file)
-    if (texto.trim()) fd.append('caption', texto.trim())
-    const r = await fetch(`/api/mensajes/${sel}/media`, { method: 'POST', body: fd })
-    const j = await r.json().catch(() => ({}))
-    if (r.ok) { setTexto(''); await abrir(sel); if (j.aviso) alert(j.aviso) }
-    else alert(j.error || 'No se pudo enviar el archivo')
-    setSubiendo(false)
+    setSubiendo(true); pausaRef.current++
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      if (texto.trim()) fd.append('caption', texto.trim())
+      const r = await fetch(`/api/mensajes/${sel}/media`, { method: 'POST', body: fd })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok) { setTexto(''); await abrir(sel); if (j.aviso) alert(j.aviso) }
+      else alert(j.error || 'No se pudo enviar el archivo')
+    } finally { pausaRef.current--; setSubiendo(false) }
   }
 
   async function patch(body: Record<string, unknown>) {
     if (!sel) return
-    await fetch(`/api/mensajes/${sel}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    await abrir(sel); await fetchConvs()
+    pausaRef.current++
+    try {
+      await fetch(`/api/mensajes/${sel}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      await abrir(sel); await fetchConvs()
+    } finally { pausaRef.current-- }
+  }
+
+  // Activar/pausar el agente. Al ACTIVAR limpia 'pausado' Y 'requiere-humano'
+  // (la conversación vuelve a manos del agente). Al pausar, agrega 'pausado'.
+  function setAgentePausado(pausar: boolean) {
+    if (!conv) return
+    const set = new Set(conv.etiquetas)
+    if (pausar) set.add('pausado')
+    else { set.delete('pausado'); set.delete('requiere-humano') }
+    patch({ etiquetas: Array.from(set) })
+  }
+
+  async function eliminar() {
+    if (!sel) return
+    if (!confirm('¿Eliminar esta conversación y todos sus mensajes? Esta acción no se puede deshacer.')) return
+    pausaRef.current++
+    try {
+      const r = await fetch(`/api/mensajes/${sel}`, { method: 'DELETE' })
+      if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error || 'No se pudo eliminar'); return }
+      setSel(null); setConv(null); setMsgs([])
+      await fetchConvs()
+    } finally { pausaRef.current-- }
   }
 
   function toggleEtiqueta(e: string) {
@@ -160,7 +231,7 @@ export default function MensajesView() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <button onClick={() => toggleEtiqueta('pausado')}
+                  <button onClick={() => setAgentePausado(!conv.etiquetas.includes('pausado'))}
                     title={conv.etiquetas.includes('pausado') ? 'El agente está en pausa (responde un humano). Clic para reactivarlo.' : 'El agente responde automáticamente. Clic para pausarlo y atender tú.'}
                     className={`text-xs font-semibold rounded-lg px-3 py-1.5 ${conv.etiquetas.includes('pausado') ? 'bg-gray-200 text-gray-600' : 'bg-emerald-600 text-white'}`}>
                     {conv.etiquetas.includes('pausado') ? '🤖 Agente en pausa' : '🤖 Agente activo'}
@@ -168,6 +239,10 @@ export default function MensajesView() {
                   <button onClick={() => patch({ estado: conv.estado === 'abierta' ? 'cerrada' : 'abierta' })}
                     className="text-xs font-semibold rounded-lg px-3 py-1.5 bg-slate-700 text-white">
                     {conv.estado === 'abierta' ? 'Cerrar' : 'Reabrir'}
+                  </button>
+                  <button onClick={eliminar} title="Eliminar conversación y todos sus mensajes"
+                    className="text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50">
+                    🗑
                   </button>
                 </div>
               </div>
@@ -203,6 +278,7 @@ export default function MensajesView() {
                 </div>
               ))}
               {msgs.length === 0 && <p className="text-center text-xs text-gray-400 py-6">Sin mensajes</p>}
+              <div ref={bottomRef} />
             </div>
 
             <div className="p-3 border-t border-gray-100">

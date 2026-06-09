@@ -99,6 +99,15 @@ export async function getMensajes(conversacionId: number): Promise<Mensaje[]> {
   return (data ?? []) as Mensaje[]
 }
 
+/** Elimina una conversación y TODOS sus mensajes (no borra el contacto). */
+export async function eliminarConversacion(id: number): Promise<void> {
+  const sb = getMensajesSupabase()
+  const delMsg = await sb.from(T_MSG).delete().eq('conversacion_id', id)
+  if (delMsg.error) throw new Error(delMsg.error.message)
+  const delConv = await sb.from(T_CONV).delete().eq('id', id)
+  if (delConv.error) throw new Error(delConv.error.message)
+}
+
 export async function actualizarConversacion(id: number, patch: Partial<Pick<Conversacion, 'estado' | 'etiquetas' | 'audiencia'>>): Promise<void> {
   const sb = getMensajesSupabase()
   const { error } = await sb.from(T_CONV).update(patch).eq('id', id)
