@@ -42,8 +42,11 @@ yarn-error.log*
 # preview/temp PDFs generados localmente
 tmp_*.pdf
 
-# respaldos de la planilla (contienen datos personales — NO commitear)
+# respaldos (contienen datos personales — NO commitear)
 /respaldo sheets/
+/respaldo postgres/
+# snapshot temporal del proyecto (se sube a R2 y se borra)
+*.tgz
 
 # typescript
 *.tsbuildinfo

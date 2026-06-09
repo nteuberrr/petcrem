@@ -25,6 +25,8 @@ export async function proxy(req: NextRequest) {
     pathname === '/api/reorder-columns' ||
     pathname === '/api/mailing/webhooks/resend' ||
     pathname === '/api/mensajes/webhook' ||
+    // Backup automático (lo llama Vercel Cron; auth por Bearer CRON_SECRET dentro de la ruta)
+    pathname === '/api/backup' ||
     pathname.startsWith('/api/mailing/pixel/') ||
     pathname.startsWith('/api/mailing/click/') ||
     pathname === '/convenio-eutanasias' ||
