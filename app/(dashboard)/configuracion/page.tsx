@@ -16,7 +16,7 @@ type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
 type ArticuloTab = 'servicios' | 'bodega' | 'otros'
 type ServiciosTab = 'tipos' | 'especies'
-type AvanzadaTab = 'datos' | 'agentes' | 'correos' | 'mantenimiento'
+type AvanzadaTab = 'datos' | 'agentes' | 'correos'
 
 type Producto = { id: string; nombre: string; precio: string; foto_url: string; stock: string; categoria?: string; activo: string }
 type CategoriaProducto = { id: string; nombre: string; activo: string; fecha_creacion: string }
@@ -135,62 +135,11 @@ export default function ConfiguracionPage() {
     else alert('Error al eliminar')
   }
 
-  // Mantenimiento: sync de la planilla — clientes + vehiculo + petroleo
-  type ClientesResult = {
-    total_filas: number
-    filas_actualizadas: number
-    cambios: { id: string; codigo: string; nombre_mascota: string; campos: string[] }[]
-    warnings: { id: string; codigo: string; nombre_mascota: string; aviso: string }[]
-  }
-  type NumberSyncResult = {
-    total_filas: number
-    filas_actualizadas: number
-    cambios: { id: string; fecha: string; campos: string[] }[]
-  }
-  type AsistenciaResult = {
-    total_filas: number
-    filas_actualizadas: number
-    cambios: { id: string; fecha: string; usuario_nombre: string; campos: string[] }[]
-    warnings: { id: string; fecha: string; usuario_nombre: string; aviso: string }[]
-  }
-  type SyncResult = {
-    ok: boolean
-    clientes: ClientesResult
-    vehiculo: NumberSyncResult
-    petroleo: NumberSyncResult
-    despachos: NumberSyncResult
-    ciclos: NumberSyncResult
-    productos_ids: NumberSyncResult
-    otros_servicios_ids: NumberSyncResult
-    cremados: ClientesResult
-    asistencia: AsistenciaResult
-  }
-  const [syncing, setSyncing] = useState(false)
-  const [syncResult, setSyncResult] = useState<SyncResult | null>(null)
-  const [syncError, setSyncError] = useState('')
-
   // Seguimiento en vivo de correos (BCC de transaccionales a un correo personal)
   const [segActivo, setSegActivo] = useState(false)
   const [segEmail, setSegEmail] = useState('')
   const [segSaving, setSegSaving] = useState(false)
   const [segMsg, setSegMsg] = useState<{ ok: boolean; texto: string } | null>(null)
-
-  async function ejecutarSync() {
-    if (!confirm('Esto va a normalizar las hojas: clientes (estados vacíos → "pendiente"), vehiculo_cargas y cargas_petroleo (números string → number con coma decimal). ¿Continuar?')) return
-    setSyncing(true)
-    setSyncError('')
-    setSyncResult(null)
-    try {
-      const res = await fetch('/api/sync-database', { method: 'POST' })
-      const data = await res.json()
-      if (res.ok) setSyncResult(data)
-      else setSyncError(data?.error ?? `HTTP ${res.status}`)
-    } catch (e) {
-      setSyncError(String(e))
-    } finally {
-      setSyncing(false)
-    }
-  }
 
   async function guardarSeguimiento() {
     if (segActivo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(segEmail.trim())) {
@@ -428,7 +377,7 @@ export default function ConfiguracionPage() {
       {/* Sub-pestañas de Configuración Avanzada */}
       {tab === 'Configuración Avanzada' && isAdminTotal && (
         <div className="flex gap-2 flex-wrap mb-4">
-          {([['datos', 'Datos Personales'], ['agentes', 'Agentes'], ['correos', 'Correos'], ['mantenimiento', 'Mantenimiento']] as const).map(([k, label]) => (
+          {([['datos', 'Datos Personales'], ['agentes', 'Agentes'], ['correos', 'Correos']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setAvanzadaTab(k)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${avanzadaTab === k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               {label}
@@ -999,7 +948,35 @@ export default function ConfiguracionPage() {
 
       {/* ─── AGENTES ─── */}
       {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'agentes' && <AgentesConfig />}
-      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'correos' && <CorreosConfig />}
+      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'correos' && (
+        <div className="space-y-6">
+          <CorreosConfig />
+
+          {/* Seguimiento en vivo de correos enviados (BCC a un correo personal) */}
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 max-w-3xl">
+            <h2 className="text-base font-bold text-gray-900 mb-1">Seguimiento en vivo de correos electrónicos enviados</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Si está activo, te llega una <b>copia oculta (BCC)</b> a tu correo de <b>cada email transaccional</b> que envíe el sistema (registro, inicio de cremación, despachos, eutanasias, informes de veterinaria…). <b>No incluye</b> el mailing masivo.
+            </p>
+            <div className="flex items-center gap-3 mb-4">
+              <Toggle checked={segActivo} onChange={setSegActivo} />
+              <span className="text-sm font-medium text-gray-700">{segActivo ? 'Activado' : 'Desactivado'}</span>
+            </div>
+            <label className="text-xs font-semibold text-gray-700">Reenviar copia a este correo</label>
+            <input type="email" value={segEmail} onChange={e => setSegEmail(e.target.value)}
+              placeholder="tucorreo@ejemplo.com"
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <div className="flex items-center gap-3 mt-4">
+              <button onClick={guardarSeguimiento} disabled={segSaving}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+                {segSaving ? 'Guardando…' : 'Guardar'}
+              </button>
+              {segMsg && <span className={`text-sm ${segMsg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{segMsg.texto}</span>}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-2">El cambio puede tardar hasta ~1 minuto en aplicarse a los envíos.</p>
+          </div>
+        </div>
+      )}
 
       {tab === 'Jornada' && (
         <div className="space-y-6 max-w-3xl">
@@ -1142,303 +1119,6 @@ export default function ConfiguracionPage() {
       )}
 
       {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'datos' && <DatosPersonalesPanel />}
-
-      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'mantenimiento' && (
-        <div className="space-y-6 max-w-3xl">
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
-          <h2 className="text-base font-bold text-gray-900 mb-2">Actualizar base de datos</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Si editaste la hoja de Google Sheets directamente (por ejemplo, agregaste filas
-            nuevas a mano), tocá este botón para que la app rellene los campos por defecto:
-          </p>
-          <ul className="text-xs text-gray-600 mb-5 space-y-1 list-disc pl-5">
-            <li><b>Clientes</b>: estado vacío → <code className="bg-gray-100 px-1 rounded">pendiente</code>, estado_pago vacío → <code className="bg-gray-100 px-1 rounded">pendiente</code>, misma_direccion vacío → <code className="bg-gray-100 px-1 rounded">FALSE</code></li>
-            <li><b>Vehículo</b>: litros, km y monto guardados como texto se convierten a número (decimales con coma en vez de punto)</li>
-            <li><b>Petróleo</b>: litros, neto, IVA, específico y total bruto pasan a número</li>
-          </ul>
-          <p className="text-xs text-amber-700 bg-amber-50 border-2 border-amber-200 rounded-lg p-3 mb-5">
-            ⚠️ Hacé un backup manual de la hoja antes (Archivo → Hacer copia) si tenés muchos datos.
-          </p>
-          <button
-            onClick={ejecutarSync}
-            disabled={syncing}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50"
-          >
-            {syncing ? 'Actualizando...' : '🔄 Actualizar base de datos'}
-          </button>
-
-          {syncError && (
-            <div className="mt-4 rounded-lg border-2 border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 font-medium">
-              Error: {syncError}
-            </div>
-          )}
-
-          {syncResult && (
-            <div className="mt-5 space-y-4">
-              {/* Clientes */}
-              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-bold text-emerald-900">
-                  ✓ Clientes: {syncResult.clientes.filas_actualizadas} de {syncResult.clientes.total_filas} filas actualizadas
-                </p>
-              </div>
-              {syncResult.clientes.cambios.length > 0 && (
-                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
-                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
-                    Detalle clientes ({syncResult.clientes.cambios.length})
-                  </summary>
-                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
-                    {syncResult.clientes.cambios.map(c => (
-                      <li key={c.id} className="text-xs text-gray-700 py-1">
-                        <span className="font-mono text-indigo-700 font-bold">{c.codigo}</span>{' '}
-                        <span className="font-semibold">{c.nombre_mascota}</span>{' '}
-                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              {syncResult.clientes.warnings.length > 0 && (
-                <details className="rounded-lg border-2 border-amber-300 bg-amber-50 px-4 py-3">
-                  <summary className="text-sm font-semibold text-amber-900 cursor-pointer">
-                    ⚠ Avisos clientes ({syncResult.clientes.warnings.length}) — revisión manual
-                  </summary>
-                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
-                    {syncResult.clientes.warnings.map((w, i) => (
-                      <li key={i} className="text-xs text-amber-900 py-1">
-                        <span className="font-mono font-bold">{w.codigo}</span>{' '}
-                        <span className="font-semibold">{w.nombre_mascota}</span>{' '}
-                        <span>— {w.aviso}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              {/* Vehículo */}
-              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-bold text-emerald-900">
-                  ✓ Vehículo: {syncResult.vehiculo.filas_actualizadas} de {syncResult.vehiculo.total_filas} filas con números corregidos
-                </p>
-              </div>
-              {syncResult.vehiculo.cambios.length > 0 && (
-                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
-                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
-                    Detalle vehículo ({syncResult.vehiculo.cambios.length})
-                  </summary>
-                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
-                    {syncResult.vehiculo.cambios.map(c => (
-                      <li key={c.id} className="text-xs text-gray-700 py-1">
-                        <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
-                        <span>{formatDate(c.fecha)}</span>{' '}
-                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              {/* Petróleo */}
-              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-bold text-emerald-900">
-                  ✓ Petróleo: {syncResult.petroleo.filas_actualizadas} de {syncResult.petroleo.total_filas} filas con números corregidos
-                </p>
-              </div>
-              {syncResult.petroleo.cambios.length > 0 && (
-                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
-                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
-                    Detalle petróleo ({syncResult.petroleo.cambios.length})
-                  </summary>
-                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
-                    {syncResult.petroleo.cambios.map(c => (
-                      <li key={c.id} className="text-xs text-gray-700 py-1">
-                        <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
-                        <span>{formatDate(c.fecha)}</span>{' '}
-                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              {/* Despachos: numero_recorrido recalculado */}
-              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-bold text-emerald-900">
-                  ✓ Despachos: {syncResult.despachos.filas_actualizadas} de {syncResult.despachos.total_filas} recorridos con N° corregido
-                </p>
-              </div>
-              {syncResult.despachos.cambios.length > 0 && (
-                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
-                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
-                    Detalle despachos ({syncResult.despachos.cambios.length})
-                  </summary>
-                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
-                    {syncResult.despachos.cambios.map(c => (
-                      <li key={c.id} className="text-xs text-gray-700 py-1">
-                        <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
-                        <span>{formatDate(c.fecha)}</span>{' '}
-                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              {/* Cremados sincronizados desde ciclos */}
-              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-bold text-emerald-900">
-                  ✓ Cremados: {syncResult.cremados.filas_actualizadas} mascotas marcadas como &quot;cremado&quot; según ciclos asociados
-                </p>
-              </div>
-              {syncResult.cremados.cambios.length > 0 && (
-                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
-                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
-                    Detalle cremados ({syncResult.cremados.cambios.length})
-                  </summary>
-                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
-                    {syncResult.cremados.cambios.map((c, i) => (
-                      <li key={`${c.id}-${i}`} className="text-xs text-gray-700 py-1">
-                        <span className="font-mono text-indigo-700 font-bold">{c.codigo}</span>{' '}
-                        <span>{c.nombre_mascota}</span>{' '}
-                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              {/* Productos / otros servicios: IDs únicos */}
-              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-bold text-emerald-900">
-                  ✓ Productos: {syncResult.productos_ids.filas_actualizadas} IDs duplicados renumerados (de {syncResult.productos_ids.total_filas} filas)
-                </p>
-              </div>
-              {syncResult.productos_ids.cambios.length > 0 && (
-                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
-                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
-                    Detalle ({syncResult.productos_ids.cambios.length})
-                  </summary>
-                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
-                    {syncResult.productos_ids.cambios.map((c, i) => (
-                      <li key={i} className="text-xs text-gray-700 py-1">
-                        <span className="text-gray-500">{c.campos.join(', ')}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-bold text-emerald-900">
-                  ✓ Otros servicios: {syncResult.otros_servicios_ids.filas_actualizadas} IDs duplicados renumerados (de {syncResult.otros_servicios_ids.total_filas} filas)
-                </p>
-              </div>
-              {syncResult.otros_servicios_ids.cambios.length > 0 && (
-                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
-                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
-                    Detalle ({syncResult.otros_servicios_ids.cambios.length})
-                  </summary>
-                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
-                    {syncResult.otros_servicios_ids.cambios.map((c, i) => (
-                      <li key={i} className="text-xs text-gray-700 py-1">
-                        <span className="text-gray-500">{c.campos.join(', ')}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              {/* Ciclos: peso_total, lt_kg, lt_mascota recalculados */}
-              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-bold text-emerald-900">
-                  ✓ Ciclos: {syncResult.ciclos.filas_actualizadas} de {syncResult.ciclos.total_filas} ciclos con peso total y ratios recalculados
-                </p>
-              </div>
-              {syncResult.ciclos.cambios.length > 0 && (
-                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
-                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
-                    Detalle ciclos ({syncResult.ciclos.cambios.length})
-                  </summary>
-                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
-                    {syncResult.ciclos.cambios.map(c => (
-                      <li key={c.id} className="text-xs text-gray-700 py-1">
-                        <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
-                        <span>{formatDate(c.fecha)}</span>{' '}
-                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              {/* Asistencia: usuario_id por nombre + recalcular minutos/extra */}
-              <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-bold text-emerald-900">
-                  ✓ Asistencia: {syncResult.asistencia.filas_actualizadas} de {syncResult.asistencia.total_filas} fichajes con usuario_id y minutos recalculados
-                </p>
-              </div>
-              {syncResult.asistencia.cambios.length > 0 && (
-                <details className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-3">
-                  <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
-                    Detalle asistencia ({syncResult.asistencia.cambios.length})
-                  </summary>
-                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
-                    {syncResult.asistencia.cambios.map(c => (
-                      <li key={c.id} className="text-xs text-gray-700 py-1">
-                        <span className="font-mono text-indigo-700 font-bold">#{c.id}</span>{' '}
-                        <span className="font-semibold">{c.usuario_nombre}</span>{' '}
-                        <span>{formatDate(c.fecha)}</span>{' '}
-                        <span className="text-gray-500">→ {c.campos.join(', ')}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              {syncResult.asistencia.warnings.length > 0 && (
-                <details className="rounded-lg border-2 border-amber-300 bg-amber-50 px-4 py-3">
-                  <summary className="text-sm font-semibold text-amber-800 cursor-pointer">
-                    ⚠ Avisos asistencia ({syncResult.asistencia.warnings.length})
-                  </summary>
-                  <ul className="mt-2 max-h-48 overflow-y-auto space-y-1">
-                    {syncResult.asistencia.warnings.map((w, i) => (
-                      <li key={i} className="text-xs text-amber-900 py-1">
-                        <span className="font-mono font-bold">#{w.id}</span>{' '}
-                        <span className="font-semibold">{w.usuario_nombre || '(sin nombre)'}</span>{' '}
-                        <span>{formatDate(w.fecha)}</span>{' '}
-                        <span>— {w.aviso}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Seguimiento en vivo de correos enviados */}
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
-          <h2 className="text-base font-bold text-gray-900 mb-1">Seguimiento en vivo de correos electrónicos enviados</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Si está activo, te llega una <b>copia oculta (BCC)</b> a tu correo de <b>cada email transaccional</b> que envíe el sistema (registro, inicio de cremación, despachos, eutanasias, informes de veterinaria…). <b>No incluye</b> el mailing masivo.
-          </p>
-          <div className="flex items-center gap-3 mb-4">
-            <Toggle checked={segActivo} onChange={setSegActivo} />
-            <span className="text-sm font-medium text-gray-700">{segActivo ? 'Activado' : 'Desactivado'}</span>
-          </div>
-          <label className="text-xs font-semibold text-gray-700">Reenviar copia a este correo</label>
-          <input type="email" value={segEmail} onChange={e => setSegEmail(e.target.value)}
-            placeholder="tucorreo@ejemplo.com"
-            className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          <div className="flex items-center gap-3 mt-4">
-            <button onClick={guardarSeguimiento} disabled={segSaving}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
-              {segSaving ? 'Guardando…' : 'Guardar'}
-            </button>
-            {segMsg && <span className={`text-sm ${segMsg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{segMsg.texto}</span>}
-          </div>
-          <p className="text-[11px] text-gray-400 mt-2">El cambio puede tardar hasta ~1 minuto en aplicarse a los envíos.</p>
-        </div>
-        </div>
-      )}
 
       {/* ─── MODALES ─── */}
       <Modal open={!!editingJornada} onClose={() => setEditingJornada(null)} title="Editar configuración de jornada">

@@ -579,57 +579,32 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               <p className="text-sm text-gray-600 mt-1">Tutor: <span className="font-semibold text-gray-900">{cliente.nombre_tutor || '—'}</span></p>
             </div>
             {puedeGenerarCert && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-start gap-1.5">
                 <button
                   onClick={abrirModalCertificado}
                   disabled={descargandoCert}
-                  className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
+                  className="inline-flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
                 >
-                  📄 {certUltimo ? 'Generar nueva versión' : 'Generar certificado'}
+                  📄 {certUltimo ? 'Nueva versión' : 'Generar certificado'}
                 </button>
                 {certUltimo && (
                   <a
                     href={certUltimo.pdf_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                    className="inline-flex items-center gap-1 border border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
                   >
-                    ⬇ Descargar V{certUltimo.version}
+                    ⬇ V{certUltimo.version}
                   </a>
                 )}
-                {/* Toggle para ver historial de certificados — siempre disponible si hay al menos uno */}
                 {certificadosEmitidos.length > 0 && (
                   <button
                     onClick={() => setVerCertHistorico(v => !v)}
-                    className="inline-flex items-center gap-2 border-2 border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                    className="inline-flex items-center gap-1 border border-gray-200 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
                   >
-                    {verCertHistorico ? '▲ Ocultar certificados' : `📁 Ver certificados generados (${certificadosEmitidos.length})`}
+                    {verCertHistorico ? '▲ Ocultar' : `📁 Certificados (${certificadosEmitidos.length})`}
                   </button>
                 )}
-                <button
-                  onClick={intentarEnviarCertificado}
-                  disabled={enviandoCert || !cliente.email || !certUltimo}
-                  title={
-                    !cliente.email
-                      ? 'El cliente no tiene email registrado'
-                      : !certUltimo
-                        ? 'Generá primero un certificado para poder enviarlo'
-                        : certUltimo.enviado_ultima_fecha
-                          ? `Ya enviado — al hacer click te pedimos confirmación para reenviar`
-                          : `Enviar a ${cliente.email}`
-                  }
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm ${
-                    certUltimo?.enviado_ultima_fecha
-                      ? 'bg-gray-500 hover:bg-gray-600 text-white'
-                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  }`}
-                >
-                  {enviandoCert
-                    ? '⌛ Enviando…'
-                    : certUltimo?.enviado_ultima_fecha
-                      ? '🔄 Reenviar al correo'
-                      : '📧 Enviar al correo'}
-                </button>
                 <input
                   ref={videoInputRef}
                   type="file"
@@ -640,11 +615,49 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 <button
                   onClick={() => videoInputRef.current?.click()}
                   disabled={subiendoVideo}
-                  className="inline-flex items-center gap-2 border-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
-                  title="Subir un video del servicio (se guarda en la ficha y se puede adjuntar al certificado)"
+                  className="inline-flex items-center gap-1 border border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                  title="Subir un video del servicio (se puede adjuntar al certificado)"
                 >
-                  {subiendoVideo ? '⌛ Subiendo video…' : '🎬 Subir video'}
+                  {subiendoVideo ? '⌛ Subiendo…' : '🎬 Subir video'}
                 </button>
+                {/* Enviar + opción de adjuntar video, agrupados */}
+                <div className="flex flex-col items-start gap-1">
+                  <button
+                    onClick={intentarEnviarCertificado}
+                    disabled={enviandoCert || !cliente.email || !certUltimo}
+                    title={
+                      !cliente.email
+                        ? 'El cliente no tiene email registrado'
+                        : !certUltimo
+                          ? 'Generá primero un certificado para poder enviarlo'
+                          : certUltimo.enviado_ultima_fecha
+                            ? `Ya enviado — al hacer click te pedimos confirmación para reenviar`
+                            : `Enviar a ${cliente.email}`
+                    }
+                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      certUltimo?.enviado_ultima_fecha
+                        ? 'bg-gray-500 hover:bg-gray-600 text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    }`}
+                  >
+                    {enviandoCert
+                      ? '⌛ Enviando…'
+                      : certUltimo?.enviado_ultima_fecha
+                        ? '🔄 Reenviar certificado al correo'
+                        : '📧 Enviar certificado al correo'}
+                  </button>
+                  {videosServicio.length > 0 && (
+                    <label className="inline-flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer pl-0.5">
+                      <input
+                        type="checkbox"
+                        checked={adjuntarVideo}
+                        onChange={e => setAdjuntarVideo(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      Adjuntar video al enviar
+                    </label>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -682,19 +695,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           {/* Videos del servicio subidos a R2 + opción de adjuntarlos al certificado */}
           {videosServicio.length > 0 && (
             <div className="mt-4 rounded-xl border-2 border-gray-200 bg-gray-50 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="mb-3">
                 <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">
                   🎬 Videos del servicio ({videosServicio.length})
                 </p>
-                <label className="inline-flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={adjuntarVideo}
-                    onChange={e => setAdjuntarVideo(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  Adjuntar el video al enviar el certificado
-                </label>
               </div>
               <div className="flex flex-wrap gap-3">
                 {videosServicio.map((url, i) => (
@@ -707,9 +711,6 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   </div>
                 ))}
               </div>
-              {adjuntarVideo && (
-                <p className="text-[11px] text-gray-500 mt-2">Se adjuntará el video más reciente al correo del certificado.</p>
-              )}
             </div>
           )}
         </div>
