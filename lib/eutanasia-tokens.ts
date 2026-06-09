@@ -17,7 +17,7 @@ import crypto from 'crypto'
 
 const DEFAULT_TTL_SECONDS = 72 * 3600 // 72h
 
-export type AccionToken = 'aceptar' | 'confirmar' | 'realizado' | 'datos_pago'
+export type AccionToken = 'aceptar' | 'confirmar' | 'realizado' | 'datos_pago' | 'cliente_confirmar'
 
 export interface TokenPayload {
   cotizacion_id: string
@@ -108,7 +108,7 @@ export function verifyToken(token: string): VerifyResult {
   if (typeof payload.exp !== 'number' || payload.exp < Math.floor(Date.now() / 1000)) {
     return { ok: false, error: 'expired' }
   }
-  if (!payload.vet_id || !['aceptar', 'confirmar', 'realizado', 'datos_pago'].includes(payload.accion)) {
+  if (!payload.vet_id || !['aceptar', 'confirmar', 'realizado', 'datos_pago', 'cliente_confirmar'].includes(payload.accion)) {
     return { ok: false, error: 'bad_payload' }
   }
   // cotizacion_id es opcional para 'datos_pago' (no aplica a una cotización

@@ -137,10 +137,12 @@ export async function POST(req: NextRequest) {
     const vetTel = (vet.telefono || '').replace(/\D/g, '').slice(-9)
     const waCliente = (c.cliente_wa_id || '').replace(/\D/g, '')
     if (waCliente && isWhatsappConfigured()) {
+      const linkConf = baseUrl ? `${baseUrl}/eutanasia/cliente-confirma/${createToken(c.id, vet.id, 'cliente_confirmar')}` : ''
       const msgWa =
         `Buenas noticias 🐾 Un veterinario de nuestra red confirmó su disponibilidad para acompañar a ${c.mascota_nombre}.\n\n` +
         `Se pondrá en contacto contigo para coordinar:\n` +
         `${vetNombreCompleto}${vetTel ? ` · +56 ${vetTel}` : ''}\n\n` +
+        (linkConf ? `Cuando hayas coordinado la visita con el veterinario, confírmanos aquí:\n${linkConf}\n\n` : '') +
         `Cualquier duda, escríbenos por aquí.`
       try { await enviarTextoWhatsapp(waCliente, msgWa) } catch (e) { console.warn('[aceptar] WhatsApp al cliente falló:', e) }
     }

@@ -192,6 +192,9 @@ export const SHEETS: Record<string, string[]> = {
     'cliente_wa_id',
     'direccion', 'comuna',
     'fecha_servicio', 'hora_servicio',
+    // Servicio de cremación que el cliente eligió para DESPUÉS de la eutanasia
+    // (CI | CP | SD). Se agendan ambos servicios.
+    'tipo_servicio_cremacion',
     'notas',
     'estado',
     'vet_id_asignado', 'vet_nombre_asignado', 'vet_email_asignado',
@@ -200,6 +203,8 @@ export const SHEETS: Record<string, string[]> = {
     // 'pendiente_pago' (default al marcar realizada) | 'pago_confirmado'
     // (el admin lo marca después de transferir).
     'estado_pago', 'fecha_pago',
+    // El cliente confirmó (por su link de WhatsApp) que coordinó la visita con el vet.
+    'cliente_confirmo', 'fecha_cliente_confirmacion',
     'fecha_creacion', 'fecha_envio_cotizacion',
     'fecha_aceptacion', 'fecha_confirmacion',
     'fecha_realizacion', 'fecha_cancelacion',

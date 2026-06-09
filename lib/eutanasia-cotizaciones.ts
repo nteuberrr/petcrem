@@ -6,6 +6,7 @@ import { createToken, createVetToken } from './eutanasia-tokens'
 import { formatDate, formatHoraDia } from './dates'
 import { nombreCompletoVet, renderCotizacionEmail } from './eutanasia-mailer'
 import { getContacto } from './email-layout'
+import { crearClienteBorrador } from './cliente-borrador'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lógica compartida de cotizaciones de eutanasia: envío a vets + alta automática
@@ -24,11 +25,13 @@ const COLS_COTI = [
   'cliente_nombre', 'cliente_telefono', 'cliente_email', 'cliente_wa_id',
   'direccion', 'comuna',
   'fecha_servicio', 'hora_servicio',
+  'tipo_servicio_cremacion',
   'notas',
   'estado',
   'vet_id_asignado', 'vet_nombre_asignado', 'vet_email_asignado',
   'precio_snapshot',
   'estado_pago', 'fecha_pago',
+  'cliente_confirmo', 'fecha_cliente_confirmacion',
   'fecha_creacion', 'fecha_envio_cotizacion',
   'fecha_aceptacion', 'fecha_confirmacion',
   'fecha_realizacion', 'fecha_cancelacion',
@@ -141,6 +144,7 @@ export interface AgendarEutInput {
   comuna: string
   fecha: string   // YYYY-MM-DD
   hora: string    // HH:MM
+  tipo_servicio_cremacion?: string  // CI | CP | SD (cremación posterior)
   notas?: string
 }
 
@@ -184,6 +188,7 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
     comuna: comunaCanon,
     fecha_servicio: input.fecha,
     hora_servicio: input.hora,
+    tipo_servicio_cremacion: input.tipo_servicio_cremacion ?? '',
     notas: input.notas ?? '',
     estado: 'creada',
     vet_id_asignado: '',
@@ -192,6 +197,8 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
     precio_snapshot: String(precioVet),
     estado_pago: '',
     fecha_pago: '',
+    cliente_confirmo: '',
+    fecha_cliente_confirmacion: '',
     fecha_creacion: ahora,
     fecha_envio_cotizacion: '',
     fecha_aceptacion: '',
@@ -200,6 +207,25 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
     fecha_cancelacion: '',
     creado_por: 'bot_whatsapp',
   })
+
+  // Crear el cliente borrador para la CREMACIÓN posterior (queda "Por ingresar"
+  // en /clientes; se agendan ambos servicios). Best-effort: no bloquea la cotización.
+  try {
+    await crearClienteBorrador({
+      nombre_tutor: input.cliente_nombre,
+      nombre_mascota: input.mascota_nombre,
+      telefono: input.cliente_wa_id || input.cliente_telefono,
+      email: input.cliente_email,
+      direccion_retiro: input.direccion,
+      comuna: comunaCanon,
+      peso_declarado: input.peso,
+      codigo_servicio: input.tipo_servicio_cremacion,
+      origen: 'bot_eutanasia',
+      notas: `Cremación tras eutanasia a domicilio (cotización N° ${id}).`,
+    })
+  } catch (e) {
+    console.warn('[eutanasia-cotizaciones] no se pudo crear cliente borrador:', e)
+  }
 
   // Matchear vets que calzan y enviarles el correo.
   const vets = await getSheetData('vet_convenio_eutanasia')

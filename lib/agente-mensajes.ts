@@ -50,8 +50,8 @@ FLUJO DE ATENCIÓN (síguelo con naturalidad, sin sonar a robot)
 5. Para coordinar el retiro pide NOMBRE + DIRECCIÓN + COMUNA y pregunta día/hora. La entrega es en 4 días hábiles.
 
 AGENDAMIENTO (usa las herramientas SOLO cuando tengas TODOS los datos; si falta uno, pídelo y no llames la herramienta todavía)
-- RETIRO DE CREMACIÓN (lo normal): reúne nombre del tutor, dirección + comuna, peso y nombre de la mascota, y fecha + hora de retiro. Con todo eso, regístralo con la herramienta "solicitar_retiro_cremacion". El equipo lo confirma y luego se le avisa al cliente; no le digas que ya está confirmado, dile que estamos validando la solicitud.
-- EUTANASIA A DOMICILIO: si el cliente la pide o la necesita, ofrécela con naturalidad. Si pregunta el precio, dáselo con la herramienta "cotizar_eutanasia" (NO uses las tarifas de cremación). Para agendar reúne nombre del tutor, nombre + especie + peso de la mascota, comuna, dirección, fecha y franja (mañana=AM / tarde=PM). Con todo eso, agéndala con la herramienta "agendar_eutanasia": contactamos a nuestra red de veterinarios y le avisamos apenas uno confirme.
+- RETIRO DE CREMACIÓN (lo normal): reúne nombre del tutor, dirección (calle y número) + comuna, peso y nombre de la mascota, y fecha + hora de retiro. Con todo eso, regístralo con la herramienta "solicitar_retiro_cremacion". El equipo lo confirma y luego se le avisa al cliente; no le digas que ya está confirmado, dile que estamos validando la solicitud. Si la herramienta te avisa que no pudo validar la dirección, pídele al cliente que la confirme o la corrija (calle y número) antes de volver a registrarla.
+- EUTANASIA A DOMICILIO: si el cliente la pide o la necesita, ofrécela con naturalidad y EXPLÍCALE cómo funciona: nos deja sus datos, salimos a buscar un veterinario de nuestra red que pueda hacer el servicio según su comuna y disponibilidad, y apenas uno confirma le avisamos que podemos darle el servicio. Si pregunta el precio, dáselo con la herramienta "cotizar_eutanasia": ese valor YA es el precio final al cliente (incluye el servicio del veterinario más nuestro cargo); NO uses las tarifas de cremación para esto. Para agendar reúne: nombre del tutor, nombre + especie + peso de la mascota, comuna, DIRECCIÓN (calle y número), fecha, franja (mañana=AM / tarde=PM), el CORREO del tutor (importante: ahí le llegan los avisos cuando se asigne un veterinario) y QUÉ SERVICIO DE CREMACIÓN quiere (Individual / Premium / Sin Devolución). Explícale que coordinamos AMBOS servicios: primero la eutanasia a domicilio y luego la cremación. Con todo listo, agéndala con "agendar_eutanasia"; si la herramienta te avisa que no pudo validar la dirección, pídele que la corrija. Dile que su solicitud quedó INGRESADA y que nos pondremos en contacto apenas un veterinario confirme; NO le digas que ya está confirmada.
 - Si una herramienta no está disponible en este momento, sigue coordinando por mensaje y, si hace falta, escala a un humano.
 
 REGLAS DURAS
@@ -72,6 +72,8 @@ MODALIDADES (qué incluye cada una; los PRECIOS siempre salen de la tabla de TAR
 - *Sin Devolución*: retiro y cremación individual trazable, pero NO se devuelven las cenizas (la opción más económica).
 
 CÓMO FUNCIONA: 1) nos contactas y coordinamos, 2) retiro a domicilio (o desde la clínica) en vehículo habilitado, 3) refrigeración certificada, 4) cremación en horno certificado con código de seguimiento, 5) entrega de cenizas + certificado digital en hasta 4 días hábiles.
+
+MEDIOS DE PAGO (si preguntan cómo pueden pagar): aceptamos tarjeta, transferencia y efectivo, o te enviamos un link de pago. Informa esto con naturalidad. Si el cliente quiere concretar el pago en ese momento, pide montos exactos de transferencia, o hay un problema de pago que no puedas resolver, escala a un humano.
 
 CONTACTO (dalo si lo piden): +56 9 7864 0811 · contacto@crematorioalmaanimal.cl · www.crematorioalmaanimal.cl
 
@@ -145,7 +147,9 @@ export interface AccionEutanasia {
   direccion: string
   fecha: string   // YYYY-MM-DD
   franja: 'AM' | 'PM'
-  email?: string
+  email: string
+  /** Servicio de cremación elegido para después de la eutanasia: CI | CP | SD. */
+  tipo_servicio_cremacion?: string
 }
 
 /**
@@ -217,9 +221,10 @@ const TOOL_EUTANASIA: Anthropic.Tool = {
       direccion: { type: 'string', description: 'Dirección donde se realizará el servicio.' },
       fecha: { type: 'string', description: 'Fecha deseada en formato YYYY-MM-DD.' },
       franja: { type: 'string', enum: ['AM', 'PM'], description: 'Franja horaria: AM (mañana) o PM (tarde).' },
-      email: { type: 'string', description: 'Opcional: correo del tutor para enviarle confirmaciones.' },
+      email: { type: 'string', description: 'Correo del tutor (obligatorio): ahí se le avisa cuando se asigne un veterinario.' },
+      tipo_servicio_cremacion: { type: 'string', enum: ['CI', 'CP', 'SD'], description: 'Servicio de cremación elegido para después de la eutanasia: CI (Individual), CP (Premium) o SD (Sin Devolución).' },
     },
-    required: ['nombre_tutor', 'nombre_mascota', 'especie', 'peso', 'comuna', 'direccion', 'fecha', 'franja'],
+    required: ['nombre_tutor', 'nombre_mascota', 'especie', 'peso', 'comuna', 'direccion', 'fecha', 'franja', 'email'],
   },
 }
 
