@@ -238,6 +238,26 @@ function construirMensajes(historial: TurnoMensaje[]): Anthropic.MessageParam[] 
   return out
 }
 
+/**
+ * Bloque con la fecha actual en Chile para que el modelo resuelva fechas
+ * RELATIVAS ("hoy", "mañana", "el viernes") correctamente. Sin esto, al agendar
+ * el modelo inventaba la fecha (bug: "mañana" → 16-07-2025). Es dinámico (no se cachea).
+ */
+function bloqueFechaChile(): string {
+  const TZ = 'America/Santiago'
+  const ref = (offsetDias: number) => {
+    const d = new Date(Date.now() + offsetDias * 86400000)
+    const iso = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+    const dia = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, weekday: 'long' }).format(d)
+    return `${dia} ${iso}`
+  }
+  return `FECHA ACTUAL (Chile, America/Santiago):
+- Hoy es ${ref(0)}.
+- Mañana es ${ref(1)}.
+- Pasado mañana es ${ref(2)}.
+Resolvé SIEMPRE las fechas relativas que diga el cliente ("hoy", "mañana", "este viernes", etc.) en base a ESTO, y pásalas a las herramientas en formato YYYY-MM-DD. NUNCA inventes ni adivines la fecha ni el año. Si hay cualquier ambigüedad, confírmale al cliente la fecha concreta (DD-MM-YYYY) antes de agendar.`
+}
+
 /** Limpia el texto final del modelo (quita fences y desarma JSON heredado). */
 function limpiarTexto(text: string): string {
   const t = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
@@ -282,6 +302,8 @@ export async function generarRespuesta(
     cfg?.calibracion?.trim() && `GUÍA DE ESTILO APRENDIDA DE CONVERSACIONES REALES (orienta tono y respuestas; no contradice los precios ni las reglas duras):\n${cfg.calibracion.trim()}`,
   ].filter(Boolean).join('\n\n')
   if (ajustes) system.push({ type: 'text', text: ajustes })
+  // Fecha actual (dinámica, sin caché) → para resolver "mañana", "el viernes", etc.
+  system.push({ type: 'text', text: bloqueFechaChile() })
 
   const tools: Anthropic.Tool[] = [TOOL_ESCALAR]
   if (opts.handlers?.solicitarRetiro) tools.push(TOOL_RETIRO)
