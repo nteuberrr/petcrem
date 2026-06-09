@@ -75,7 +75,7 @@ const SERVICIOS = [
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [buscar, setBuscar] = useState('')
-  const [filtro, setFiltro] = useState<'todos' | 'pendiente' | 'cremado' | 'despachado' | 'pago_pendiente' | 'este_mes' | 'esta_semana' | 'datos_pendientes'>('todos')
+  const [filtro, setFiltro] = useState<'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado' | 'pago_pendiente' | 'este_mes' | 'esta_semana' | 'datos_pendientes'>('todos')
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [selected, setSelected] = useState<Cliente | null>(null)
@@ -266,6 +266,10 @@ export default function ClientesPage() {
     const ordenados = [...clientes].reverse()
 
     return ordenados.filter(c => {
+      // Borradores (creados por el bot, sin código aún): solo bajo "Por ingresar".
+      // En el resto de vistas se ocultan porque todavía no son fichas reales.
+      if (filtro === 'borrador') { if (c.estado !== 'borrador') return false }
+      else if (c.estado === 'borrador') return false
       // Filtro por categoría
       if (filtro === 'pendiente' && !(c.estado === 'pendiente' || !c.estado)) return false
       if (filtro === 'cremado' && c.estado !== 'cremado') return false
@@ -293,6 +297,8 @@ export default function ClientesPage() {
       return true
     })
   }, [buscar, filtro, clientes])
+
+  const nBorradores = useMemo(() => clientes.filter(c => c.estado === 'borrador').length, [clientes])
 
   function toggleAdicional(tipo: 'producto' | 'servicio', item: { id: string; nombre: string; precio: string }) {
     const existing = adicionales.find(a => a.tipo === tipo && a.id === item.id)
@@ -483,6 +489,7 @@ export default function ClientesPage() {
           <span className="text-xs font-semibold text-gray-600 mr-1">Filtrar:</span>
           {([
             { id: 'todos', label: 'Todos' },
+            { id: 'borrador', label: '🗂 Por ingresar' },
             { id: 'pendiente', label: '📥 Retirados (en cámara)' },
             { id: 'cremado', label: '✓ Cremados' },
             { id: 'despachado', label: '📦 Despachados' },
@@ -492,6 +499,7 @@ export default function ClientesPage() {
             { id: 'datos_pendientes', label: '📝 Datos pendientes' },
           ] as const).map(opt => {
             const active = filtro === opt.id
+            const esBorr = opt.id === 'borrador'
             return (
               <button
                 key={opt.id}
@@ -499,10 +507,12 @@ export default function ClientesPage() {
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
                   active
                     ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
-                    : 'bg-white border-gray-300 text-gray-700 hover:border-indigo-400 hover:bg-indigo-50'
+                    : esBorr && nBorradores > 0
+                      ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+                      : 'bg-white border-gray-300 text-gray-700 hover:border-indigo-400 hover:bg-indigo-50'
                 }`}
               >
-                {opt.label}
+                {opt.label}{esBorr && nBorradores > 0 ? ` (${nBorradores})` : ''}
               </button>
             )
           })}
@@ -529,19 +539,24 @@ export default function ClientesPage() {
               className="text-left bg-white rounded-xl shadow-md border-2 border-gray-200 hover:border-indigo-400 hover:shadow-lg p-4 transition-all"
             >
               <div className="flex items-start justify-between mb-2">
-                <span className="font-mono text-xs text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded">{c.codigo}</span>
-                <Badge variant={c.estado === 'cremado' ? 'green' : c.estado === 'despachado' ? 'blue' : 'yellow'}>{c.estado && c.estado !== 'pendiente' ? c.estado : 'retirado'}</Badge>
+                <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${c.codigo ? 'text-indigo-700 bg-indigo-50' : 'text-gray-400 bg-gray-100'}`}>{c.codigo || 'sin código'}</span>
+                <Badge variant={c.estado === 'cremado' ? 'green' : c.estado === 'despachado' ? 'blue' : 'yellow'}>{c.estado === 'borrador' ? 'Por ingresar' : c.estado && c.estado !== 'pendiente' ? c.estado : 'retirado'}</Badge>
               </div>
-              <p className="font-bold text-gray-900 text-base">{c.nombre_mascota}</p>
+              <p className="font-bold text-gray-900 text-base">{c.nombre_mascota || <span className="text-gray-400 italic">Sin nombre</span>}</p>
               <p className="text-sm text-gray-600">{c.nombre_tutor}</p>
               <div className="mt-3 flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-gray-500">{c.especie}</span>
+                <span className="text-xs text-gray-500">{c.especie || (c.estado === 'borrador' ? 'falta especie' : '')}</span>
                 <span className="text-gray-300">·</span>
                 <span className="text-xs text-gray-500">{fmtKg(parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado))}</span>
                 <span className="text-gray-300">·</span>
                 <span className="text-xs font-semibold text-gray-700">{c.codigo_servicio}</span>
               </div>
-              {c.estado_pago !== 'pagado' && (
+              {c.estado === 'borrador' && (
+                <p className="mt-2 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                  🗂 Completa la ficha para registrarla
+                </p>
+              )}
+              {c.estado !== 'borrador' && c.estado_pago !== 'pagado' && (
                 <p className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
                   ⚠ Pago pendiente
                 </p>

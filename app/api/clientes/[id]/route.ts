@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { getSheetData, updateRow, ensureColumns, deleteRow } from '@/lib/datastore'
 import { parseDecimal } from '@/lib/numbers'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
+import { generarCodigo } from '@/lib/codigo-generator'
+import { enviarRegistroMascota } from '@/lib/cliente-mailer'
 import { esAdmin } from '@/lib/roles'
 
 export async function GET(
@@ -102,7 +104,38 @@ export async function PATCH(
       precio_total: snapshot.precio_total,
       descuento_monto: String(snapshot.descuento_monto),
     }
+
+    // "Registrar" un borrador: cuando la ficha aún no tiene código (cliente
+    // creado por el bot, estado 'borrador') y el front pide registrar, genera el
+    // código, pasa a 'pendiente' y manda el correo de bienvenida al tutor.
+    const esBorrador = !String(rows[idx].codigo || '').trim() || rows[idx].estado === 'borrador'
+    let codigoGenerado = ''
+    if (body.registrar === true && esBorrador) {
+      const letra = String(candidate.letra_especie || '').trim()
+      if (!letra) {
+        return NextResponse.json({ error: 'Falta la especie: es necesaria para generar el código.' }, { status: 400 })
+      }
+      codigoGenerado = await generarCodigo(letra, String(candidate.codigo_servicio || 'CI'))
+      updated.codigo = codigoGenerado
+      if (!updated.estado || updated.estado === 'borrador') updated.estado = 'pendiente'
+    }
+
     await updateRow('clientes', idx, updated)
+
+    // Correo de bienvenida con el código, solo al registrar (best-effort).
+    if (codigoGenerado && String(updated.email || '').trim()) {
+      try {
+        await enviarRegistroMascota({
+          email: String(updated.email),
+          nombreMascota: String(updated.nombre_mascota || ''),
+          nombreTutor: String(updated.nombre_tutor || ''),
+          codigo: codigoGenerado,
+        })
+      } catch (e) {
+        console.warn('[clientes PATCH] fallo mail registro (no bloqueante):', e)
+      }
+    }
+
     return NextResponse.json(updated)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

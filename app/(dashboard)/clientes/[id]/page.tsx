@@ -393,7 +393,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     }
   }
 
-  async function handleSave() {
+  async function handleSave(opts?: { registrar?: boolean }) {
+    const registrar = opts?.registrar === true
     setSaving(true)
     // Calcular snapshot del descuento al momento de guardar.
     // Si no aplica descuento o el descuento ya no existe, limpiamos las columnas.
@@ -414,6 +415,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       descuento_tipo: desc ? desc.tipo : '',
       descuento_valor: desc ? String(parseFloat(desc.valor) || 0) : '',
       descuento_monto: desc ? String(monto) : '',
+      ...(registrar ? { registrar: true } : {}),
     }
     const res = await fetch(`/api/clientes/${id}`, {
       method: 'PATCH',
@@ -423,6 +425,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     if (res.ok) {
       const updated = await res.json()
       setCliente(updated)
+      if (registrar) alert(`Ficha registrada. Código generado: ${updated.codigo}. Le enviamos el correo al tutor.`)
+    } else {
+      const e = await res.json().catch(() => ({}))
+      alert(e?.error || 'No se pudo guardar la ficha.')
     }
     setSaving(false)
   }
@@ -562,17 +568,27 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         <span className="font-medium">Volver</span>
       </button>
 
+      {cliente.estado === 'borrador' && (
+        <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-bold text-amber-900">🗂 Ficha por ingresar</p>
+          <p className="text-xs text-amber-800 mt-0.5">
+            Esta ficha la creó el bot al agendar. Completa los datos que falten (especie, peso, fechas, datos de pago)
+            y presiona <strong>Registrar ficha</strong> para generar el código y enviarle el correo al tutor.
+          </p>
+        </div>
+      )}
+
       {/* Header limpio sobre fondo claro: borde lateral indigo + tipografía grande */}
       <div className="rounded-2xl bg-white border-2 border-gray-200 shadow-md overflow-hidden mb-6">
         <div className="border-l-4 border-indigo-600 px-6 py-6 sm:px-8 sm:py-7">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex-1 min-w-[260px]">
               <div className="flex items-center gap-2 flex-wrap mb-2">
-                <span className="font-mono text-xs text-indigo-700 font-bold bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded">{cliente.codigo}</span>
-                <Badge variant={estadoVariant}>{cliente.estado && cliente.estado !== 'pendiente' ? cliente.estado : 'retirado'}</Badge>
-                {cliente.estado_pago === 'pagado'
+                <span className={`font-mono text-xs font-bold px-2.5 py-1 rounded border ${cliente.codigo ? 'text-indigo-700 bg-indigo-50 border-indigo-200' : 'text-gray-400 bg-gray-100 border-gray-200'}`}>{cliente.codigo || 'sin código'}</span>
+                <Badge variant={estadoVariant}>{cliente.estado === 'borrador' ? 'Por ingresar' : cliente.estado && cliente.estado !== 'pendiente' ? cliente.estado : 'retirado'}</Badge>
+                {cliente.estado !== 'borrador' && (cliente.estado_pago === 'pagado'
                   ? <Badge variant="green">Pagado</Badge>
-                  : <Badge variant="yellow">Pago pendiente</Badge>}
+                  : <Badge variant="yellow">Pago pendiente</Badge>)}
                 {vetSeleccionada && <Badge variant="blue">{vetSeleccionada.nombre}</Badge>}
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 truncate">{cliente.nombre_mascota}</h1>
@@ -933,14 +949,33 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           />
         </div>
 
-        <div className="flex justify-end mt-5">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Guardando...' : 'Guardar cambios'}
-          </button>
+        <div className="flex justify-end gap-3 mt-5">
+          {(cliente.estado === 'borrador' || !cliente.codigo) ? (
+            <>
+              <button
+                onClick={() => handleSave()}
+                disabled={saving}
+                className="border-2 border-gray-300 text-gray-700 px-5 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Guardando...' : 'Guardar borrador'}
+              </button>
+              <button
+                onClick={() => handleSave({ registrar: true })}
+                disabled={saving}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Guardando...' : 'Registrar ficha'}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => handleSave()}
+              disabled={saving}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1059,7 +1094,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
             <div className="flex justify-end mt-4">
               <button
-                onClick={handleSave}
+                onClick={() => handleSave()}
                 disabled={saving}
                 className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
               >

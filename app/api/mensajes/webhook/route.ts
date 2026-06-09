@@ -8,6 +8,7 @@ import {
 import { isAgenteConfigurado, generarRespuesta } from '@/lib/agente-mensajes'
 import { handlersAgente } from '@/lib/agente-acciones'
 import { getSheetData, updateRow } from '@/lib/datastore'
+import { crearClienteBorrador } from '@/lib/cliente-borrador'
 import { formatDate } from '@/lib/dates'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 
@@ -139,6 +140,25 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
     estado: confirmado ? 'confirmada' : 'rechazada',
     fecha_resolucion: new Date().toISOString(),
   })
+
+  // Al confirmar: crear el cliente borrador en /clientes (queda "Por ingresar";
+  // el equipo completa la ficha y al "Registrar" se genera el código).
+  if (confirmado) {
+    try {
+      await crearClienteBorrador({
+        nombre_tutor: sol.cliente_nombre,
+        nombre_mascota: sol.nombre_mascota,
+        telefono: waCliente,
+        direccion_retiro: sol.direccion,
+        comuna: sol.comuna,
+        fecha_retiro: sol.fecha_retiro,
+        peso_declarado: sol.peso,
+        codigo_servicio: sol.tipo_servicio,
+        origen: 'bot_retiro',
+        notas: 'Creado desde una solicitud de retiro del bot de WhatsApp.',
+      })
+    } catch (e) { console.warn('[webhook] no se pudo crear cliente borrador:', e) }
+  }
 
   // Acuse al admin.
   await enviarTextoWhatsapp(
