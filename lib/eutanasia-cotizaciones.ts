@@ -7,6 +7,7 @@ import { formatDate, formatHoraDia } from './dates'
 import { nombreCompletoVet, renderCotizacionEmail } from './eutanasia-mailer'
 import { getContacto } from './email-layout'
 import { crearClienteBorrador } from './cliente-borrador'
+import { capitalizarNombre } from './nombres'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lógica compartida de cotizaciones de eutanasia: envío a vets + alta automática
@@ -177,10 +178,10 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
 
   await appendRow(SHEET_COTI, {
     id,
-    mascota_nombre: input.mascota_nombre,
+    mascota_nombre: capitalizarNombre(input.mascota_nombre),
     especie: input.especie,
     peso: String(input.peso),
-    cliente_nombre: input.cliente_nombre,
+    cliente_nombre: capitalizarNombre(input.cliente_nombre),
     cliente_telefono: cliTel,
     cliente_email: (input.cliente_email || '').trim().toLowerCase(),
     cliente_wa_id: (input.cliente_wa_id || '').replace(/\D/g, ''),

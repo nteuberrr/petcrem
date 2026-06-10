@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSheetData, appendRow, updateRow, getNextId, deleteRow } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
+import { capitalizarNombre } from '@/lib/nombres'
 
 const VetSchema = z.object({
   nombre: z.string().min(1),
@@ -35,6 +36,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const data = VetSchema.parse(body)
+    data.nombre = capitalizarNombre(data.nombre)
+    if (data.nombre_contacto) data.nombre_contacto = capitalizarNombre(data.nombre_contacto)
     const id = await getNextId('veterinarios')
     const now = todayISO()
     const row = { id, ...data, activo: 'TRUE', fecha_creacion: now }
@@ -64,6 +67,8 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
     const { id, ...updates } = body
+    if (typeof updates.nombre === 'string') updates.nombre = capitalizarNombre(updates.nombre)
+    if (typeof updates.nombre_contacto === 'string') updates.nombre_contacto = capitalizarNombre(updates.nombre_contacto)
     const rows = await getSheetData('veterinarios')
     const idx = rows.findIndex((r) => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })

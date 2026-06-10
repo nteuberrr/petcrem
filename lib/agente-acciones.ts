@@ -5,6 +5,7 @@ import { formatDate, todayISO } from './dates'
 import { fmtPrecio } from './format'
 import { precioClienteEutanasia } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
+import { capitalizarNombre } from './nombres'
 import type { HandlersAgente, AccionRetiro, AccionEutanasia, AccionCotizarEutanasia, CtxAgente } from './agente-mensajes'
 
 /**
@@ -43,6 +44,8 @@ const COLS_RETIRO = [
 ]
 
 async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string> {
+  a.nombre_tutor = capitalizarNombre(a.nombre_tutor)
+  a.nombre_mascota = capitalizarNombre(a.nombre_mascota)
   if (!(await direccionValida(a.direccion, a.comuna))) {
     return `No pude validar la dirección "${a.direccion}, ${a.comuna}". Pídele al cliente que la confirme o la corrija (calle y número) y vuelve a registrarla. NO la registres aún.`
   }
@@ -110,6 +113,8 @@ async function cotizarEutanasia(a: AccionCotizarEutanasia): Promise<string> {
 
 /** Crea la cotización de eutanasia, matchea la red de vets y les envía el correo. */
 async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<string> {
+  a.nombre_tutor = capitalizarNombre(a.nombre_tutor)
+  a.nombre_mascota = capitalizarNombre(a.nombre_mascota)
   const peso = Number(a.peso)
   if (!Number.isFinite(peso) || peso <= 0) {
     return 'Falta el peso de la mascota para agendar la eutanasia. Pídeselo al cliente.'

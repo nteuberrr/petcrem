@@ -6,6 +6,7 @@ import { parseDecimal } from '@/lib/numbers'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota } from '@/lib/cliente-mailer'
+import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
 
 export async function GET(
@@ -75,6 +76,10 @@ export async function PATCH(
     // Normalizar teléfono: solo dígitos, máximo 9
     if (typeof normalizedBody.telefono === 'string') {
       normalizedBody.telefono = normalizedBody.telefono.replace(/\D/g, '').slice(-9)
+    }
+    // Nombres en Tipo Título (se usan tal cual en correos/certificados).
+    for (const k of ['nombre_mascota', 'nombre_tutor']) {
+      if (typeof normalizedBody[k] === 'string') normalizedBody[k] = capitalizarNombre(normalizedBody[k])
     }
 
     const candidate = { ...rows[idx], ...normalizedBody }

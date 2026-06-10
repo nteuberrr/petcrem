@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { buscarComuna } from '@/lib/comunas'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
+import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
 
 const SHEET = 'cotizaciones_eutanasia'
@@ -110,10 +111,10 @@ export async function POST(req: NextRequest) {
     const ahora = nowISO()
     const row = {
       id,
-      mascota_nombre: mascota,
+      mascota_nombre: capitalizarNombre(mascota),
       especie,
       peso: String(peso),
-      cliente_nombre: cliNombre,
+      cliente_nombre: capitalizarNombre(cliNombre),
       cliente_telefono: cliTel,
       cliente_email: cliEmail,
       direccion,

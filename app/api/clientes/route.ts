@@ -5,6 +5,7 @@ import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota } from '@/lib/cliente-mailer'
 import { todayISO } from '@/lib/dates'
 import { calcularSnapshotFicha, type AdicionalItem } from '@/lib/price-calculator'
+import { capitalizarNombre } from '@/lib/nombres'
 
 const ClienteSchema = z.object({
   nombre_mascota: z.string().min(1, 'Nombre de mascota requerido'),
@@ -60,6 +61,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const data = ClienteSchema.parse(body)
+    // Nombres siempre en Tipo Título (se usan tal cual en correos/certificados).
+    data.nombre_mascota = capitalizarNombre(data.nombre_mascota)
+    data.nombre_tutor = capitalizarNombre(data.nombre_tutor)
     await ensureColumns('clientes', [
       'email', 'telefono',
       'veterinaria_id', 'adicionales', 'tipo_precios',

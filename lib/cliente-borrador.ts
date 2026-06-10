@@ -1,5 +1,6 @@
 import { appendRow, getNextId, ensureColumns } from './datastore'
 import { todayISO } from './dates'
+import { capitalizarNombre } from './nombres'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cliente "borrador" (estado='borrador', sin código). Lo crea el bot al agendar
@@ -36,8 +37,8 @@ export async function crearClienteBorrador(d: BorradorInput): Promise<string> {
   await appendRow('clientes', {
     id,
     codigo: '',
-    nombre_mascota: d.nombre_mascota ?? '',
-    nombre_tutor: d.nombre_tutor ?? '',
+    nombre_mascota: capitalizarNombre(d.nombre_mascota),
+    nombre_tutor: capitalizarNombre(d.nombre_tutor),
     email: d.email ?? '',
     telefono: tel,
     direccion_retiro: dir,

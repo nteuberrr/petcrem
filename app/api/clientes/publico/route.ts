@@ -5,6 +5,7 @@ import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota } from '@/lib/cliente-mailer'
 import { todayISO } from '@/lib/dates'
 import { calcularSnapshotFicha } from '@/lib/price-calculator'
+import { capitalizarNombre } from '@/lib/nombres'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Registro PÚBLICO de mascota (formulario auto-atención del tutor).
@@ -56,6 +57,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const data = RegistroPublicoSchema.parse(body)
+    data.nombre_mascota = capitalizarNombre(data.nombre_mascota)
+    data.nombre_tutor = capitalizarNombre(data.nombre_tutor)
     await ensureColumns('clientes', [
       'email', 'telefono',
       'veterinaria_id', 'adicionales', 'tipo_precios',
