@@ -4,9 +4,10 @@ import {
   buildRegistro, buildCremacion, buildDespacho, buildEntrega, buildCertificado,
 } from './cliente-mailer'
 import {
-  nombreCompletoVet, renderBienvenida, renderCotizacionEmail, renderCoordinarEmail,
+  renderBienvenida, renderCotizacionEmail, renderCoordinarEmail,
   renderRealizarServicio, renderAgradecimiento, renderClienteVetAsignado,
 } from './eutanasia-mailer'
+import { renderInformeFacturacionEmail } from './informe-mailer'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Catálogo central de TODOS los correos transaccionales. Es la única fuente para
@@ -109,21 +110,7 @@ export const CORREOS: CorreoDef[] = [
     build: (m, c) => pick(buildCertificado({ email: m.email, nombreMascota: m.nombreMascota, nombreTutor: m.nombreTutor, fechaCremacion: m.fechaCremacion, conVideo: false }, c)),
   },
 
-  // ── Eutanasias a domicilio ──────────────────────────────────────────────────
-  {
-    key: 'eutanasia_cliente_vet_asignado',
-    titulo: 'Aviso al tutor: un veterinario tomó el caso',
-    modulo: 'Eutanasias',
-    audiencia: 'Tutor',
-    cuando: 'Cuando un vet acepta la cotización.',
-    build: (m, c) => ({
-      subject: `Un veterinario confirmó la atención de ${m.nombreMascota}`,
-      html: renderClienteVetAsignado({
-        clienteEmail: m.email, clienteNombre: m.nombreTutor, mascotaNombre: m.nombreMascota,
-        vetNombre: VET_MUESTRA, vetTelefono: VET_TEL_MUESTRA, fechaServicio: m.fechaCremacion, horaServicio: '16:00',
-      }, c),
-    }),
-  },
+  // ── Eutanasias a domicilio (en orden del flujo) ──────────────────────────────
   {
     key: 'eutanasia_bienvenida_vet',
     titulo: 'Bienvenida al veterinario del convenio',
@@ -148,6 +135,20 @@ export const CORREOS: CorreoDef[] = [
         html: renderCotizacionEmail({ vetNombre: VET_MUESTRA, c: cot, linkAceptar: '#', linkDatosPago: '#', contacto: c }),
       }
     },
+  },
+  {
+    key: 'eutanasia_cliente_vet_asignado',
+    titulo: 'Aviso al tutor: un veterinario tomó el caso',
+    modulo: 'Eutanasias',
+    audiencia: 'Tutor',
+    cuando: 'Cuando un vet acepta la cotización (en paralelo se le avisa al tutor).',
+    build: (m, c) => ({
+      subject: `Un veterinario confirmó la atención de ${m.nombreMascota}`,
+      html: renderClienteVetAsignado({
+        clienteEmail: m.email, clienteNombre: m.nombreTutor, mascotaNombre: m.nombreMascota,
+        vetNombre: VET_MUESTRA, vetTelefono: VET_TEL_MUESTRA, fechaServicio: m.fechaCremacion, horaServicio: '16:00',
+      }, c),
+    }),
   },
   {
     key: 'eutanasia_coordinar',
@@ -188,6 +189,24 @@ export const CORREOS: CorreoDef[] = [
         cotizacion: { id: '0', mascota_nombre: m.nombreMascota, precio_snapshot: '70000' },
         fechaRealizacionISO: todayISO(),
       }, c),
+    }),
+  },
+
+  // ── Veterinarias (facturación) ───────────────────────────────────────────────
+  {
+    key: 'vet_informe_facturacion',
+    titulo: 'Informe de facturación (adjunta xlsx/pdf)',
+    modulo: 'Veterinarias',
+    audiencia: 'Veterinario',
+    cuando: 'Al enviar el informe de facturación a la veterinaria.',
+    build: (m, c) => ({
+      subject: 'Informe de facturación — Veterinaria San Francisco',
+      html: renderInformeFacturacionEmail({
+        nombreVet: 'Veterinaria San Francisco',
+        nombreContacto: VET_MUESTRA,
+        periodoHasta: m.fechaCremacion,
+        contacto: c,
+      }),
     }),
   },
 ]

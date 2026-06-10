@@ -13,17 +13,28 @@ export default function CorreosConfig() {
   const [subject, setSubject] = useState<string>('')
   const [cargandoPreview, setCargandoPreview] = useState(false)
   const [enviando, setEnviando] = useState(false)
+  const [enviandoTodos, setEnviandoTodos] = useState(false)
+  const [actualizando, setActualizando] = useState(false)
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'error'; msg: string } | null>(null)
 
-  useEffect(() => {
-    fetch('/api/correos').then(r => r.json()).then(d => {
+  const cargarLista = useCallback(async (opts?: { aviso?: boolean }) => {
+    setActualizando(true)
+    try {
+      const d = await fetch('/api/correos', { cache: 'no-store' }).then(r => r.json())
       const list: CorreoMeta[] = Array.isArray(d?.correos) ? d.correos : []
       setCorreos(list)
       setMuestra(d?.muestra ?? null)
       setSeguimiento(d?.seguimiento ?? '')
-      if (list.length > 0) setSel(list[0].key)
-    }).catch(() => {})
+      setSel(prev => prev || (list[0]?.key ?? ''))
+      if (opts?.aviso) setFeedback({ kind: 'ok', msg: `Lista actualizada — ${list.length} correos en el catálogo.` })
+    } catch {
+      if (opts?.aviso) setFeedback({ kind: 'error', msg: 'No se pudo actualizar la lista.' })
+    } finally {
+      setActualizando(false)
+    }
   }, [])
+
+  useEffect(() => { queueMicrotask(() => cargarLista()) }, [cargarLista])
 
   const cargarPreview = useCallback(async (key: string) => {
     setCargandoPreview(true)
@@ -69,21 +80,65 @@ export default function CorreosConfig() {
     }
   }
 
+  async function enviarTodos() {
+    if (!seguimiento || correos.length === 0) return
+    if (!confirm(`Se enviará una copia de los ${correos.length} correos del catálogo a ${seguimiento}, con datos del último cliente. ¿Continuar?`)) return
+    setEnviandoTodos(true)
+    setFeedback(null)
+    try {
+      const r = await fetch('/api/correos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok) {
+        setFeedback({
+          kind: d.fallidos ? 'error' : 'ok',
+          msg: `Se enviaron ${d.enviados}/${d.total} correos a ${d.to}${d.fallidos ? ` · ${d.fallidos} fallaron` : ''}.`,
+        })
+      } else setFeedback({ kind: 'error', msg: d.error || 'No se pudieron enviar los correos' })
+    } catch {
+      setFeedback({ kind: 'error', msg: 'Error de red al enviar los correos' })
+    } finally {
+      setEnviandoTodos(false)
+    }
+  }
+
   const seleccionado = correos.find(c => c.key === sel)
 
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-lg font-bold text-gray-900">Correos</h2>
-        <p className="text-sm text-gray-600 mt-0.5">
-          Todos los correos que enviamos, agrupados por módulo. Previsualízalos acá y envía una prueba
-          {seguimiento ? <> a <span className="font-mono text-gray-800">{seguimiento}</span></> : ' al correo de seguimiento'}.
-        </p>
-        {!seguimiento && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
-            No hay correo de seguimiento configurado. Defínelo en Configuración → Mantenimiento para poder enviar pruebas.
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold text-gray-900">Correos</h2>
+          <p className="text-sm text-gray-600 mt-0.5">
+            Todos los correos que enviamos, agrupados por módulo. Previsualízalos acá y envía pruebas
+            {seguimiento ? <> a <span className="font-mono text-gray-800">{seguimiento}</span></> : ' al correo de seguimiento'}.
           </p>
-        )}
+          {!seguimiento && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+              No hay correo de seguimiento configurado. Defínelo más abajo en esta sección para poder enviar pruebas.
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => cargarLista({ aviso: true })}
+            disabled={actualizando}
+            className="border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 px-3 py-2 rounded-lg text-sm font-semibold"
+            title="Volver a leer el catálogo (por si saliste un deploy con correos nuevos)"
+          >
+            {actualizando ? '⌛' : '↻'} Actualizar
+          </button>
+          <button
+            onClick={enviarTodos}
+            disabled={enviandoTodos || !seguimiento || correos.length === 0}
+            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-sm font-semibold shadow-sm"
+            title={!seguimiento ? 'Configura el correo de seguimiento primero' : `Enviar una copia de los ${correos.length} correos a ${seguimiento}`}
+          >
+            {enviandoTodos ? '⌛ Enviando…' : `📨 Enviar todos (${correos.length})`}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4">

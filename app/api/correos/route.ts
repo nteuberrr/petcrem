@@ -77,11 +77,34 @@ export async function POST(req: NextRequest) {
     }
     const body = await req.json().catch(() => ({}))
     const key = String(body.key || '')
+    const all = body.all === true
     const seguimiento = await getEmailSeguimiento()
     if (!seguimiento) {
-      return NextResponse.json({ error: 'No hay correo de seguimiento configurado (Configuración → Mantenimiento).' }, { status: 400 })
+      return NextResponse.json({ error: 'No hay correo de seguimiento configurado (defínelo más abajo en esta sección).' }, { status: 400 })
     }
     const [muestra, contacto] = await Promise.all([construirMuestra(), getContacto()])
+
+    // Enviar TODO el catálogo: una copia de cada correo (con datos del último
+    // cliente) al correo de seguimiento.
+    if (all) {
+      const lista = listarCorreos()
+      let enviados = 0
+      let fallidos = 0
+      for (const def of lista) {
+        const r = renderCorreo(def.key, muestra, contacto)
+        if (!r) { fallidos++; continue }
+        const res = await sendEmail({
+          to: seguimiento,
+          subject: `[PRUEBA] ${r.subject}`,
+          html: r.html,
+          preview_text: `Prueba del correo "${def.key}".`,
+          tags: [{ name: 'tipo', value: 'correo_prueba' }],
+        })
+        if (res.ok) enviados++; else fallidos++
+      }
+      return NextResponse.json({ ok: true, all: true, enviados, fallidos, total: lista.length, to: seguimiento })
+    }
+
     const r = renderCorreo(key, muestra, contacto)
     if (!r) return NextResponse.json({ error: 'Correo no encontrado' }, { status: 404 })
 
