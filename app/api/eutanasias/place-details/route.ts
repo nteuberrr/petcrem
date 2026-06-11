@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
       lng: j.location?.longitude ?? null,
     })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error('[eutanasias/place-details]', e)
+    return NextResponse.json({ error: 'No se pudo obtener la dirección. Intenta nuevamente.' }, { status: 500 })
   }
 }

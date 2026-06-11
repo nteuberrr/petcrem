@@ -31,7 +31,8 @@ export async function GET() {
       .map((e) => ({ id: e.id, nombre: e.nombre, letra: e.letra }))
     return NextResponse.json({ especies, tramos })
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    console.error('[clientes/publico GET]', e)
+    return NextResponse.json({ error: 'No se pudo cargar la información. Intenta nuevamente.' }, { status: 500 })
   }
 }
 
@@ -142,6 +143,7 @@ export async function POST(req: NextRequest) {
     if (e instanceof z.ZodError) {
       return NextResponse.json({ error: e.issues[0]?.message ?? 'Datos inválidos' }, { status: 400 })
     }
-    return NextResponse.json({ error: String(e) }, { status: 400 })
+    console.error('[clientes/publico POST]', e)
+    return NextResponse.json({ error: 'No se pudo completar el registro. Revisa los datos e intenta nuevamente.' }, { status: 400 })
   }
 }

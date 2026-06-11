@@ -60,6 +60,13 @@ export interface SendOpts {
   tracking?: TrackingIds
   /** Adjuntos via URL pública (R2). */
   attachments?: AttachmentSpec[]
+  /**
+   * Si es true, NO se agrega el BCC de "seguimiento en vivo" a este envío.
+   * Úsalo en correos con adjuntos sensibles o pesados (certificado con video,
+   * informe de facturación de un vet) para no filtrar PII de terceros ni
+   * duplicar archivos grandes a la casilla de seguimiento.
+   */
+  noBcc?: boolean
 }
 
 /**
@@ -181,7 +188,7 @@ export async function sendEmail(opts: SendOpts): Promise<SendResult> {
   try {
     const client = getClient()
     const html = prepararHtml(opts)
-    const bcc = await getSeguimientoBcc()
+    const bcc = opts.noBcc ? null : await getSeguimientoBcc()
     const res = await client.emails.send({
       from: opts.from || getFromAddress(),
       to: opts.to,

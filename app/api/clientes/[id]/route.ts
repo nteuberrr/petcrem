@@ -125,7 +125,26 @@ export async function PATCH(
       if (!updated.estado || updated.estado === 'borrador') updated.estado = 'pendiente'
     }
 
-    await updateRow('clientes', idx, updated)
+    // Escribir. generarCodigo hace max+1 (no atómico): dos registros simultáneos
+    // de la misma especie podrían generar el mismo código. Si existe el índice
+    // único de `clientes.codigo` (ver supabase/schema-principal.sql), el segundo
+    // write choca; lo detectamos, regeneramos y reintentamos. Sin el índice no
+    // hay conflicto → este loop corre una sola vez.
+    let intentosCodigo = 0
+    for (;;) {
+      try {
+        await updateRow('clientes', idx, updated)
+        break
+      } catch (e) {
+        const msg = String(e).toLowerCase()
+        const choqueCodigo = !!codigoGenerado && intentosCodigo < 3 &&
+          (msg.includes('duplicate') || msg.includes('unique')) && msg.includes('codigo')
+        if (!choqueCodigo) throw e
+        intentosCodigo++
+        codigoGenerado = await generarCodigo(String(candidate.letra_especie || '').trim(), String(candidate.codigo_servicio || 'CI'))
+        updated.codigo = codigoGenerado
+      }
+    }
 
     // Correo de bienvenida con el código, solo al registrar (best-effort).
     if (codigoGenerado && String(updated.email || '').trim()) {
@@ -153,7 +172,8 @@ export async function PATCH(
  * Antes de borrar la fila, limpia las referencias cruzadas para no dejar datos huérfanos:
  *  - Devuelve al stock las unidades de productos adicionales que la ficha estaba consumiendo.
  *  - Quita el id del cliente de la lista `mascotas_ids` del ciclo asociado (si tenía uno).
- *  - Quita el id del cliente de la lista `paradas_ids` del despacho asociado (si tenía uno).
+ *  - Quita el id del cliente del despacho asociado: columnas JSON `mascotas_ids`,
+ *    `paradas` y `entregas` (regenerando el orden de las paradas restantes).
  */
 export async function DELETE(
   _req: NextRequest,
@@ -197,19 +217,36 @@ export async function DELETE(
       }
     }
 
-    // 3) Limpiar referencia en el despacho (si tenía uno)
+    // 3) Limpiar referencia en el despacho (si tenía uno). Las tres listas son
+    // JSON (no CSV): mascotas_ids [array], paradas [array de {cliente_id,…}],
+    // entregas {por cliente}. Quitamos la mascota de las tres y reordenamos las
+    // paradas restantes (mismo formato que despachos POST/PATCH).
     if (cliente.despacho_id) {
       try {
         const despachos = await getSheetData('despachos')
         const didx = despachos.findIndex(d => d.id === cliente.despacho_id)
         if (didx !== -1) {
           const desp = despachos[didx]
-          const idsRaw = (desp.paradas_ids ?? desp.mascotas_ids ?? '').toString()
-          const idsArr = idsRaw.split(',').map(s => s.trim()).filter(Boolean)
-          if (idsArr.includes(id)) {
-            const filtrados = idsArr.filter(x => x !== id)
-            const colKey = desp.paradas_ids !== undefined ? 'paradas_ids' : 'mascotas_ids'
-            await updateRow('despachos', didx, { ...desp, [colKey]: filtrados.join(',') })
+          const mascotasIds = parseJsonSafe<string[]>(desp.mascotas_ids, [])
+          const paradas = parseJsonSafe<Parada[]>(desp.paradas, [])
+          const entregas = parseJsonSafe<Record<string, { fecha_hora: string }>>(desp.entregas, {})
+          const estaReferenciado =
+            mascotasIds.some(m => String(m) === id) ||
+            paradas.some(p => String(p.cliente_id) === id) ||
+            entregas[id] !== undefined
+          if (estaReferenciado) {
+            const nuevasMascotas = mascotasIds.filter(m => String(m) !== id)
+            const nuevasParadas = paradas
+              .filter(p => String(p.cliente_id) !== id)
+              .map((p, i) => ({ ...p, orden: i + 1 }))
+            const nuevasEntregas: Record<string, { fecha_hora: string }> = {}
+            for (const [k, v] of Object.entries(entregas)) if (k !== id) nuevasEntregas[k] = v
+            await updateRow('despachos', didx, {
+              ...desp,
+              mascotas_ids: JSON.stringify(nuevasMascotas),
+              paradas: JSON.stringify(nuevasParadas),
+              entregas: JSON.stringify(nuevasEntregas),
+            })
           }
         }
       } catch (err) {
@@ -226,10 +263,16 @@ export async function DELETE(
 }
 
 type AdicionalItem = { tipo: string; id: string; qty?: number }
+type Parada = { cliente_id: string; orden?: number; lat?: number; lng?: number; direccion?: string }
 
 function parseAdicionales(raw: string | undefined): AdicionalItem[] {
   if (!raw) return []
   try { return JSON.parse(raw) } catch { return [] }
+}
+
+/** Parseo JSON tolerante: devuelve fallback si el valor está vacío o no es JSON. */
+function parseJsonSafe<T>(raw: string | undefined, fallback: T): T {
+  try { const x = JSON.parse(raw || ''); return (x ?? fallback) as T } catch { return fallback }
 }
 
 async function adjustProductStock(

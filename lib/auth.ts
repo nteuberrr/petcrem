@@ -1,6 +1,18 @@
+import crypto from 'crypto'
+import bcrypt from 'bcryptjs'
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import { getSheetData } from '@/lib/datastore'
+import { getSheetData, updateById } from '@/lib/datastore'
+import { normalizarRol } from '@/lib/roles'
+
+const BCRYPT_RE = /^\$2[aby]\$/
+
+/** Comparación timing-safe; el sha256 previo evita el throw de timingSafeEqual con largos distintos. */
+function safeEqual(a: string, b: string): boolean {
+  const ha = crypto.createHash('sha256').update(a).digest()
+  const hb = crypto.createHash('sha256').update(b).digest()
+  return crypto.timingSafeEqual(ha, hb)
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -11,23 +23,43 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Contraseña', type: 'password' },
       },
       async authorize(credentials) {
+        const email = credentials?.email ?? ''
+        const password = credentials?.password ?? ''
+        if (!email || !password) return null
         // Admin from env always works
         if (
-          credentials?.email === process.env.ADMIN_EMAIL &&
-          credentials?.password === process.env.ADMIN_PASSWORD
+          process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD &&
+          email === process.env.ADMIN_EMAIL &&
+          safeEqual(password, process.env.ADMIN_PASSWORD)
         ) {
-          return { id: '0', name: 'Administrador', email: credentials!.email, role: 'admin' }
+          return { id: '0', name: 'Administrador', email, role: 'admin' }
         }
         // Check usuarios sheet
         try {
           const usuarios = await getSheetData('usuarios')
-          const u = usuarios.find(
-            u => u.email === credentials?.email &&
-                 u.password === credentials?.password &&
-                 u.activo === 'TRUE'
-          )
-          if (u) return { id: u.id, name: u.nombre, email: u.email, role: u.rol ?? 'operador' }
-        } catch {}
+          const u = usuarios.find(u => u.email === email && u.activo === 'TRUE')
+          if (u && u.password) {
+            const esHash = BCRYPT_RE.test(u.password)
+            const ok = esHash
+              ? bcrypt.compareSync(password, u.password)
+              : safeEqual(password, u.password)
+            if (ok) {
+              if (!esHash) {
+                // Re-hash on-login de passwords legacy en texto plano; best-effort, nunca bloquea el login
+                try {
+                  await updateById('usuarios', u.id, { ...u, password: bcrypt.hashSync(password, 10) })
+                } catch (e) {
+                  console.error('[auth] no se pudo re-hashear password legacy:', e)
+                }
+              }
+              // normalizarRol: una celda 'rol' vacía/desconocida cae a 'operador'
+              // (no a '' que el proxy dejaría pasar). Las celdas vacías llegan como ''.
+              return { id: u.id, name: u.nombre, email: u.email, role: normalizarRol(u.rol) }
+            }
+          }
+        } catch (e) {
+          console.error('[auth] error consultando usuarios:', e)
+        }
         return null
       },
     }),

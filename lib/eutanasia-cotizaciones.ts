@@ -81,8 +81,23 @@ export async function enviarCotizacionAVets(opts: {
   await ensureSheet(SHEET_ENVIOS)
   await ensureColumns(SHEET_ENVIOS, COLS_ENVIOS)
 
+  // Idempotencia: no reenviar a un vet que ya recibió ESTA cotización con éxito
+  // (evita correos y filas de envío duplicados si se llama dos veces, o si el
+  // match automático se solapa con un envío manual previo). Un envío anterior
+  // con estado 'error' SÍ se reintenta.
+  const enviosPrevios = await getSheetData(SHEET_ENVIOS)
+  const yaEnviados = new Set(
+    enviosPrevios
+      .filter(e => String(e.cotizacion_id) === String(c.id) && (e.estado_envio || '') !== 'error')
+      .map(e => String(e.vet_id)),
+  )
+  const vetsAEnviar = vetsSeleccionados.filter(v => !yaEnviados.has(String(v.id)))
+  if (vetsAEnviar.length === 0) {
+    return { enviados: 0, fallidos: 0, total: 0 }
+  }
+
   const contacto = await getContacto()
-  const emails = vetsSeleccionados.map(v => {
+  const emails = vetsAEnviar.map(v => {
     const token = createToken(c.id, v.id, 'aceptar')
     const linkAceptar = `${baseUrl}/eutanasia/aceptar/${token}`
     const tieneDatosPago = (v.datos_pago_completos ?? '').toUpperCase() === 'TRUE'
@@ -106,8 +121,8 @@ export async function enviarCotizacionAVets(opts: {
   const ahora = new Date().toISOString()
   let okCount = 0
   let failCount = 0
-  for (let i = 0; i < vetsSeleccionados.length; i++) {
-    const v = vetsSeleccionados[i]
+  for (let i = 0; i < vetsAEnviar.length; i++) {
+    const v = vetsAEnviar[i]
     const r = results[i]
     if (r.ok) okCount++; else failCount++
     const envioId = await getNextId(SHEET_ENVIOS)
@@ -130,7 +145,7 @@ export async function enviarCotizacionAVets(opts: {
     await updateRow(SHEET_COTI, idxCot, { ...c, ...partial })
   }
 
-  return { enviados: okCount, fallidos: failCount, total: vetsSeleccionados.length }
+  return { enviados: okCount, fallidos: failCount, total: vetsAEnviar.length }
 }
 
 export interface AgendarEutInput {

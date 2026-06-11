@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
-import { esApiAvanzada } from '@/lib/roles'
+import { esApiAvanzada, normalizarRol } from '@/lib/roles'
 
 // Rutas permitidas para rol 'operador'. Todo lo demás en el dashboard es solo admin.
 const OPERADOR_ALLOWED = ['/dashboard', '/clientes', '/operaciones', '/asistencia']
@@ -65,7 +65,9 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  const role = (token.role as string) ?? 'operador'
+  // normalizarRol: cualquier rol vacío/desconocido cae a 'operador' (el menos
+  // privilegiado) — antes un role '' caía al passthrough final = acceso total.
+  const role = normalizarRol(token.role)
 
   // Admin (1) tiene acceso total
   if (role === 'admin') return NextResponse.next()
@@ -92,7 +94,7 @@ export async function proxy(req: NextRequest) {
         '/api/vehiculo', '/api/despachos',
         '/api/especies', '/api/servicios', '/api/productos',
         '/api/veterinarios', '/api/precios', '/api/descuentos', '/api/upload',
-        '/api/init-sheets', '/api/places',
+        '/api/places',
         '/api/asistencia', '/api/jornada-config', '/api/retiros-adicionales',
       ]
       if (allowedApis.some(p => pathname.startsWith(p))) return NextResponse.next()

@@ -1,4 +1,5 @@
 import { getSheetData, ensureSheet, ensureColumns, appendRow, updateRow } from './datastore'
+import { findTramo } from './tramos'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Precios del servicio de eutanasia a domicilio.
@@ -32,24 +33,6 @@ function num(v: unknown): number {
 
 type TramoEut = { peso_min: string; peso_max: string; precio: string }
 
-/** Tramo aplicable con regla de borde hacia arriba (ver price-calculator). */
-function findTramoEut(tabla: TramoEut[], peso: number): TramoEut | null {
-  if (!tabla.length || !Number.isFinite(peso) || peso <= 0) return null
-  let maxMin = -Infinity
-  let tramoTope: TramoEut | null = null
-  for (const t of tabla) {
-    const min = num(t.peso_min)
-    if (min > maxMin) { maxMin = min; tramoTope = t }
-  }
-  if (tramoTope && peso >= maxMin) return tramoTope
-  for (const t of tabla) {
-    const min = num(t.peso_min)
-    const max = num(t.peso_max)
-    if (peso >= min && peso < max) return t
-  }
-  return null
-}
-
 /** Lee el cargo fijo configurado (0 si no hay config o la hoja no existe). */
 export async function getFijoEutanasia(): Promise<number> {
   try {
@@ -78,7 +61,7 @@ export async function setFijoEutanasia(fijo: number): Promise<void> {
 /** Precio que se le paga al vet para un peso dado (0 si no hay tramo). */
 export async function precioVetEutanasia(peso: number): Promise<number> {
   const rows = (await getSheetData(SHEET_PRECIOS)) as unknown as TramoEut[]
-  const tramo = findTramoEut(rows, peso)
+  const tramo = findTramo(rows, peso)
   return tramo ? num(tramo.precio) : 0
 }
 

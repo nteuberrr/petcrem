@@ -1,5 +1,6 @@
 import { getSheetData } from './datastore'
 import { PrecioTramo } from '@/types'
+import { findTramo, precioDelTramo, numTramo as num } from './tramos'
 
 export async function calcularPrecio(
   peso: number,
@@ -24,9 +25,8 @@ export async function calcularPrecio(
     }))
   }
 
-  // Regla de borde: en el límite exacto entre dos tramos se usa el tramo MAYOR
-  // (intervalos [min, max) ), con fallback al tramo tope cuando el peso lo iguala
-  // o supera. Ver findTramo() más abajo y la nota en CLAUDE.md.
+  // Regla de borde canónica (intervalos [min, max), límite → tramo MAYOR):
+  // findTramo vive en lib/tramos (helper único compartido). Ver nota en CLAUDE.md.
   const tramo = findTramo(tramos as unknown as TramoRaw[], peso) as unknown as PrecioTramo | null
 
   if (!tramo) return 0
@@ -67,42 +67,6 @@ export interface PrecioSnapshot {
   precio_total: number
   descuento_monto: number
   tipo_precios_efectivo: 'general' | 'convenio' | 'especial'
-}
-
-function num(v: unknown): number {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
-  if (typeof v === 'string') {
-    const n = parseFloat(v.replace(',', '.'))
-    return Number.isFinite(n) ? n : 0
-  }
-  return 0
-}
-
-function findTramo(tabla: TramoRaw[], peso: number): TramoRaw | null {
-  if (!tabla.length || !Number.isFinite(peso) || peso <= 0) return null
-  // Tramo tope = el de mayor peso_min. Si el peso lo iguala o supera, es el que
-  // aplica (cubre el borde superior y los pesos por encima de la tabla).
-  let maxMin = -Infinity
-  let tramoTope: TramoRaw | null = null
-  for (const t of tabla) {
-    const min = num(t.peso_min)
-    if (min > maxMin) { maxMin = min; tramoTope = t }
-  }
-  if (tramoTope && peso >= maxMin) return tramoTope
-  // Regla de borde: intervalos [min, max). En el límite exacto (ej. 15 kg entre
-  // 10–15 y 15–25) gana SIEMPRE el tramo MAYOR, porque 15 ya no cae en [10,15).
-  for (const t of tabla) {
-    const min = num(t.peso_min)
-    const max = num(t.peso_max)
-    if (peso >= min && peso < max) return t
-  }
-  return null
-}
-
-function precioDelTramo(t: TramoRaw | null, codigo: string): number {
-  if (!t) return 0
-  const k = codigo === 'CP' ? 'precio_cp' : codigo === 'SD' ? 'precio_sd' : 'precio_ci'
-  return num((t as unknown as Record<string, unknown>)[k])
 }
 
 export interface SnapshotInput {
@@ -154,9 +118,10 @@ export async function calcularSnapshotFicha(input: SnapshotInput): Promise<Preci
   const tramo = findTramo(tabla, peso)
   const precio_servicio = precioDelTramo(tramo, (codigo_servicio || 'CI').toUpperCase())
 
-  // 4) Sumar adicionales
+  // 4) Sumar adicionales — precio y cantidad acotados a ≥0 para que un item con
+  // valores negativos (manipulación del payload) no reste del total.
   const precio_adicionales = adicionales.reduce(
-    (s, a) => s + num(a.precio) * (a.qty ?? 1),
+    (s, a) => s + Math.max(0, num(a.precio)) * Math.max(0, a.qty ?? 1),
     0
   )
 

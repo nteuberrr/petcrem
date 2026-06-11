@@ -105,7 +105,12 @@ export function waMediaDeMime(mime: string): { tipo: WaMediaTipo; tipoInterno: s
 export function verificarFirmaWebhook(rawBody: string, signature: string | null): boolean {
   const secret = process.env.META_APP_SECRET
   if (!secret) {
-    // Sin secret no podemos validar; en dev lo permitimos pero avisamos.
+    // Sin secret no podemos validar: en producción rechazamos (fail-closed);
+    // en dev lo permitimos para no trabar pruebas locales.
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[whatsapp] META_APP_SECRET no configurado — webhook rechazado (fail-closed en producción)')
+      return false
+    }
     console.warn('[whatsapp] META_APP_SECRET no configurado — no se valida la firma del webhook')
     return true
   }

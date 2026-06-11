@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow } from '@/lib/datastore'
+import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { verifyToken, createToken } from '@/lib/eutanasia-tokens'
 import { enviarMailRealizarServicio } from '@/lib/eutanasia-mailer'
 
@@ -47,12 +47,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: `Estado inválido para confirmar: ${c.estado}` })
     }
 
+    // Flip atómico: solo si sigue 'aceptada' y asignada a este vet (idempotente
+    // ante doble clic / reintentos del mismo enlace).
     const ahora = new Date().toISOString()
-    await updateRow(SHEET_COTI, idx, {
-      ...c,
-      estado: 'confirmada',
-      fecha_confirmacion: ahora,
-    })
+    const gano = await updateByIdIf(
+      SHEET_COTI,
+      cotizacion_id,
+      { estado: 'aceptada', vet_id_asignado: vet_id },
+      { estado: 'confirmada', fecha_confirmacion: ahora },
+    )
+    if (!gano) {
+      return NextResponse.json({ ok: true, ya_confirmada: true, mensaje: 'Ya habías confirmado este servicio.' })
+    }
 
     // Disparar el siguiente correo: "Confirma aquí una vez realizado el servicio".
     // Best-effort: si falla, igual marcamos confirmada (el vet ya hizo el clic

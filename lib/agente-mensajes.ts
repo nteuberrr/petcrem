@@ -260,7 +260,7 @@ function bloqueFechaChile(): string {
 - Hoy es ${ref(0)}.
 - Mañana es ${ref(1)}.
 - Pasado mañana es ${ref(2)}.
-Resolvé SIEMPRE las fechas relativas que diga el cliente ("hoy", "mañana", "este viernes", etc.) en base a ESTO, y pásalas a las herramientas en formato YYYY-MM-DD. NUNCA inventes ni adivines la fecha ni el año. Si hay cualquier ambigüedad, confírmale al cliente la fecha concreta (DD-MM-YYYY) antes de agendar.`
+Resuelve SIEMPRE las fechas relativas que diga el cliente ("hoy", "mañana", "este viernes", etc.) en base a ESTO, y pásalas a las herramientas en formato YYYY-MM-DD. NUNCA inventes ni adivines la fecha ni el año. Si hay cualquier ambigüedad, confírmale al cliente la fecha concreta (DD-MM-YYYY) antes de agendar.`
 }
 
 /** Limpia el texto final del modelo (quita fences y desarma JSON heredado). */
@@ -357,7 +357,22 @@ export async function generarRespuesta(
     convo.push({ role: 'user', content: results })
   }
 
-  return { mensaje: limpiarTexto(textoFinal), escalar, acciones }
+  // Fallback de acuse: si el modelo no dejó texto final (p.ej. ejecutó una
+  // herramienta en la última iteración y se cortó el loop sin redactar el cierre),
+  // igual le respondemos algo al cliente según lo que pasó — nunca lo dejamos
+  // sin acuse tras una acción.
+  let mensaje = limpiarTexto(textoFinal)
+  if (!mensaje) {
+    if (escalar) {
+      mensaje = 'Gracias por escribirnos. Un miembro de nuestro equipo te responderá a la brevedad. 🐾'
+    } else if (acciones.includes('agendar_eutanasia')) {
+      mensaje = 'Recibimos tu solicitud de eutanasia a domicilio. Apenas un veterinario de nuestra red confirme, te avisamos. Cualquier duda, escríbenos por aquí.'
+    } else if (acciones.includes('solicitar_retiro_cremacion')) {
+      mensaje = 'Recibimos tu solicitud de retiro. La estamos validando y te confirmamos a la brevedad. Cualquier duda, escríbenos por aquí.'
+    }
+    // Sin acción y sin texto → queda vacío: el webhook no envía nada (correcto).
+  }
+  return { mensaje, escalar, acciones }
 }
 
 const SYSTEM_CALIBRACION = `Eres analista de atención al cliente del Crematorio Alma Animal. Vas a recibir conversaciones reales de WhatsApp (Cliente = el tutor; Nosotros = nuestro equipo). Extrae una GUÍA DE CALIBRACIÓN accionable para un asistente automático que atiende este mismo canal.

@@ -226,7 +226,7 @@ export default function AsistenciaPage() {
     e.preventDefault()
     setErrorPago('')
     if (pagoSeleccion.size === 0) {
-      setErrorPago('Seleccioná al menos un retiro')
+      setErrorPago('Selecciona al menos un retiro')
       return
     }
     setSavingPago(true)
@@ -292,7 +292,7 @@ export default function AsistenciaPage() {
     e.preventDefault()
     setErrorForm('')
     if (!form.hora_entrada) {
-      setErrorForm('Tenés que indicar al menos la hora de entrada')
+      setErrorForm('Tienes que indicar al menos la hora de entrada')
       return
     }
     setSaving(true)
@@ -512,7 +512,7 @@ export default function AsistenciaPage() {
         )}
         {fichajeHoy ? (
           <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 text-sm text-blue-900">
-            <p className="font-semibold">Ya tenés un fichaje de hoy.</p>
+            <p className="font-semibold">Ya tienes un fichaje de hoy.</p>
             <p className="text-xs mt-1">
               Entrada: <b>{formatHora(fichajeHoy.hora_entrada)}</b>
               {fichajeHoy.hora_salida ? <> · Salida: <b>{formatHora(fichajeHoy.hora_salida)}</b></> : ' · Salida pendiente'}
@@ -539,7 +539,7 @@ export default function AsistenciaPage() {
                 <label className="text-xs font-semibold text-gray-700">Hora salida (opcional)</label>
                 <input type="time" value={form.hora_salida} onChange={e => setForm(f => ({ ...f, hora_salida: e.target.value }))}
                   className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                <p className="text-[10px] text-gray-500 mt-0.5">Podés dejarla en blanco y completarla más tarde con &quot;Editar&quot;.</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">Puedes dejarla en blanco y completarla más tarde con &quot;Editar&quot;.</p>
               </div>
             </div>
             <div>

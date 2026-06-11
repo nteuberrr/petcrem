@@ -1,5 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow } from '@/lib/datastore'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
 
 // 1x1 transparent GIF — el byte payload mínimo posible (43 bytes)
@@ -16,7 +15,8 @@ const TRANSPARENT_GIF = Buffer.from(
  * Cuerpo: GIF transparente de 43 bytes (mínimo absoluto).
  * Side-effect: UPDATE mailing_logs SET fecha_apertura=NOW(), estado='opened'
  *   WHERE campana_id=X AND vet_id=Y AND fecha_apertura IS NULL (idempotente).
- * También incrementa el contador `aperturas` en mailing_campanas.
+ * Los contadores de mailing_campanas NO se tocan acá: los calcula on-demand
+ * /api/mailing/campanas agregando mailing_logs (evita lost-update + cuota Sheets).
  */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ campana: string; vet: string }> }) {
   const { campana, vet } = await params
@@ -33,8 +33,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cam
     },
   })
 
-  // Registrar apertura (fire and forget)
-  ;(async () => {
+  // Registrar apertura en after() — garantiza que corra tras enviar la respuesta
+  // (un IIFE detached lo mata Vercel al congelar la función). Solo mailing_logs.
+  after(async () => {
     if (!isSupabaseConfigured()) return
     try {
       const supabase = getSupabase()
@@ -57,22 +58,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cam
         .update({ fecha_apertura: ahora, estado: 'opened' })
         .eq('id', log.id)
       if (updErr) { console.error('[pixel] update:', updErr.message); return }
-
-      // Incrementar aperturas en la campaña (Sheets)
-      try {
-        const campanas = await getSheetData('mailing_campanas')
-        const cIdx = campanas.findIndex(c => c.id === campana)
-        if (cIdx >= 0) {
-          const current = parseInt(campanas[cIdx].aperturas || '0', 10) || 0
-          await updateRow('mailing_campanas', cIdx, { ...campanas[cIdx], aperturas: String(current + 1) })
-        }
-      } catch (err) {
-        console.error('[pixel] agg update:', err)
-      }
     } catch (err) {
       console.error('[pixel] error:', err)
     }
-  })()
+  })
 
   return pixel
 }

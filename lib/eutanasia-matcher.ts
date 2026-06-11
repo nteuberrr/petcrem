@@ -1,5 +1,6 @@
 import { buscarComuna } from './comunas'
 import { formatHoraDia, parseFecha } from './dates'
+import { findTramo } from './tramos'
 
 /**
  * Reglas de matching para encontrar vets del convenio que pueden atender
@@ -190,19 +191,20 @@ export function matchVets(
   return matchVetsConDiagnostico(vets, comuna, fechaISO, horaHHMM).matched
 }
 
-/** Busca el precio que corresponde a un peso (kg) en tramos. */
+/**
+ * Busca el precio (lo que se paga al vet) para un peso (kg) en los tramos.
+ * Usa la regla de borde canónica compartida (lib/tramos): en el límite exacto
+ * gana el tramo MAYOR y el tramo tope cubre cualquier peso por encima de la
+ * tabla — antes devolvía $0 si el peso superaba el último tramo, congelando un
+ * precio_snapshot en cero. 0 solo si no hay tramo aplicable (peso ≤ 0 o tabla vacía).
+ */
 export function precioParaPeso(
   tramos: Array<Record<string, string>>,
   peso: number,
 ): number {
-  if (!Number.isFinite(peso) || peso < 0) return 0
-  for (const t of tramos) {
-    const min = parseFloat(t.peso_min)
-    const max = parseFloat(t.peso_max)
-    if (peso >= min && peso < max) return parseInt(t.precio, 10) || 0
-  }
-  // Si peso es exactamente igual al peso_max del último tramo, devuelvo ese precio
-  const ultimo = [...tramos].sort((a, b) => parseFloat(b.peso_max) - parseFloat(a.peso_max))[0]
-  if (ultimo && peso <= parseFloat(ultimo.peso_max)) return parseInt(ultimo.precio, 10) || 0
-  return 0
+  // findTramo exige props nombradas (peso_min/peso_max); las filas vienen como
+  // Record<string,string> desde Sheets/PG, así que tipamos el shape esperado.
+  type TramoEutRow = { peso_min: string; peso_max: string; precio: string }
+  const t = findTramo(tramos as unknown as TramoEutRow[], peso)
+  return t ? (parseInt(t.precio, 10) || 0) : 0
 }

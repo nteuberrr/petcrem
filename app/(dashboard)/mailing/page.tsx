@@ -1587,7 +1587,7 @@ function NuevaCampanaPanel({ initial, onCreada }: {
           <span className="text-[10px] font-normal text-gray-400">así lo va a ver el destinatario</span>
         </div>
         <iframe
-          srcDoc={previewHtml || '<p style="font-family:sans-serif;color:#999;padding:1rem">Escribí HTML para ver el preview.</p>'}
+          srcDoc={previewHtml || '<p style="font-family:sans-serif;color:#999;padding:1rem">Escribe HTML para ver el preview.</p>'}
           className="w-full h-[760px] border border-gray-200 rounded bg-white"
           sandbox=""
         />

@@ -32,7 +32,8 @@ export async function GET(req: NextRequest) {
     if (idx === -1) return NextResponse.json({ ok: false, error: 'No encontramos ese código' }, { status: 404 })
     return NextResponse.json({ ok: true, nombre_mascota: rows[idx].nombre_mascota })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e) }, { status: 500 })
+    console.error('[clientes/foto]', e)
+    return NextResponse.json({ ok: false, error: 'No se pudo procesar la solicitud. Intenta nuevamente.' }, { status: 500 })
   }
 }
 
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, nombre_mascota: cliente.nombre_mascota, url: up.url })
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e) }, { status: 500 })
+    console.error('[clientes/foto]', e)
+    return NextResponse.json({ ok: false, error: 'No se pudo procesar la solicitud. Intenta nuevamente.' }, { status: 500 })
   }
 }

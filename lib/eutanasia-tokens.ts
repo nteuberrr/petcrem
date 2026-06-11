@@ -70,13 +70,15 @@ export function createToken(
 
 /**
  * Helper para acciones a nivel vet (no ligadas a una cotización).
- * TTL default: 90 días, así el vet puede usar el link del mail de bienvenida
- * incluso si tarda algunos días en completar sus datos bancarios.
+ * TTL default: 30 días — margen para que el vet complete sus datos bancarios
+ * desde el mail de bienvenida, pero acotado porque el link habilita cargar
+ * datos de pago. Además el endpoint de datos-pago rechaza el envío cuando
+ * `datos_pago_completos` ya es TRUE (consumo único efectivo).
  */
 export function createVetToken(
   vet_id: string,
   accion: AccionToken,
-  ttlSeconds: number = 90 * 24 * 3600,
+  ttlSeconds: number = 30 * 24 * 3600,
 ): string {
   return createToken('', vet_id, accion, ttlSeconds)
 }

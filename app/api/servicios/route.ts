@@ -42,7 +42,7 @@ function findUniqueIndex(rows: Record<string, string>[], id: string, hoja: strin
   if (matches.length > 1) {
     return {
       idx: -1,
-      error: `Hay ${matches.length} filas con id="${id}" en ${hoja}. Andá a Configuración → Mantenimiento → Actualizar base de datos para renumerar IDs duplicados.`,
+      error: `Hay ${matches.length} filas con id="${id}" en ${hoja}. Ve a Configuración → Mantenimiento → Actualizar base de datos para renumerar IDs duplicados.`,
     }
   }
   return { idx: matches[0] }

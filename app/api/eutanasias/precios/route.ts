@@ -24,7 +24,8 @@ export async function GET() {
     rows.sort((a, b) => (parseFloat(a.peso_min) || 0) - (parseFloat(b.peso_min) || 0))
     return NextResponse.json(rows)
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    console.error('[eutanasias/precios GET]', e)
+    return NextResponse.json({ error: 'No se pudieron cargar los precios. Intenta nuevamente.' }, { status: 500 })
   }
 }
 

@@ -103,6 +103,9 @@ export async function POST(
       from: FROM_DEFAULT,
       reply_to: 'contacto@crematorioalmaanimal.cl',
       attachments,
+      // El certificado (y el video, cuando se adjunta) son pesados y personales:
+      // no los copiamos al BCC de seguimiento.
+      noBcc: true,
     })
 
     if (!res.ok) {

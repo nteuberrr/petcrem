@@ -21,7 +21,13 @@ export async function POST(req: NextRequest) {
     const secret = process.env.RESEND_WEBHOOK_SECRET
     const rawBody = await req.text()
 
-    const permisivo = (process.env.MAILING_WEBHOOK_PERMISSIVE ?? '').toLowerCase() === 'true'
+    const esProd = process.env.NODE_ENV === 'production'
+    const permisivoEnv = (process.env.MAILING_WEBHOOK_PERMISSIVE ?? '').toLowerCase() === 'true'
+    if (permisivoEnv && esProd) {
+      console.error('[webhook] MAILING_WEBHOOK_PERMISSIVE=true está seteado en PRODUCCIÓN — se ignora (la firma inválida rechaza igual). Quitar la variable de Vercel.')
+    }
+    // El modo permisivo solo aplica fuera de producción.
+    const permisivo = permisivoEnv && !esProd
     let evt: ResendEvent
     let firmaValida: boolean | null = null
     if (secret) {
@@ -48,11 +54,16 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ok: true, ignored: true, reason: 'body no parseable' })
           }
         } else {
-          console.warn('[webhook] firma inválida (set MAILING_WEBHOOK_PERMISSIVE=true en Vercel para procesar igual):', errMsg)
-          return NextResponse.json({ error: 'firma inválida', hint: 'set MAILING_WEBHOOK_PERMISSIVE=true para procesar sin verificar' }, { status: 401 })
+          console.warn('[webhook] firma inválida (MAILING_WEBHOOK_PERMISSIVE=true permite procesar igual, solo fuera de producción):', errMsg)
+          return NextResponse.json({ error: 'firma inválida' }, { status: 401 })
         }
       }
     } else {
+      if (esProd) {
+        // Fail-closed: sin secret no procesamos nada en producción.
+        console.error('[webhook] RESEND_WEBHOOK_SECRET no configurado — webhook rechazado (fail-closed en producción)')
+        return NextResponse.json({ error: 'RESEND_WEBHOOK_SECRET no configurado' }, { status: 503 })
+      }
       console.warn('[webhook] RESEND_WEBHOOK_SECRET no configurado — aceptando sin verificar (dev)')
       evt = JSON.parse(rawBody) as ResendEvent
     }

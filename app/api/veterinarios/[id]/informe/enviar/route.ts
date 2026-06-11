@@ -97,6 +97,9 @@ export async function POST(
       reply_to: 'contacto@crematorioalmaanimal.cl',
       preview_text: `Informe de facturación de ${vet.nombre}.`,
       attachments,
+      // El informe contiene datos de facturación de este vet: no se copia al BCC
+      // de seguimiento (evita exponer datos de un tercero y adjuntos pesados).
+      noBcc: true,
     })
 
     if (!res.ok) {

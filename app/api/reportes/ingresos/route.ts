@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData } from '@/lib/datastore'
 import { formatDateForSheet } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
+import { findTramo, precioDelTramo } from '@/lib/tramos'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,26 +19,6 @@ function parseFecha(raw: string): Date | null {
   if (!iso) return null
   const d = new Date(`${iso}T12:00:00`)
   return isNaN(d.getTime()) ? null : d
-}
-
-function findTramo(tabla: Tramo[], pesoKg: number): Tramo | null {
-  if (!tabla.length || !isFinite(pesoKg) || pesoKg <= 0) return null
-  let maxMin = -Infinity
-  let top: Tramo | null = null
-  for (const t of tabla) {
-    const min = parseDecimalOr0(t.peso_min)
-    const max = parseDecimalOr0(t.peso_max)
-    if (min > maxMin) { maxMin = min; top = t }
-    if (pesoKg >= min && pesoKg <= max) return t
-  }
-  if (top && pesoKg >= maxMin) return top
-  return null
-}
-
-function precioTramo(tramo: Tramo | null, codigo: string): number {
-  if (!tramo) return 0
-  const raw = codigo === 'CP' ? tramo.precio_cp : codigo === 'SD' ? tramo.precio_sd : tramo.precio_ci
-  return parseDecimalOr0(raw)
 }
 
 export async function GET(req: NextRequest) {
@@ -72,21 +53,20 @@ export async function GET(req: NextRequest) {
       preciosEByVet.set(vid, arr)
     }
 
-    // Tramos canónicos = precios_generales (usados como labels para bucketear)
+    // Tramos canónicos = precios_generales (usados como labels para bucketear).
+    // Conservan peso_min/peso_max para que findTramo aplique la MISMA regla de
+    // borde que el resto del sistema (límite exacto → tramo MAYOR).
     const tramosCanonicos = [...preciosG]
-      .map(t => ({ id: t.id, min: parseDecimalOr0(t.peso_min), max: parseDecimalOr0(t.peso_max) }))
-      .filter(t => t.max > 0)
-      .sort((a, b) => a.min - b.min)
+      .map(t => ({ id: t.id, peso_min: parseDecimalOr0(t.peso_min), peso_max: parseDecimalOr0(t.peso_max) }))
+      .filter(t => t.peso_max > 0)
+      .sort((a, b) => a.peso_min - b.peso_min)
 
     function tramoLabel(pesoKg: number): { label: string; orden: number } {
       if (!isFinite(pesoKg) || pesoKg <= 0) return { label: 'Sin peso', orden: 9999 }
-      for (let i = 0; i < tramosCanonicos.length; i++) {
-        const t = tramosCanonicos[i]
-        if (pesoKg >= t.min && pesoKg <= t.max) return { label: `${t.min}–${t.max} kg`, orden: i }
-      }
-      const last = tramosCanonicos[tramosCanonicos.length - 1]
-      if (last && pesoKg > last.max) return { label: `${last.min}–${last.max} kg`, orden: tramosCanonicos.length - 1 }
-      return { label: 'Sin peso', orden: 9999 }
+      const t = findTramo(tramosCanonicos, pesoKg)
+      if (!t) return { label: 'Sin peso', orden: 9999 }
+      const orden = tramosCanonicos.indexOf(t)
+      return { label: `${t.peso_min}–${t.peso_max} kg`, orden: orden >= 0 ? orden : 9999 }
     }
 
     function ingresoCliente(c: Record<string, string>): number {
@@ -103,11 +83,11 @@ export async function GET(req: NextRequest) {
         else tabla = preciosC
       }
       const tramo = findTramo(tabla, peso)
-      const servicio = precioTramo(tramo, codigo)
+      const servicio = precioDelTramo(tramo, codigo)
       let adicionales = 0
       try {
         const items = JSON.parse(c.adicionales || '[]') as AdicionalItem[]
-        adicionales = items.reduce((s, a) => s + (a.precio ?? 0) * (a.qty ?? 1), 0)
+        adicionales = items.reduce((s, a) => s + Math.max(0, a.precio ?? 0) * Math.max(0, a.qty ?? 1), 0)
       } catch { /* noop */ }
       return servicio + adicionales
     }
@@ -125,8 +105,10 @@ export async function GET(req: NextRequest) {
       return 'General'
     }
 
-    // Filtrar clientes por fecha_retiro (driver de venta)
+    // Filtrar clientes por fecha_retiro (driver de venta). Los borradores (fichas
+    // del bot aún sin registrar) no son ventas: se excluyen del reporte.
     const clientesFiltrados = clientes.filter(c => {
+      if (c.estado === 'borrador') return false
       const f = parseFecha(c.fecha_retiro || c.fecha_creacion)
       if (!f) return false
       if (desde && f < desde) return false

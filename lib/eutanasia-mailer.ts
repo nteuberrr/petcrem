@@ -60,8 +60,8 @@ export async function enviarBienvenidaVet(args: {
   const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
   const nombreCompleto = nombreCompletoVet(args.nombre, args.apellido)
 
-  // Token firmado largo (90d) para que el vet pueda completar sus datos
-  // bancarios desde el correo sin tener que hacer login.
+  // Token firmado (30d, consumo único en el endpoint) para que el vet pueda
+  // completar sus datos bancarios desde el correo sin tener que hacer login.
   let linkDatosPago = ''
   try {
     if (baseUrl && args.vetId) {
@@ -135,7 +135,7 @@ export function renderBienvenida({ nombreCompleto, baseUrl, linkDatosPago, conta
         <a href="${linkDatosPago}" style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">
           Ingresa tus datos para transferirte los pagos
         </a>
-        <p style="margin:10px 0 0;font-size:11px;color:${BRAND.muted}">Este enlace es personal y válido por 90 días.</p>
+        <p style="margin:10px 0 0;font-size:11px;color:${BRAND.muted}">Este enlace es personal y válido por 30 días. Por seguridad, los datos se cargan una sola vez.</p>
       </div>` : ''}
       <h2 style="margin:26px 0 10px;font-size:16px;color:${BRAND.navy}">¿Necesitas ajustar algo?</h2>
       <p style="margin:0;font-size:14px;line-height:1.55">

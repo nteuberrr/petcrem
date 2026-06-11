@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { fmtPrecio } from '@/lib/format'
 
@@ -18,37 +18,31 @@ interface Resultado {
 /**
  * Página pública. Tercer paso del flujo del vet: ya confirmó la cita, realizó
  * el servicio, y desde el correo presiona "Confirma aquí una vez realizado".
- * Acá hacemos POST al backend, se marca la cotización como 'realizada' y
- * se dispara el correo de agradecimiento con la fecha de pago.
+ * La mutación (estado → 'realizada' + correo de agradecimiento) se dispara SOLO
+ * al apretar el botón, no en el montaje (evita que un prefetch/escáner la marque
+ * como realizada sin intención).
  */
 export default function RealizadoPage() {
   const params = useParams<{ token: string }>()
   const token = params?.token ?? ''
-  const [estado, setEstado] = useState<'cargando' | 'listo'>('cargando')
+  const [estado, setEstado] = useState<'inicial' | 'enviando' | 'listo'>('inicial')
   const [data, setData] = useState<Resultado | null>(null)
 
-  useEffect(() => {
-    if (!token) {
-      setData({ ok: false, error: 'Falta el token en la URL.' })
+  async function confirmar() {
+    setEstado('enviando')
+    try {
+      const r = await fetch('/api/eutanasias/cotizaciones/realizado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      })
+      setData(await r.json())
+    } catch {
+      setData({ ok: false, error: 'Error de red. Intenta de nuevo.' })
+    } finally {
       setEstado('listo')
-      return
     }
-    ;(async () => {
-      try {
-        const r = await fetch('/api/eutanasias/cotizaciones/realizado', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
-        })
-        const j = await r.json()
-        setData(j)
-      } catch {
-        setData({ ok: false, error: 'Error de red. Intenta de nuevo.' })
-      } finally {
-        setEstado('listo')
-      }
-    })()
-  }, [token])
+  }
 
   const precioNum = data?.precio ? parseInt(data.precio, 10) || 0 : 0
 
@@ -60,9 +54,34 @@ export default function RealizadoPage() {
           <h1 className="text-xl font-bold mt-1">Realización del servicio</h1>
         </div>
         <div className="bg-white border border-gray-200 rounded-b-2xl p-6 shadow-sm text-center">
-          {estado === 'cargando' && <p className="text-gray-500 text-sm py-4">Verificando…</p>}
+          {!token && (
+            <>
+              <p className="text-5xl mb-3">⚠</p>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Enlace inválido</h2>
+              <p className="text-sm text-gray-600">Falta el token en la URL.</p>
+            </>
+          )}
 
-          {estado === 'listo' && data && !data.ok && (
+          {token && estado !== 'listo' && (
+            <div className="py-2">
+              <p className="text-5xl mb-3">🙏</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">¿Ya realizaste el servicio?</h2>
+              <p className="text-sm text-gray-600 mb-5">
+                Al confirmar, dejamos registrado que el servicio se realizó y agendamos tu pago
+                para el día hábil siguiente.
+              </p>
+              <button
+                onClick={confirmar}
+                disabled={estado === 'enviando'}
+                className="w-full px-6 py-3 text-white font-medium rounded-lg disabled:opacity-60 transition-opacity text-base"
+                style={{ backgroundColor: COLOR }}
+              >
+                {estado === 'enviando' ? 'Registrando…' : 'Sí, ya realicé el servicio'}
+              </button>
+            </div>
+          )}
+
+          {token && estado === 'listo' && data && !data.ok && (
             <>
               <p className="text-5xl mb-3">⚠</p>
               <h2 className="text-lg font-semibold text-gray-900 mb-1">No pudimos confirmar</h2>
@@ -71,7 +90,7 @@ export default function RealizadoPage() {
             </>
           )}
 
-          {estado === 'listo' && data && data.ok && (
+          {token && estado === 'listo' && data && data.ok && (
             <>
               <p className="text-5xl mb-3">🙏</p>
               <h2 className="text-xl font-bold text-gray-900 mb-2">

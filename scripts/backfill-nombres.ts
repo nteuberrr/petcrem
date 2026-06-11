@@ -24,7 +24,7 @@ const TARGETS: { tabla: string; campos: string[] }[] = [
 const apply = process.argv.includes('--apply')
 
 async function main() {
-  console.log(apply ? '⚙️  APLICANDO cambios…\n' : '🔎 DRY-RUN (no escribe). Usá --apply para guardar.\n')
+  console.log(apply ? '⚙️  APLICANDO cambios…\n' : '🔎 DRY-RUN (no escribe). Usa --apply para guardar.\n')
   let total = 0
   for (const { tabla, campos } of TARGETS) {
     let rows: Record<string, string>[]

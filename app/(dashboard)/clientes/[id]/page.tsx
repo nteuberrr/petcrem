@@ -7,6 +7,8 @@ import { Modal } from '@/components/ui/Modal'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtLitros, fmtPrecio, fmtFecha } from '@/lib/format'
 import { formatDateForSheet } from '@/lib/dates'
+import { parsePeso } from '@/lib/numbers'
+import { findTramo, precioDelTramo } from '@/lib/tramos'
 
 type Certificado = {
   id: string
@@ -368,7 +370,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       const veces = cantidad > 1 ? ` (ya se reenvió ${cantidad - 1} ${cantidad - 1 === 1 ? 'vez' : 'veces'})` : ''
       const ok = confirm(
         `Este certificado (V${cu.version}) ya fue enviado${dest} el ${fecha}${hora}${veces}.\n\n` +
-        `¿Querés reenviarlo de todas formas?`
+        `¿Quieres reenviarlo de todas formas?`
       )
       if (!ok) return
     }
@@ -474,32 +476,18 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       ? 'Precios convenio'
       : 'Precios generales'
 
-  // Encontrar tramo para el peso dado
-  function encontrarTramo(tabla: Tramo[], pesoKg: number): Tramo | null {
-    if (!tabla.length || !isFinite(pesoKg) || pesoKg <= 0) return null
-    const maxPesoMin = Math.max(...tabla.map(t => parseFloat(t.peso_min) || 0))
-    const tramoTope = tabla.find(t => (parseFloat(t.peso_min) || 0) === maxPesoMin)
-    if (tramoTope && pesoKg >= maxPesoMin) return tramoTope
-    return tabla.find(t => {
-      const min = parseFloat(t.peso_min) || 0
-      const max = parseFloat(t.peso_max) || 0
-      return pesoKg >= min && pesoKg <= max
-    }) ?? null
-  }
+  // Encontrar tramo para el peso dado — regla de borde canónica (helper compartido).
+  const encontrarTramo = (tabla: Tramo[], pesoKg: number): Tramo | null => findTramo(tabla, pesoKg)
 
-  // Preferir peso_ingreso (real) sobre peso_declarado para el cálculo del servicio
-  const pesoIngreso = parseFloat(form.peso_ingreso || '') || 0
-  const pesoDeclarado = parseFloat(form.peso_declarado || '') || 0
+  // Preferir peso_ingreso (real) sobre peso_declarado para el cálculo del servicio.
+  // parsePeso (no parseFloat) para coincidir con el snapshot del backend en pesos
+  // con coma decimal o escalados heredados de Sheets.
+  const pesoIngreso = parsePeso(form.peso_ingreso)
+  const pesoDeclarado = parsePeso(form.peso_declarado)
   const pesoKg = pesoIngreso > 0 ? pesoIngreso : pesoDeclarado
   const tramoAplicable = encontrarTramo(tablaPrecios, pesoKg)
   const codigoServ = form.codigo_servicio ?? 'CI'
-  const precioServicio = tramoAplicable
-    ? parseFloat(
-        codigoServ === 'CI' ? tramoAplicable.precio_ci :
-        codigoServ === 'CP' ? tramoAplicable.precio_cp :
-        tramoAplicable.precio_sd
-      ) || 0
-    : 0
+  const precioServicio = precioDelTramo(tramoAplicable, codigoServ)
   const subtotalServicio = precioServicio + totalAdicionales
 
   // Descuento (aplica sobre subtotal = servicio + adicionales).
@@ -524,13 +512,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   // precio normal (tabla de precios generales) para tener a la vista cuánto
   // se cobraría si fuera una venta normal sin veterinaria.
   const tramoNormal = encontrarTramo(preciosGenerales, pesoKg)
-  const precioNormal = tramoNormal
-    ? parseFloat(
-        codigoServ === 'CI' ? tramoNormal.precio_ci :
-        codigoServ === 'CP' ? tramoNormal.precio_cp :
-        tramoNormal.precio_sd
-      ) || 0
-    : 0
+  const precioNormal = precioDelTramo(tramoNormal, codigoServ)
   const mostrarPrecioNormal = form.tipo_precios !== 'general' && precioNormal > 0
 
   const rangoTramo = tramoAplicable
@@ -1222,7 +1204,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   </div>
                 )}
                 {descuentosDisp.length === 0 && !cliente?.descuento_id && (
-                  <p className="text-xs text-gray-400">No hay descuentos activos. Andá a Configuración → Descuentos para crear uno.</p>
+                  <p className="text-xs text-gray-400">No hay descuentos activos. Ve a Configuración → Descuentos para crear uno.</p>
                 )}
               </div>
             )}
@@ -1275,7 +1257,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             </p>
           </div>
           <p className="text-xs text-gray-600 leading-relaxed">
-            Esta acción no se puede deshacer. Para confirmar, escribí el código de la ficha
+            Esta acción no se puede deshacer. Para confirmar, escribe el código de la ficha
             (<span className="font-mono font-semibold text-gray-900">{cliente.codigo}</span>) en el campo de abajo.
           </p>
           <div>
@@ -1330,7 +1312,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 {fotosSubidas.length > 0 && (
                   <div>
                     <label className="text-xs font-semibold text-gray-700">
-                      Fotos enviadas por el tutor — tocá una para usarla
+                      Fotos enviadas por el tutor — toca una para usarla
                     </label>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {fotosSubidas.map((url, i) => {
@@ -1469,25 +1451,7 @@ function PesoIngresoField({ value, onChange, pesoDeclarado, tabla, codigoServ }:
   tabla: Tramo[]
   codigoServ: string
 }) {
-  const pesoIngreso = parseFloat(value) || 0
-
-  function findTramo(peso: number): Tramo | null {
-    if (!tabla.length || peso <= 0) return null
-    const maxMin = Math.max(...tabla.map(t => parseFloat(t.peso_min) || 0))
-    const top = tabla.find(t => (parseFloat(t.peso_min) || 0) === maxMin)
-    if (top && peso >= maxMin) return top
-    return tabla.find(t => {
-      const min = parseFloat(t.peso_min) || 0
-      const max = parseFloat(t.peso_max) || 0
-      return peso >= min && peso <= max
-    }) ?? null
-  }
-
-  function precioTramo(tr: Tramo | null): number {
-    if (!tr) return 0
-    const raw = codigoServ === 'CP' ? tr.precio_cp : codigoServ === 'SD' ? tr.precio_sd : tr.precio_ci
-    return parseFloat(raw) || 0
-  }
+  const pesoIngreso = parsePeso(value)
 
   type Feedback =
     | { kind: 'alerta'; diff: number }
@@ -1497,11 +1461,11 @@ function PesoIngresoField({ value, onChange, pesoDeclarado, tabla, codigoServ }:
 
   let feedback: Feedback = null
   if (pesoIngreso > 0 && pesoDeclarado > 0 && tabla.length > 0) {
-    const tramoDecl = findTramo(pesoDeclarado)
-    const tramoIng = findTramo(pesoIngreso)
+    const tramoDecl = findTramo(tabla, pesoDeclarado)
+    const tramoIng = findTramo(tabla, pesoIngreso)
     if (tramoDecl && tramoIng) {
-      const pDecl = precioTramo(tramoDecl)
-      const pIng = precioTramo(tramoIng)
+      const pDecl = precioDelTramo(tramoDecl, codigoServ)
+      const pIng = precioDelTramo(tramoIng, codigoServ)
       if (tramoIng.id === tramoDecl.id) {
         feedback = { kind: 'igual' }
       } else if (pIng > pDecl) {

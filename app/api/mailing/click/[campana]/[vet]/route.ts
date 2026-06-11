@@ -1,5 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow } from '@/lib/datastore'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
 
 /**
@@ -23,8 +22,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ camp
     return NextResponse.json({ error: 'URL no decodificable' }, { status: 400 })
   }
 
-  // Disparar el registro (fire and forget) y redirigir
-  ;(async () => {
+  // Registrar el click en after() (garantiza ejecución tras la redirección).
+  // Solo mailing_logs; los contadores los agrega on-demand /api/mailing/campanas.
+  after(async () => {
     if (!isSupabaseConfigured()) return
     try {
       const supabase = getSupabase()
@@ -40,32 +40,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ camp
       if (!log) return
 
       const updates: Record<string, string> = { url_clickeada: urlDestino }
-      // Solo contar como nuevo click si no había uno previo (1 click por destinatario en agregado)
-      const esPrimerClick = !log.fecha_click
-      if (esPrimerClick) {
+      // Solo marcar fecha_click la primera vez (1 click por destinatario en agregado)
+      if (!log.fecha_click) {
         updates.fecha_click = ahora
         updates.estado = 'clicked'
       }
 
       const { error: updErr } = await supabase.from('mailing_logs').update(updates).eq('id', log.id)
       if (updErr) { console.error('[click] update:', updErr.message); return }
-
-      if (esPrimerClick) {
-        try {
-          const campanas = await getSheetData('mailing_campanas')
-          const cIdx = campanas.findIndex(c => c.id === campana)
-          if (cIdx >= 0) {
-            const current = parseInt(campanas[cIdx].clicks || '0', 10) || 0
-            await updateRow('mailing_campanas', cIdx, { ...campanas[cIdx], clicks: String(current + 1) })
-          }
-        } catch (err) {
-          console.error('[click] agg update:', err)
-        }
-      }
     } catch (err) {
       console.error('[click] error:', err)
     }
-  })()
+  })
 
   return NextResponse.redirect(urlDestino, 302)
 }

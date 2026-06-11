@@ -3,15 +3,20 @@ import { getSheetData, updateRow } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
 import { bancoValido, tipoCuentaValido } from '@/lib/bancos-cl'
 import { todayISO } from '@/lib/dates'
+import { enviarTextoWhatsapp, isWhatsappConfigured, adminWhatsapp } from '@/lib/whatsapp'
 
 const SHEET = 'vet_convenio_eutanasia'
+
+const MSG_YA_COMPLETADO = 'Tus datos de pago ya están registrados. Si necesitas modificarlos, escríbenos a info@crematorioalmaanimal.cl.'
 
 /**
  * GET /api/eutanasias/vets/datos-pago?token=...
  *
  * Endpoint público. Verifica el token de acción 'datos_pago' y devuelve los
  * datos actuales del vet para precargar el formulario (nombre, apellido,
- * email, rut, y los datos bancarios si ya los había completado antes).
+ * email, rut). Si el vet ya completó sus datos bancarios, NO los expone:
+ * responde `ya_completado` (el formulario es de consumo único — cambios
+ * posteriores se gestionan por correo, no por el link).
  *
  * Por seguridad solo expone los datos del vet identificado en el token,
  * no de otros vets aunque el atacante adivine ids.
@@ -35,6 +40,10 @@ export async function GET(req: NextRequest) {
   const v = vets.find(r => r.id === verif.payload!.vet_id)
   if (!v) return NextResponse.json({ ok: false, error: 'Veterinario no encontrado.' }, { status: 404 })
 
+  if ((v.datos_pago_completos || '').toUpperCase() === 'TRUE') {
+    return NextResponse.json({ ok: false, ya_completado: true, mensaje: MSG_YA_COMPLETADO })
+  }
+
   return NextResponse.json({
     ok: true,
     vet: {
@@ -46,7 +55,6 @@ export async function GET(req: NextRequest) {
       banco: v.banco || '',
       tipo_cuenta: v.tipo_cuenta || '',
       numero_cuenta: v.numero_cuenta || '',
-      datos_pago_completos: v.datos_pago_completos === 'TRUE',
       fecha_datos_pago: v.fecha_datos_pago || '',
     },
   })
@@ -56,10 +64,14 @@ export async function GET(req: NextRequest) {
  * POST /api/eutanasias/vets/datos-pago
  * body: { token, nombre, rut, banco, tipo_cuenta, numero_cuenta, email }
  *
- * Endpoint público. Actualiza los datos bancarios del vet identificado en el
+ * Endpoint público. Registra los datos bancarios del vet identificado en el
  * token. El email del form se usa solo como confirmación visual (queremos que
  * el vet vea su email para saber a quién está cargando los datos); el match
  * real es por el vet_id del token firmado.
+ *
+ * Consumo único: si el vet ya tiene `datos_pago_completos` en TRUE, se rechaza
+ * la sobrescritura (un link filtrado no puede desviar pagos cambiando la
+ * cuenta). Cambios posteriores se gestionan por correo con el equipo.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -109,6 +121,10 @@ export async function POST(req: NextRequest) {
     if (idx === -1) return NextResponse.json({ ok: false, error: 'Veterinario no encontrado.' }, { status: 404 })
     const v = vets[idx]
 
+    if ((v.datos_pago_completos || '').toUpperCase() === 'TRUE') {
+      return NextResponse.json({ ok: false, ya_completado: true, mensaje: MSG_YA_COMPLETADO }, { status: 409 })
+    }
+
     // Si el email del form no coincide con el registrado, lo señalamos pero
     // permitimos actualizar (puede que el vet quiera cambiar su email también).
     const cambiaEmail = v.email && v.email.toLowerCase() !== email
@@ -124,6 +140,18 @@ export async function POST(req: NextRequest) {
       datos_pago_completos: 'TRUE',
       fecha_datos_pago: todayISO(),
     })
+
+    // Aviso al admin (best-effort): los datos bancarios se cargan una sola vez por
+    // el link, así que conviene que quede visible quién y con qué cuenta los registró.
+    if (isWhatsappConfigured()) {
+      const cuentaEnmascarada = numeroCuenta.length > 4 ? `••••${numeroCuenta.slice(-4)}` : numeroCuenta
+      const aviso =
+        `💳 *Datos de pago registrados* — veterinario de la red de eutanasias\n\n` +
+        `${nombre}${v.apellido ? ' ' + v.apellido : ''} (${email})\n` +
+        `Banco: ${banco} · ${tipoCuenta} · cuenta ${cuentaEnmascarada}\n\n` +
+        `Si no reconoces este movimiento, revísalo en Servicios → Veterinarios.`
+      try { await enviarTextoWhatsapp(adminWhatsapp(), aviso) } catch (e) { console.warn('[datos-pago] aviso admin falló:', e) }
+    }
 
     return NextResponse.json({
       ok: true,

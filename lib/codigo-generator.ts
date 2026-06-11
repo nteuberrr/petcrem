@@ -10,6 +10,11 @@ import { getSheetData } from './datastore'
  * Ahora busca el número MÁXIMO ya usado en cualquier código que arranque con
  * la letra (independiente del campo letra_especie) y suma 1. Robusto contra
  * eliminaciones, cambios de especie y registros con letra_especie ausente.
+ *
+ * NOTA de concurrencia: max+1 NO es atómico — dos registros simultáneos de la
+ * misma especie pueden generar el mismo código. La garantía REAL de unicidad es
+ * el índice único `clientes.codigo` (ver supabase/tanda3-uniques.sql); el caller
+ * (PATCH clientes con registrar) detecta el choque, regenera y reintenta.
  */
 export async function generarCodigo(
   letraEspecie: string,

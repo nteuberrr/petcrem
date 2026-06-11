@@ -186,7 +186,7 @@ export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
     })
   }
   if (fueraDeChile.length > 0) {
-    throw new Error(`Coordenadas fuera de Chile: ${fueraDeChile.join(', ')}. Revisá las direcciones que geocodearon a esa ubicación.`)
+    throw new Error(`Coordenadas fuera de Chile: ${fueraDeChile.join(', ')}. Revisa las direcciones que geocodearon a esa ubicación.`)
   }
 
   let { status, json: j } = await llamarRoutesApi(body)
@@ -230,7 +230,7 @@ export async function computeRoute(opts: RouteOptions): Promise<RouteResult> {
     })
     const paradas = (opts.intermediates ?? []).map((w, i) => `${i + 1}:${fmtCoord(w)}`).join(' | ')
     const detalle = Object.keys(j).length === 0
-      ? `no se encontró ruta. Origen ${fmtCoord(opts.origin)} → destino ${fmtCoord(opts.destination)}${paradas ? ' · paradas: ' + paradas : ''}. Revisá si alguna dirección quedó mal geocodeada (Google Maps).`
+      ? `no se encontró ruta. Origen ${fmtCoord(opts.origin)} → destino ${fmtCoord(opts.destination)}${paradas ? ' · paradas: ' + paradas : ''}. Revisa si alguna dirección quedó mal geocodeada (Google Maps).`
       : ((j.error as { message?: string })?.message ?? JSON.stringify(j).slice(0, 300))
     throw new Error(`Routes API ${status}: ${detalle}`)
   }

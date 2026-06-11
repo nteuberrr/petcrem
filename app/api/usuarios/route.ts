@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import bcrypt from 'bcryptjs'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/datastore'
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
       id,
       nombre: String(body.nombre),
       email: String(body.email),
-      password: String(body.password),
+      password: bcrypt.hashSync(String(body.password), 10),
       rol,
       activo: 'TRUE',
       fecha_creacion: now,
@@ -81,6 +82,11 @@ export async function DELETE(req: NextRequest) {
     const idx = rows.findIndex(r => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     const caller = await rolSesion()
+    // Defensa en profundidad: el proxy ya bloquea a operadores, pero el route no
+    // debe confiar solo en eso. Solo admin / admin2 pueden gestionar usuarios.
+    if (caller !== 'admin' && caller !== 'admin2') {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+    }
     if (caller === 'admin2' && normalizarRol(rows[idx].rol) !== 'operador') {
       return NextResponse.json({ error: 'Admin 2 solo puede eliminar operadores' }, { status: 403 })
     }
@@ -99,6 +105,10 @@ export async function PATCH(req: NextRequest) {
     const idx = rows.findIndex(r => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     const caller = await rolSesion()
+    // Defensa en profundidad (no confiar solo en el proxy): solo admin / admin2.
+    if (caller !== 'admin' && caller !== 'admin2') {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+    }
     const target = rows[idx]
     if (caller === 'admin2') {
       if (normalizarRol(target.rol) !== 'operador') {
@@ -109,6 +119,12 @@ export async function PATCH(req: NextRequest) {
       }
     }
     if (updates.rol !== undefined) updates.rol = normalizarRol(updates.rol)
+    // Password vacío/omitido = no cambiar; si viene, se guarda hasheado
+    if (updates.password) {
+      updates.password = bcrypt.hashSync(String(updates.password), 10)
+    } else {
+      delete updates.password
+    }
     const updated = { ...target, ...updates }
     await updateRow('usuarios', idx, updated)
     return NextResponse.json({ id, nombre: updated.nombre, email: updated.email, rol: updated.rol, activo: updated.activo })

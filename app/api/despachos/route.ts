@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/datastore'
+import { getSheetData, appendRow, updateRow, updateById, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 
 // Forzar evaluación dinámica: la planilla cambia fuera de Next, no queremos cache.
@@ -163,6 +163,19 @@ export async function PATCH(req: NextRequest) {
       updated.mascotas_ids = JSON.stringify(mascotas_ids)
       updated.paradas = JSON.stringify(paradas)
       updated.entregas = JSON.stringify(entregas)
+
+      // Mascotas que se sacaron de la ruta: si ya estaban entregadas (despachado
+      // + vinculadas a ESTA ruta), revertirlas a 'cremado' y limpiar el vínculo,
+      // para no dejarlas apuntando a una ruta de la que ya no forman parte.
+      const idsViejos = parseJson<string[]>(rows[idx].mascotas_ids, [])
+      const idsNuevos = mascotas_ids.map(String)
+      for (const mid of idsViejos) {
+        if (idsNuevos.includes(mid)) continue
+        const cli = byId.get(mid)
+        if (cli && cli.estado === 'despachado' && cli.despacho_id === id) {
+          await updateById('clientes', mid, { ...cli, estado: 'cremado', despacho_id: '' })
+        }
+      }
     }
 
     await updateRow(HOJA, idx, updated)

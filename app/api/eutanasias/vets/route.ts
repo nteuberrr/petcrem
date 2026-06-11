@@ -172,6 +172,22 @@ export async function PATCH(req: NextRequest) {
     if ('horarios' in updates) partial.horarios = JSON.stringify(normalizarHorarios(updates.horarios))
     if ('activo' in updates) partial.activo = updates.activo === true || updates.activo === 'TRUE' ? 'TRUE' : 'FALSE'
     if (typeof updates.notas === 'string') partial.notas = updates.notas.trim()
+    // Datos bancarios: editables por admin (el link público de datos-pago es de
+    // consumo único, así que el cambio legítimo de cuenta se hace por acá).
+    if (typeof updates.banco === 'string') partial.banco = updates.banco.trim()
+    if (typeof updates.tipo_cuenta === 'string') partial.tipo_cuenta = updates.tipo_cuenta.trim()
+    if (typeof updates.numero_cuenta === 'string') partial.numero_cuenta = updates.numero_cuenta.replace(/\s+/g, '')
+    if (typeof updates.datos_pago_completos === 'string' || typeof updates.datos_pago_completos === 'boolean') {
+      partial.datos_pago_completos = updates.datos_pago_completos === true || String(updates.datos_pago_completos).toUpperCase() === 'TRUE' ? 'TRUE' : 'FALSE'
+    }
+    // Reset: deja al vet para que vuelva a cargar sus datos por el link (consumo único).
+    if (updates.resetear_datos_pago === true) {
+      partial.datos_pago_completos = 'FALSE'
+      partial.banco = ''
+      partial.tipo_cuenta = ''
+      partial.numero_cuenta = ''
+      partial.fecha_datos_pago = ''
+    }
 
     const updated = { ...rows[idx], ...partial }
     await updateRow(SHEET, idx, updated)

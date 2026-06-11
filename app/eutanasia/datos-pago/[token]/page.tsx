@@ -15,20 +15,22 @@ interface VetInfo {
   banco: string
   tipo_cuenta: string
   numero_cuenta: string
-  datos_pago_completos: boolean
 }
 
 /**
- * Página pública para que el vet registre o actualice sus datos bancarios.
+ * Página pública para que el vet registre sus datos bancarios (una sola vez).
  * Se llega desde un link en el mail de bienvenida y/o en el de cotización.
- * El token (firmado, TTL 90d) identifica al vet — sin él no se puede acceder
- * ni se exponen datos.
+ * El token (firmado, TTL 30d) identifica al vet — sin él no se puede acceder
+ * ni se exponen datos. Si los datos ya fueron registrados, el backend responde
+ * `ya_completado` y se muestra un aviso en lugar del formulario (cambios
+ * posteriores se gestionan por correo).
  */
 export default function DatosPagoPage() {
   const params = useParams<{ token: string }>()
   const token = params?.token ?? ''
-  const [estado, setEstado] = useState<'cargando' | 'listo' | 'error'>('cargando')
+  const [estado, setEstado] = useState<'cargando' | 'listo' | 'error' | 'ya_completado'>('cargando')
   const [errorMsg, setErrorMsg] = useState('')
+  const [yaCompletadoMsg, setYaCompletadoMsg] = useState('')
   const [vet, setVet] = useState<VetInfo | null>(null)
 
   const [form, setForm] = useState({
@@ -44,15 +46,20 @@ export default function DatosPagoPage() {
   const [confirmado, setConfirmado] = useState<{ mensaje: string; email_cambio: boolean } | null>(null)
 
   useEffect(() => {
-    if (!token) {
-      setErrorMsg('Falta el token en la URL.')
-      setEstado('error')
-      return
-    }
     ;(async () => {
+      if (!token) {
+        setErrorMsg('Falta el token en la URL.')
+        setEstado('error')
+        return
+      }
       try {
         const r = await fetch(`/api/eutanasias/vets/datos-pago?token=${encodeURIComponent(token)}`)
         const j = await r.json()
+        if (j.ya_completado) {
+          setYaCompletadoMsg(j.mensaje || 'Tus datos de pago ya están registrados.')
+          setEstado('ya_completado')
+          return
+        }
         if (!r.ok || !j.ok) {
           setErrorMsg(j.error || 'No pudimos cargar tus datos.')
           setEstado('error')
@@ -87,7 +94,10 @@ export default function DatosPagoPage() {
         body: JSON.stringify({ token, ...form }),
       })
       const j = await r.json()
-      if (!r.ok || !j.ok) {
+      if (j.ya_completado) {
+        setYaCompletadoMsg(j.mensaje || 'Tus datos de pago ya están registrados.')
+        setEstado('ya_completado')
+      } else if (!r.ok || !j.ok) {
         setResultError(j.error || 'No pudimos guardar tus datos.')
       } else {
         setConfirmado({ mensaje: j.mensaje, email_cambio: !!j.email_cambio })
@@ -128,14 +138,19 @@ export default function DatosPagoPage() {
           </div>
         )}
 
+        {estado === 'ya_completado' && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
+            <p className="text-5xl mb-3">🐾</p>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Tus datos ya están registrados</h2>
+            <p className="text-sm text-gray-600">{yaCompletadoMsg}</p>
+            <p className="text-xs text-gray-500 mt-4">
+              Por tu seguridad, este formulario solo se puede completar una vez.
+            </p>
+          </div>
+        )}
+
         {estado === 'listo' && vet && (
           <form onSubmit={enviar} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 space-y-4">
-            {vet.datos_pago_completos && (
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg p-3 text-sm">
-                Ya tenías datos registrados. Si quieres actualizarlos, modifica los campos y envía el formulario.
-              </div>
-            )}
-
             <Field label="Nombre completo" required>
               <input type="text" required value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={inputCls} />
             </Field>

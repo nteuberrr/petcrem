@@ -367,7 +367,7 @@ export default function ClientesPage() {
       await fetchClientes()
     } else {
       const err = await res.json().catch(() => ({}))
-      setFormError(err?.error ?? 'Error al guardar la ficha. Revisá que todos los campos obligatorios estén completos.')
+      setFormError(err?.error ?? 'Error al guardar la ficha. Revisa que todos los campos obligatorios estén completos.')
     }
     setSaving(false)
   }
@@ -450,7 +450,7 @@ export default function ClientesPage() {
               <p className="text-sm font-bold text-amber-900">
                 {kpis.pendientesPago} cliente{kpis.pendientesPago !== 1 ? 's' : ''} con pago pendiente
               </p>
-              <p className="text-xs text-amber-700 mt-0.5">Todos los clientes cuyo estado de pago es &quot;pendiente&quot;. Tocá uno para ver su ficha.</p>
+              <p className="text-xs text-amber-700 mt-0.5">Todos los clientes cuyo estado de pago es &quot;pendiente&quot;. Toca uno para ver su ficha.</p>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -899,7 +899,7 @@ export default function ClientesPage() {
                     {rangoTramo && <span className="text-gray-500 font-normal"> · {rangoTramo}</span>}
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    {pesoKgForm > 0 ? `${pesoKgForm} kg` : 'Ingresá el peso para calcular'}
+                    {pesoKgForm > 0 ? `${pesoKgForm} kg` : 'Ingresa el peso para calcular'}
                     {pesoKgForm > 0 && !tramoAplicable && (
                       <span className="text-red-500 ml-2">⚠ Sin tramo de precio aplicable</span>
                     )}
@@ -970,7 +970,7 @@ export default function ClientesPage() {
                       </div>
                     )}
                     {descuentosDisp.length === 0 && (
-                      <p className="text-xs text-gray-400">No hay descuentos activos. Andá a Configuración → Descuentos para crear uno.</p>
+                      <p className="text-xs text-gray-400">No hay descuentos activos. Ve a Configuración → Descuentos para crear uno.</p>
                     )}
                   </div>
                 )}

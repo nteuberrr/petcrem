@@ -2,36 +2,17 @@ import { NextResponse } from 'next/server'
 import { getSheetData } from '@/lib/datastore'
 import { formatDateForSheet, horaToMinutos } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso, parseMonto } from '@/lib/numbers'
+import { findTramo, precioDelTramo } from '@/lib/tramos'
 
 export const dynamic = 'force-dynamic'
 
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string; veterinaria_id?: string }
 type AdicionalItem = { tipo: string; id: string; nombre?: string; precio?: number; qty?: number }
 
-function findTramo(tabla: Tramo[], pesoKg: number): Tramo | null {
-  if (!tabla.length || !isFinite(pesoKg) || pesoKg <= 0) return null
-  let maxMin = -Infinity
-  let top: Tramo | null = null
-  for (const t of tabla) {
-    const min = parseDecimalOr0(t.peso_min)
-    const max = parseDecimalOr0(t.peso_max)
-    if (min > maxMin) { maxMin = min; top = t }
-    if (pesoKg >= min && pesoKg <= max) return t
-  }
-  if (top && pesoKg >= maxMin) return top
-  return null
-}
-
-function precioTramo(tramo: Tramo | null, codigo: string): number {
-  if (!tramo) return 0
-  const raw = codigo === 'CP' ? tramo.precio_cp : codigo === 'SD' ? tramo.precio_sd : tramo.precio_ci
-  return parseDecimalOr0(raw)
-}
-
 export async function GET() {
   try {
     const safe = (name: string) => getSheetData(name).catch(() => [] as Record<string, string>[])
-    const [clientes, ciclos, cargas, cargasVehiculo, vets, preciosGRaw, preciosCRaw, preciosERaw, productos, otrosSrv] = await Promise.all([
+    const [clientesAll, ciclos, cargas, cargasVehiculo, vets, preciosGRaw, preciosCRaw, preciosERaw, productos, otrosSrv] = await Promise.all([
       safe('clientes'),
       safe('ciclos'),
       safe('cargas_petroleo'),
@@ -43,6 +24,9 @@ export async function GET() {
       safe('productos'),
       safe('otros_servicios'),
     ])
+    // Los borradores (fichas creadas por el bot, aún sin registrar) no entran a
+    // ningún KPI ni serie del dashboard — se ocultan igual en /clientes.
+    const clientes = clientesAll.filter(c => c.estado !== 'borrador')
     const preciosG = preciosGRaw as unknown as Tramo[]
     const preciosC = preciosCRaw as unknown as Tramo[]
     const preciosE = preciosERaw as unknown as Tramo[]
@@ -165,8 +149,8 @@ export async function GET() {
         else tabla = preciosC
       }
       const tramo = findTramo(tabla, peso)
-      const servicio = precioTramo(tramo, codigo)
-      const adicionales = adicionalesItems.reduce((s, a) => s + (a.precio ?? 0) * (a.qty ?? 1), 0)
+      const servicio = precioDelTramo(tramo, codigo)
+      const adicionales = adicionalesItems.reduce((s, a) => s + Math.max(0, a.precio ?? 0) * Math.max(0, a.qty ?? 1), 0)
       const result = { total: servicio + adicionales, servicio, adicionales, adicionalesItems }
       ingresoCache.set(c.id, result)
       return result
@@ -240,9 +224,6 @@ export async function GET() {
 
     // Rango adaptativo: desde el mes más antiguo con actividad (o últimos 12 meses si hay menos),
     // hasta el mes actual. Cap superior de 24 meses para no inflar el chart.
-    function mesKeyOf(d: Date): { y: number; m: number } {
-      return { y: d.getFullYear(), m: d.getMonth() }
-    }
     const fechasRelevantes: Date[] = []
     for (const c of clientes) {
       const f = fechaVenta(c)

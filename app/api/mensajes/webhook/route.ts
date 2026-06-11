@@ -1,8 +1,9 @@
+import crypto from 'node:crypto'
 import { NextRequest, NextResponse, after } from 'next/server'
 import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, isWhatsappConfigured, adminWhatsapp } from '@/lib/whatsapp'
 import {
   upsertContacto, getOrCreateConversacion, insertarMensaje, getMensajes,
-  actualizarConversacion, existeMensajePorProvider, marcarEstadoMensaje,
+  actualizarConversacion, existeMensajePorProvider, marcarEstadoMensaje, getConversacion,
   type Conversacion, type Contacto,
 } from '@/lib/mensajes'
 import { isAgenteConfigurado, generarRespuesta } from '@/lib/agente-mensajes'
@@ -41,6 +42,17 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
   } catch (e) { console.error('[agente] generarRespuesta:', e); return }
   if (!r.mensaje) return
 
+  // Re-leer la conversación JUSTO antes de enviar: generarRespuesta puede tardar
+  // varios segundos y en ese lapso un humano pudo tomar la conversación desde el
+  // inbox (que la marca 'pausado'). Si quedó pausada, no enviamos — manda el humano.
+  try {
+    const fresca = await getConversacion(conv.id)
+    if (fresca && (fresca.etiquetas || []).includes('pausado')) {
+      console.log('[agente] conversación pausada durante la generación — no envío:', conv.id)
+      return
+    }
+  } catch (e) { console.warn('[agente] no se pudo re-verificar pausa antes de enviar:', e) }
+
   const env = await enviarTextoWhatsapp(destino, r.mensaje)
   await insertarMensaje({
     conversacion_id: conv.id, direccion: 'saliente', cuerpo: r.mensaje,
@@ -58,8 +70,14 @@ export async function GET(req: NextRequest) {
   const mode = searchParams.get('hub.mode')
   const token = searchParams.get('hub.verify_token')
   const challenge = searchParams.get('hub.challenge')
-  if (mode === 'subscribe' && token && token === process.env.WHATSAPP_VERIFY_TOKEN) {
-    return new NextResponse(challenge ?? '', { status: 200 })
+  const esperado = process.env.WHATSAPP_VERIFY_TOKEN
+  if (mode === 'subscribe' && token && esperado) {
+    // Comparación timing-safe: hasheamos ambos para igualar largos.
+    const a = crypto.createHash('sha256').update(token).digest()
+    const b = crypto.createHash('sha256').update(esperado).digest()
+    if (crypto.timingSafeEqual(a, b)) {
+      return new NextResponse(challenge ?? '', { status: 200 })
+    }
   }
   return new NextResponse('Forbidden', { status: 403 })
 }
@@ -202,15 +220,24 @@ async function procesarEntrante(value: Record<string, unknown>, msg: MetaMsg) {
     cuerpo = `[${tipo}]`
   }
 
-  await insertarMensaje({
-    conversacion_id: conv.id,
-    direccion: 'entrante',
-    cuerpo,
-    tipo,
-    media_url: mediaUrl,
-    provider_message_id: msg.id,
-    ts: new Date(Number(msg.timestamp) * 1000 || Date.now()).toISOString(),
-  })
+  try {
+    await insertarMensaje({
+      conversacion_id: conv.id,
+      direccion: 'entrante',
+      cuerpo,
+      tipo,
+      media_url: mediaUrl,
+      provider_message_id: msg.id,
+      ts: new Date(Number(msg.timestamp) * 1000 || Date.now()).toISOString(),
+    })
+  } catch (e) {
+    // Si existe el índice único de provider_message_id (ver tanda3-uniques.sql),
+    // una segunda entrega del MISMO mensaje (Meta entrega at-least-once) choca acá:
+    // es dedupe ganado por otra request → salimos sin disparar el agente de nuevo.
+    const m = String(e).toLowerCase()
+    if ((m.includes('duplicate') || m.includes('unique')) && m.includes('provider')) return
+    throw e
+  }
 
   // Auto-respuesta del agente solo para mensajes de texto, tras responder a Meta.
   if (msg.type === 'text' && cuerpo) {

@@ -1,5 +1,6 @@
 import './_env-preload'
 import { execFileSync } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { readFileSync, unlinkSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { uploadToR2 } from '../lib/cloudflare-r2'
@@ -11,7 +12,7 @@ import { uploadToR2 } from '../lib/cloudflare-r2'
  *
  * ⚠️ Por defecto INCLUYE .env.local (claves/tokens) para que el respaldo sea
  *    restaurable de una. El objeto en R2 es privado (no se sirve por la URL pública).
- *    Si NO querés incluir secretos:  npx tsx scripts/respaldo-proyecto.ts --sin-env
+ *    Si NO quieres incluir secretos:  npx tsx scripts/respaldo-proyecto.ts --sin-env
  *
  * Uso:  npx tsx scripts/respaldo-proyecto.ts
  *
@@ -39,7 +40,9 @@ async function main() {
 
   const buf = readFileSync(tmpPath)
   const mb = (statSync(tmpPath).size / 1024 / 1024).toFixed(2)
-  const key = `backups/codigo/petcrem-${stamp}.tgz`
+  // Sufijo aleatorio: el bucket tiene dominio público (sin listing) y este tgz
+  // incluye .env.local — una key por timestamp sería adivinable.
+  const key = `backups/codigo/petcrem-${stamp}-${randomBytes(16).toString('hex')}.tgz`
   const up = await uploadToR2(buf, key, 'application/gzip')
   try { unlinkSync(tmpPath) } catch { /* */ }
 

@@ -65,7 +65,7 @@ Also consult `CLAUDE.md` for expanded repo-specific architecture, Google Sheets 
 
 - Add routes under `app/api/` in one folder per sheet / entity.
 - Consider operator access before adding a new API route; update `proxy.ts` allowlist accordingly.
-- Public routes: `/login`, `/api/auth/*`, `/api/init-sheets`, `/api/reorder-columns`.
+- Public routes (gateadas en `proxy`): `/login`, `/api/auth/*`, `/api/init-sheets` (con auth interna: sesión admin-total o `Bearer CRON_SECRET`), `/api/reorder-columns`.
 
 ### Helpful files
 

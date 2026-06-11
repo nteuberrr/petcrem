@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow, ensureSheet, ensureColumns } from '@/lib/datastore'
+import { getSheetData, updateRow, updateByIdIf, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { verifyToken, createToken, createVetToken } from '@/lib/eutanasia-tokens'
 import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
 import { nombreCompletoVet, renderCoordinarEmail, enviarClienteVetAsignado } from '@/lib/eutanasia-mailer'
@@ -69,17 +69,38 @@ export async function POST(req: NextRequest) {
     const vet = vets.find(v => v.id === vet_id)
     if (!vet) return NextResponse.json({ ok: false, error: 'Veterinario no encontrado.' }, { status: 404 })
 
-    // Marcar cotización como aceptada
+    // Marcar cotización como aceptada — ATÓMICO: solo gana si sigue en 'enviada'.
+    // Esto resuelve la carrera "dos vets aceptan casi a la vez": el segundo update
+    // no matchea (estado ya != 'enviada') y devuelve false.
     const ahora = new Date().toISOString()
     const vetNombreCompleto = nombreCompletoVet(vet.nombre, vet.apellido)
-    await updateRow(SHEET_COTI, idx, {
-      ...c,
-      estado: 'aceptada',
-      vet_id_asignado: vet.id,
-      vet_nombre_asignado: vetNombreCompleto,
-      vet_email_asignado: vet.email,
-      fecha_aceptacion: ahora,
-    })
+    const gano = await updateByIdIf(
+      SHEET_COTI,
+      cotizacion_id,
+      { estado: 'enviada' },
+      {
+        estado: 'aceptada',
+        vet_id_asignado: vet.id,
+        vet_nombre_asignado: vetNombreCompleto,
+        vet_email_asignado: vet.email,
+        fecha_aceptacion: ahora,
+      },
+    )
+    if (!gano) {
+      // Otro proceso cambió el estado entre la lectura y el update. Re-leemos
+      // para responder con precisión (nuestro propio doble-clic vs. otro vet).
+      const fresco = (await getSheetData(SHEET_COTI)).find(r => r.id === cotizacion_id)
+      if (fresco?.vet_id_asignado === vet_id) {
+        return NextResponse.json({
+          ok: true, ya_aceptada: true,
+          mensaje: 'Ya habías confirmado esta solicitud. Comunícate con la familia para coordinar.',
+        })
+      }
+      return NextResponse.json({
+        ok: false,
+        error: 'Otro veterinario ya tomó esta solicitud. Gracias por tu interés.',
+      })
+    }
 
     // Marcar el envío correspondiente como 'aceptada'
     try {

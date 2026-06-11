@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { formatDate, formatHoraDia } from '@/lib/dates'
 
@@ -17,37 +17,31 @@ interface Resultado {
 
 /**
  * Página pública. El CLIENTE (tutor) llega desde el link "confirma aquí" que
- * recibió por WhatsApp cuando un veterinario tomó su caso. Al abrirla, confirma
- * que ya coordinó la visita con el veterinario.
+ * recibió por WhatsApp cuando un veterinario tomó su caso. La confirmación se
+ * dispara SOLO al apretar el botón (no en el montaje), para que un preview de
+ * link en WhatsApp no la confirme sola.
  */
 export default function ClienteConfirmaPage() {
   const params = useParams<{ token: string }>()
   const token = params?.token ?? ''
-  const [estado, setEstado] = useState<'cargando' | 'listo'>('cargando')
+  const [estado, setEstado] = useState<'inicial' | 'enviando' | 'listo'>('inicial')
   const [data, setData] = useState<Resultado | null>(null)
 
-  useEffect(() => {
-    ;(async () => {
-      if (!token) {
-        setData({ ok: false, error: 'Falta el token en la URL.' })
-        setEstado('listo')
-        return
-      }
-      try {
-        const r = await fetch('/api/eutanasias/cotizaciones/cliente-confirmar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
-        })
-        const j = await r.json()
-        setData(j)
-      } catch {
-        setData({ ok: false, error: 'Error de red. Intenta de nuevo.' })
-      } finally {
-        setEstado('listo')
-      }
-    })()
-  }, [token])
+  async function confirmar() {
+    setEstado('enviando')
+    try {
+      const r = await fetch('/api/eutanasias/cotizaciones/cliente-confirmar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      })
+      setData(await r.json())
+    } catch {
+      setData({ ok: false, error: 'Error de red. Intenta de nuevo.' })
+    } finally {
+      setEstado('listo')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-start justify-center p-4 py-12">
@@ -57,9 +51,34 @@ export default function ClienteConfirmaPage() {
           <h1 className="text-xl font-bold mt-1">Confirmación de la visita</h1>
         </div>
         <div className="bg-white border border-gray-200 rounded-b-2xl p-6 shadow-sm text-center">
-          {estado === 'cargando' && <p className="text-gray-500 text-sm py-4">Verificando…</p>}
+          {!token && (
+            <>
+              <p className="text-5xl mb-3">⚠</p>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Enlace inválido</h2>
+              <p className="text-sm text-gray-600">Falta el token en la URL.</p>
+            </>
+          )}
 
-          {estado === 'listo' && data && !data.ok && (
+          {token && estado !== 'listo' && (
+            <div className="py-2">
+              <p className="text-5xl mb-3">🐾</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Confirma la visita</h2>
+              <p className="text-sm text-gray-600 mb-5">
+                Si ya coordinaste con el veterinario el día y la hora de la visita,
+                confírmalo aquí para que lo dejemos registrado.
+              </p>
+              <button
+                onClick={confirmar}
+                disabled={estado === 'enviando'}
+                className="w-full px-6 py-3 text-white font-medium rounded-lg disabled:opacity-60 transition-opacity text-base"
+                style={{ backgroundColor: COLOR }}
+              >
+                {estado === 'enviando' ? 'Confirmando…' : 'Sí, confirmo la visita'}
+              </button>
+            </div>
+          )}
+
+          {token && estado === 'listo' && data && !data.ok && (
             <>
               <p className="text-5xl mb-3">⚠</p>
               <h2 className="text-lg font-semibold text-gray-900 mb-1">No pudimos confirmar</h2>
@@ -68,7 +87,7 @@ export default function ClienteConfirmaPage() {
             </>
           )}
 
-          {estado === 'listo' && data && data.ok && (
+          {token && estado === 'listo' && data && data.ok && (
             <>
               <p className="text-5xl mb-3">🐾</p>
               <h2 className="text-xl font-bold text-gray-900 mb-1">

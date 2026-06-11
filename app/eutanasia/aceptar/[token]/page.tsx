@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { formatDate, formatHoraDia } from '@/lib/dates'
 
@@ -21,38 +21,31 @@ interface Resultado {
 }
 
 /**
- * Página pública. El vet llega acá desde el link del email. La página
- * confirma el token vía POST y muestra el resultado: datos del cliente
- * + instrucción para contactarlo, o un mensaje de error/expiración.
+ * Página pública. El vet llega acá desde el link del email. NO mutamos en el
+ * montaje (un prefetch del cliente de correo o un escáner de links podría
+ * "aceptar" sin intención): la confirmación se dispara solo al apretar el botón.
  */
 export default function AceptarPage() {
   const params = useParams<{ token: string }>()
   const token = params?.token ?? ''
-  const [estado, setEstado] = useState<'cargando' | 'listo'>('cargando')
+  const [estado, setEstado] = useState<'inicial' | 'enviando' | 'listo'>('inicial')
   const [data, setData] = useState<Resultado | null>(null)
 
-  useEffect(() => {
-    if (!token) {
-      setData({ ok: false, error: 'Falta el token en la URL.' })
+  async function confirmar() {
+    setEstado('enviando')
+    try {
+      const r = await fetch('/api/eutanasias/cotizaciones/aceptar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      })
+      setData(await r.json())
+    } catch {
+      setData({ ok: false, error: 'Error de red. Intenta de nuevo.' })
+    } finally {
       setEstado('listo')
-      return
     }
-    ;(async () => {
-      try {
-        const r = await fetch('/api/eutanasias/cotizaciones/aceptar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
-        })
-        const j = await r.json()
-        setData(j)
-      } catch {
-        setData({ ok: false, error: 'Error de red. Intenta de nuevo.' })
-      } finally {
-        setEstado('listo')
-      }
-    })()
-  }, [token])
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-start justify-center p-4 py-12">
@@ -62,9 +55,34 @@ export default function AceptarPage() {
           <h1 className="text-xl font-bold mt-1">Confirmación de disponibilidad</h1>
         </div>
         <div className="bg-white border border-gray-200 rounded-b-2xl p-6 shadow-sm">
-          {estado === 'cargando' && <p className="text-gray-500 text-sm">Verificando…</p>}
+          {!token && (
+            <div className="text-center py-6">
+              <p className="text-5xl mb-3">⚠</p>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Enlace inválido</h2>
+              <p className="text-sm text-gray-600">Falta el token en la URL.</p>
+            </div>
+          )}
 
-          {estado === 'listo' && data && !data.ok && (
+          {token && estado !== 'listo' && (
+            <div className="text-center py-2">
+              <p className="text-5xl mb-3">🤝</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">¿Confirmas tu disponibilidad?</h2>
+              <p className="text-sm text-gray-600 mb-5">
+                Al confirmar, le avisamos a la familia que tú acompañarás a su mascota y te
+                enviamos sus datos de contacto para que coordines la visita.
+              </p>
+              <button
+                onClick={confirmar}
+                disabled={estado === 'enviando'}
+                className="w-full px-6 py-3 text-white font-medium rounded-lg disabled:opacity-60 transition-opacity text-base"
+                style={{ backgroundColor: COLOR }}
+              >
+                {estado === 'enviando' ? 'Confirmando…' : 'Sí, confirmo mi disponibilidad'}
+              </button>
+            </div>
+          )}
+
+          {token && estado === 'listo' && data && !data.ok && (
             <div className="text-center py-6">
               <p className="text-5xl mb-3">⚠</p>
               <h2 className="text-lg font-semibold text-gray-900 mb-1">No pudimos confirmar</h2>
@@ -73,7 +91,7 @@ export default function AceptarPage() {
             </div>
           )}
 
-          {estado === 'listo' && data && data.ok && data.ya_aceptada && (
+          {token && estado === 'listo' && data && data.ok && data.ya_aceptada && (
             <div className="text-center py-4">
               <p className="text-4xl mb-3">✓</p>
               <h2 className="text-lg font-semibold text-gray-900 mb-1">Ya habías confirmado</h2>
@@ -82,7 +100,7 @@ export default function AceptarPage() {
             </div>
           )}
 
-          {estado === 'listo' && data && data.ok && !data.ya_aceptada && (
+          {token && estado === 'listo' && data && data.ok && !data.ya_aceptada && (
             <div>
               <div className="text-center mb-5">
                 <p className="text-5xl mb-2">🤝</p>

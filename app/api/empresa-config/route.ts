@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, appendRow, updateRow, ensureSheet, ensureColumns } from '@/lib/datastore'
+import { getSheetData, appendRow, updateRow, ensureSheet, ensureColumns, isSheetsBackend } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 
 const SHEET = 'empresa_config'
@@ -79,8 +79,14 @@ export async function PUT(req: NextRequest) {
     // "+", "=" o "@" como fórmula y se "come" el "+" del teléfono. Forzamos texto
     // con un apóstrofo inicial: Sheets lo guarda como texto y NO lo devuelve al
     // leer, así el "+56..." persiste y se muestra tal cual.
-    if (data.telefono && /^[+=@]/.test(data.telefono.trim())) {
-      data.telefono = `'${data.telefono.trim()}`
+    // SOLO aplica a Sheets: en Postgres el apóstrofo se guardaría literal ("'+56…").
+    if (data.telefono) {
+      if (isSheetsBackend()) {
+        if (/^[+=@]/.test(data.telefono.trim())) data.telefono = `'${data.telefono.trim()}`
+      } else if (data.telefono.startsWith("'")) {
+        // Postgres: limpiar el apóstrofo heredado del hack de Sheets (datos viejos).
+        data.telefono = data.telefono.replace(/^'+/, '')
+      }
     }
 
     if (idx === -1) {

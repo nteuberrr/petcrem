@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow } from '@/lib/datastore'
+import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
 import { enviarMailAgradecimiento, fechaProximoPago } from '@/lib/eutanasia-mailer'
 
@@ -62,14 +62,24 @@ export async function POST(req: NextRequest) {
 
     const ahora = new Date().toISOString()
     const fechaRealizacionISO = ahora.slice(0, 10) // YYYY-MM-DD
-    await updateRow(SHEET_COTI, idx, {
-      ...c,
-      estado: 'realizada',
-      fecha_realizacion: ahora,
-      // Inicializamos el estado de pago para que aparezca en el listado
-      // histórico esperando que el admin marque "pago confirmado".
-      estado_pago: 'pendiente_pago',
-    })
+    // Flip atómico: la cotización puede llegar de 'confirmada' o 'aceptada'
+    // (el vet puede saltarse el paso confirmar). Intentamos ambas, siempre
+    // exigiendo que esté asignada a este vet. Si ninguna matchea, otro request
+    // ya la marcó → respondemos idempotente.
+    // estado_pago se inicializa para que aparezca en el histórico esperando que
+    // el admin marque "pago confirmado".
+    const cambiosRealizada = { estado: 'realizada', fecha_realizacion: ahora, estado_pago: 'pendiente_pago' }
+    let gano = await updateByIdIf(SHEET_COTI, cotizacion_id, { estado: 'confirmada', vet_id_asignado: vet_id }, cambiosRealizada)
+    if (!gano) gano = await updateByIdIf(SHEET_COTI, cotizacion_id, { estado: 'aceptada', vet_id_asignado: vet_id }, cambiosRealizada)
+    if (!gano) {
+      const fresco = (await getSheetData(SHEET_COTI)).find(r => r.id === cotizacion_id)
+      const fechaPago = fresco?.fecha_realizacion ? fechaProximoPago(fresco.fecha_realizacion.slice(0, 10)) : ''
+      return NextResponse.json({
+        ok: true, ya_realizada: true,
+        mensaje: 'Ya habías confirmado la realización de este servicio.',
+        mascota_nombre: c.mascota_nombre, fecha_pago: fechaPago, precio: c.precio_snapshot,
+      })
+    }
 
     // Disparar correo de agradecimiento. Best-effort.
     const vetNombre = c.vet_nombre_asignado || ''

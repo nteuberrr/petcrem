@@ -559,7 +559,7 @@ export default function ConfiguracionPage() {
                           if (cantidad > 0) {
                             const otras = categoriasProd.filter(x => x.id !== c.id).map(x => x.nombre)
                             const opcionesTxt = otras.length > 0 ? `\nOpciones disponibles: ${otras.join(', ')}` : ''
-                            const reasignar = prompt(`La categoría "${c.nombre}" tiene ${cantidad} producto(s).\n\nEscribí el nombre de la categoría a la que querés moverlos, o dejá vacío para que queden sin categoría.${opcionesTxt}`)
+                            const reasignar = prompt(`La categoría "${c.nombre}" tiene ${cantidad} producto(s).\n\nEscribe el nombre de la categoría a la que quieres moverlos, o deja vacío para que queden sin categoría.${opcionesTxt}`)
                             if (reasignar === null) return  // canceló
                             const r = await fetch(`/api/categorias-productos?id=${c.id}&reasignar_a=${encodeURIComponent(reasignar.trim())}`, { method: 'DELETE' })
                             if (!r.ok) { const err = await r.json().catch(() => ({})); alert(err?.error ?? 'Error al eliminar'); return }
@@ -1188,7 +1188,7 @@ export default function ConfiguracionPage() {
           e.preventDefault()
           const categoria = prodForm.categoria.trim()
           if (!categoria) {
-            alert('La categoría es obligatoria. Escribí una existente o creá una nueva (ej: Ánforas, Relicarios).')
+            alert('La categoría es obligatoria. Escribe una existente o crea una nueva (ej: Ánforas, Relicarios).')
             return
           }
           if (editingProducto) {
@@ -1211,7 +1211,7 @@ export default function ConfiguracionPage() {
               list="categorias-productos"
               value={prodForm.categoria}
               onChange={e => setProdForm(f => ({ ...f, categoria: e.target.value }))}
-              placeholder="Elegí una existente o escribí una nueva (Ánforas, Relicarios, etc.)"
+              placeholder="Elige una existente o escribe una nueva (Ánforas, Relicarios, etc.)"
               className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <datalist id="categorias-productos">
@@ -1222,7 +1222,7 @@ export default function ConfiguracionPage() {
                 return Array.from(set).sort().map(cat => <option key={cat} value={cat} />)
               })()}
             </datalist>
-            <p className="text-[10px] text-gray-500 mt-0.5">Elegí una existente o escribí una nueva. Las categorías se gestionan arriba.</p>
+            <p className="text-[10px] text-gray-500 mt-0.5">Elige una existente o escribe una nueva. Las categorías se gestionan arriba.</p>
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Precio (CLP)</label>

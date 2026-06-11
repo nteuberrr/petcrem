@@ -1014,7 +1014,7 @@ export default function DespachosTab() {
                 </div>
               ) : (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600">
-                  No hay sugeridas dentro del umbral de {optimMaxDetour} min de desvío. Subí el slider para considerar más opciones.
+                  No hay sugeridas dentro del umbral de {optimMaxDetour} min de desvío. Sube el slider para considerar más opciones.
                 </div>
               )}
 

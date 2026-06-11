@@ -44,7 +44,7 @@ function findUniqueIndex(rows: Record<string, string>[], id: string): { idx: num
   if (matches.length > 1) {
     return {
       idx: -1,
-      error: `Hay ${matches.length} productos con id="${id}" en la planilla. Andá a Configuración → Mantenimiento → Actualizar base de datos para renumerar IDs duplicados.`,
+      error: `Hay ${matches.length} productos con id="${id}" en la planilla. Ve a Configuración → Mantenimiento → Actualizar base de datos para renumerar IDs duplicados.`,
     }
   }
   return { idx: matches[0] }

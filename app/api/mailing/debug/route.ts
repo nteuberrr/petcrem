@@ -186,7 +186,7 @@ function interpretar(
     out.push('   3. Webhook recibe email.opened pero falla al actualizar.')
   }
   if (!env.own_tracking_disabled) {
-    out.push('⚠ MAILING_DISABLE_OWN_TRACKING NO está en true. Si tenés Resend tracking activo, los links están siendo reescritos dos veces.')
+    out.push('⚠ MAILING_DISABLE_OWN_TRACKING NO está en true. Si tienes Resend tracking activo, los links están siendo reescritos dos veces.')
   }
   if (!env.webhook_secret_set) {
     out.push('⚠ RESEND_WEBHOOK_SECRET no configurado. El webhook acepta sin verificar firma (OK en dev, no recomendado en prod).')

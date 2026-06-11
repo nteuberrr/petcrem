@@ -21,6 +21,12 @@ import { SHEETS } from './sheets-schema'
 const BACKEND = (process.env.DATA_BACKEND || 'sheets').toLowerCase()
 const usePg = BACKEND === 'postgres'
 
+/** true si el backend activo es Google Sheets (default). Útil para hacks que solo
+ * aplican a Sheets (ej. el apóstrofo anti-fórmula de USER_ENTERED). */
+export function isSheetsBackend(): boolean {
+  return !usePg
+}
+
 // ── helpers postgres ─────────────────────────────────────────────────────────
 
 /** Convierte cualquier valor a la representación string que espera la app. */
@@ -123,6 +129,41 @@ export async function updateById(sheetName: string, id: string | number, data: R
   if (error) throw new Error(`[datastore] updateById ${sheetName}: ${error.message}`)
 }
 
+/**
+ * Update condicional por id: aplica `changes` (PARCIAL — solo esas columnas) SOLO
+ * si la fila con ese id cumple todos los pares de `expected` (igualdad). Devuelve
+ * true si actualizó, false si la condición no se cumplió (otro proceso ganó la
+ * carrera, o el estado cambió).
+ *
+ * En Postgres es ATÓMICO: `UPDATE … WHERE id=? AND col=? …` en una sola sentencia
+ * → sirve para resolver races tipo "primer veterinario que acepta gana".
+ * En Sheets es best-effort (re-lee y compara antes de escribir; la ventana TOCTOU
+ * se reduce pero no desaparece — la API de Sheets no tiene transacciones).
+ */
+export async function updateByIdIf(
+  sheetName: string,
+  id: string | number,
+  expected: Record<string, string>,
+  changes: Record<string, unknown>,
+): Promise<boolean> {
+  if (!usePg) {
+    const rows = await sheets.getSheetData(sheetName)
+    const idx = rows.findIndex(r => String(r.id) === String(id))
+    if (idx === -1) return false
+    const row = rows[idx]
+    for (const [k, v] of Object.entries(expected)) {
+      if (String(row[k] ?? '') !== String(v)) return false
+    }
+    await sheets.updateRow(sheetName, idx, { ...row, ...changes })
+    return true
+  }
+  let q = getSupabase().from(sheetName).update(rowForWrite(sheetName, changes, { full: false })).eq('id', String(id))
+  for (const [k, v] of Object.entries(expected)) q = q.eq(k, v)
+  const { data, error } = await q.select('id')
+  if (error) throw new Error(`[datastore] updateByIdIf ${sheetName}: ${error.message}`)
+  return (data?.length ?? 0) > 0
+}
+
 export async function findRows(sheetName: string, field: string, value: string): Promise<Record<string, string>[]> {
   if (!usePg) return sheets.findRows(sheetName, field, value)
   const rows = await getSheetData(sheetName)
@@ -135,6 +176,18 @@ export async function deleteRow(sheetName: string, rowIndex: number): Promise<vo
   if (id == null) throw new Error(`[datastore] deleteRow ${sheetName}: no existe fila en índice ${rowIndex}`)
   const { error } = await getSupabase().from(sheetName).delete().eq('id', id)
   if (error) throw new Error(`[datastore] delete ${sheetName}: ${error.message}`)
+}
+
+/** Delete por id (preferido sobre deleteRow; sin TOCTOU de índice). */
+export async function deleteById(sheetName: string, id: string | number): Promise<void> {
+  if (!usePg) {
+    const rows = await sheets.getSheetData(sheetName)
+    const idx = rows.findIndex(r => String(r.id) === String(id))
+    if (idx === -1) throw new Error(`[datastore] deleteById ${sheetName}: id ${id} no encontrado`)
+    return sheets.deleteRow(sheetName, idx)
+  }
+  const { error } = await getSupabase().from(sheetName).delete().eq('id', String(id))
+  if (error) throw new Error(`[datastore] deleteById ${sheetName}: ${error.message}`)
 }
 
 export async function getNextId(sheetName: string): Promise<string> {
