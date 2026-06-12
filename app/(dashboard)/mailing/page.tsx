@@ -97,7 +97,23 @@ type DebugData = {
   error?: string
 }
 
-const TABS = ['Campañas', 'Base', 'Nueva campaña'] as const
+type ImagenBanco = {
+  id: string
+  url: string
+  key: string
+  descripcion: string
+  prompt: string
+  tags: string
+  alt: string
+  grupo: string
+  aspect: string
+  origen: string
+  modelo: string
+  creado_por: string
+  fecha_creacion: string
+}
+
+const TABS = ['Campañas', 'Base', 'Nueva campaña', 'Imágenes'] as const
 type Tab = typeof TABS[number]
 
 const CATEGORIAS = ['prospecto', 'cliente', 'inactivo'] as const
@@ -153,6 +169,7 @@ export default function MailingPage() {
       {tab === 'Campañas' && <CampanasPanel refreshKey={campanasRefreshKey} onDuplicar={abrirDuplicar} />}
       {tab === 'Base' && <BasePanel />}
       {tab === 'Nueva campaña' && <NuevaCampanaPanel initial={prefilled} onCreada={onCampanaCreada} />}
+      {tab === 'Imágenes' && <ImagenesPanel />}
     </div>
   )
 }
@@ -1256,7 +1273,10 @@ function NuevaCampanaPanel({ initial, onCreada }: {
   const [vets, setVets] = useState<Vet[]>([])
   const [borradores, setBorradores] = useState<Campana[]>([])
   const [loadingBorrador, setLoadingBorrador] = useState<string | null>(null)
+  const [generarOpen, setGenerarOpen] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const htmlRef = useRef<HTMLTextAreaElement>(null)
 
   const fetchBorradores = useCallback(async () => {
     try {
@@ -1407,6 +1427,21 @@ function NuevaCampanaPanel({ initial, onCreada }: {
     return { html: resultado, subidas, fallidas, locales }
   }
 
+  function insertarImagen(img: ImagenBanco) {
+    const tag = `\n<img src="${img.url}" alt="${(img.alt || img.descripcion || '').replace(/"/g, '&quot;')}" style="width:100%;max-width:560px;height:auto;display:block;border:0;border-radius:8px;margin:12px auto" />\n`
+    const el = htmlRef.current
+    if (el && typeof el.selectionStart === 'number') {
+      const start = el.selectionStart
+      const end = el.selectionEnd
+      const next = form.html.slice(0, start) + tag + form.html.slice(end)
+      setForm(f => ({ ...f, html: next }))
+    } else {
+      setForm(f => ({ ...f, html: f.html + tag }))
+    }
+    setPickerOpen(false)
+    setInfo('Imagen insertada en el HTML')
+  }
+
   async function guardarBorrador(): Promise<string | null> {
     setError(''); setInfo(''); setSavingDraft(true)
     try {
@@ -1516,14 +1551,20 @@ function NuevaCampanaPanel({ initial, onCreada }: {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-9 gap-4">
       <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-base font-bold text-gray-900">{draftId ? `Editando borrador N° ${draftId}` : 'Nueva campaña'}</h2>
-          {draftId && (
-            <button type="button" onClick={nuevaCampana}
-              className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg px-3 py-1.5 shadow-sm transition-colors">
-              <span>+</span> Empezar campaña nueva
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setGenerarOpen(true)}
+              className="inline-flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white text-xs font-semibold rounded-lg px-3 py-1.5 shadow-sm transition-colors">
+              <span>✨</span> Generar con IA
             </button>
-          )}
+            {draftId && (
+              <button type="button" onClick={nuevaCampana}
+                className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg px-3 py-1.5 shadow-sm transition-colors">
+                <span>+</span> Empezar campaña nueva
+              </button>
+            )}
+          </div>
         </div>
 
         <Field label="Asunto *" value={form.asunto} onChange={v => setForm(f => ({ ...f, asunto: v }))} required />
@@ -1545,15 +1586,21 @@ function NuevaCampanaPanel({ initial, onCreada }: {
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
             <label className="text-xs font-semibold text-gray-700">HTML del email *</label>
-            <button type="button" onClick={() => fileRef.current?.click()}
-              className="inline-flex items-center gap-1 border-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors">
-              📁 Cargar desde archivo (.html)
-            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setPickerOpen(true)}
+                className="inline-flex items-center gap-1 border-2 border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors">
+                🖼 Insertar imagen del banco
+              </button>
+              <button type="button" onClick={() => fileRef.current?.click()}
+                className="inline-flex items-center gap-1 border-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors">
+                📁 Cargar desde archivo (.html)
+              </button>
+            </div>
             <input ref={fileRef} type="file" accept=".html,text/html" onChange={onFileChange} className="hidden" />
           </div>
-          <textarea value={form.html} onChange={e => setForm(f => ({ ...f, html: e.target.value }))}
+          <textarea ref={htmlRef} value={form.html} onChange={e => setForm(f => ({ ...f, html: e.target.value }))}
             rows={14}
             placeholder="<html><body>Hola {{primer_nombre}}, …</body></html>"
             className="w-full font-mono text-xs border-2 border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
@@ -1644,6 +1691,20 @@ function NuevaCampanaPanel({ initial, onCreada }: {
         </div>
       )}
 
+      <GenerarCampanaModal
+        open={generarOpen}
+        onClose={() => setGenerarOpen(false)}
+        categoriaInicial={form.categoria}
+        onUsar={(r, categoria) => {
+          setForm(f => ({ ...f, asunto: r.asunto, preview_text: r.preview_text, html: r.html, categoria }))
+          setError('')
+          setInfo('Campaña generada con IA. Revisa el preview y envía un test antes del envío real.')
+          setGenerarOpen(false)
+        }}
+      />
+
+      <ImagenPickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={insertarImagen} />
+
       <Modal open={testOpen} onClose={() => setTestOpen(false)} title="Enviar email de prueba">
         <div className="space-y-3">
           <p className="text-sm text-gray-600">Se envía un mail con el asunto prefijado con [TEST], usando un veterinario de muestra para sustituir las variables.</p>
@@ -1658,6 +1719,505 @@ function NuevaCampanaPanel({ initial, onCreada }: {
           </div>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+// ===================== GENERAR CAMPAÑA CON IA =====================
+
+type GenImagen = { url: string; alt: string; origen: 'ai' | 'reuse'; id?: string }
+type GenResult = { asunto: string; preview_text: string; html: string; imagenes?: GenImagen[]; avisos?: string[] }
+
+const TONOS = [
+  'Profesional e institucional',
+  'Cercano y humano',
+  'Directo y comercial',
+  'Informativo / educativo',
+] as const
+
+const FORMATOS = [
+  { value: 'auto', label: 'Automático (que elija la IA)' },
+  { value: 'newsletter', label: 'Newsletter (varias secciones)' },
+  { value: 'correo', label: 'Correo simple (mensaje directo)' },
+  { value: 'folleto', label: 'Folleto / promocional (visual)' },
+  { value: 'anuncio', label: 'Anuncio / novedad (una noticia)' },
+] as const
+
+/** Rellena las variables {{...}} con un vet de muestra, solo para el preview. */
+function sampleFill(html: string): string {
+  const vars: Record<string, string> = {
+    nombre: 'Dra. María José Soto', primer_nombre: 'María José',
+    veterinaria: 'Clínica Vida Animal', comuna: 'Providencia',
+    telefono: '+56 9 1234 5678', email: 'contacto@vidaanimal.cl', categoria: 'prospecto',
+  }
+  return html.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vars[k] ?? '')
+}
+
+function GenerarCampanaModal({ open, onClose, categoriaInicial, onUsar }: {
+  open: boolean
+  onClose: () => void
+  categoriaInicial: string
+  onUsar: (r: GenResult, categoria: string) => void
+}) {
+  const [instruccion, setInstruccion] = useState('')
+  const [categoria, setCategoria] = useState(categoriaInicial || 'todos')
+  const [tono, setTono] = useState<string>(TONOS[0])
+  const [formato, setFormato] = useState<string>('auto')
+  const [comentario, setComentario] = useState('')
+  const [result, setResult] = useState<GenResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [accion, setAccion] = useState<'generar' | 'variar' | 'ajustar' | null>(null)
+  const [error, setError] = useState('')
+
+  async function generar(body: Record<string, unknown>, modo: 'generar' | 'variar' | 'ajustar') {
+    setLoading(true); setAccion(modo); setError('')
+    try {
+      const res = await fetch('/api/mailing/generar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(j.error || `Error ${res.status}`); return }
+      setResult(j as GenResult)
+      setComentario('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error de red')
+    } finally {
+      setLoading(false); setAccion(null)
+    }
+  }
+
+  function stripActual(r: GenResult) {
+    return { asunto: r.asunto, preview_text: r.preview_text, html: r.html }
+  }
+
+  function generarNueva() {
+    if (!instruccion.trim()) { setError('Describe de qué se trata la campaña.'); return }
+    generar({ instruccion, categoria, tono, formato }, 'generar')
+  }
+  function variar() {
+    if (!result) return
+    generar({ instruccion, categoria, tono, formato, variar: true, actual: stripActual(result) }, 'variar')
+  }
+  function ajustar() {
+    if (!result || !comentario.trim()) return
+    generar({ instruccion, categoria, tono, formato, comentario, actual: stripActual(result) }, 'ajustar')
+  }
+  function reiniciar() {
+    setResult(null); setComentario(''); setError('')
+  }
+
+  const previewHtml = result ? sampleFill(result.html) : ''
+  const generadas = result?.imagenes?.filter(i => i.origen === 'ai').length ?? 0
+  const reusadas = result?.imagenes?.filter(i => i.origen === 'reuse').length ?? 0
+
+  return (
+    <Modal open={open} onClose={onClose} title="Generar campaña con IA" size="2xl">
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600">
+          Describe la campaña y la IA arma el asunto, el preview y un email completo, generando o
+          reciclando imágenes fotorrealistas del banco. Después puedes pedir otra versión o ajustarla con un comentario.
+        </p>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-700">¿De qué se trata la campaña? *</label>
+          <textarea value={instruccion} onChange={e => setInstruccion(e.target.value)} rows={4}
+            placeholder="Ej: invitar a las clínicas de la zona oriente a sumarse al convenio, destacando la entrega en 4 días hábiles, el retiro desde la clínica y la trazabilidad total. Cerrar con un botón para coordinar una reunión."
+            className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-700">Grupo destinatario</label>
+            <select value={categoria} onChange={e => setCategoria(e.target.value)}
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="todos">Todas las categorías</option>
+              {CATEGORIAS.map(c => <option key={c} value={c}>Solo {c}s</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-700">Formato</label>
+            <select value={formato} onChange={e => setFormato(e.target.value)}
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              {FORMATOS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-700">Tono</label>
+            <select value={tono} onChange={e => setTono(e.target.value)}
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              {TONOS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {error && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{error}</div>}
+
+        {!result && (
+          <button type="button" onClick={generarNueva} disabled={loading || !instruccion.trim()}
+            className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-lg py-2.5 text-sm font-semibold shadow-sm disabled:opacity-50">
+            {loading ? 'Generando… (las imágenes pueden tardar hasta ~1 min)' : '✨ Generar campaña'}
+          </button>
+        )}
+
+        {result && (
+          <div className="space-y-3 border-t border-gray-200 pt-3">
+            <div className="text-sm space-y-0.5">
+              <div className="text-gray-900"><span className="font-semibold">Asunto:</span> {result.asunto}</div>
+              <div className="text-gray-600"><span className="font-semibold">Preview:</span> {result.preview_text}</div>
+              {(generadas > 0 || reusadas > 0) && (
+                <div className="text-[12px] text-gray-500">
+                  Imágenes: {generadas > 0 && <span>{generadas} generada{generadas === 1 ? '' : 's'}</span>}
+                  {generadas > 0 && reusadas > 0 && ' · '}
+                  {reusadas > 0 && <span>{reusadas} reciclada{reusadas === 1 ? '' : 's'} del banco</span>}
+                </div>
+              )}
+            </div>
+
+            {result.avisos && result.avisos.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 text-xs space-y-0.5">
+                {result.avisos.map((a, i) => <div key={i}>⚠ {a}</div>)}
+              </div>
+            )}
+
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 flex items-center justify-between">
+                <span>Vista previa (con vet de muestra)</span>
+                {loading && <span className="text-[11px] font-normal text-indigo-600">{accion === 'ajustar' ? 'Ajustando…' : 'Generando otra versión…'}</span>}
+              </div>
+              <iframe srcDoc={previewHtml} className="w-full h-[420px] bg-white" sandbox="" />
+            </div>
+
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+              <label className="text-xs font-semibold text-gray-700">¿Quieres ajustar algo? Escribe un comentario</label>
+              <textarea value={comentario} onChange={e => setComentario(e.target.value)} rows={2}
+                placeholder="Ej: hazlo más corto, agrega un botón para agendar reunión, tono más formal, cambia la foto principal por una de un gato…"
+                className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <div className="flex gap-2 flex-wrap">
+                <button type="button" onClick={ajustar} disabled={loading || !comentario.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50">
+                  {loading && accion === 'ajustar' ? 'Ajustando…' : 'Ajustar con comentario'}
+                </button>
+                <button type="button" onClick={variar} disabled={loading}
+                  className="border-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50">
+                  {loading && accion === 'variar' ? 'Generando…' : '↻ Generar otra versión'}
+                </button>
+                <button type="button" onClick={reiniciar} disabled={loading}
+                  className="ml-auto text-xs text-gray-500 hover:underline">
+                  Empezar de cero
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={onClose} className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button type="button" onClick={() => onUsar(result, categoria)} disabled={loading}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md disabled:opacity-50">
+                Usar esta campaña
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+// ===================== BANCO DE IMÁGENES =====================
+
+const ASPECTOS = ['16:9', '4:3', '1:1', '4:5', '3:2', '9:16'] as const
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader()
+    fr.onload = () => resolve(String(fr.result))
+    fr.onerror = () => reject(new Error('No se pudo leer el archivo'))
+    fr.readAsDataURL(file)
+  })
+}
+
+/** Modal para insertar una imagen del banco en el editor de HTML. */
+function ImagenPickerModal({ open, onClose, onPick }: {
+  open: boolean
+  onClose: () => void
+  onPick: (img: ImagenBanco) => void
+}) {
+  const [imgs, setImgs] = useState<ImagenBanco[]>([])
+  const [loading, setLoading] = useState(false)
+  const [q, setQ] = useState('')
+
+  const cargar = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await fetch('/api/mailing/imagenes', { cache: 'no-store' })
+      const d = await r.json()
+      setImgs(Array.isArray(d) ? d : [])
+    } catch { setImgs([]) }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargar()
+  }, [open, cargar])
+
+  const filtrados = q.trim()
+    ? imgs.filter(i => `${i.descripcion} ${i.tags} ${i.alt}`.toLowerCase().includes(q.toLowerCase()))
+    : imgs
+
+  return (
+    <Modal open={open} onClose={onClose} title="Insertar imagen del banco" size="2xl">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar por descripción o tag…"
+            className="flex-1 border-2 border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <button type="button" onClick={cargar} className="text-xs text-indigo-600 hover:underline">Actualizar</button>
+        </div>
+        {loading ? (
+          <p className="text-sm text-gray-400 text-center py-6">Cargando…</p>
+        ) : filtrados.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">
+            {imgs.length === 0 ? 'El banco está vacío. Genera imágenes en la pestaña «Imágenes» o desde «Generar con IA».' : 'Sin resultados.'}
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
+            {filtrados.map(img => (
+              <button key={img.id} type="button" onClick={() => onPick(img)}
+                className="group text-left border border-gray-200 rounded-lg overflow-hidden hover:ring-2 hover:ring-indigo-500 transition">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.url} alt={img.alt} className="w-full h-28 object-cover bg-gray-100" />
+                <div className="px-2 py-1.5">
+                  <div className="text-[11px] text-gray-700 line-clamp-2">{img.descripcion || img.alt || '(sin descripción)'}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+const GRUPOS = ['mascotas', 'personas', 'productos', 'instalaciones', 'otro'] as const
+// La IA NUNCA genera instalaciones → al generar solo se ofrecen estos grupos.
+const GRUPOS_GEN = ['mascotas', 'personas', 'productos', 'otro'] as const
+
+/** Tarjeta de una imagen del banco con selector de grupo, copiar y eliminar. */
+function ImagenCard({ img, onGrupo, onCopy, onDelete }: {
+  img: ImagenBanco
+  onGrupo: (img: ImagenBanco, grupo: string) => void
+  onCopy: (url: string) => void
+  onDelete: (img: ImagenBanco) => void
+}) {
+  return (
+    <div className="border border-gray-200 rounded-lg overflow-hidden flex flex-col">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={img.url} alt={img.alt} className="w-full h-36 object-cover bg-gray-100" />
+      <div className="p-2 flex-1 flex flex-col gap-1.5">
+        <div className="text-[11px] text-gray-700 line-clamp-2 flex-1">{img.descripcion || img.alt || '(sin descripción)'}</div>
+        <div className="flex items-center gap-1.5">
+          <select value={(GRUPOS as readonly string[]).includes(img.grupo) ? img.grupo : ''}
+            onChange={e => onGrupo(img, e.target.value)} title="Grupo"
+            className="text-[10px] border border-gray-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="">sin grupo</option>
+            {GRUPOS.map(g => <option key={g} value={g}>{g}</option>)}
+          </select>
+          {img.aspect && <span className="text-[10px] text-gray-400">{img.aspect}</span>}
+          <div className="ml-auto flex items-center gap-1">
+            <button type="button" onClick={() => onCopy(img.url)} title="Copiar URL" className="text-gray-500 hover:text-indigo-600 text-xs">⧉</button>
+            <button type="button" onClick={() => onDelete(img)} title="Eliminar" className="text-gray-500 hover:text-red-600 text-xs">🗑</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Pestaña «Imágenes»: banco de imágenes reciclables (generar / subir / agrupar / eliminar). */
+function ImagenesPanel() {
+  const [imgs, setImgs] = useState<ImagenBanco[]>([])
+  const [loading, setLoading] = useState(true)
+  const [prompt, setPrompt] = useState('')
+  const [aspect, setAspect] = useState<string>('16:9')
+  const [genGrupo, setGenGrupo] = useState<string>('mascotas')
+  const [upGrupo, setUpGrupo] = useState<string>('instalaciones')
+  const [generando, setGenerando] = useState(false)
+  const [subiendo, setSubiendo] = useState(false)
+  const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const cargar = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await fetch('/api/mailing/imagenes', { cache: 'no-store' })
+      const d = await r.json()
+      setImgs(Array.isArray(d) ? d : [])
+    } catch { setImgs([]) }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargar()
+  }, [cargar])
+
+  async function generar() {
+    if (!prompt.trim()) { setError('Describe la imagen que quieres generar.'); return }
+    setGenerando(true); setError(''); setInfo('')
+    try {
+      const r = await fetch('/api/mailing/imagenes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generar: { prompt, aspect, descripcion: prompt, tags: '', grupo: genGrupo } }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setError(j.error || `Error ${r.status}`); return }
+      setPrompt(''); setInfo('Imagen generada y guardada en el banco.')
+      await cargar()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error de red')
+    } finally {
+      setGenerando(false)
+    }
+  }
+
+  async function subir(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (fileRef.current) fileRef.current.value = ''
+    setSubiendo(true); setError(''); setInfo('')
+    try {
+      const dataUrl = await fileToDataUrl(file)
+      const r = await fetch('/api/mailing/imagenes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data_url: dataUrl, descripcion: file.name.replace(/\.[^.]+$/, ''), grupo: upGrupo }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setError(j.error || `Error ${r.status}`); return }
+      setInfo(`Imagen subida al banco (grupo: ${upGrupo}).`); await cargar()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al subir')
+    } finally {
+      setSubiendo(false)
+    }
+  }
+
+  async function cambiarGrupo(img: ImagenBanco, grupo: string) {
+    setImgs(prev => prev.map(i => i.id === img.id ? { ...i, grupo } : i)) // optimista
+    const r = await fetch(`/api/mailing/imagenes?id=${encodeURIComponent(img.id)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grupo }),
+    })
+    if (!r.ok) { setError('No se pudo cambiar el grupo'); await cargar() }
+  }
+
+  async function eliminar(img: ImagenBanco) {
+    if (!confirm('¿Eliminar esta imagen del banco? Si está usada en alguna campaña ya enviada, esa copia no se ve afectada.')) return
+    const r = await fetch(`/api/mailing/imagenes?id=${encodeURIComponent(img.id)}`, { method: 'DELETE' })
+    if (r.ok) await cargar()
+    else alert('Error al eliminar')
+  }
+
+  async function copiarUrl(url: string) {
+    try { await navigator.clipboard.writeText(url); setInfo('URL copiada al portapapeles.') } catch { /* ignore */ }
+  }
+
+  const generadas = imgs.filter(i => i.origen !== 'upload')
+  const subidas = imgs.filter(i => i.origen === 'upload')
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
+        <div>
+          <h2 className="text-base font-bold text-gray-900">Banco de imágenes</h2>
+          <p className="text-sm text-gray-500">Imágenes fotorrealistas reutilizables. El generador de campañas las recicla automáticamente cuando calzan con el contexto. Asigna un grupo a cada una para organizarlas.</p>
+        </div>
+
+        {/* Generar con IA */}
+        <div>
+          <label className="text-xs font-semibold text-gray-700">Generar una imagen nueva (Nano Banana Pro)</label>
+          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2}
+            placeholder="Ej: una mujer acariciando a su perro mayor en un living luminoso, luz natural, momento cálido y sereno."
+            className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <select value={aspect} onChange={e => setAspect(e.target.value)} title="Relación de aspecto"
+              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              {ASPECTOS.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <select value={genGrupo} onChange={e => setGenGrupo(e.target.value)} title="Grupo"
+              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              {GRUPOS_GEN.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+            <button type="button" onClick={generar} disabled={generando || !prompt.trim()}
+              className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-lg px-4 py-1.5 text-sm font-semibold shadow-sm disabled:opacity-50">
+              {generando ? 'Generando… (puede tardar)' : '✨ Generar imagen'}
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1">La IA no genera fotos de instalaciones — esas se suben.</p>
+        </div>
+
+        {/* Subir propia */}
+        <div className="border-t border-gray-100 pt-3">
+          <label className="text-xs font-semibold text-gray-700">Subir una imagen propia (ej. fotos reales de las instalaciones)</label>
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-500">Grupo:</span>
+            <select value={upGrupo} onChange={e => setUpGrupo(e.target.value)} title="Grupo de la imagen a subir"
+              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              {GRUPOS.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={subiendo}
+              className="border-2 border-gray-300 text-gray-700 rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50">
+              {subiendo ? 'Subiendo…' : '📤 Subir imagen'}
+            </button>
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={subir} className="hidden" />
+          </div>
+        </div>
+
+        {error && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{error}</div>}
+        {info && <div className="bg-green-50 border border-green-200 text-green-800 rounded-lg px-3 py-2 text-sm">{info}</div>}
+      </div>
+
+      {loading ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-sm text-gray-400">Cargando…</div>
+      ) : imgs.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-sm text-gray-400">Sin imágenes todavía. Genera la primera arriba o sube una propia.</div>
+      ) : (
+        <>
+          <ImagenesSeccion titulo="Generadas con IA" imgs={generadas} onGrupo={cambiarGrupo} onCopy={copiarUrl} onDelete={eliminar} onRefresh={cargar} />
+          <ImagenesSeccion titulo="Subidas por el equipo" imgs={subidas} onGrupo={cambiarGrupo} onCopy={copiarUrl} onDelete={eliminar} />
+        </>
+      )}
+    </div>
+  )
+}
+
+function ImagenesSeccion({ titulo, imgs, onGrupo, onCopy, onDelete, onRefresh }: {
+  titulo: string
+  imgs: ImagenBanco[]
+  onGrupo: (img: ImagenBanco, grupo: string) => void
+  onCopy: (url: string) => void
+  onDelete: (img: ImagenBanco) => void
+  onRefresh?: () => void
+}) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-900">{titulo} ({imgs.length})</h3>
+        {onRefresh && <button type="button" onClick={onRefresh} className="text-xs text-indigo-600 hover:underline">Actualizar</button>}
+      </div>
+      {imgs.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-6">Ninguna por ahora.</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {imgs.map(img => (
+            <ImagenCard key={img.id} img={img} onGrupo={onGrupo} onCopy={onCopy} onDelete={onDelete} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

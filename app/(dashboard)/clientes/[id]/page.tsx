@@ -628,7 +628,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               <p className="text-sm text-gray-600 mt-1">Tutor: <span className="font-semibold text-gray-900">{cliente.nombre_tutor || '—'}</span></p>
             </div>
             {cliente.estado !== 'borrador' && (
-              <div className="relative shrink-0" ref={docsMenuRef}>
+              <div className="relative w-full sm:w-auto sm:shrink-0" ref={docsMenuRef}>
                 {/* Inputs ocultos: compartidos por el menú y el botón de evidencia del peso. */}
                 <input
                   ref={videoInputRef}
@@ -647,13 +647,21 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
                 <button
                   onClick={() => setDocsOpen(o => !o)}
-                  className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
                 >
                   📁 Documentos <span className="text-[10px]">▾</span>
                 </button>
 
                 {docsOpen && (
-                  <div className="absolute right-0 mt-2 w-80 max-w-[88vw] max-h-[70vh] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl z-30 p-1">
+                  <>
+                  {/* Backdrop solo en móvil (el panel es un bottom-sheet) */}
+                  <div className="fixed inset-0 bg-black/30 z-40 sm:hidden" onClick={() => setDocsOpen(false)} aria-hidden="true" />
+                  <div className="fixed inset-x-3 bottom-3 z-50 max-h-[80vh] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-2xl p-1 sm:absolute sm:inset-x-auto sm:right-0 sm:bottom-auto sm:mt-2 sm:w-80 sm:max-w-[88vw] sm:max-h-[70vh] sm:shadow-xl">
+                    {/* Cabecera (solo móvil): deja claro que es un panel cerrable */}
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 sm:hidden">
+                      <span className="text-sm font-bold text-gray-800">Documentos</span>
+                      <button onClick={() => setDocsOpen(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none px-1">×</button>
+                    </div>
                     {/* Certificados */}
                     <p className="px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Certificados</p>
                     <button
@@ -708,6 +716,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                       )}
                     </div>
                   </div>
+                  </>
                 )}
               </div>
             )}

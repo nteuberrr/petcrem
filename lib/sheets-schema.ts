@@ -159,6 +159,22 @@ export const SHEETS: Record<string, string[]> = {
     'error_msg',
     'fecha_creacion',
   ],
+  // Banco de imágenes para campañas (generadas con Nano Banana Pro o subidas a
+  // mano). Viven en R2 (url/key) y se RECICLAN entre correos: el generador IA
+  // revisa este banco y reutiliza una imagen existente cuando calza con el
+  // contexto, en vez de generar otra. descripcion + tags alimentan ese match.
+  // origen: 'ai' (generada) | 'upload' (subida). aspect ej. '16:9'.
+  mailing_imagenes: [
+    'id', 'url', 'key',
+    'descripcion', 'prompt', 'tags', 'alt',
+    // grupo: clasificación que asigna el equipo (mascotas | personas | productos
+    // | instalaciones | otro). 'instalaciones' SOLO existe en imágenes SUBIDAS por
+    // el equipo — la IA nunca genera fotos de instalaciones.
+    'grupo',
+    'aspect', 'ancho', 'alto',
+    'origen', 'modelo',
+    'creado_por', 'fecha_creacion',
+  ],
   // Convenio de eutanasias a domicilio. Vets se inscriben en /convenio-eutanasias
   // (auto-aprobado) o los carga el admin manualmente.
   // - comunas: JSON array de nombres de comuna donde puede atender.
