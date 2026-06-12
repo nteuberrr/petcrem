@@ -22,6 +22,9 @@ export const SHEETS: Record<string, string[]> = {
     // JSON array de URLs (R2) de videos del servicio que sube el operador; se
     // pueden adjuntar al correo del certificado.
     'videos_servicio',
+    // JSON array de URLs (R2) de fotos de EVIDENCIA del peso real, que sube el
+    // operador cuando hay diferencia de tramo (peso_ingreso > peso_declarado).
+    'fotos_evidencia',
     'origen', 'fecha_creacion',
   ],
   ciclos: [

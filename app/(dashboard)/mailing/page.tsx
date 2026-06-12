@@ -830,29 +830,29 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[1080px] table-fixed">
+            <table className="w-full text-sm min-w-[820px] table-fixed">
               <colgroup>
-                <col className="w-[26%]" />{/* Asunto */}
-                <col className="w-[80px]" />{/* Estado */}
-                <col className="w-[70px]" />{/* Dest. */}
-                <col className="w-[80px]" />{/* Enviados */}
-                <col className="w-[110px]" />{/* Aperturas */}
-                <col className="w-[100px]" />{/* Clicks */}
-                <col className="w-[100px]" />{/* Rebotes */}
-                <col className="w-[110px]" />{/* Fecha */}
-                <col className="w-[70px]" />{/* Hora */}
-                <col className="w-[180px]" />{/* Acciones */}
+                <col className="w-[24%]" />{/* Asunto */}
+                <col className="w-[72px]" />{/* Estado */}
+                <col className="w-[56px]" />{/* Dest. */}
+                <col className="w-[72px]" />{/* Enviados */}
+                <col className="w-[92px]" />{/* Aperturas */}
+                <col className="w-[84px]" />{/* Clicks */}
+                <col className="w-[84px]" />{/* Rebotes */}
+                <col className="w-[92px]" />{/* Fecha */}
+                <col className="w-[52px]" />{/* Hora */}
+                <col className="w-[120px]" />{/* Acciones */}
               </colgroup>
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr className="text-[11px] text-gray-500 uppercase tracking-wider">
                   <th className="px-4 py-3 text-left font-semibold">Asunto</th>
                   <th className="px-2 py-3 text-center font-semibold">Estado</th>
                   <th className="px-2 py-3 text-right font-semibold">Dest.</th>
-                  <th className="px-2 py-3 text-right font-semibold">Enviados</th>
-                  <th className="px-2 py-3 text-right font-semibold">Aperturas</th>
+                  <th className="px-2 py-3 text-right font-semibold">Env.</th>
+                  <th className="px-2 py-3 text-right font-semibold">Aper.</th>
                   <th className="px-2 py-3 text-right font-semibold">Clicks</th>
-                  <th className="px-2 py-3 text-right font-semibold">Rebotes</th>
-                  <th className="px-3 py-3 text-left font-semibold">Fecha envío</th>
+                  <th className="px-2 py-3 text-right font-semibold">Reb.</th>
+                  <th className="px-3 py-3 text-left font-semibold">Fecha</th>
                   <th className="px-2 py-3 text-left font-semibold">Hora</th>
                   <th className="px-3 py-3 text-center font-semibold">Acciones</th>
                 </tr>
@@ -887,24 +887,24 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                       <td className="px-3 py-2.5 text-gray-600 text-xs whitespace-nowrap">{formatDate(c.fecha_envio) || '—'}</td>
                       <td className="px-2 py-2.5 text-gray-600 text-xs whitespace-nowrap tabular-nums">{formatHoraDia(c.hora_envio)}</td>
                       <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                        <div className="flex gap-1.5 justify-center">
+                        <div className="flex gap-1 justify-center">
                           {c.estado === 'enviando' && (
                             <>
-                              <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm" title="Reanudar envío a los que faltan">Reanudar</button>
-                              <button onClick={() => cancelar(c)} className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Cancelar</button>
+                              <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Reanudar envío a los que faltan">↻</button>
+                              <button onClick={() => cancelar(c)} className="bg-amber-600 hover:bg-amber-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Cancelar envío">✕</button>
                             </>
                           )}
                           {(c.estado === 'enviado' || c.estado === 'fallido' || c.estado === 'cancelado') && (
-                            <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm" title="Reanudar / reintentar fallidos">Reanudar</button>
+                            <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Reanudar / reintentar fallidos">↻</button>
                           )}
                           {(c.estado === 'enviado' || c.estado === 'fallido' || c.estado === 'cancelado') && (
-                            <button onClick={() => duplicar(c)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Duplicar</button>
+                            <button onClick={() => duplicar(c)} className="bg-indigo-600 hover:bg-indigo-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Duplicar campaña">⧉</button>
                           )}
                           {(c.estado === 'enviado' || c.estado === 'fallido') && (
-                            <button onClick={() => abrirDebug(c)} className="bg-gray-700 hover:bg-gray-800 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm" title="Ver diagnóstico de tracking">🔍</button>
+                            <button onClick={() => abrirDebug(c)} className="bg-gray-700 hover:bg-gray-800 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Ver diagnóstico de tracking">🔍</button>
                           )}
                           {c.estado !== 'enviando' && (
-                            <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-md text-xs font-semibold shadow-sm">Eliminar</button>
+                            <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Eliminar campaña">🗑</button>
                           )}
                         </div>
                       </td>

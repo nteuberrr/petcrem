@@ -65,6 +65,7 @@ type ClienteDetalle = {
   estado_pago: string
   fotos_mascota?: string
   videos_servicio?: string
+  fotos_evidencia?: string
   ciclo?: {
     id: string
     fecha: string
@@ -106,6 +107,13 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const videoInputRef = useRef<HTMLInputElement>(null)
   const [subiendoVideo, setSubiendoVideo] = useState(false)
   const [videoError, setVideoError] = useState('')
+  // Foto de evidencia del peso (se sube cuando hay diferencia de tramo).
+  const fotoEvidenciaInputRef = useRef<HTMLInputElement>(null)
+  const [subiendoFoto, setSubiendoFoto] = useState(false)
+  const [fotoError, setFotoError] = useState('')
+  // Menú "Documentos" (certificados + archivos).
+  const [docsOpen, setDocsOpen] = useState(false)
+  const docsMenuRef = useRef<HTMLDivElement>(null)
   // Viñeta de confirmación para adjuntar el video del servicio al correo del certificado.
   const [confirmVideoOpen, setConfirmVideoOpen] = useState(false)
   const certInputRef = useRef<HTMLInputElement>(null)
@@ -137,23 +145,6 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [deletingFicha, setDeletingFicha] = useState(false)
   const [deleteError, setDeleteError] = useState('')
-
-  // Toggle del historial de certificados emitidos
-  const [verCertHistorico, setVerCertHistorico] = useState(false)
-
-  // Sheets devuelve la hora guardada como fracción de día (ej. 0.8625 = 20:42).
-  // Si ya viene como "HH:MM" la dejamos como está.
-  function fmtHoraCert(raw: string): string {
-    if (!raw) return ''
-    const n = parseFloat(raw)
-    if (Number.isFinite(n) && n >= 0 && n < 1) {
-      const totalMin = Math.round(n * 24 * 60)
-      const h = Math.floor(totalMin / 60) % 24
-      const m = totalMin % 60
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-    }
-    return raw
-  }
 
   const fetchCertificados = useCallback(async () => {
     const res = await fetch(`/api/clientes/${id}/certificados`).catch(() => null)
@@ -230,6 +221,16 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       .then(d => setDescuentosDisp(Array.isArray(d) ? d.filter((x: Descuento) => x.activo === 'TRUE') : []))
     fetchCertificados()
   }, [id, fetchCertificados])
+
+  // Cerrar el menú "Documentos" al hacer click fuera.
+  useEffect(() => {
+    if (!docsOpen) return
+    function onDoc(e: MouseEvent) {
+      if (docsMenuRef.current && !docsMenuRef.current.contains(e.target as Node)) setDocsOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [docsOpen])
 
   // Load special pricing when vet changes
   useEffect(() => {
@@ -354,6 +355,40 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   async function eliminarVideo(url: string) {
     if (!confirm('¿Eliminar este video del servicio?')) return
     await fetch(`/api/clientes/${id}/video?url=${encodeURIComponent(url)}`, { method: 'DELETE' }).catch(() => {})
+    await recargarCliente()
+  }
+
+  async function subirFotoEvidencia(file: File) {
+    setFotoError('')
+    setSubiendoFoto(true)
+    try {
+      // 1) URL prefirmada (soporta fotos grandes de celular sin el límite de Vercel)
+      const pres = await fetch(`/api/clientes/${id}/foto-evidencia/presign`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content_type: file.type }),
+      })
+      const pd = await pres.json().catch(() => ({}))
+      if (!pres.ok) { setFotoError(pd.error || 'No se pudo preparar la subida'); return }
+      // 2) PUT directo a R2
+      const put = await fetch(pd.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
+      if (!put.ok) { setFotoError('Falló la subida de la foto a R2. Verifica la configuración CORS del bucket.'); return }
+      // 3) Registrar la URL en la ficha
+      const reg = await fetch(`/api/clientes/${id}/foto-evidencia`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: pd.publicUrl }),
+      })
+      if (!reg.ok) { const rd = await reg.json().catch(() => ({})); setFotoError(rd.error || 'No se pudo registrar la foto'); return }
+      await recargarCliente()
+    } catch {
+      setFotoError('Error subiendo la foto. Inténtalo de nuevo.')
+    } finally {
+      setSubiendoFoto(false)
+    }
+  }
+
+  async function eliminarFotoEvidencia(url: string) {
+    if (!confirm('¿Eliminar esta foto de evidencia?')) return
+    await fetch(`/api/clientes/${id}/foto-evidencia?url=${encodeURIComponent(url)}`, { method: 'DELETE' }).catch(() => {})
     await recargarCliente()
   }
 
@@ -513,6 +548,13 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   // se cobraría si fuera una venta normal sin veterinaria.
   const tramoNormal = encontrarTramo(preciosGenerales, pesoKg)
   const precioNormal = precioDelTramo(tramoNormal, codigoServ)
+
+  // ¿El peso de ingreso cae en un tramo MÁS CARO que el declarado? Igual criterio
+  // que la alerta de PesoIngresoField — habilita subir la foto de evidencia.
+  const tramoPesoDeclarado = encontrarTramo(tablaPrecios, pesoDeclarado)
+  const tramoPesoIngreso = encontrarTramo(tablaPrecios, pesoIngreso)
+  const hayDiferenciaPeso = pesoIngreso > 0 && pesoDeclarado > 0 && !!tramoPesoIngreso && !!tramoPesoDeclarado &&
+    precioDelTramo(tramoPesoIngreso, codigoServ) > precioDelTramo(tramoPesoDeclarado, codigoServ)
   const mostrarPrecioNormal = form.tipo_precios !== 'general' && precioNormal > 0
 
   const rangoTramo = tramoAplicable
@@ -541,6 +583,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const puedeGenerarCert = cliente.estado === 'cremado' || cliente.estado === 'despachado'
   const videosServicio: string[] = (() => {
     try { const x = JSON.parse(cliente.videos_servicio || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
+  })()
+  const fotosEvidencia: string[] = (() => {
+    try { const x = JSON.parse(cliente.fotos_evidencia || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
   })()
   const estadoVariant: 'green' | 'blue' | 'yellow' =
     cliente.estado === 'cremado' ? 'green'
@@ -582,33 +627,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 truncate">{cliente.nombre_mascota}</h1>
               <p className="text-sm text-gray-600 mt-1">Tutor: <span className="font-semibold text-gray-900">{cliente.nombre_tutor || '—'}</span></p>
             </div>
-            {puedeGenerarCert && (
-              <div className="flex flex-wrap items-start gap-1.5">
-                <button
-                  onClick={abrirModalCertificado}
-                  disabled={descargandoCert}
-                  className="inline-flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
-                >
-                  📄 {certUltimo ? 'Nueva versión' : 'Generar certificado'}
-                </button>
-                {certUltimo && (
-                  <a
-                    href={certUltimo.pdf_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 border border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-                  >
-                    ⬇ V{certUltimo.version}
-                  </a>
-                )}
-                {certificadosEmitidos.length > 0 && (
-                  <button
-                    onClick={() => setVerCertHistorico(v => !v)}
-                    className="inline-flex items-center gap-1 border border-gray-200 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-                  >
-                    {verCertHistorico ? '▲ Ocultar' : `📁 Certificados (${certificadosEmitidos.length})`}
-                  </button>
-                )}
+            {cliente.estado !== 'borrador' && (
+              <div className="relative shrink-0" ref={docsMenuRef}>
+                {/* Inputs ocultos: compartidos por el menú y el botón de evidencia del peso. */}
                 <input
                   ref={videoInputRef}
                   type="file"
@@ -616,40 +637,78 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) subirVideo(f); e.target.value = '' }}
                 />
+                <input
+                  ref={fotoEvidenciaInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) subirFotoEvidencia(f); e.target.value = '' }}
+                />
+
                 <button
-                  onClick={() => videoInputRef.current?.click()}
-                  disabled={subiendoVideo}
-                  className="inline-flex items-center gap-1 border border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
-                  title="Subir un video del servicio (se puede adjuntar al certificado)"
+                  onClick={() => setDocsOpen(o => !o)}
+                  className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
                 >
-                  {subiendoVideo ? '⌛ Subiendo…' : '🎬 Subir video'}
+                  📁 Documentos <span className="text-[10px]">▾</span>
                 </button>
-                {/* Enviar certificado. Si hay video del servicio, al hacer click
-                    se abre una viñeta preguntando si adjuntarlo. */}
-                <button
-                  onClick={intentarEnviarCertificado}
-                  disabled={enviandoCert || !cliente.email || !certUltimo}
-                  title={
-                    !cliente.email
-                      ? 'El cliente no tiene email registrado'
-                      : !certUltimo
-                        ? 'Generá primero un certificado para poder enviarlo'
-                        : certUltimo.enviado_ultima_fecha
-                          ? `Ya enviado — al hacer click te pedimos confirmación para reenviar`
-                          : `Enviar a ${cliente.email}`
-                  }
-                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                    certUltimo?.enviado_ultima_fecha
-                      ? 'bg-gray-500 hover:bg-gray-600 text-white'
-                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  }`}
-                >
-                  {enviandoCert
-                    ? '⌛ Enviando…'
-                    : certUltimo?.enviado_ultima_fecha
-                      ? '🔄 Reenviar certificado al correo'
-                      : '📧 Enviar certificado al correo'}
-                </button>
+
+                {docsOpen && (
+                  <div className="absolute right-0 mt-2 w-80 max-w-[88vw] max-h-[70vh] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl z-30 p-1">
+                    {/* Certificados */}
+                    <p className="px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Certificados</p>
+                    <button
+                      onClick={() => { setDocsOpen(false); abrirModalCertificado() }}
+                      disabled={!puedeGenerarCert || descargandoCert}
+                      title={!puedeGenerarCert ? 'Disponible cuando la mascota esté cremada' : ''}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      📄 <span>{certUltimo ? 'Emitir nueva versión' : 'Emitir certificado'}</span>
+                    </button>
+                    <button
+                      onClick={() => { setDocsOpen(false); intentarEnviarCertificado() }}
+                      disabled={enviandoCert || !cliente.email || !certUltimo}
+                      title={!certUltimo ? 'Emite primero un certificado' : !cliente.email ? 'El cliente no tiene email' : `Enviar a ${cliente.email}`}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {certUltimo?.enviado_ultima_fecha ? '🔄' : '📧'} <span>Reenviar certificado al correo</span>
+                    </button>
+
+                    <div className="my-1 border-t border-gray-100" />
+
+                    {/* Archivos */}
+                    <div className="flex items-center justify-between px-3 pt-2 pb-1">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Archivos</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => videoInputRef.current?.click()} disabled={subiendoVideo} className="text-[11px] font-medium text-indigo-600 hover:underline disabled:opacity-50">{subiendoVideo ? 'Subiendo…' : '+ Video'}</button>
+                        <button onClick={() => fotoEvidenciaInputRef.current?.click()} disabled={subiendoFoto} className="text-[11px] font-medium text-indigo-600 hover:underline disabled:opacity-50">{subiendoFoto ? 'Subiendo…' : '+ Foto'}</button>
+                      </div>
+                    </div>
+                    <div className="px-1 pb-2 space-y-0.5">
+                      {certificadosEmitidos.map(c => (
+                        <a key={`cert-${c.id}`} href={c.pdf_url || undefined} target="_blank" rel="noopener noreferrer"
+                          className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 ${c.pdf_url ? 'text-gray-700' : 'text-gray-400 pointer-events-none'}`}>
+                          📄 <span className="flex-1 truncate">Certificado V{c.version}</span>
+                          <span className="text-[11px] text-gray-400 shrink-0">{fmtFecha(c.fecha_emision)}</span>
+                        </a>
+                      ))}
+                      {videosServicio.map((url, i) => (
+                        <div key={`vid-${i}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 text-gray-700">
+                          🎬 <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Video {i + 1}</a>
+                          <button onClick={() => eliminarVideo(url)} className="text-[11px] text-red-600 hover:text-red-800 shrink-0">Eliminar</button>
+                        </div>
+                      ))}
+                      {fotosEvidencia.map((url, i) => (
+                        <div key={`foto-${i}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 text-gray-700">
+                          📷 <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Foto evidencia {i + 1}</a>
+                          <button onClick={() => eliminarFotoEvidencia(url)} className="text-[11px] text-red-600 hover:text-red-800 shrink-0">Eliminar</button>
+                        </div>
+                      ))}
+                      {certificadosEmitidos.length === 0 && videosServicio.length === 0 && fotosEvidencia.length === 0 && (
+                        <p className="px-2 py-2 text-xs text-gray-400">Aún no hay archivos guardados.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -708,28 +767,6 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           {videoError && (
             <div className="mt-4 rounded-lg px-3 py-2 text-xs font-medium bg-red-50 border border-red-200 text-red-800">{videoError}</div>
           )}
-
-          {/* Videos del servicio subidos a R2 + opción de adjuntarlos al certificado */}
-          {videosServicio.length > 0 && (
-            <div className="mt-4 rounded-xl border-2 border-gray-200 bg-gray-50 p-4">
-              <div className="mb-3">
-                <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">
-                  🎬 Videos del servicio ({videosServicio.length})
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                {videosServicio.map((url, i) => (
-                  <div key={url + i} className="w-44">
-                    <video src={url} controls preload="metadata" className="w-44 h-28 rounded-lg border border-gray-300 bg-black object-cover" />
-                    <div className="flex items-center justify-between mt-1">
-                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-indigo-600 hover:underline">Abrir</a>
-                      <button type="button" onClick={() => eliminarVideo(url)} className="text-[11px] text-red-600 hover:text-red-800 font-semibold">Eliminar</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -755,45 +792,6 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           )}
         </div>
       </div>
-
-      {/* Historial de certificados emitidos — colapsable, todos los certificados (incl. el último) */}
-      {verCertHistorico && certificadosEmitidos.length > 0 && (
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 mb-6 overflow-hidden">
-          <div className="bg-gradient-to-r from-amber-50 to-yellow-50 px-6 py-3 border-b-2 border-amber-100 flex items-center gap-2">
-            <span className="text-lg">📄</span>
-            <h2 className="text-sm font-bold text-amber-900 uppercase tracking-wide">Certificados generados</h2>
-            <span className="text-[11px] text-amber-700 font-semibold bg-amber-100 px-2 py-0.5 rounded-full">
-              {certificadosEmitidos.length} versión{certificadosEmitidos.length !== 1 ? 'es' : ''}
-            </span>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {certificadosEmitidos.map(c => (
-              <div key={c.id} className="flex items-center justify-between px-6 py-3 gap-3 flex-wrap">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">Versión {c.version}</p>
-                  <p className="text-xs text-gray-500">
-                    {fmtFecha(c.fecha_emision)}
-                    {c.hora_emision ? ` · ${fmtHoraCert(c.hora_emision)}` : ''}
-                    {c.emitido_por_nombre ? ` · ${c.emitido_por_nombre}` : ''}
-                  </p>
-                </div>
-                {c.pdf_url ? (
-                  <a
-                    href={c.pdf_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                  >
-                    ⬇ Descargar
-                  </a>
-                ) : (
-                  <span className="text-xs text-gray-400">PDF no disponible</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Despacho — solo si fue despachada */}
       {cliente.estado === 'despachado' && (
@@ -834,6 +832,49 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             tabla={tablaPrecios}
             codigoServ={form.codigo_servicio ?? 'CI'}
           />
+
+          {/* Evidencia del peso: aparece cuando el peso de ingreso cae en un tramo
+              más caro (o si ya hay fotos cargadas). La foto se guarda junto a los
+              demás archivos del cliente y se ve en Documentos → Archivos. */}
+          {(hayDiferenciaPeso || fotosEvidencia.length > 0) && (
+            <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-xs font-semibold text-amber-900">
+                  📷 Evidencia del peso real{fotosEvidencia.length > 0 ? ` (${fotosEvidencia.length})` : ''}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => fotoEvidenciaInputRef.current?.click()}
+                  disabled={subiendoFoto}
+                  className="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                >
+                  {subiendoFoto ? '⌛ Subiendo…' : '📷 Subir foto'}
+                </button>
+              </div>
+              <p className="text-[11px] text-amber-800 mt-1">
+                Sube una foto que muestre el peso real de la mascota como respaldo del cobro adicional.
+              </p>
+              {fotoError && <p className="text-[11px] text-red-600 mt-1">{fotoError}</p>}
+              {fotosEvidencia.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {fotosEvidencia.map((url, i) => (
+                    <div key={url + i} className="relative">
+                      <a href={url} target="_blank" rel="noopener noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt={`Evidencia ${i + 1}`} className="w-16 h-16 rounded-md object-cover border border-amber-300" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => eliminarFotoEvidencia(url)}
+                        title="Eliminar"
+                        className="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full w-4 h-4 grid place-items-center text-[10px] leading-none"
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div className="col-span-2">
             <label className="text-xs font-semibold text-gray-700">
               Tipo de servicio <span className="text-red-500">*</span>
