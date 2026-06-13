@@ -197,7 +197,8 @@ export default function ClientesPage() {
       porEspecie[esp] = (porEspecie[esp] || 0) + 1
       const srv = c.codigo_servicio || 'CI'
       porServicio[srv] = (porServicio[srv] || 0) + 1
-      if (c.estado_pago !== 'pagado') {
+      // Borradores fuera: aún no son fichas reales (tienen su propia alerta).
+      if (c.estado !== 'borrador' && c.estado_pago !== 'pagado') {
         clientesPendientesPago.push(c)
       }
     }
@@ -299,6 +300,27 @@ export default function ClientesPage() {
   }, [buscar, filtro, clientes])
 
   const nBorradores = useMemo(() => clientes.filter(c => c.estado === 'borrador').length, [clientes])
+
+  // Conteos para las notificaciones compactas de arriba. Excluyen borradores
+  // (esos tienen su propia alerta de "nueva reserva del agente").
+  const alertas = useMemo(() => {
+    const reales = clientes.filter(c => c.estado !== 'borrador')
+    return {
+      pagoPendiente: reales.filter(c => c.estado_pago !== 'pagado').length,
+      enCamara: reales.filter(c => c.estado === 'pendiente' || !c.estado).length,
+      porDespachar: reales.filter(c => c.estado === 'cremado').length,
+      datosPendientes: reales.filter(c => tieneDatosPendientes(c)).length,
+    }
+  }, [clientes])
+
+  // Permite llegar con un filtro preseleccionado por URL (ej. desde la alerta
+  // del dashboard: /clientes?filtro=borrador). Se lee una vez al montar.
+  useEffect(() => {
+    const f = new URLSearchParams(window.location.search).get('filtro')
+    const validos = ['todos', 'borrador', 'pendiente', 'cremado', 'despachado', 'pago_pendiente', 'este_mes', 'esta_semana', 'datos_pendientes']
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (f && validos.includes(f)) setFiltro(f as typeof filtro)
+  }, [])
 
   function toggleAdicional(tipo: 'producto' | 'servicio', item: { id: string; nombre: string; precio: string }) {
     const existing = adicionales.find(a => a.tipo === tipo && a.id === item.id)
@@ -441,31 +463,40 @@ export default function ClientesPage() {
         </button>
       </div>
 
-      {/* Alerta de pagos pendientes */}
-      {kpis.pendientesPago > 0 && (
-        <div className="mb-6 rounded-xl border-2 border-amber-300 bg-amber-50 px-5 py-4 shadow-md">
-          <div className="flex items-center gap-4">
-            <div className="shrink-0 inline-flex w-12 h-12 rounded-xl bg-amber-200 items-center justify-center text-2xl">⚠️</div>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-amber-900">
-                {kpis.pendientesPago} cliente{kpis.pendientesPago !== 1 ? 's' : ''} con pago pendiente
-              </p>
-              <p className="text-xs text-amber-700 mt-0.5">Todos los clientes cuyo estado de pago es &quot;pendiente&quot;. Toca uno para ver su ficha.</p>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {kpis.clientesPendientesPago.map(c => (
-              <button
-                key={c.id}
-                onClick={() => setSelected(c)}
-                className="inline-flex items-center gap-2 bg-white border-2 border-amber-300 hover:border-amber-500 hover:bg-amber-100 px-3 py-1.5 rounded-lg text-xs font-semibold text-amber-900 transition-colors shadow-sm"
-              >
-                <span className="font-mono text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">{c.codigo}</span>
-                <span>{c.nombre_mascota}</span>
-                <span className="text-amber-700 font-normal">· {c.nombre_tutor}</span>
-              </button>
-            ))}
-          </div>
+      {/* Notificaciones compactas: una fila de chips clickeables que aplican el
+          filtro correspondiente. Reemplaza al banner grande de pago pendiente. */}
+      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0) && (
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          {nBorradores > 0 && (
+            <button onClick={() => setFiltro('borrador')}
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-red-300 bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-bold text-red-800 shadow-sm transition-colors">
+              🔔 {nBorradores} nueva{nBorradores === 1 ? '' : 's'} reserva{nBorradores === 1 ? '' : 's'} del agente
+            </button>
+          )}
+          {alertas.pagoPendiente > 0 && (
+            <button onClick={() => setFiltro('pago_pendiente')}
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 shadow-sm transition-colors">
+              ⚠ {alertas.pagoPendiente} con pago pendiente
+            </button>
+          )}
+          {alertas.enCamara > 0 && (
+            <button onClick={() => setFiltro('pendiente')}
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-sky-300 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-800 shadow-sm transition-colors">
+              📥 {alertas.enCamara} en cámara por cremar
+            </button>
+          )}
+          {alertas.porDespachar > 0 && (
+            <button onClick={() => setFiltro('cremado')}
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-800 shadow-sm transition-colors">
+              📦 {alertas.porDespachar} cremado{alertas.porDespachar === 1 ? '' : 's'} por despachar
+            </button>
+          )}
+          {alertas.datosPendientes > 0 && (
+            <button onClick={() => setFiltro('datos_pendientes')}
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-orange-300 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-800 shadow-sm transition-colors">
+              📝 {alertas.datosPendientes} con datos pendientes
+            </button>
+          )}
         </div>
       )}
 

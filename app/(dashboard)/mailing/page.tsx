@@ -116,6 +116,19 @@ type ImagenBanco = {
 const TABS = ['Campañas', 'Base', 'Nueva campaña', 'Imágenes'] as const
 type Tab = typeof TABS[number]
 
+/**
+ * Reescribe las imágenes de R2 del HTML para que el PREVIEW las cargue por el
+ * proxy propio (/api/mailing/img-proxy): mismo origen → el navegador no las
+ * bloquea (sandbox del iframe, adblockers que filtran *.r2.dev, etc.).
+ * Solo afecta a la vista previa; el correo enviado usa las URLs directas.
+ */
+function proxyImgs(html: string): string {
+  return html.replace(
+    /src="(https:\/\/[^"]*\.r2\.dev\/[^"]+)"/gi,
+    (_m, u) => `src="/api/mailing/img-proxy?u=${encodeURIComponent(u)}"`,
+  )
+}
+
 const CATEGORIAS = ['prospecto', 'cliente', 'inactivo'] as const
 
 export default function MailingPage() {
@@ -1068,7 +1081,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
               {loadingDetalle ? (
                 <div className="p-8 text-center text-sm text-gray-400">Cargando…</div>
               ) : (
-                <iframe srcDoc={detalleHtml} className="w-full h-96 bg-white" sandbox="" />
+                <iframe srcDoc={proxyImgs(detalleHtml)} className="w-full h-96 bg-white" sandbox="allow-same-origin" referrerPolicy="no-referrer" />
               )}
             </div>
 
@@ -1275,6 +1288,8 @@ function NuevaCampanaPanel({ initial, onCreada }: {
   const [loadingBorrador, setLoadingBorrador] = useState<string | null>(null)
   const [generarOpen, setGenerarOpen] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [iaComentario, setIaComentario] = useState('')
+  const [iaEditando, setIaEditando] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const htmlRef = useRef<HTMLTextAreaElement>(null)
 
@@ -1425,6 +1440,40 @@ function NuevaCampanaPanel({ initial, onCreada }: {
       locales.push(lm[2].slice(0, 60))
     }
     return { html: resultado, subidas, fallidas, locales }
+  }
+
+  // Edición con IA directo sobre el preview: manda la campaña actual + el
+  // comentario al mismo agente de "Generar con IA", que la devuelve ajustada.
+  async function editarConIA() {
+    if (!iaComentario.trim() || !form.html.trim()) return
+    setIaEditando(true); setError(''); setInfo('')
+    try {
+      const res = await fetch('/api/mailing/generar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instruccion: 'Edita esta campaña existente aplicando el comentario del usuario. Mantén todo lo que no se pida cambiar (copy, imágenes, estructura).',
+          categoria: form.categoria,
+          comentario: iaComentario,
+          actual: { asunto: form.asunto, preview_text: form.preview_text, html: form.html },
+        }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(j.error || `Error ${res.status}`); return }
+      setForm(f => ({
+        ...f,
+        asunto: j.asunto || f.asunto,
+        preview_text: j.preview_text || f.preview_text,
+        html: j.html || f.html,
+      }))
+      setIaComentario('')
+      const avisos = Array.isArray(j.avisos) && j.avisos.length > 0 ? ` · ⚠ ${j.avisos.join(' · ')}` : ''
+      setInfo(`Campaña ajustada con IA. Revisa el preview${avisos}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error de red')
+    } finally {
+      setIaEditando(false)
+    }
   }
 
   function insertarImagen(img: ImagenBanco) {
@@ -1634,10 +1683,30 @@ function NuevaCampanaPanel({ initial, onCreada }: {
           <span className="text-[10px] font-normal text-gray-400">así lo va a ver el destinatario</span>
         </div>
         <iframe
-          srcDoc={previewHtml || '<p style="font-family:sans-serif;color:#999;padding:1rem">Escribe HTML para ver el preview.</p>'}
-          className="w-full h-[760px] border border-gray-200 rounded bg-white"
-          sandbox=""
+          srcDoc={previewHtml ? proxyImgs(previewHtml) : '<p style="font-family:sans-serif;color:#999;padding:1rem">Escribe HTML para ver el preview.</p>'}
+          className="w-full h-[660px] border border-gray-200 rounded bg-white"
+          sandbox="allow-same-origin"
+          referrerPolicy="no-referrer"
         />
+        {/* Editar con IA directo sobre el preview */}
+        <div className="mt-3 border border-violet-200 bg-violet-50/60 rounded-lg p-2.5 space-y-1.5">
+          <label className="text-[11px] font-bold text-violet-800">✨ Editar con IA</label>
+          <textarea
+            value={iaComentario}
+            onChange={e => setIaComentario(e.target.value)}
+            rows={2}
+            placeholder="Ej: cambia el título, hazlo más corto, usa una foto de un gato del banco, tono más formal…"
+            className="w-full border-2 border-violet-200 bg-white rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500"
+          />
+          <button
+            type="button"
+            onClick={editarConIA}
+            disabled={iaEditando || !iaComentario.trim() || !form.html.trim()}
+            className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-lg py-1.5 text-xs font-semibold shadow-sm disabled:opacity-50"
+          >
+            {iaEditando ? 'Aplicando cambios… (puede tardar)' : 'Aplicar cambios al correo'}
+          </button>
+        </div>
       </div>
 
       {borradores.length > 0 && (
@@ -1886,7 +1955,7 @@ function GenerarCampanaModal({ open, onClose, categoriaInicial, onUsar }: {
                 <span>Vista previa (con vet de muestra)</span>
                 {loading && <span className="text-[11px] font-normal text-indigo-600">{accion === 'ajustar' ? 'Ajustando…' : 'Generando otra versión…'}</span>}
               </div>
-              <iframe srcDoc={previewHtml} className="w-full h-[420px] bg-white" sandbox="" />
+              <iframe srcDoc={proxyImgs(previewHtml)} className="w-full h-[420px] bg-white" sandbox="allow-same-origin" referrerPolicy="no-referrer" />
             </div>
 
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">

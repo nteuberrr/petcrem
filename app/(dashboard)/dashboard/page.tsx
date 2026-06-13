@@ -6,6 +6,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid,
 } from 'recharts'
+import Link from 'next/link'
 import TimelineStatus from '@/components/TimelineStatus'
 import { Modal } from '@/components/ui/Modal'
 
@@ -18,6 +19,7 @@ type Data = {
     pendientes: number; ciclos_mes: number
     litros_mes: number; ingresos_mes: number; stock_petroleo: number
     stock_bajo: boolean; pendientes_pago: number; monto_pendiente: number
+    fichas_por_ingresar?: number
   }
   ratios: { litros_por_ciclo: number; litros_por_mascota: number; costo_vehiculo_por_mascota: number; duracion_promedio_ciclo_min: number }
   ratios_por_mes: RatioMensual[]
@@ -100,6 +102,21 @@ export default function DashboardPage() {
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Resumen operativo — {mesActual} {new Date().getFullYear()}</p>
       </div>
+
+      {/* Alerta: nuevas reservas confirmadas por el agente de WhatsApp (fichas borrador) */}
+      {(data.kpis.fichas_por_ingresar ?? 0) > 0 && (
+        <Link
+          href="/clientes?filtro=borrador"
+          className="flex items-center gap-3 rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 shadow-sm hover:bg-red-100 transition-colors"
+        >
+          <span className="shrink-0 inline-flex w-9 h-9 rounded-lg bg-red-200 items-center justify-center text-lg">🔔</span>
+          <span className="flex-1 text-sm font-bold text-red-900">
+            {data.kpis.fichas_por_ingresar} nueva{data.kpis.fichas_por_ingresar === 1 ? '' : 's'} reserva{data.kpis.fichas_por_ingresar === 1 ? '' : 's'} del agente por ingresar
+            <span className="block sm:inline sm:ml-2 text-xs font-medium text-red-700">Completa la ficha y regístrala para generar el código.</span>
+          </span>
+          <span className="shrink-0 text-xs font-semibold text-red-700 bg-white border border-red-300 rounded-lg px-2.5 py-1">Ver fichas →</span>
+        </Link>
+      )}
 
       {/* Timeline Status */}
       <TimelineStatus />

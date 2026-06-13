@@ -438,6 +438,10 @@ export async function GET() {
         stock_bajo: stock < 100,
         pendientes_pago: pendientesPago,
         monto_pendiente: montoPendientePago,
+        // Fichas creadas por el agente de WhatsApp aún sin registrar (estado
+        // 'borrador'). No entran a ningún KPI; solo alimentan la alerta de
+        // "nueva reserva" del dashboard y de /clientes.
+        fichas_por_ingresar: clientesAll.filter(c => c.estado === 'borrador').length,
       },
       ratios: {
         litros_por_ciclo: litrosPorCiclo,

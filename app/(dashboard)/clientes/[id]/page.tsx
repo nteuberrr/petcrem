@@ -680,6 +680,20 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     >
                       {certUltimo?.enviado_ultima_fecha ? '🔄' : '📧'} <span>Reenviar certificado al correo</span>
                     </button>
+                    {/* Certificados emitidos: listados acá mismo, bajo los botones */}
+                    {certificadosEmitidos.length > 0 && (
+                      <div className="px-1 pb-1 space-y-0.5">
+                        <p className="px-2 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-300">Emitidos ({certificadosEmitidos.length})</p>
+                        {certificadosEmitidos.map(c => (
+                          <a key={`cert-${c.id}`} href={c.pdf_url || undefined} target="_blank" rel="noopener noreferrer"
+                            className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 ${c.pdf_url ? 'text-gray-700' : 'text-gray-400 pointer-events-none'}`}>
+                            📄 <span className="flex-1 truncate">Certificado V{c.version}</span>
+                            <span className="text-[11px] text-gray-400 shrink-0">{fmtFecha(c.fecha_emision)}</span>
+                            {c.pdf_url && <span className="text-[11px] font-medium text-indigo-600 shrink-0">Abrir</span>}
+                          </a>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="my-1 border-t border-gray-100" />
 
@@ -692,13 +706,6 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                       </div>
                     </div>
                     <div className="px-1 pb-2 space-y-0.5">
-                      {certificadosEmitidos.map(c => (
-                        <a key={`cert-${c.id}`} href={c.pdf_url || undefined} target="_blank" rel="noopener noreferrer"
-                          className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 ${c.pdf_url ? 'text-gray-700' : 'text-gray-400 pointer-events-none'}`}>
-                          📄 <span className="flex-1 truncate">Certificado V{c.version}</span>
-                          <span className="text-[11px] text-gray-400 shrink-0">{fmtFecha(c.fecha_emision)}</span>
-                        </a>
-                      ))}
                       {videosServicio.map((url, i) => (
                         <div key={`vid-${i}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 text-gray-700">
                           🎬 <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Video {i + 1}</a>
@@ -711,8 +718,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                           <button onClick={() => eliminarFotoEvidencia(url)} className="text-[11px] text-red-600 hover:text-red-800 shrink-0">Eliminar</button>
                         </div>
                       ))}
-                      {certificadosEmitidos.length === 0 && videosServicio.length === 0 && fotosEvidencia.length === 0 && (
-                        <p className="px-2 py-2 text-xs text-gray-400">Aún no hay archivos guardados.</p>
+                      {videosServicio.length === 0 && fotosEvidencia.length === 0 && (
+                        <p className="px-2 py-2 text-xs text-gray-400">Aún no hay videos ni fotos guardados.</p>
                       )}
                     </div>
                   </div>
