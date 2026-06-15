@@ -33,7 +33,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       const destinatarios = mascotasIds
         .map(mid => byId.get(mid))
         .filter((c): c is Record<string, string> => !!c)
-        .map(c => ({ email: c.email, nombreMascota: c.nombre_mascota, nombreTutor: c.nombre_tutor }))
+        .map(c => ({ email: c.email, nombreMascota: c.nombre_mascota, nombreTutor: c.nombre_tutor, clienteId: c.id }))
       await enviarInicioDespacho(destinatarios)
     } catch (e) {
       console.warn('[despachos/iniciar] fallo correo (no bloqueante):', e)

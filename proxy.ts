@@ -34,6 +34,9 @@ export async function proxy(req: NextRequest) {
     // metadata/creación. Cliente general "sin veterinaria", sin sesión.
     pathname === '/registro-mascota' ||
     pathname === '/api/clientes/publico' ||
+    // Completar el borrador desde el link firmado del WhatsApp de retiro
+    // confirmado (auth = token HMAC; NO genera código, solo enriquece el borrador).
+    pathname === '/api/clientes/completar-borrador' ||
     // Subida pública de la foto de la mascota (link del correo de registro).
     pathname === '/subir-foto' ||
     pathname === '/api/clientes/foto' ||

@@ -121,6 +121,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           nombreMascota: cliente.nombre_mascota,
           nombreTutor: cliente.nombre_tutor,
           codigo: cliente.codigo,
+          clienteId: cliente.id,
         })
       } catch (e) {
         console.warn('[despachos/entregar] fallo correo entrega (no bloqueante):', e)

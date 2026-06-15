@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
           email: clientes[i].email,
           nombreMascota: clientes[i].nombre_mascota,
           nombreTutor: clientes[i].nombre_tutor,
+          clienteId: clientes[i].id,
         }))
       await enviarInicioCremacion(destinatarios)
     } catch (e) {

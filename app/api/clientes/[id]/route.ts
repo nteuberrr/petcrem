@@ -154,6 +154,7 @@ export async function PATCH(
           nombreMascota: String(updated.nombre_mascota || ''),
           nombreTutor: String(updated.nombre_tutor || ''),
           codigo: codigoGenerado,
+          clienteId: String(updated.id || ''),
         })
       } catch (e) {
         console.warn('[clientes PATCH] fallo mail registro (no bloqueante):', e)

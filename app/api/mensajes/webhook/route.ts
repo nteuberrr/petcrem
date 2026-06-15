@@ -10,6 +10,7 @@ import { isAgenteConfigurado, generarRespuesta } from '@/lib/agente-mensajes'
 import { handlersAgente } from '@/lib/agente-acciones'
 import { getSheetData, updateRow } from '@/lib/datastore'
 import { crearClienteBorrador } from '@/lib/cliente-borrador'
+import { createBorradorToken } from '@/lib/borrador-token'
 import { formatDate } from '@/lib/dates'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 
@@ -61,6 +62,18 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
   if (r.escalar) {
     const tags = Array.from(new Set([...(conv.etiquetas || []), 'pausado', 'requiere-humano']))
     await actualizarConversacion(conv.id, { etiquetas: tags })
+    // Aviso al admin por WhatsApp: una conversación necesita atención humana
+    // (reclamo, solicitud especial/postventa, etc.). Best-effort. La conversación
+    // queda 'pausada' → el agente no vuelve a responder hasta que la retomes.
+    try {
+      const ultimoCliente = [...historial].reverse().find(h => h.rol === 'cliente')?.texto || ''
+      const nombre = contacto.nombre || 'Cliente'
+      const aviso = `⚠️ *Atención requerida* — el bot derivó una conversación a una persona.\n\n` +
+        `Cliente: ${nombre}\nWhatsApp: +${destino}\n` +
+        (ultimoCliente ? `Último mensaje: "${ultimoCliente.slice(0, 220)}"\n` : '') +
+        `\nLa pauso para que la retomes tú desde el inbox.`
+      await enviarTextoWhatsapp(adminWhatsapp(), aviso)
+    } catch (e) { console.warn('[agente] aviso de escalamiento al admin falló:', e) }
   }
 }
 
@@ -133,10 +146,33 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
   const base = (process.env.NEXTAUTH_URL || 'https://petcrem.vercel.app').replace(/\/$/, '')
   const confirmado = accion === 'ok'
 
+  // Al confirmar: crear el cliente borrador PRIMERO (queda "Por ingresar", sin
+  // código) para poder mandarle al tutor un link FIRMADO que completa ESE
+  // borrador. Completar el link NO genera código ni correo — eso lo hace el
+  // operador al "Registrar ficha" (ingreso oficial).
+  let linkFicha = `${base}/registro-mascota`
+  if (confirmado) {
+    try {
+      const borradorId = await crearClienteBorrador({
+        nombre_tutor: sol.cliente_nombre,
+        nombre_mascota: sol.nombre_mascota,
+        telefono: waCliente,
+        direccion_retiro: sol.direccion,
+        comuna: sol.comuna,
+        fecha_retiro: sol.fecha_retiro,
+        peso_declarado: sol.peso,
+        codigo_servicio: sol.tipo_servicio,
+        origen: 'bot_retiro',
+        notas: 'Creado desde una solicitud de retiro del bot de WhatsApp.',
+      })
+      linkFicha = `${base}/registro-mascota?ficha=${createBorradorToken(borradorId)}`
+    } catch (e) { console.warn('[webhook] no se pudo crear cliente borrador:', e) }
+  }
+
   const msgCliente = confirmado
     ? `Tu retiro quedó confirmado para el ${formatDate(sol.fecha_retiro)} a las ${sol.hora_retiro}.\n\n` +
-      `Por favor completa el registro de tu mascota aquí:\n${base}/registro-mascota\n\n` +
-      `Nuestro chofer te contactará cuando esté pronto a llegar. Gracias por confiar en nosotros 🐾`
+      `Si quieres, puedes adelantar los datos de tu mascota aquí:\n${linkFicha}\n\n` +
+      `No es obligatorio: si no alcanzas, te los pedimos al momento del retiro. Gracias por confiar en nosotros 🐾`
     : `Gracias por escribirnos. Un agente de nuestro equipo se pondrá en contacto contigo a la brevedad para coordinar. 🐾`
 
   // Avisar al cliente + registrar en su conversación del inbox.
@@ -159,30 +195,11 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
     fecha_resolucion: new Date().toISOString(),
   })
 
-  // Al confirmar: crear el cliente borrador en /clientes (queda "Por ingresar";
-  // el equipo completa la ficha y al "Registrar" se genera el código).
-  if (confirmado) {
-    try {
-      await crearClienteBorrador({
-        nombre_tutor: sol.cliente_nombre,
-        nombre_mascota: sol.nombre_mascota,
-        telefono: waCliente,
-        direccion_retiro: sol.direccion,
-        comuna: sol.comuna,
-        fecha_retiro: sol.fecha_retiro,
-        peso_declarado: sol.peso,
-        codigo_servicio: sol.tipo_servicio,
-        origen: 'bot_retiro',
-        notas: 'Creado desde una solicitud de retiro del bot de WhatsApp.',
-      })
-    } catch (e) { console.warn('[webhook] no se pudo crear cliente borrador:', e) }
-  }
-
   // Acuse al admin.
   await enviarTextoWhatsapp(
     adminWhatsapp(),
     confirmado
-      ? `✅ Retiro N° ${solicitudId} confirmado. Le enviamos al cliente el link de registro.`
+      ? `✅ Retiro N° ${solicitudId} confirmado. Le enviamos al cliente el link para completar su ficha (queda como borrador "Por ingresar"; el código se genera cuando registres la ficha).`
       : `❌ Retiro N° ${solicitudId} rechazado. Avisamos al cliente que un agente lo contactará.`,
   )
   return true

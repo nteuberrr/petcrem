@@ -67,6 +67,14 @@ export interface SendOpts {
    * duplicar archivos grandes a la casilla de seguimiento.
    */
   noBcc?: boolean
+  /**
+   * Solo para sendBatch: OPT-IN al BCC de "seguimiento en vivo". En batch el BCC
+   * está apagado por defecto (las campañas masivas usan sendBatch y no queremos
+   * 500 copias en la casilla de seguimiento). Los correos de ETAPA al tutor que
+   * van en lote (inicio de cremación, "vamos en camino") lo activan para que el
+   * seguimiento los cubra igual que a los de sendEmail. Se respeta `noBcc`.
+   */
+  bccSeguimiento?: boolean
 }
 
 /**
@@ -166,7 +174,9 @@ function buildAttachmentsPayload(attachments: AttachmentSpec[] | undefined) {
 /**
  * "Seguimiento en vivo": correo al que se reenvía copia OCULTA (BCC) de cada
  * email transaccional, si está activo en empresa_config. Cacheado ~60s.
- * Solo aplica a sendEmail (transaccional), NUNCA al mailing masivo (sendBatch).
+ * En sendEmail aplica por defecto (opt-out con `noBcc`). En sendBatch aplica
+ * SOLO a los items con `bccSeguimiento: true` (opt-in) — así cubre los correos
+ * de etapa al tutor sin inundar la casilla con las campañas masivas.
  */
 let segCache: { ts: number; bcc: string | null } | null = null
 async function getSeguimientoBcc(): Promise<string | null> {
@@ -270,9 +280,15 @@ export async function sendBatch(emails: SendOpts[]): Promise<SendResult[]> {
 
   try {
     const client = getClient()
+    // BCC de seguimiento: solo si algún item lo pide explícitamente (opt-in).
+    // Se lee una vez (está cacheado) y se aplica por item respetando noBcc.
+    const segBcc = validos.some(v => v.opts.bccSeguimiento && !v.opts.noBcc)
+      ? await getSeguimientoBcc()
+      : null
     const payload = validos.map(v => ({
       from: v.opts.from || getFromAddress(),
       to: v.toLimpio,
+      bcc: (v.opts.bccSeguimiento && !v.opts.noBcc && segBcc) ? segBcc : undefined,
       subject: v.opts.subject,
       html: prepararHtml(v.opts),
       replyTo: v.opts.reply_to,

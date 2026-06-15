@@ -5,6 +5,7 @@ import { fmtFecha } from '@/lib/format'
 import { todayISO } from '@/lib/dates'
 import { getContacto } from '@/lib/email-layout'
 import { buildCertificado } from '@/lib/cliente-mailer'
+import { registrarEnvio } from '@/lib/correos-log'
 
 const CERT_COLS = [
   'id', 'cliente_id', 'codigo_mascota', 'nombre_mascota',
@@ -109,8 +110,10 @@ export async function POST(
     })
 
     if (!res.ok) {
+      await registrarEnvio({ clienteId: cliente.id, tipo: 'certificado', email: cliente.email, ok: false, error: res.error })
       return NextResponse.json({ error: res.error ?? 'No se pudo enviar el correo' }, { status: 502 })
     }
+    await registrarEnvio({ clienteId: cliente.id, tipo: 'certificado', email: cliente.email, messageId: res.message_id, ok: true })
 
     // Persistir el envío en la fila del certificado para que el front pueda mostrar
     // "Certificado enviado el DD-MM-YYYY" y evitar reenvíos accidentales.

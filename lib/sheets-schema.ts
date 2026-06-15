@@ -159,6 +159,16 @@ export const SHEETS: Record<string, string[]> = {
     'error_msg',
     'fecha_creacion',
   ],
+  // Correos transaccionales al tutor (registro, inicio cremación, inicio
+  // despacho, entrega, certificado). Se registran al enviar y el webhook de
+  // Resend reconcilia entregado/abierto/rebotado por message_id. Alimentan el
+  // bloque "Correos al tutor" de la ficha y la alerta de rebote del email.
+  // tipo: registro | inicio_cremacion | inicio_despacho | entrega | certificado
+  // estado: enviado | entregado | abierto | clic | rebotado | spam | fallido
+  correos_cliente: [
+    'id', 'cliente_id', 'tipo', 'email', 'message_id',
+    'estado', 'motivo', 'fecha_envio', 'fecha_actualizacion',
+  ],
   // Banco de imágenes para campañas (generadas con Nano Banana Pro o subidas a
   // mano). Viven en R2 (url/key) y se RECICLAN entre correos: el generador IA
   // revisa este banco y reutiliza una imagen existente cuando calza con el

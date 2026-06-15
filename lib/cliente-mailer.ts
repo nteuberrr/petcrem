@@ -1,5 +1,6 @@
 import { sendEmail, sendBatch, isResendConfigured, type SendOpts } from './resend-mailer'
 import { renderEmailLayout, getContacto, escapeHtml, BRAND, type Contacto } from './email-layout'
+import { registrarEnvio, registrarEnvios, type TipoCorreo } from './correos-log'
 
 /**
  * Correos transaccionales al tutor (dueño de la mascota), enganchados en los
@@ -24,6 +25,8 @@ export interface DestinatarioTutor {
   email: string
   nombreMascota: string
   nombreTutor: string
+  /** Id de la ficha del cliente, para registrar el correo en su historial. */
+  clienteId?: string
 }
 
 /** Saludo seguro: "Hola Nombre," o "Hola," si no hay nombre de tutor. */
@@ -39,6 +42,7 @@ export interface RegistroArgs {
   nombreMascota: string
   nombreTutor: string
   codigo: string
+  clienteId?: string
 }
 
 /**
@@ -56,8 +60,10 @@ export async function enviarRegistroMascota(args: RegistroArgs): Promise<void> {
     const res = await sendEmail(buildRegistro(args, contacto))
     if (res.ok) console.log(`[cliente-mailer] OK registro a ${args.email}, message_id=${res.message_id}`)
     else console.error(`[cliente-mailer] FAIL registro a ${args.email}: ${res.error}`)
+    await registrarEnvio({ clienteId: args.clienteId, tipo: 'registro', email: args.email, messageId: res.message_id, ok: res.ok, error: res.error })
   } catch (e) {
     console.error(`[cliente-mailer] EXC registro a ${args.email}:`, e instanceof Error ? e.message : String(e))
+    await registrarEnvio({ clienteId: args.clienteId, tipo: 'registro', email: args.email, ok: false, error: e instanceof Error ? e.message : String(e) })
   }
 }
 
@@ -115,8 +121,7 @@ export async function enviarInicioCremacion(destinatarios: DestinatarioTutor[]):
     return
   }
   const contacto = await getContacto()
-  const emails: SendOpts[] = validos.map(d => buildCremacion(d, contacto))
-  await enviarEnLotes(emails, 'inicio cremación')
+  await enviarLoteTutor(validos.map(d => ({ d, opts: buildCremacion(d, contacto) })), 'inicio_cremacion', 'inicio cremación')
 }
 
 export function buildCremacion(d: DestinatarioTutor, contacto: Contacto): SendOpts {
@@ -136,6 +141,7 @@ export function buildCremacion(d: DestinatarioTutor, contacto: Contacto): SendOp
     html: renderEmailLayout({ titulo: 'Iniciamos el proceso de cremación', bodyHtml: cuerpo, contacto }),
     preview_text: `El proceso de cremación de ${d.nombreMascota} ha comenzado.`,
     tags: [{ name: 'tipo', value: 'cliente_inicio_cremacion' }],
+    bccSeguimiento: true, // va en lote; opt-in para que el seguimiento lo copie
   }
 }
 
@@ -153,8 +159,7 @@ export async function enviarInicioDespacho(destinatarios: DestinatarioTutor[]): 
     return
   }
   const contacto = await getContacto()
-  const emails: SendOpts[] = validos.map(d => buildDespacho(d, contacto))
-  await enviarEnLotes(emails, 'inicio despacho')
+  await enviarLoteTutor(validos.map(d => ({ d, opts: buildDespacho(d, contacto) })), 'inicio_despacho', 'inicio despacho')
 }
 
 export function buildDespacho(d: DestinatarioTutor, contacto: Contacto): SendOpts {
@@ -175,6 +180,7 @@ export function buildDespacho(d: DestinatarioTutor, contacto: Contacto): SendOpt
     html: renderEmailLayout({ titulo: 'Tu ánfora va en camino', bodyHtml: cuerpo, contacto }),
     preview_text: `Dentro de las próximas horas recibirás el ánfora de ${d.nombreMascota}.`,
     tags: [{ name: 'tipo', value: 'cliente_inicio_despacho' }],
+    bccSeguimiento: true, // va en lote; opt-in para que el seguimiento lo copie
   }
 }
 
@@ -186,6 +192,7 @@ export interface EntregaArgs {
   nombreTutor: string
   /** Código de la mascota; se muestra entre paréntesis junto al nombre. */
   codigo?: string
+  clienteId?: string
 }
 
 /**
@@ -204,8 +211,10 @@ export async function enviarEntregaConfirmada(args: EntregaArgs): Promise<void> 
     const res = await sendEmail(buildEntrega(args, contacto))
     if (res.ok) console.log(`[cliente-mailer] OK entrega a ${args.email}, message_id=${res.message_id}`)
     else console.error(`[cliente-mailer] FAIL entrega a ${args.email}: ${res.error}`)
+    await registrarEnvio({ clienteId: args.clienteId, tipo: 'entrega', email: args.email, messageId: res.message_id, ok: res.ok, error: res.error })
   } catch (e) {
     console.error(`[cliente-mailer] EXC entrega a ${args.email}:`, e instanceof Error ? e.message : String(e))
+    await registrarEnvio({ clienteId: args.clienteId, tipo: 'entrega', email: args.email, ok: false, error: e instanceof Error ? e.message : String(e) })
   }
 }
 
@@ -289,16 +298,30 @@ export function buildCertificado(args: CertificadoEmailArgs, contacto: Contacto)
   }
 }
 
-/** Envía en lotes de 100 (límite de sendBatch). Loggea un resumen por lote. */
-async function enviarEnLotes(emails: SendOpts[], etiqueta: string): Promise<void> {
-  for (let i = 0; i < emails.length; i += 100) {
-    const chunk = emails.slice(i, i + 100)
+/**
+ * Envía en lotes de 100 (límite de sendBatch) y REGISTRA cada destinatario en
+ * correos_cliente (con su message_id) para el historial de la ficha. Loggea un
+ * resumen por lote. Best-effort.
+ */
+async function enviarLoteTutor(
+  items: { d: DestinatarioTutor; opts: SendOpts }[],
+  tipo: TipoCorreo,
+  etiqueta: string,
+): Promise<void> {
+  for (let i = 0; i < items.length; i += 100) {
+    const chunk = items.slice(i, i + 100)
     try {
-      const res = await sendBatch(chunk)
+      const res = await sendBatch(chunk.map(c => c.opts))
       const ok = res.filter(r => r.ok).length
       console.log(`[cliente-mailer] ${etiqueta}: lote ${i / 100 + 1} → ${ok}/${chunk.length} enviados`)
+      await registrarEnvios(chunk.map((c, k) => ({
+        clienteId: c.d.clienteId, tipo, email: c.d.email,
+        messageId: res[k]?.message_id, ok: !!res[k]?.ok, error: res[k]?.error,
+      })))
     } catch (e) {
-      console.error(`[cliente-mailer] ${etiqueta}: lote ${i / 100 + 1} falló:`, e instanceof Error ? e.message : String(e))
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error(`[cliente-mailer] ${etiqueta}: lote ${i / 100 + 1} falló:`, msg)
+      await registrarEnvios(chunk.map(c => ({ clienteId: c.d.clienteId, tipo, email: c.d.email, ok: false, error: msg })))
     }
   }
 }

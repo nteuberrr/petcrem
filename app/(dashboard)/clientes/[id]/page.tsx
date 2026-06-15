@@ -25,6 +25,17 @@ type Certificado = {
   enviado_a?: string
 }
 
+type CorreoCliente = {
+  id: string
+  cliente_id: string
+  tipo: string
+  email: string
+  estado: string
+  motivo: string
+  fecha_envio: string
+  fecha_actualizacion: string
+}
+
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
 
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
@@ -140,6 +151,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [enviandoCert, setEnviandoCert] = useState(false)
   const [feedbackCert, setFeedbackCert] = useState<{ kind: 'ok' | 'error'; msg: string } | null>(null)
 
+  // Correos transaccionales enviados al tutor (estado de entrega por etapa).
+  const [correos, setCorreos] = useState<CorreoCliente[]>([])
+
   // Eliminar ficha (admin only)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
@@ -151,6 +165,13 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     if (!res || !res.ok) return
     const data = await res.json().catch(() => [])
     setCertificadosEmitidos(Array.isArray(data) ? data : [])
+  }, [id])
+
+  const fetchCorreos = useCallback(async () => {
+    const res = await fetch(`/api/clientes/${id}/correos`).catch(() => null)
+    if (!res || !res.ok) return
+    const data = await res.json().catch(() => ({}))
+    setCorreos(Array.isArray(data?.correos) ? data.correos : [])
   }, [id])
 
   // Recarga solo la ficha del cliente (usado tras subir/eliminar un video).
@@ -220,7 +241,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       .then(r => r.json())
       .then(d => setDescuentosDisp(Array.isArray(d) ? d.filter((x: Descuento) => x.activo === 'TRUE') : []))
     fetchCertificados()
-  }, [id, fetchCertificados])
+    fetchCorreos()
+  }, [id, fetchCertificados, fetchCorreos])
 
   // Cerrar el menú "Documentos" al hacer click fuera.
   useEffect(() => {
@@ -581,6 +603,18 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
   const certUltimo = certificadosEmitidos[0]
   const puedeGenerarCert = cliente.estado === 'cremado' || cliente.estado === 'despachado'
+
+  // Correos al tutor: último registro por etapa + detección de rebote del email.
+  const CORREO_RANK: Record<string, number> = { fallido: 1, enviado: 1, entregado: 2, abierto: 3, clic: 4, rebotado: 5, spam: 6 }
+  const correosPorTipo: Record<string, CorreoCliente> = {}
+  for (const c of correos) {
+    const prev = correosPorTipo[c.tipo]
+    if (!prev || (CORREO_RANK[c.estado] ?? 0) >= (CORREO_RANK[prev.estado] ?? 0)) correosPorTipo[c.tipo] = c
+  }
+  const emailActual = (cliente.email || '').trim().toLowerCase()
+  const correoProblema = emailActual
+    ? [...correos].reverse().find(c => (c.email || '').trim().toLowerCase() === emailActual && (c.estado === 'rebotado' || c.estado === 'spam' || c.estado === 'fallido')) || null
+    : null
   const videosServicio: string[] = (() => {
     try { const x = JSON.parse(cliente.videos_servicio || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
   })()
@@ -786,6 +820,49 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
+      {/* Correos al tutor: estado de entrega por etapa del proceso. */}
+      {cliente.estado !== 'borrador' && (
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 mb-6 overflow-hidden">
+          <div className="bg-gradient-to-r from-sky-50 to-indigo-50 px-6 py-3 border-b-2 border-sky-100 flex items-center gap-2">
+            <span className="text-lg">✉️</span>
+            <h2 className="text-sm font-bold text-sky-900 uppercase tracking-wide">Correos al tutor</h2>
+          </div>
+          <div className="p-4 sm:p-6">
+            {correoProblema && (
+              <div className="mb-3 rounded-lg bg-red-50 border-2 border-red-200 px-3 py-2.5 text-xs text-red-800 flex items-start gap-2">
+                <span className="text-base leading-none">⚠</span>
+                <span>
+                  El correo <b>{cliente.email}</b> {correoProblema.estado === 'rebotado' ? 'rebotó' : correoProblema.estado === 'spam' ? 'fue marcado como spam' : 'falló al enviarse'} — el tutor podría no estar recibiendo los avisos. Revisa que la dirección sea correcta.
+                  {correoProblema.motivo ? <span className="block text-[11px] text-red-600 mt-0.5">Motivo: {correoProblema.motivo}</span> : null}
+                </span>
+              </div>
+            )}
+            {correos.length === 0 ? (
+              <p className="text-sm text-gray-400">Sin registro de correos para esta ficha todavía. Los correos enviados de aquí en adelante quedan registrados con su estado de entrega.</p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {([
+                  { tipo: 'registro', label: 'Registro / bienvenida' },
+                  { tipo: 'inicio_cremacion', label: 'Inicio de cremación' },
+                  { tipo: 'inicio_despacho', label: 'Vamos en camino (ruta)' },
+                  { tipo: 'entrega', label: 'Entrega confirmada' },
+                  { tipo: 'certificado', label: 'Certificado de cremación' },
+                ] as const).map(et => {
+                  const c = correosPorTipo[et.tipo]
+                  return (
+                    <li key={et.tipo} className="flex items-center gap-3 py-2">
+                      <span className="flex-1 text-sm text-gray-700">{et.label}</span>
+                      {c && <span className="text-[11px] text-gray-400 shrink-0">{fmtFecha(c.fecha_envio)}</span>}
+                      <CorreoEstadoBadge estado={c?.estado} />
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Proceso de cremación — rediseñado con header colorido y mejor jerarquía */}
       <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 mb-6 overflow-hidden">
         <div className="bg-gradient-to-r from-rose-50 to-orange-50 px-6 py-3 border-b-2 border-rose-100 flex items-center gap-2">
@@ -832,7 +909,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
           <Field required label="Nombre tutor" value={form.nombre_tutor} onChange={v => setForm(f => ({ ...f, nombre_tutor: v }))} />
-          <Field required type="email" label="Email" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} />
+          <div>
+            <Field required type="email" label="Email" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} />
+            {correoProblema && (
+              <p className="mt-1 text-[11px] font-medium text-red-700">
+                ⚠ Este correo {correoProblema.estado === 'rebotado' ? 'rebotó' : correoProblema.estado === 'spam' ? 'fue marcado como spam' : 'falló'} — el tutor podría no recibir los avisos.
+              </p>
+            )}
+          </div>
           <Field required type="tel" label="Teléfono" value={form.telefono} onChange={v => setForm(f => ({ ...f, telefono: v.replace(/\D/g, '').slice(0, 9) }))} placeholder="9 dígitos" />
           <AddressField required label="Dirección de retiro" value={form.direccion_retiro} onChange={v => setForm(f => ({ ...f, direccion_retiro: v }))} />
           <AddressField required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
@@ -1578,4 +1662,20 @@ function InfoField({ label, value }: { label: string; value: string }) {
       <p className="text-sm text-gray-900 mt-0.5">{value}</p>
     </div>
   )
+}
+
+/** Badge de estado de un correo transaccional (o "sin enviar" si no hay registro). */
+function CorreoEstadoBadge({ estado }: { estado?: string }) {
+  if (!estado) return <span className="text-[11px] text-gray-400 shrink-0">— sin enviar</span>
+  const map: Record<string, { cls: string; label: string }> = {
+    enviado: { cls: 'bg-blue-100 text-blue-800', label: 'Enviado' },
+    entregado: { cls: 'bg-cyan-100 text-cyan-800', label: 'Entregado' },
+    abierto: { cls: 'bg-emerald-100 text-emerald-800', label: 'Abierto' },
+    clic: { cls: 'bg-violet-100 text-violet-800', label: 'Click' },
+    rebotado: { cls: 'bg-red-100 text-red-800', label: 'Rebotó' },
+    spam: { cls: 'bg-orange-100 text-orange-800', label: 'Spam' },
+    fallido: { cls: 'bg-red-100 text-red-800', label: 'Falló' },
+  }
+  const s = map[estado] || { cls: 'bg-gray-100 text-gray-700', label: estado }
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 ${s.cls}`}>{s.label}</span>
 }

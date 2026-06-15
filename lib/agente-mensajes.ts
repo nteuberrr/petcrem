@@ -58,7 +58,7 @@ REGLAS DURAS
 - NUNCA inventes precios, plazos ni servicios. Usa SOLO la tabla "TARIFAS VIGENTES" que te entrego abajo. Si no tienes el peso, pídelo antes de cotizar.
 - Las TARIFAS VIGENTES son SOLO de cremación. NO las uses para cotizar una eutanasia a domicilio (la eutanasia tiene otro precio, que se entrega por separado).
 - No prometas nada que no esté en esta información.
-- Para ESCALAR a un humano, llama a la herramienta "escalar_a_humano" (no escribas JSON). Escala si: el cliente está molesto o hace un reclamo; pide hablar con una persona; es un tema sensible, legal o de pago/transferencia que no puedes resolver; o algo se sale del flujo de cremación/eutanasia. Aun así, envía una línea breve y cálida avisando que un miembro del equipo le responderá a la brevedad.
+- Para ESCALAR a un humano, llama a la herramienta "escalar_a_humano" (no escribas JSON). Escala si: el cliente está molesto o hace un reclamo; pide hablar con una persona; es un tema sensible, legal o de pago/transferencia que no puedes resolver; algo se sale del flujo de cremación/eutanasia; o hace cualquier SOLICITUD ESPECIAL o de POSTVENTA (un pedido fuera de lo estándar, consultar por horarios distintos, incluir o agregar algo adicional al servicio, personalizar/modificar algo, o dudas después de la entrega). Ante la duda de si es "especial", escala. Aun así, envía una línea breve y cálida avisando que un miembro del equipo le responderá a la brevedad.
 - Una sola respuesta por turno.
 
 SOBRE NOSOTROS Y EL SERVICIO (usa lo que aplique para responder dudas; no lo recites entero)
@@ -180,7 +180,7 @@ const TOOL_COTIZAR_EUTANASIA: Anthropic.Tool = {
 
 const TOOL_ESCALAR: Anthropic.Tool = {
   name: 'escalar_a_humano',
-  description: 'Deriva la conversación a una persona del equipo. Úsala ante reclamos, clientes molestos, cuando piden hablar con una persona, temas sensibles/legales/de pago que no puedes resolver, o cuando algo se sale del flujo de cremación/eutanasia. Tras llamarla, igual envía un mensaje breve y cálido avisando que un miembro del equipo responderá pronto.',
+  description: 'Deriva la conversación a una persona del equipo. Úsala ante reclamos, clientes molestos, cuando piden hablar con una persona, temas sensibles/legales/de pago que no puedes resolver, cuando algo se sale del flujo de cremación/eutanasia, o ante cualquier SOLICITUD ESPECIAL o de POSTVENTA (pedidos fuera de lo estándar, horarios distintos, incluir/agregar algo adicional, personalizar o modificar el servicio, dudas posteriores a la entrega). Ante la duda, escala. Tras llamarla, igual envía un mensaje breve y cálido avisando que un miembro del equipo responderá pronto.',
   input_schema: {
     type: 'object',
     properties: { motivo: { type: 'string', description: 'Motivo breve de la derivación.' } },
@@ -256,11 +256,13 @@ function bloqueFechaChile(): string {
     const dia = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, weekday: 'long' }).format(d)
     return `${dia} ${iso}`
   }
-  return `FECHA ACTUAL (Chile, America/Santiago):
+  const horaActual = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+  return `FECHA Y HORA ACTUAL (Chile, America/Santiago):
 - Hoy es ${ref(0)}.
 - Mañana es ${ref(1)}.
 - Pasado mañana es ${ref(2)}.
-Resuelve SIEMPRE las fechas relativas que diga el cliente ("hoy", "mañana", "este viernes", etc.) en base a ESTO, y pásalas a las herramientas en formato YYYY-MM-DD. NUNCA inventes ni adivines la fecha ni el año. Si hay cualquier ambigüedad, confírmale al cliente la fecha concreta (DD-MM-YYYY) antes de agendar.`
+- Ahora son las ${horaActual} hrs.
+Resuelve SIEMPRE las fechas Y horas relativas que diga el cliente ("hoy", "mañana", "este viernes", "lo antes posible", "en un rato") en base a ESTO. Pasa las fechas a las herramientas en formato YYYY-MM-DD y las horas en HH:MM (24h). Si pide "lo antes posible" o algo similar y no hay una indicación distinta del equipo, calcula la hora de retiro a partir de la HORA ACTUAL de arriba. NUNCA inventes ni adivines la fecha, el año ni la hora; si hay ambigüedad, confírmasela al cliente antes de agendar.`
 }
 
 /** Limpia el texto final del modelo (quita fences y desarma JSON heredado). */
@@ -303,7 +305,11 @@ export async function generarRespuesta(
     { type: 'text', text: `${BASE}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
   ]
   const ajustes = [
-    cfg?.instrucciones?.trim() && `INSTRUCCIONES DEL OPERADOR (tienen prioridad sobre lo anterior, EXCEPTO las REGLAS DURAS de no inventar precios y de escalar):\n${cfg.instrucciones.trim()}`,
+    cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO — trátalos como la VERDAD ACTUAL del negocio, no como una nota aparte.
+Lo siguiente lo definió el equipo y REEMPLAZA cualquier dato del guion base con el que choque (horarios de atención, plazos de entrega, cobertura/comunas, recargos, datos de contacto, forma de atender, etc.). Si algo de acá contradice lo de arriba, vale SIEMPRE esto y actúa como si el dato anterior no existiera: NO menciones la versión antigua. Incorpóralo con naturalidad en tus respuestas como información propia.
+Únicas dos cosas que NO se pueden cambiar por esta vía: (1) los PRECIOS salen siempre de la tabla TARIFAS VIGENTES (nunca los inventes); (2) siempre escala a un humano los reclamos y temas sensibles.
+
+${cfg.instrucciones.trim()}`,
     cfg?.calibracion?.trim() && `GUÍA DE ESTILO APRENDIDA DE CONVERSACIONES REALES (orienta tono y respuestas; no contradice los precios ni las reglas duras):\n${cfg.calibracion.trim()}`,
   ].filter(Boolean).join('\n\n')
   if (ajustes) system.push({ type: 'text', text: ajustes })

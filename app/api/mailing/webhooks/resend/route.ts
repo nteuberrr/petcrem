@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Webhook } from 'standardwebhooks'
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
+import { aplicarEventoCorreo } from '@/lib/correos-log'
 
 interface ResendEvent {
   type: string
@@ -10,9 +11,30 @@ interface ResendEvent {
     from?: string
     to?: string | string[]
     subject?: string
-    tags?: Record<string, string>
+    // Resend puede entregar los tags como objeto {name:value} o como arreglo
+    // [{name,value}] según la versión — leerTag() maneja ambos.
+    tags?: Record<string, string> | Array<{ name: string; value: string }>
     click?: { link?: string; ipAddress?: string; timestamp?: string }
     bounce?: { message?: string; subType?: string }
+  }
+}
+
+/** Lee un tag por nombre tolerando ambas formas (objeto o arreglo). */
+function leerTag(tags: ResendEvent['data']['tags'], name: string): string {
+  if (!tags) return ''
+  if (Array.isArray(tags)) return tags.find(t => t?.name === name)?.value || ''
+  return String(tags[name] || '')
+}
+
+/** Mapea el tipo de evento de Resend al estado de correos_cliente (o null). */
+function estadoTransaccional(tipo: string): string | null {
+  switch (tipo) {
+    case 'email.delivered': return 'entregado'
+    case 'email.opened': return 'abierto'
+    case 'email.clicked': return 'clic'
+    case 'email.bounced': return 'rebotado'
+    case 'email.complained': return 'spam'
+    default: return null
   }
 }
 
@@ -77,6 +99,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, ignored: true, reason: 'supabase no configurado' })
     }
 
+    // Correos transaccionales al tutor (registro / inicio cremación / inicio
+    // despacho / entrega / certificado): llevan tag tipo="cliente_*" y se
+    // reconcilian en correos_cliente, NO en mailing_logs (que es de campañas).
+    const tipoTag = leerTag(evt.data?.tags, 'tipo')
+    if (tipoTag.startsWith('cliente_')) {
+      const estado = estadoTransaccional(evt.type)
+      if (!estado) return NextResponse.json({ ok: true, ignored: true, type: evt.type })
+      const ts = evt.created_at || new Date().toISOString()
+      const motivo = evt.type === 'email.bounced' ? (evt.data.bounce?.message || evt.data.bounce?.subType || '') : ''
+      const found = await aplicarEventoCorreo(messageId, estado, motivo, ts)
+      return NextResponse.json({ ok: true, transaccional: true, applied: found ? estado : null })
+    }
+
     // Race condition guard: el endpoint /enviar hace sendBatch ANTES de hacer
     // INSERT de los logs. Resend a veces dispara el webhook antes de que el
     // insert termine. Reintentamos buscar el log con backoff exponencial.
@@ -106,6 +141,15 @@ export async function POST(req: NextRequest) {
       }
     }
     if (!log) {
+      // No está en mailing_logs. Fallback: puede ser un correo transaccional al
+      // tutor cuyo tag no llegó en el payload → intentamos correos_cliente.
+      const estadoTx = estadoTransaccional(evt.type)
+      if (estadoTx) {
+        const ts = evt.created_at || new Date().toISOString()
+        const motivo = evt.type === 'email.bounced' ? (evt.data.bounce?.message || evt.data.bounce?.subType || '') : ''
+        const found = await aplicarEventoCorreo(messageId, estadoTx, motivo, ts)
+        if (found) return NextResponse.json({ ok: true, transaccional: true, applied: estadoTx })
+      }
       // Devolvemos 200 para que Resend no marque failed_attempts. Es esperado:
       // o el log nunca se insertó (test, email manual no de campaña) o tardó
       // demasiado. Loggeamos para visibility.
