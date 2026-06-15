@@ -162,10 +162,16 @@ export interface AccionCotizarEutanasia {
   peso: number
 }
 
+export interface AccionConsultaEta {
+  /** Nombre de la mascota, si el agente lo sabe. */
+  mascota_nombre?: string
+}
+
 export interface HandlersAgente {
   solicitarRetiro?: (a: AccionRetiro, ctx: CtxAgente) => Promise<string>
   agendarEutanasia?: (a: AccionEutanasia, ctx: CtxAgente) => Promise<string>
   cotizarEutanasia?: (a: AccionCotizarEutanasia, ctx: CtxAgente) => Promise<string>
+  consultarEtaRetiro?: (a: AccionConsultaEta, ctx: CtxAgente) => Promise<string>
 }
 
 const TOOL_COTIZAR_EUTANASIA: Anthropic.Tool = {
@@ -175,6 +181,16 @@ const TOOL_COTIZAR_EUTANASIA: Anthropic.Tool = {
     type: 'object',
     properties: { peso: { type: 'number', description: 'Peso aproximado de la mascota en kg.' } },
     required: ['peso'],
+  },
+}
+
+const TOOL_ETA: Anthropic.Tool = {
+  name: 'consultar_eta_retiro',
+  description: 'Úsala cuando el cliente que YA tiene un retiro confirmado (y aún no retirado) pregunta cuánto falta para que pasen a retirar a su mascota (a qué hora llegan, cuánto tardan). Avisa al equipo para que confirme el horario; cuando responda, le reenviaremos la respuesta al cliente. NUNCA inventes tú una hora ni un plazo.',
+  input_schema: {
+    type: 'object',
+    properties: { mascota_nombre: { type: 'string', description: 'Nombre de la mascota, si lo sabes.' } },
+    required: [],
   },
 }
 
@@ -285,6 +301,31 @@ export interface OpcionesAgente {
 }
 
 /**
+ * Nota dinámica con el estado de las solicitudes de retiro del cliente (por
+ * wa_id). Hace que el agente NO registre un segundo retiro mientras hay uno
+ * pendiente, y que ofrezca consultar el ETA cuando hay uno confirmado.
+ */
+async function bloqueSolicitudesAbiertas(waId: string): Promise<string> {
+  const wa = (waId || '').replace(/\D/g, '')
+  if (!wa) return ''
+  try {
+    const rows = await getSheetData('solicitudes_retiro')
+    const propias = rows.filter(r => (r.cliente_wa_id || '').replace(/\D/g, '') === wa)
+    if (propias.length === 0) return ''
+    const lineas: string[] = []
+    const pend = propias.find(r => r.estado === 'pendiente')
+    if (pend) lineas.push(`- Tiene una solicitud de retiro PENDIENTE de confirmación (N° ${pend.id}${pend.nombre_mascota ? `, ${pend.nombre_mascota}` : ''}). NO registres otra; si pide agendar de nuevo, dile que está siendo validada y que le confirmamos a la brevedad.`)
+    for (const c of propias.filter(r => r.estado === 'confirmada')) {
+      lineas.push(`- Tiene un retiro CONFIRMADO (N° ${c.id}${c.nombre_mascota ? `, ${c.nombre_mascota}` : ''}${c.fecha_retiro ? `, ${c.fecha_retiro}` : ''}). Si pregunta cuánto falta para que pasen a retirar, usa la herramienta "consultar_eta_retiro" (NO inventes la hora).`)
+    }
+    if (lineas.length === 0) return ''
+    return `ESTADO DE SOLICITUDES DE RETIRO DE ESTE CLIENTE (no lo recites; úsalo para decidir):\n${lineas.join('\n')}`
+  } catch {
+    return ''
+  }
+}
+
+/**
  * Genera la respuesta del agente con tool-use. El modelo puede:
  *  - responder en texto plano (caso normal),
  *  - llamar `escalar_a_humano` (siempre disponible) → marca escalar=true,
@@ -315,11 +356,18 @@ ${cfg.instrucciones.trim()}`,
   if (ajustes) system.push({ type: 'text', text: ajustes })
   // Fecha actual (dinámica, sin caché) → para resolver "mañana", "el viernes", etc.
   system.push({ type: 'text', text: bloqueFechaChile() })
+  // Estado de solicitudes del cliente (sin caché): evita duplicar retiros y
+  // habilita la consulta de ETA cuando hay uno confirmado.
+  if (opts.ctx?.waId) {
+    const notaSolicitudes = await bloqueSolicitudesAbiertas(opts.ctx.waId)
+    if (notaSolicitudes) system.push({ type: 'text', text: notaSolicitudes })
+  }
 
   const tools: Anthropic.Tool[] = [TOOL_ESCALAR]
   if (opts.handlers?.solicitarRetiro) tools.push(TOOL_RETIRO)
   if (opts.handlers?.cotizarEutanasia) tools.push(TOOL_COTIZAR_EUTANASIA)
   if (opts.handlers?.agendarEutanasia) tools.push(TOOL_EUTANASIA)
+  if (opts.handlers?.consultarEtaRetiro) tools.push(TOOL_ETA)
 
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
@@ -352,6 +400,8 @@ ${cfg.instrucciones.trim()}`,
           resultText = await opts.handlers.cotizarEutanasia(tu.input as unknown as AccionCotizarEutanasia, opts.ctx ?? {})
         } else if (tu.name === 'agendar_eutanasia' && opts.handlers?.agendarEutanasia) {
           resultText = await opts.handlers.agendarEutanasia(tu.input as unknown as AccionEutanasia, opts.ctx ?? {})
+        } else if (tu.name === 'consultar_eta_retiro' && opts.handlers?.consultarEtaRetiro) {
+          resultText = await opts.handlers.consultarEtaRetiro(tu.input as unknown as AccionConsultaEta, opts.ctx ?? {})
         } else {
           resultText = 'Esa herramienta no está disponible ahora. Continúa la coordinación por mensaje o escala a un humano.'
         }
@@ -379,6 +429,33 @@ ${cfg.instrucciones.trim()}`,
     // Sin acción y sin texto → queda vacío: el webhook no envía nada (correcto).
   }
   return { mensaje, escalar, acciones }
+}
+
+const SYSTEM_RELAY = `Eres el asistente de WhatsApp del Crematorio Alma Animal. Un miembro del equipo te pasó, por interno, una respuesta sobre CUÁNDO van a pasar a retirar a la mascota de un cliente. Tu tarea: redactar el mensaje que se le enviará al cliente por WhatsApp con esa información.
+
+- Tuteo, cálido pero sobrio. BREVE (1–2 frases), como un WhatsApp.
+- A la mascota por su NOMBRE si lo tienes; como genérico "tu mascota". Nunca "su mascota" ni clichés del rubro.
+- Sin emojis tristes; a lo sumo una huellita 🐾 con moderación.
+- Usa SOLO lo que dijo el equipo. NUNCA inventes horas, plazos ni datos que no estén en su nota. Si la nota es vaga ("voy en un rato"), transmítela con naturalidad sin precisar de más.
+- Devuelve SOLO el texto del mensaje al cliente: sin comillas, sin prefijos, sin firmar.`
+
+/**
+ * Redacta, en la voz de marca, el mensaje al cliente a partir de la respuesta
+ * interna del equipo sobre el horario de retiro (relay de ETA). Devuelve el
+ * texto listo para enviar; el caller hace fallback a un reenvío simple si falla.
+ */
+export async function redactarRelayCliente(args: { notaEquipo: string; mascota?: string; nombreCliente?: string }): Promise<string> {
+  const ctx = `${args.mascota ? `Mascota: ${args.mascota}. ` : ''}${args.nombreCliente ? `Cliente: ${args.nombreCliente}. ` : ''}`.trim()
+  const res = await getClient().messages.create({
+    model: MODEL,
+    max_tokens: 300,
+    system: SYSTEM_RELAY,
+    messages: [{
+      role: 'user',
+      content: `${ctx ? ctx + '\n' : ''}El cliente preguntó cuánto falta para que pasen a retirar a su mascota. El equipo respondió: «${args.notaEquipo}». Redacta el mensaje para el cliente.`,
+    }],
+  })
+  return res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
 }
 
 const SYSTEM_CALIBRACION = `Eres analista de atención al cliente del Crematorio Alma Animal. Vas a recibir conversaciones reales de WhatsApp (Cliente = el tutor; Nosotros = nuestro equipo). Extrae una GUÍA DE CALIBRACIÓN accionable para un asistente automático que atiende este mismo canal.

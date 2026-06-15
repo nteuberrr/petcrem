@@ -6,11 +6,12 @@ import {
   actualizarConversacion, existeMensajePorProvider, marcarEstadoMensaje, getConversacion,
   type Conversacion, type Contacto,
 } from '@/lib/mensajes'
-import { isAgenteConfigurado, generarRespuesta } from '@/lib/agente-mensajes'
+import { isAgenteConfigurado, generarRespuesta, redactarRelayCliente } from '@/lib/agente-mensajes'
 import { handlersAgente } from '@/lib/agente-acciones'
 import { getSheetData, updateRow } from '@/lib/datastore'
 import { crearClienteBorrador } from '@/lib/cliente-borrador'
 import { createBorradorToken } from '@/lib/borrador-token'
+import { buscarRelayPendientePorMsg, buscarRelayPendienteMasReciente, marcarRelayRespondida } from '@/lib/relay-retiro'
 import { formatDate } from '@/lib/dates'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 
@@ -111,6 +112,8 @@ interface MetaMsg {
   video?: { id: string; caption?: string; mime_type?: string }
   document?: { id: string; caption?: string; filename?: string; mime_type?: string }
   interactive?: { type?: string; button_reply?: { id: string; title: string }; list_reply?: { id: string; title: string } }
+  /** Presente cuando el mensaje es una RESPUESTA citando otro (id = wamid citado). */
+  context?: { id?: string; from?: string }
   [k: string]: unknown
 }
 
@@ -205,6 +208,56 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
   return true
 }
 
+/**
+ * Relay — el admin RESPONDIÓ (citando) un aviso de "¿cuánto falta para el
+ * retiro?". El context.id de la cita matchea el message_id que guardamos en
+ * relay_retiro; reenviamos la respuesta del admin al cliente. Devuelve true si
+ * consumió el mensaje.
+ */
+async function procesarRelayAdmin(msg: MetaMsg): Promise<boolean> {
+  if (msg.from.replace(/\D/g, '') !== adminWhatsapp()) return false
+  const texto = msg.text?.body?.trim()
+  if (!texto) return false
+  // Si citó el aviso, match exacto; si no, la consulta pendiente más reciente.
+  let relay = msg.context?.id ? await buscarRelayPendientePorMsg(msg.context.id) : null
+  if (!relay) relay = await buscarRelayPendienteMasReciente()
+  if (!relay) return false // no hay consulta pendiente → no es un relay, sigue flujo normal
+
+  const cliente = (relay.cliente_wa_id || '').replace(/\D/g, '')
+  // El agente LEE tu respuesta y redacta el mensaje al cliente en la voz de marca.
+  // Fallback (si la IA no está disponible o falla): reenvío simple de tu texto.
+  let mensajeCliente = ''
+  try {
+    mensajeCliente = await redactarRelayCliente({ notaEquipo: texto, mascota: relay.mascota, nombreCliente: relay.cliente_nombre })
+  } catch (e) {
+    console.warn('[webhook] redactarRelayCliente falló, reenvío simple:', e)
+  }
+  if (!mensajeCliente) {
+    const mascota = relay.mascota ? ` de ${relay.mascota}` : ''
+    mensajeCliente = `Sobre el retiro${mascota}: ${texto} 🐾`
+  }
+  const env = await enviarTextoWhatsapp(cliente, mensajeCliente)
+
+  // Registrar el reenvío en la conversación del cliente (inbox).
+  try {
+    const cont = await upsertContacto({ wa_id: cliente, telefono: cliente, audiencia: 'A' })
+    const conv = await getOrCreateConversacion(cont.id, 'whatsapp', cont.audiencia, 'whatsapp')
+    await insertarMensaje({
+      conversacion_id: conv.id, direccion: 'saliente', cuerpo: mensajeCliente,
+      tipo: 'texto', estado: env.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
+    })
+  } catch (e) { console.warn('[webhook] no se pudo registrar el relay al cliente:', e) }
+
+  await marcarRelayRespondida(relay.id)
+  await enviarTextoWhatsapp(
+    adminWhatsapp(),
+    env.ok
+      ? `✅ Le reenvié tu respuesta a ${relay.cliente_nombre || 'el cliente'}.`
+      : `⚠ No pude reenviar al cliente (${env.fuera_de_ventana ? 'pasaron más de 24h y WhatsApp no permite escribirle' : env.error}).`,
+  )
+  return true
+}
+
 async function procesarEntrante(value: Record<string, unknown>, msg: MetaMsg) {
   if (await existeMensajePorProvider(msg.id)) return // dedupe
 
@@ -282,6 +335,8 @@ export async function POST(req: NextRequest) {
         for (const msg of (value.messages as MetaMsg[]) ?? []) {
           // Flujo A: respuesta del admin a una solicitud de retiro (botón ✅/❌).
           if (msg.type === 'interactive' && await procesarBotonAdmin(msg)) continue
+          // Relay: el admin respondió (citando) un aviso de ETA → reenviar al cliente.
+          if (msg.type === 'text' && await procesarRelayAdmin(msg)) continue
           await procesarEntrante(value, msg)
         }
       }

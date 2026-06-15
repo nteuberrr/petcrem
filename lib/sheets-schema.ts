@@ -254,4 +254,12 @@ export const SHEETS: Record<string, string[]> = {
     'peso', 'direccion', 'comuna', 'fecha_retiro', 'hora_retiro', 'tipo_servicio',
     'estado', 'fecha_creacion', 'fecha_resolucion',
   ],
+  // Relay de consultas de "¿cuánto falta para el retiro?": el agente avisa al
+  // admin y guarda el message_id de ese aviso; cuando el admin RESPONDE CITANDO
+  // ese mensaje (context.id), el webhook reenvía su respuesta al cliente.
+  // estado: pendiente | respondida.
+  relay_retiro: [
+    'id', 'admin_msg_id', 'cliente_wa_id', 'cliente_nombre', 'mascota',
+    'pregunta', 'estado', 'fecha_creacion', 'fecha_respuesta',
+  ],
 }

@@ -1,12 +1,13 @@
-import { ensureSheet, ensureColumns, appendRow, getNextId } from './datastore'
+import { ensureSheet, ensureColumns, appendRow, getNextId, getSheetData } from './datastore'
 import { enviarBotonesWhatsapp, enviarTextoWhatsapp, adminWhatsapp } from './whatsapp'
+import { crearRelayPendiente } from './relay-retiro'
 import { geocodeAddress, coordEnChile } from './google-maps'
 import { formatDate, todayISO } from './dates'
 import { fmtPrecio } from './format'
 import { precioClienteEutanasia } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
 import { capitalizarNombre } from './nombres'
-import type { HandlersAgente, AccionRetiro, AccionEutanasia, AccionCotizarEutanasia, CtxAgente } from './agente-mensajes'
+import type { HandlersAgente, AccionRetiro, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, CtxAgente } from './agente-mensajes'
 
 /**
  * Valida que una dirección + comuna exista y caiga dentro de Chile (geocoding).
@@ -54,6 +55,15 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
   await ensureColumns(SHEET_RETIRO, COLS_RETIRO)
 
   const waCliente = (ctx.waId || '').replace(/\D/g, '')
+
+  // No permitir una SEGUNDA solicitud mientras la anterior siga PENDIENTE de
+  // confirmación: el equipo debe confirmar la primera antes de aceptar otra.
+  const existentes = await getSheetData(SHEET_RETIRO)
+  const pendiente = existentes.find(r => (r.cliente_wa_id || '').replace(/\D/g, '') === waCliente && r.estado === 'pendiente')
+  if (pendiente) {
+    return `Este cliente YA tiene una solicitud de retiro PENDIENTE de confirmación (N° ${pendiente.id}). NO registres otra. Dile, cálido y breve, que su solicitud anterior está siendo validada por el equipo y que le confirmaremos por aquí a la brevedad; si necesita cambiar algún dato, que nos lo indique y lo gestionamos.`
+  }
+
   const id = await getNextId(SHEET_RETIRO)
   await appendRow(SHEET_RETIRO, {
     id,
@@ -179,7 +189,51 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
     `Dile al cliente que su solicitud quedó INGRESADA y que nos pondremos en contacto por este mismo medio apenas un veterinario confirme su disponibilidad.${precioTxt}`
 }
 
+/**
+ * Consulta "¿cuánto falta para el retiro?": avisa al admin (pidiéndole que
+ * responda CITANDO el mensaje) y guarda el relay pendiente. Cuando el admin
+ * responde, el webhook reenvía su respuesta al cliente. NO inventa una hora.
+ */
+async function consultarEtaRetiro(a: AccionConsultaEta, ctx: CtxAgente): Promise<string> {
+  const waCliente = (ctx.waId || '').replace(/\D/g, '')
+  if (!waCliente) {
+    return 'Dile al cliente que estás confirmando con el equipo cuánto falta para el retiro y que en un momento le confirmas por aquí.'
+  }
+  let mascota = capitalizarNombre(a.mascota_nombre || '')
+  let fechaTxt = ''
+  try {
+    const rows = await getSheetData(SHEET_RETIRO)
+    const propias = rows.filter(r => (r.cliente_wa_id || '').replace(/\D/g, '') === waCliente)
+    const ref = propias.find(r => r.estado === 'confirmada') || propias.find(r => r.estado === 'pendiente')
+    if (ref) {
+      if (!mascota) mascota = ref.nombre_mascota || ''
+      if (ref.fecha_retiro) fechaTxt = ` (agendado ${formatDate(ref.fecha_retiro)}${ref.hora_retiro ? ' ' + ref.hora_retiro : ''})`
+    }
+  } catch { /* contexto opcional */ }
+
+  const nombre = ctx.nombreContacto || ''
+  const aviso =
+    `⏱️ *Consulta de horario de retiro*\n\n` +
+    (nombre ? `Cliente: ${nombre}\n` : '') +
+    `WhatsApp: +${waCliente}\n` +
+    (mascota ? `Mascota: ${mascota}${fechaTxt}\n` : '') +
+    `\nPregunta cuánto falta para que pasen a retirar.\n` +
+    `👉 Respóndeme por aquí con la hora/estado estimado y le escribo al cliente con tus palabras. ` +
+    `(Si tienes varias consultas abiertas a la vez, responde citando la que corresponde.)`
+
+  const env = await enviarTextoWhatsapp(adminWhatsapp(), aviso)
+  if (!env.ok || !env.message_id) {
+    console.warn('[agente-acciones] no se pudo avisar al admin (ETA):', env.error)
+    return 'Dile al cliente, cálido y breve, que estás confirmando con el equipo el horario de retiro y que en un momento le confirmas por aquí. NO inventes una hora.'
+  }
+  try {
+    await crearRelayPendiente({ adminMsgId: env.message_id, clienteWaId: waCliente, clienteNombre: nombre, mascota, pregunta: 'ETA de retiro' })
+  } catch (e) { console.warn('[agente-acciones] no se pudo guardar relay pendiente:', e) }
+
+  return 'Avisé al equipo para que confirme el horario. Dile al cliente, cálido y breve, que estás confirmando cuánto falta para el retiro y que apenas el equipo responda se lo avisas por aquí. NO inventes una hora.'
+}
+
 /** Handlers disponibles para el agente (Flujo A: retiro · Flujo B: eutanasia). */
 export function handlersAgente(): HandlersAgente {
-  return { solicitarRetiro, cotizarEutanasia, agendarEutanasia }
+  return { solicitarRetiro, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro }
 }
