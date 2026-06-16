@@ -22,7 +22,18 @@ const CANAL_CLS: Record<Canal, string> = {
 }
 
 function fecha(iso: string | null): string {
-  return formatDateTime(iso) // dd-mm-yyyy HH:MM (vacío si no hay)
+  // Los ts de mensajes/conversaciones se guardan en UTC (ISO con Z). Hay que
+  // MOSTRARLOS en hora de Chile, si no se ve corrido (ej. 18:50 UTC = 14:50 CL).
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return formatDateTime(iso) // fallback (no-ISO/serial)
+  const p = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Santiago',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d)
+  const g = (t: string) => p.find(x => x.type === t)?.value || ''
+  return `${g('day')}-${g('month')}-${g('year')} ${g('hour')}:${g('minute')}`
 }
 
 export default function MensajesView() {

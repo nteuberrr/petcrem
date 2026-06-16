@@ -56,12 +56,15 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
 
   const waCliente = (ctx.waId || '').replace(/\D/g, '')
 
-  // No permitir una SEGUNDA solicitud mientras la anterior siga PENDIENTE de
-  // confirmación: el equipo debe confirmar la primera antes de aceptar otra.
-  const existentes = await getSheetData(SHEET_RETIRO)
-  const pendiente = existentes.find(r => (r.cliente_wa_id || '').replace(/\D/g, '') === waCliente && r.estado === 'pendiente')
-  if (pendiente) {
-    return `Este cliente YA tiene una solicitud de retiro PENDIENTE de confirmación (N° ${pendiente.id}). NO registres otra. Dile, cálido y breve, que su solicitud anterior está siendo validada por el equipo y que le confirmaremos por aquí a la brevedad; si necesita cambiar algún dato, que nos lo indique y lo gestionamos.`
+  // No permitir una SEGUNDA solicitud si el cliente YA tiene una ficha de retiro
+  // en proceso. La fuente de verdad es lo VISIBLE en /clientes (ficha "borrador"/
+  // por ingresar), no el log interno: así, cuando el equipo la registra o la
+  // elimina, el cliente puede volver a pedir.
+  const tel9 = waCliente.slice(-9)
+  const clientes = await getSheetData('clientes')
+  const enProceso = clientes.find(c => c.estado === 'borrador' && (c.telefono || '').replace(/\D/g, '').slice(-9) === tel9)
+  if (enProceso) {
+    return `Este cliente YA tiene una solicitud de retiro EN PROCESO${enProceso.nombre_mascota ? ` (${enProceso.nombre_mascota})` : ''}, que el equipo está terminando de ingresar. NO registres otra. Dile, cálido y breve, que su solicitud ya está en proceso y que la estamos gestionando; si necesita cambiar algún dato, que nos lo indique.`
   }
 
   const id = await getNextId(SHEET_RETIRO)

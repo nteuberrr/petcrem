@@ -301,25 +301,20 @@ export interface OpcionesAgente {
 }
 
 /**
- * Nota dinámica con el estado de las solicitudes de retiro del cliente (por
- * wa_id). Hace que el agente NO registre un segundo retiro mientras hay uno
- * pendiente, y que ofrezca consultar el ETA cuando hay uno confirmado.
+ * Nota dinámica: si el cliente ya tiene una ficha de retiro EN PROCESO (borrador
+ * "por ingresar" en /clientes), el agente NO debe registrar otra. La fuente de
+ * verdad es lo visible en /clientes, no el log interno — cuando el equipo la
+ * registra o elimina, el cliente puede volver a pedir.
  */
-async function bloqueSolicitudesAbiertas(waId: string): Promise<string> {
-  const wa = (waId || '').replace(/\D/g, '')
-  if (!wa) return ''
+async function bloqueFichaEnProceso(waId: string): Promise<string> {
+  const tel9 = (waId || '').replace(/\D/g, '').slice(-9)
+  if (!tel9) return ''
   try {
-    const rows = await getSheetData('solicitudes_retiro')
-    const propias = rows.filter(r => (r.cliente_wa_id || '').replace(/\D/g, '') === wa)
-    if (propias.length === 0) return ''
-    const lineas: string[] = []
-    const pend = propias.find(r => r.estado === 'pendiente')
-    if (pend) lineas.push(`- Tiene una solicitud de retiro PENDIENTE de confirmación (N° ${pend.id}${pend.nombre_mascota ? `, ${pend.nombre_mascota}` : ''}). NO registres otra; si pide agendar de nuevo, dile que está siendo validada y que le confirmamos a la brevedad.`)
-    for (const c of propias.filter(r => r.estado === 'confirmada')) {
-      lineas.push(`- Tiene un retiro CONFIRMADO (N° ${c.id}${c.nombre_mascota ? `, ${c.nombre_mascota}` : ''}${c.fecha_retiro ? `, ${c.fecha_retiro}` : ''}). Si pregunta cuánto falta para que pasen a retirar, usa la herramienta "consultar_eta_retiro" (NO inventes la hora).`)
-    }
-    if (lineas.length === 0) return ''
-    return `ESTADO DE SOLICITUDES DE RETIRO DE ESTE CLIENTE (no lo recites; úsalo para decidir):\n${lineas.join('\n')}`
+    const rows = await getSheetData('clientes')
+    const borr = rows.find(c => c.estado === 'borrador' && (c.telefono || '').replace(/\D/g, '').slice(-9) === tel9)
+    if (!borr) return ''
+    const m = borr.nombre_mascota ? ` (${borr.nombre_mascota})` : ''
+    return `ESTADO DE ESTE CLIENTE (no lo recites; úsalo para decidir): ya tiene una solicitud de retiro EN PROCESO${m} que el equipo está terminando de ingresar. NO registres otra solicitud de retiro; si pide agendar de nuevo, dile cálido y breve que su solicitud ya está en proceso y que la estamos gestionando.`
   } catch {
     return ''
   }
@@ -356,11 +351,11 @@ ${cfg.instrucciones.trim()}`,
   if (ajustes) system.push({ type: 'text', text: ajustes })
   // Fecha actual (dinámica, sin caché) → para resolver "mañana", "el viernes", etc.
   system.push({ type: 'text', text: bloqueFechaChile() })
-  // Estado de solicitudes del cliente (sin caché): evita duplicar retiros y
-  // habilita la consulta de ETA cuando hay uno confirmado.
+  // Si el cliente ya tiene una ficha de retiro en proceso (borrador visible en
+  // /clientes), evita que el agente registre otra.
   if (opts.ctx?.waId) {
-    const notaSolicitudes = await bloqueSolicitudesAbiertas(opts.ctx.waId)
-    if (notaSolicitudes) system.push({ type: 'text', text: notaSolicitudes })
+    const notaFicha = await bloqueFichaEnProceso(opts.ctx.waId)
+    if (notaFicha) system.push({ type: 'text', text: notaFicha })
   }
 
   const tools: Anthropic.Tool[] = [TOOL_ESCALAR]
