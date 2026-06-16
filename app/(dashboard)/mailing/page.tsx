@@ -2075,6 +2075,10 @@ function ImagenPickerModal({ open, onClose, onPick }: {
 const GRUPOS = ['mascotas', 'personas', 'productos', 'instalaciones', 'otro'] as const
 // La IA NUNCA genera instalaciones → al generar solo se ofrecen estos grupos.
 const GRUPOS_GEN = ['mascotas', 'personas', 'productos', 'otro'] as const
+const GRUPO_LABEL: Record<string, string> = {
+  mascotas: 'Mascotas', personas: 'Personas', productos: 'Productos',
+  instalaciones: 'Instalaciones', otro: 'Otro',
+}
 
 /** Tarjeta de una imagen del banco con nombre editable, grupo, WhatsApp, copiar y eliminar. */
 function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete }: {
@@ -2094,10 +2098,17 @@ function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete }: {
     if (t !== (img.descripcion || '')) onRename(img, t)
   }
 
+  const esGenerada = img.origen !== 'upload'
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden flex flex-col">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={img.url} alt={img.alt} className="w-full h-36 object-cover bg-gray-100" />
+    <div className="border border-gray-200 rounded-lg overflow-hidden flex flex-col bg-white">
+      {/* Foto completa (sin recortar) sobre fondo neutro + badge de origen. */}
+      <div className="relative h-28 bg-gray-50 flex items-center justify-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={img.url} alt={img.alt} className="max-h-28 max-w-full object-contain" />
+        <span className={`absolute top-1 left-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${esGenerada ? 'bg-violet-100 text-violet-700' : 'bg-sky-100 text-sky-700'}`}>
+          {esGenerada ? 'Generada' : 'Subida'}
+        </span>
+      </div>
       <div className="p-2 flex-1 flex flex-col gap-1.5">
         <div className="flex-1">
           {editando ? (
@@ -2259,8 +2270,15 @@ function ImagenesPanel() {
     try { await navigator.clipboard.writeText(url); setInfo('URL copiada al portapapeles.') } catch { /* ignore */ }
   }
 
-  const generadas = imgs.filter(i => i.origen !== 'upload')
-  const subidas = imgs.filter(i => i.origen === 'upload')
+  // Agrupadas por etiqueta (grupo), en orden canónico + "sin etiqueta" al final.
+  const grupos = useMemo(() => {
+    const norm = (g: string) => ((GRUPOS as readonly string[]).includes(g) ? g : '')
+    return [...GRUPOS, ''].map(key => ({
+      key: key || 'sin',
+      label: key ? GRUPO_LABEL[key] : 'Sin etiqueta',
+      imgs: imgs.filter(i => norm(i.grupo) === key),
+    })).filter(g => g.imgs.length > 0)
+  }, [imgs])
 
   return (
     <div className="space-y-4">
@@ -2320,40 +2338,30 @@ function ImagenesPanel() {
       ) : imgs.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-sm text-gray-400">Sin imágenes todavía. Genera la primera arriba o sube una propia.</div>
       ) : (
-        <>
-          <ImagenesSeccion titulo="Generadas con IA" imgs={generadas} onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onRename={renombrar} onCopy={copiarUrl} onDelete={eliminar} onRefresh={cargar} />
-          <ImagenesSeccion titulo="Subidas por el equipo" imgs={subidas} onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onRename={renombrar} onCopy={copiarUrl} onDelete={eliminar} />
-        </>
-      )}
-    </div>
-  )
-}
-
-function ImagenesSeccion({ titulo, imgs, onGrupo, onWhatsapp, onRename, onCopy, onDelete, onRefresh }: {
-  titulo: string
-  imgs: ImagenBanco[]
-  onGrupo: (img: ImagenBanco, grupo: string) => void
-  onWhatsapp: (img: ImagenBanco, on: boolean) => void
-  onRename: (img: ImagenBanco, descripcion: string) => void
-  onCopy: (url: string) => void
-  onDelete: (img: ImagenBanco) => void
-  onRefresh?: () => void
-}) {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-900">{titulo} ({imgs.length})</h3>
-        {onRefresh && <button type="button" onClick={onRefresh} className="text-xs text-indigo-600 hover:underline">Actualizar</button>}
-      </div>
-      {imgs.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-6">Ninguna por ahora.</p>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {imgs.map(img => (
-            <ImagenCard key={img.id} img={img} onGrupo={onGrupo} onWhatsapp={onWhatsapp} onRename={onRename} onCopy={onCopy} onDelete={onDelete} />
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <p className="text-xs text-gray-400">{imgs.length} imagen{imgs.length === 1 ? '' : 'es'} · agrupadas por etiqueta</p>
+            <button type="button" onClick={cargar} className="text-xs text-indigo-600 hover:underline">Actualizar</button>
+          </div>
+          {grupos.map(g => (
+            <details key={g.key} open className="bg-white rounded-xl shadow-sm border border-gray-200 group">
+              <summary className="cursor-pointer select-none px-4 py-3 flex items-center gap-2 list-none [&::-webkit-details-marker]:hidden">
+                <span className="text-gray-400 text-xs transition-transform group-open:rotate-90">▶</span>
+                <span className="text-sm font-semibold text-gray-900">{g.label}</span>
+                <span className="text-xs text-gray-400">({g.imgs.length})</span>
+              </summary>
+              <div className="px-4 pb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                  {g.imgs.map(img => (
+                    <ImagenCard key={img.id} img={img} onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onRename={renombrar} onCopy={copiarUrl} onDelete={eliminar} />
+                  ))}
+                </div>
+              </div>
+            </details>
           ))}
         </div>
       )}
     </div>
   )
 }
+
