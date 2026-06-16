@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { NextRequest, NextResponse, after } from 'next/server'
-import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, isWhatsappConfigured, adminWhatsapp } from '@/lib/whatsapp'
+import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, enviarMediaWhatsapp, isWhatsappConfigured, adminWhatsapp } from '@/lib/whatsapp'
 import {
   upsertContacto, getOrCreateConversacion, insertarMensaje, getMensajes,
   actualizarConversacion, existeMensajePorProvider, marcarEstadoMensaje, getConversacion,
@@ -42,7 +42,7 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
       ctx: { waId: destino, nombreContacto: contacto.nombre ?? undefined },
     })
   } catch (e) { console.error('[agente] generarRespuesta:', e); return }
-  if (!r.mensaje) return
+  if (!r.mensaje && !(r.imagenes && r.imagenes.length)) return
 
   // Re-leer la conversación JUSTO antes de enviar: generarRespuesta puede tardar
   // varios segundos y en ese lapso un humano pudo tomar la conversación desde el
@@ -55,11 +55,26 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
     }
   } catch (e) { console.warn('[agente] no se pudo re-verificar pausa antes de enviar:', e) }
 
-  const env = await enviarTextoWhatsapp(destino, r.mensaje)
-  await insertarMensaje({
-    conversacion_id: conv.id, direccion: 'saliente', cuerpo: r.mensaje,
-    tipo: 'texto', estado: env.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
-  })
+  if (r.mensaje) {
+    const env = await enviarTextoWhatsapp(destino, r.mensaje)
+    await insertarMensaje({
+      conversacion_id: conv.id, direccion: 'saliente', cuerpo: r.mensaje,
+      tipo: 'texto', estado: env.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
+    })
+  }
+
+  // Fotos del banco que el agente decidió enviar (flag whatsapp). Se mandan
+  // después del texto y se registran en el inbox como mensajes de imagen.
+  if (r.imagenes && r.imagenes.length) {
+    for (const img of r.imagenes) {
+      const me = await enviarMediaWhatsapp(destino, { tipo: 'image', link: img.url })
+      await insertarMensaje({
+        conversacion_id: conv.id, direccion: 'saliente', cuerpo: img.alt || '',
+        tipo: 'imagen', media_url: img.url, estado: me.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
+      })
+    }
+  }
+
   if (r.escalar) {
     const tags = Array.from(new Set([...(conv.etiquetas || []), 'pausado', 'requiere-humano']))
     await actualizarConversacion(conv.id, { etiquetas: tags })

@@ -569,6 +569,9 @@ create table if not exists "mailing_imagenes" (
   "tags" text not null default '',
   "alt" text not null default '',
   "grupo" text not null default '',
+  -- whatsapp: 'TRUE' si el agente de WhatsApp puede enviar esta imagen al cliente
+  -- cuando la pida (ej. fotos de ánforas/urnas). Lo marca el equipo a mano.
+  "whatsapp" text not null default 'FALSE',
   "aspect" text not null default '',
   "ancho" text not null default '',
   "alto" text not null default '',
@@ -578,6 +581,8 @@ create table if not exists "mailing_imagenes" (
   "fecha_creacion" text not null default ''
 );
 alter table "mailing_imagenes" enable row level security;
+-- Idempotente para tablas ya creadas antes de esta columna.
+alter table "mailing_imagenes" add column if not exists "whatsapp" text not null default 'FALSE';
 
 -- Correos transaccionales al tutor (registro / inicio cremación / inicio
 -- despacho / entrega / certificado). Se registran al enviar y el webhook de

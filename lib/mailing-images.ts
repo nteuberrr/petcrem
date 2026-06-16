@@ -1,4 +1,4 @@
-import { getSheetData, appendRow, getNextId, deleteById, updateById } from './datastore'
+import { getSheetData, appendRow, getNextId, deleteById, updateById, ensureSheet, ensureColumns } from './datastore'
 import { uploadToR2, deleteFromR2, keyFromPublicUrl } from './cloudflare-r2'
 import { generarImagen, extFromMime } from './nano-banana'
 import { todayISO } from './dates'
@@ -15,6 +15,16 @@ export type GrupoImagen = typeof GRUPOS_IMAGEN[number]
  */
 
 const TABLE = 'mailing_imagenes'
+const COLS = [
+  'id', 'url', 'key', 'descripcion', 'prompt', 'tags', 'alt', 'grupo', 'whatsapp',
+  'aspect', 'ancho', 'alto', 'origen', 'modelo', 'creado_por', 'fecha_creacion',
+]
+
+/** Garantiza que la tabla y sus columnas existan (no-op en Postgres). */
+async function ensureBanco(): Promise<void> {
+  await ensureSheet(TABLE)
+  await ensureColumns(TABLE, COLS)
+}
 
 export interface ImagenBanco {
   id: string
@@ -25,6 +35,8 @@ export interface ImagenBanco {
   tags: string
   alt: string
   grupo: string
+  /** El agente de WhatsApp puede enviar esta imagen al cliente cuando la pida. */
+  whatsapp: boolean
   aspect: string
   ancho: string
   alto: string
@@ -39,6 +51,7 @@ function toImagen(r: Record<string, string>): ImagenBanco {
     id: r.id || '', url: r.url || '', key: r.key || '',
     descripcion: r.descripcion || '', prompt: r.prompt || '', tags: r.tags || '', alt: r.alt || '',
     grupo: r.grupo || '',
+    whatsapp: /^(true|verdadero|1)$/i.test((r.whatsapp || '').trim()),
     aspect: r.aspect || '', ancho: r.ancho || '', alto: r.alto || '',
     origen: r.origen || '', modelo: r.modelo || '',
     creado_por: r.creado_por || '', fecha_creacion: r.fecha_creacion || '',
@@ -53,6 +66,11 @@ export async function listarImagenes(): Promise<ImagenBanco[]> {
   return imgs
 }
 
+/** Imágenes que el agente de WhatsApp puede enviar al cliente (whatsapp = TRUE). */
+export async function listarImagenesWhatsapp(): Promise<ImagenBanco[]> {
+  return (await listarImagenes()).filter(i => i.whatsapp && i.url)
+}
+
 export interface RegistrarImagenInput {
   url: string
   key: string
@@ -61,6 +79,7 @@ export interface RegistrarImagenInput {
   tags?: string
   alt?: string
   grupo?: string
+  whatsapp?: boolean
   aspect?: string
   ancho?: number | string
   alto?: number | string
@@ -71,6 +90,7 @@ export interface RegistrarImagenInput {
 
 /** Registra una imagen ya subida a R2 en el banco. Devuelve la fila creada. */
 export async function registrarImagen(input: RegistrarImagenInput): Promise<ImagenBanco> {
+  await ensureBanco()
   const id = await getNextId(TABLE)
   const row: Record<string, string> = {
     id,
@@ -81,6 +101,7 @@ export async function registrarImagen(input: RegistrarImagenInput): Promise<Imag
     tags: (input.tags || '').trim(),
     alt: (input.alt || '').trim(),
     grupo: (input.grupo || '').trim(),
+    whatsapp: input.whatsapp ? 'TRUE' : 'FALSE',
     aspect: (input.aspect || '').trim(),
     ancho: input.ancho != null ? String(input.ancho) : '',
     alto: input.alto != null ? String(input.alto) : '',
@@ -142,8 +163,9 @@ export async function generarYGuardarImagen(args: {
  */
 export async function actualizarImagen(
   id: string,
-  cambios: { grupo?: string; descripcion?: string; tags?: string },
+  cambios: { grupo?: string; descripcion?: string; tags?: string; whatsapp?: boolean },
 ): Promise<void> {
+  await ensureBanco()
   const rows = await getSheetData(TABLE)
   const row = rows.find(r => String(r.id) === String(id))
   if (!row) throw new Error(`imagen ${id} no encontrada`)
@@ -151,6 +173,7 @@ export async function actualizarImagen(
   if (cambios.grupo !== undefined) merged.grupo = cambios.grupo.trim()
   if (cambios.descripcion !== undefined) merged.descripcion = cambios.descripcion.trim()
   if (cambios.tags !== undefined) merged.tags = cambios.tags.trim()
+  if (cambios.whatsapp !== undefined) merged.whatsapp = cambios.whatsapp ? 'TRUE' : 'FALSE'
   await updateById(TABLE, id, merged)
 }
 

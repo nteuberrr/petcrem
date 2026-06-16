@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       alt?: string
       tags?: string
       grupo?: string
+      whatsapp?: boolean
     }
 
     // Modo 1: generar con IA.
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest) {
         aspect: g.aspect,
         creadoPor,
       })
+      if (body.whatsapp) { await actualizarImagen(imagen.id, { whatsapp: true }); imagen.whatsapp = true }
       return NextResponse.json(imagen)
     }
 
@@ -89,6 +91,7 @@ export async function POST(req: NextRequest) {
         alt: body.alt || body.descripcion || '',
         tags: body.tags || '',
         grupo: body.grupo || '',
+        whatsapp: !!body.whatsapp,
         origen: 'upload',
         creadoPor,
       })
@@ -103,14 +106,14 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** PATCH ?id=… — reasigna grupo (y opcionalmente descripción/tags) de una imagen. */
+/** PATCH ?id=… — reasigna grupo / descripción / tags / flag whatsapp de una imagen. */
 export async function PATCH(req: NextRequest) {
   const { denied } = await requireAdmin()
   if (denied) return denied
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Falta id' }, { status: 400 })
   try {
-    const body = await req.json() as { grupo?: string; descripcion?: string; tags?: string }
+    const body = await req.json() as { grupo?: string; descripcion?: string; tags?: string; whatsapp?: boolean }
     await actualizarImagen(id, body)
     return NextResponse.json({ ok: true })
   } catch (e) {

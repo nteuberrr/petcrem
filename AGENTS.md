@@ -23,8 +23,8 @@ Also consult `CLAUDE.md` for expanded repo-specific architecture, Google Sheets 
 
 - Framework: **Next.js 16 App Router** with **React 19.2.4** and **Tailwind v4**.
 - Auth: **NextAuth v4** with `CredentialsProvider` + JWT.
-- Database: **Google Sheets**, not SQL.
-- Sheet access is centralized in `lib/google-sheets.ts`.
+- Database: el código está modelado como **Google Sheets**, pero el backend EN VIVO (local + prod) es **Postgres** (`DATA_BACKEND=postgres`, Supabase «Alma Animal»). Toda la I/O pasa por `lib/datastore.ts`. **Agregar una columna requiere un `ALTER TABLE` en Supabase** — editar `init-sheets` NO basta (en Postgres `ensureColumns` es no-op). Ver la sección "El backend EN VIVO es Postgres" en `CLAUDE.md`.
+- Sheet access is centralized in `lib/google-sheets.ts` (camino Sheets); en prod se usa la capa `lib/datastore.ts`.
 - API routes are one folder per entity under `app/api/`.
 - Auth guard is implemented in `proxy.ts` (Next.js 16 replacement for middleware).
 

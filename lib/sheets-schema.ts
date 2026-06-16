@@ -181,6 +181,9 @@ export const SHEETS: Record<string, string[]> = {
     // | instalaciones | otro). 'instalaciones' SOLO existe en imágenes SUBIDAS por
     // el equipo — la IA nunca genera fotos de instalaciones.
     'grupo',
+    // whatsapp: TRUE si el agente de WhatsApp puede enviar esta imagen al cliente
+    // cuando la pida (ej. fotos de ánforas/urnas). El equipo lo marca a mano.
+    'whatsapp',
     'aspect', 'ancho', 'alto',
     'origen', 'modelo',
     'creado_por', 'fecha_creacion',

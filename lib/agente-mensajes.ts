@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getSheetData } from './datastore'
 import { getAgenteConfig } from './mensajes'
 import { fmtPrecio } from './format'
+import { listarImagenesWhatsapp, type ImagenBanco } from './mailing-images'
 
 /**
  * Agente IA del inbox de Mensajes: redacta la respuesta de atención por
@@ -111,6 +112,8 @@ export interface RespuestaAgente {
   escalar: boolean
   /** Nombres de las herramientas que el modelo ejecutó en este turno. */
   acciones: string[]
+  /** Imágenes del banco que el agente decidió enviar al cliente (las manda el webhook). */
+  imagenes?: { url: string; alt?: string }[]
 }
 export interface TurnoMensaje { rol: 'cliente' | 'nosotros'; texto: string }
 
@@ -191,6 +194,18 @@ const TOOL_ETA: Anthropic.Tool = {
     type: 'object',
     properties: { mascota_nombre: { type: 'string', description: 'Nombre de la mascota, si lo sabes.' } },
     required: [],
+  },
+}
+
+const TOOL_FOTOS: Anthropic.Tool = {
+  name: 'enviar_fotos',
+  description: 'Envía al cliente una o más fotos del banco de imágenes. Úsala SOLO cuando el cliente pida ver fotos (de las ánforas/urnas, los productos, las instalaciones, etc.) y haya imágenes que calcen en la lista «FOTOS DISPONIBLES PARA ENVIAR». Pasa los IDs exactos de esa lista. NUNCA inventes fotos ni describas imágenes que no estén en la lista; si no hay ninguna que calce, no llames esta herramienta y ofrécele coordinar con el equipo.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      imagen_ids: { type: 'array', items: { type: 'string' }, description: 'IDs de las fotos a enviar, tomados de la lista FOTOS DISPONIBLES PARA ENVIAR.' },
+    },
+    required: ['imagen_ids'],
   },
 }
 
@@ -321,6 +336,22 @@ async function bloqueFichaEnProceso(waId: string): Promise<string> {
 }
 
 /**
+ * Bloque con las fotos del banco que el equipo habilitó para WhatsApp (flag
+ * whatsapp = TRUE). El modelo elige por ID con la herramienta enviar_fotos. Si
+ * no hay ninguna, devuelve '' y la herramienta NO se ofrece.
+ */
+function bloqueImagenesWhatsapp(imgs: ImagenBanco[]): string {
+  if (imgs.length === 0) return ''
+  const lista = imgs.slice(0, 40).map(i => {
+    const desc = (i.descripcion || i.alt || 'imagen').replace(/\s+/g, ' ').trim().slice(0, 120)
+    const tags = i.tags ? ` — tags: ${i.tags.slice(0, 80)}` : ''
+    const grupo = i.grupo ? ` [${i.grupo}]` : ''
+    return `- ID ${i.id}${grupo}: ${desc}${tags}`
+  }).join('\n')
+  return `FOTOS DISPONIBLES PARA ENVIAR (banco habilitado para WhatsApp). Si el cliente pide ver fotos (ánforas/urnas, productos, instalaciones, etc.) y alguna de estas calza, envíaselas con la herramienta enviar_fotos pasando sus IDs. Acompáñalas SIEMPRE con un mensaje breve y cálido. NO inventes ni describas fotos que no estén en esta lista:\n${lista}`
+}
+
+/**
  * Genera la respuesta del agente con tool-use. El modelo puede:
  *  - responder en texto plano (caso normal),
  *  - llamar `escalar_a_humano` (siempre disponible) → marca escalar=true,
@@ -334,7 +365,11 @@ export async function generarRespuesta(
 ): Promise<RespuestaAgente> {
   const base = construirMensajes(historial.slice(-24))
   if (base.length === 0) return { mensaje: '', escalar: false, acciones: [] }
-  const [tarifas, cfg] = await Promise.all([bloqueTarifas(), getAgenteConfig().catch(() => null)])
+  const [tarifas, cfg, imgsWa] = await Promise.all([
+    bloqueTarifas(),
+    getAgenteConfig().catch(() => null),
+    listarImagenesWhatsapp().catch(() => [] as ImagenBanco[]),
+  ])
 
   // Bloque base + tarifas: cacheado (estable). Ajustes del operador/calibración: sin caché (cambian seguido).
   const system: Anthropic.TextBlockParam[] = [
@@ -357,15 +392,20 @@ ${cfg.instrucciones.trim()}`,
     const notaFicha = await bloqueFichaEnProceso(opts.ctx.waId)
     if (notaFicha) system.push({ type: 'text', text: notaFicha })
   }
+  // Fotos que el equipo habilitó para WhatsApp → el agente puede enviarlas.
+  const bloqueFotos = bloqueImagenesWhatsapp(imgsWa)
+  if (bloqueFotos) system.push({ type: 'text', text: bloqueFotos })
 
   const tools: Anthropic.Tool[] = [TOOL_ESCALAR]
   if (opts.handlers?.solicitarRetiro) tools.push(TOOL_RETIRO)
   if (opts.handlers?.cotizarEutanasia) tools.push(TOOL_COTIZAR_EUTANASIA)
   if (opts.handlers?.agendarEutanasia) tools.push(TOOL_EUTANASIA)
   if (opts.handlers?.consultarEtaRetiro) tools.push(TOOL_ETA)
+  if (imgsWa.length > 0) tools.push(TOOL_FOTOS)
 
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
+  const imagenesAEnviar: { url: string; alt?: string }[] = []
   let escalar = false
   let textoFinal = ''
 
@@ -389,6 +429,19 @@ ${cfg.instrucciones.trim()}`,
         if (tu.name === 'escalar_a_humano') {
           escalar = true
           resultText = 'Listo, conversación derivada al equipo. Ahora envía una línea breve y cálida avisando al cliente que un miembro del equipo le responderá a la brevedad.'
+        } else if (tu.name === 'enviar_fotos') {
+          const ids = Array.isArray((tu.input as { imagen_ids?: unknown }).imagen_ids)
+            ? ((tu.input as { imagen_ids: unknown[] }).imagen_ids).map(String)
+            : []
+          const elegidas = imgsWa.filter(i => ids.includes(String(i.id)))
+          if (elegidas.length === 0) {
+            resultText = 'No encontré esas fotos en el banco. No menciones fotos que no existan; si el cliente necesita ver algo más, ofrécele coordinar con el equipo.'
+          } else {
+            for (const im of elegidas.slice(0, 6)) {
+              if (!imagenesAEnviar.some(x => x.url === im.url)) imagenesAEnviar.push({ url: im.url, alt: im.alt || im.descripcion || '' })
+            }
+            resultText = `Listo, se enviarán ${imagenesAEnviar.length} foto(s) al cliente (${elegidas.slice(0, 6).map(e => e.descripcion || e.alt || `ID ${e.id}`).join('; ')}). Acompáñalas con un mensaje breve y cálido presentándolas; no describas detalles que no se vean en las fotos.`
+          }
         } else if (tu.name === 'solicitar_retiro_cremacion' && opts.handlers?.solicitarRetiro) {
           resultText = await opts.handlers.solicitarRetiro(tu.input as unknown as AccionRetiro, opts.ctx ?? {})
         } else if (tu.name === 'cotizar_eutanasia' && opts.handlers?.cotizarEutanasia) {
@@ -420,10 +473,12 @@ ${cfg.instrucciones.trim()}`,
       mensaje = 'Recibimos tu solicitud de eutanasia a domicilio. Apenas un veterinario de nuestra red confirme, te avisamos. Cualquier duda, escríbenos por aquí.'
     } else if (acciones.includes('solicitar_retiro_cremacion')) {
       mensaje = 'Recibimos tu solicitud de retiro. La estamos validando y te confirmamos a la brevedad. Cualquier duda, escríbenos por aquí.'
+    } else if (imagenesAEnviar.length > 0) {
+      mensaje = 'Te comparto algunas fotos 🐾'
     }
     // Sin acción y sin texto → queda vacío: el webhook no envía nada (correcto).
   }
-  return { mensaje, escalar, acciones }
+  return { mensaje, escalar, acciones, imagenes: imagenesAEnviar.length ? imagenesAEnviar : undefined }
 }
 
 const SYSTEM_RELAY = `Eres el asistente de WhatsApp del Crematorio Alma Animal. Un miembro del equipo te pasó, por interno, una respuesta sobre CUÁNDO van a pasar a retirar a la mascota de un cliente. Tu tarea: redactar el mensaje que se le enviará al cliente por WhatsApp con esa información.

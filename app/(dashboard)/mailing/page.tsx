@@ -106,6 +106,7 @@ type ImagenBanco = {
   tags: string
   alt: string
   grupo: string
+  whatsapp: boolean
   aspect: string
   origen: string
   modelo: string
@@ -2075,27 +2076,62 @@ const GRUPOS = ['mascotas', 'personas', 'productos', 'instalaciones', 'otro'] as
 // La IA NUNCA genera instalaciones → al generar solo se ofrecen estos grupos.
 const GRUPOS_GEN = ['mascotas', 'personas', 'productos', 'otro'] as const
 
-/** Tarjeta de una imagen del banco con selector de grupo, copiar y eliminar. */
-function ImagenCard({ img, onGrupo, onCopy, onDelete }: {
+/** Tarjeta de una imagen del banco con nombre editable, grupo, WhatsApp, copiar y eliminar. */
+function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete }: {
   img: ImagenBanco
   onGrupo: (img: ImagenBanco, grupo: string) => void
+  onWhatsapp: (img: ImagenBanco, on: boolean) => void
+  onRename: (img: ImagenBanco, descripcion: string) => void
   onCopy: (url: string) => void
   onDelete: (img: ImagenBanco) => void
 }) {
+  const [editando, setEditando] = useState(false)
+  const [texto, setTexto] = useState(img.descripcion || img.alt || '')
+
+  function guardar() {
+    setEditando(false)
+    const t = texto.trim()
+    if (t !== (img.descripcion || '')) onRename(img, t)
+  }
+
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden flex flex-col">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={img.url} alt={img.alt} className="w-full h-36 object-cover bg-gray-100" />
       <div className="p-2 flex-1 flex flex-col gap-1.5">
-        <div className="text-[11px] text-gray-700 line-clamp-2 flex-1">{img.descripcion || img.alt || '(sin descripción)'}</div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex-1">
+          {editando ? (
+            <input autoFocus value={texto} onChange={e => setTexto(e.target.value)} onBlur={guardar}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); guardar() }
+                else if (e.key === 'Escape') { setTexto(img.descripcion || img.alt || ''); setEditando(false) }
+              }}
+              placeholder="Ej: Ánfora estándar"
+              className="w-full text-[11px] border border-indigo-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+          ) : (
+            <button type="button" title="Clic para editar el nombre"
+              onClick={() => { setTexto(img.descripcion || img.alt || ''); setEditando(true) }}
+              className="text-left text-[11px] text-gray-700 line-clamp-2 hover:text-indigo-600 w-full flex items-start gap-1">
+              <span className="line-clamp-2">{img.descripcion || img.alt || '(sin nombre — clic para editar)'}</span>
+              <span className="text-gray-300 shrink-0">✏️</span>
+            </button>
+          )}
+        </div>
+        <div className="flex items-center flex-wrap gap-1.5 gap-y-1">
           <select value={(GRUPOS as readonly string[]).includes(img.grupo) ? img.grupo : ''}
-            onChange={e => onGrupo(img, e.target.value)} title="Grupo"
+            onChange={e => onGrupo(img, e.target.value)} title="Grupo (etiqueta)"
             className="text-[10px] border border-gray-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
             <option value="">sin grupo</option>
             {GRUPOS.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
-          {img.aspect && <span className="text-[10px] text-gray-400">{img.aspect}</span>}
+          {/* Checkbox WhatsApp: si está marcado, el agente puede enviar esta foto al cliente. */}
+          <label
+            title="El agente de WhatsApp puede enviar esta imagen al cliente cuando la pida"
+            className={`flex items-center gap-1 text-[10px] rounded px-1 py-0.5 cursor-pointer border ${img.whatsapp ? 'bg-green-50 border-green-300 text-green-700' : 'border-gray-300 text-gray-500'}`}>
+            <input type="checkbox" checked={img.whatsapp} onChange={e => onWhatsapp(img, e.target.checked)}
+              className="accent-green-600 w-3 h-3" />
+            WhatsApp
+          </label>
           <div className="ml-auto flex items-center gap-1">
             <button type="button" onClick={() => onCopy(img.url)} title="Copiar URL" className="text-gray-500 hover:text-indigo-600 text-xs">⧉</button>
             <button type="button" onClick={() => onDelete(img)} title="Eliminar" className="text-gray-500 hover:text-red-600 text-xs">🗑</button>
@@ -2155,21 +2191,31 @@ function ImagenesPanel() {
   }
 
   async function subir(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
     if (fileRef.current) fileRef.current.value = ''
     setSubiendo(true); setError(''); setInfo('')
+    let ok = 0
+    const fallidas: string[] = []
     try {
-      const dataUrl = await fileToDataUrl(file)
-      const r = await fetch('/api/mailing/imagenes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data_url: dataUrl, descripcion: file.name.replace(/\.[^.]+$/, ''), grupo: upGrupo }),
-      })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) { setError(j.error || `Error ${r.status}`); return }
-      setInfo(`Imagen subida al banco (grupo: ${upGrupo}).`); await cargar()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al subir')
+      // Una por una (la API sube de a una): así el banco se va llenando aunque
+      // alguna falle, y no topamos con el límite de tamaño del request.
+      for (const file of files) {
+        try {
+          const dataUrl = await fileToDataUrl(file)
+          const r = await fetch('/api/mailing/imagenes', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data_url: dataUrl, descripcion: file.name.replace(/\.[^.]+$/, ''), grupo: upGrupo }),
+          })
+          if (r.ok) ok++
+          else { const j = await r.json().catch(() => ({})); fallidas.push(`${file.name}: ${j.error || `Error ${r.status}`}`) }
+        } catch (err) {
+          fallidas.push(`${file.name}: ${err instanceof Error ? err.message : 'error'}`)
+        }
+        await cargar()
+      }
+      if (ok > 0) setInfo(`${ok} imagen${ok === 1 ? '' : 'es'} subida${ok === 1 ? '' : 's'} al banco (grupo: ${upGrupo}).`)
+      if (fallidas.length) setError(`No se pudieron subir ${fallidas.length}: ${fallidas.slice(0, 3).join(' · ')}${fallidas.length > 3 ? '…' : ''}`)
     } finally {
       setSubiendo(false)
     }
@@ -2182,6 +2228,24 @@ function ImagenesPanel() {
       body: JSON.stringify({ grupo }),
     })
     if (!r.ok) { setError('No se pudo cambiar el grupo'); await cargar() }
+  }
+
+  async function cambiarWhatsapp(img: ImagenBanco, on: boolean) {
+    setImgs(prev => prev.map(i => i.id === img.id ? { ...i, whatsapp: on } : i)) // optimista
+    const r = await fetch(`/api/mailing/imagenes?id=${encodeURIComponent(img.id)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ whatsapp: on }),
+    })
+    if (!r.ok) { setError('No se pudo cambiar la opción de WhatsApp'); await cargar() }
+  }
+
+  async function renombrar(img: ImagenBanco, descripcion: string) {
+    setImgs(prev => prev.map(i => i.id === img.id ? { ...i, descripcion } : i)) // optimista
+    const r = await fetch(`/api/mailing/imagenes?id=${encodeURIComponent(img.id)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ descripcion }),
+    })
+    if (!r.ok) { setError('No se pudo renombrar la imagen'); await cargar() }
   }
 
   async function eliminar(img: ImagenBanco) {
@@ -2240,9 +2304,10 @@ function ImagenesPanel() {
             </select>
             <button type="button" onClick={() => fileRef.current?.click()} disabled={subiendo}
               className="border-2 border-gray-300 text-gray-700 rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50">
-              {subiendo ? 'Subiendo…' : '📤 Subir imagen'}
+              {subiendo ? 'Subiendo…' : '📤 Subir imágenes'}
             </button>
-            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={subir} className="hidden" />
+            <input ref={fileRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={subir} className="hidden" />
+            <span className="text-[11px] text-gray-400">Puedes elegir varias a la vez.</span>
           </div>
         </div>
 
@@ -2256,18 +2321,20 @@ function ImagenesPanel() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-sm text-gray-400">Sin imágenes todavía. Genera la primera arriba o sube una propia.</div>
       ) : (
         <>
-          <ImagenesSeccion titulo="Generadas con IA" imgs={generadas} onGrupo={cambiarGrupo} onCopy={copiarUrl} onDelete={eliminar} onRefresh={cargar} />
-          <ImagenesSeccion titulo="Subidas por el equipo" imgs={subidas} onGrupo={cambiarGrupo} onCopy={copiarUrl} onDelete={eliminar} />
+          <ImagenesSeccion titulo="Generadas con IA" imgs={generadas} onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onRename={renombrar} onCopy={copiarUrl} onDelete={eliminar} onRefresh={cargar} />
+          <ImagenesSeccion titulo="Subidas por el equipo" imgs={subidas} onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onRename={renombrar} onCopy={copiarUrl} onDelete={eliminar} />
         </>
       )}
     </div>
   )
 }
 
-function ImagenesSeccion({ titulo, imgs, onGrupo, onCopy, onDelete, onRefresh }: {
+function ImagenesSeccion({ titulo, imgs, onGrupo, onWhatsapp, onRename, onCopy, onDelete, onRefresh }: {
   titulo: string
   imgs: ImagenBanco[]
   onGrupo: (img: ImagenBanco, grupo: string) => void
+  onWhatsapp: (img: ImagenBanco, on: boolean) => void
+  onRename: (img: ImagenBanco, descripcion: string) => void
   onCopy: (url: string) => void
   onDelete: (img: ImagenBanco) => void
   onRefresh?: () => void
@@ -2283,7 +2350,7 @@ function ImagenesSeccion({ titulo, imgs, onGrupo, onCopy, onDelete, onRefresh }:
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {imgs.map(img => (
-            <ImagenCard key={img.id} img={img} onGrupo={onGrupo} onCopy={onCopy} onDelete={onDelete} />
+            <ImagenCard key={img.id} img={img} onGrupo={onGrupo} onWhatsapp={onWhatsapp} onRename={onRename} onCopy={onCopy} onDelete={onDelete} />
           ))}
         </div>
       )}
