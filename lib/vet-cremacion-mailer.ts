@@ -53,6 +53,92 @@ function cajaCodigo(mascota: string, codigo: string): string {
       </div>`
 }
 
+// ─── 0. Bienvenida al convenio (al registrar una veterinaria nueva) ───────────
+
+export interface BienvenidaConvenioArgs {
+  /** Correo destinatario (en producción = correo de la veterinaria). */
+  email: string
+  /** Nombre de la veterinaria/clínica (veterinarios.nombre). */
+  vetNombre: string
+  contacto?: string
+  cargoContacto?: string
+  razonSocial?: string
+  rut?: string
+  giro?: string
+  direccion?: string
+  comuna?: string
+  telefono?: string
+  /** Correo a MOSTRAR en la tabla de datos; default = email. (Útil en pruebas.) */
+  correoMostrar?: string
+}
+
+/** Fila de la tabla de datos; se omite si el valor está vacío. */
+function filaDato(label: string, valor?: string): string {
+  const v = (valor || '').trim()
+  if (!v) return ''
+  return `
+        <tr>
+          <td style="padding:7px 14px 7px 0;font-size:13px;color:${BRAND.muted};white-space:nowrap;vertical-align:top">${escapeHtml(label)}</td>
+          <td style="padding:7px 0;font-size:14px;color:${BRAND.navy};font-weight:600">${escapeHtml(v)}</td>
+        </tr>`
+}
+
+export function buildBienvenidaConvenioVet(args: BienvenidaConvenioArgs, contacto: Contacto): SendOpts {
+  const saludo = args.contacto?.trim()
+    ? `Hola <strong>${escapeHtml(args.contacto.trim())}</strong>,`
+    : (args.vetNombre?.trim() ? `Hola equipo de <strong>${escapeHtml(args.vetNombre.trim())}</strong>,` : 'Hola,')
+  const contactoLinea = args.contacto ? `${args.contacto}${args.cargoContacto ? ` — ${args.cargoContacto}` : ''}` : ''
+  const filas = [
+    filaDato('Veterinaria', args.vetNombre),
+    filaDato('Razón social', args.razonSocial),
+    filaDato('RUT', args.rut),
+    filaDato('Giro', args.giro),
+    filaDato('Dirección', args.direccion),
+    filaDato('Comuna', args.comuna),
+    filaDato('Teléfono', args.telefono),
+    filaDato('Correo', args.correoMostrar || args.email),
+    filaDato('Contacto', contactoLinea),
+  ].filter(Boolean).join('')
+  const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">${saludo}</p>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+        ¡Bienvenidos al <strong>convenio de Crematorio Alma Animal</strong>! Estamos muy contentos de comenzar a trabajar junto a ustedes.
+      </p>
+      <p style="margin:0 0 12px;font-size:14px;line-height:1.6">
+        Ingresamos su veterinaria en nuestras bases con los siguientes datos. Si necesita corregir o actualizar alguno, solo <strong>responda a este mismo correo</strong> y lo ajustamos:
+      </p>
+      <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:12px;padding:14px 20px;margin:6px 0 18px">
+        <table style="width:100%;border-collapse:collapse">${filas}</table>
+      </div>
+      <p style="margin:0;font-size:14px;line-height:1.6">
+        Agradecemos su preferencia y la confianza en nosotros. Quedamos atentos a cualquier consulta y con muchas ganas de cuidar, como corresponde, a las mascotas que nos deriven.
+      </p>`
+  return {
+    to: args.email,
+    subject: 'Bienvenidos al convenio — Crematorio Alma Animal',
+    html: renderEmailLayout({ titulo: 'Bienvenidos al convenio', bodyHtml: cuerpo, contacto, contexto: 'Convenio veterinarios' }),
+    preview_text: 'Ingresamos su veterinaria al convenio. Confirme o corrija sus datos respondiendo este correo.',
+    tags: [{ name: 'tipo', value: 'vet_convenio_bienvenida' }],
+  }
+}
+
+/** Envía la bienvenida al convenio (best-effort). */
+export async function enviarBienvenidaConvenioVet(args: BienvenidaConvenioArgs): Promise<void> {
+  if (!args.email) return
+  if (!isResendConfigured()) {
+    console.warn('[vet-mailer] Resend no configurado, salto bienvenida convenio a', args.email)
+    return
+  }
+  const contacto = await getContacto()
+  try {
+    const res = await sendEmail(buildBienvenidaConvenioVet(args, contacto))
+    if (res.ok) console.log(`[vet-mailer] OK bienvenida convenio a ${args.email}, message_id=${res.message_id}`)
+    else console.error(`[vet-mailer] FAIL bienvenida convenio a ${args.email}: ${res.error}`)
+  } catch (e) {
+    console.error(`[vet-mailer] EXC bienvenida convenio a ${args.email}:`, e instanceof Error ? e.message : String(e))
+  }
+}
+
 // ─── 1. Confirmación del retiro ───────────────────────────────────────────────
 
 export function buildRetiroConfirmadoVet(args: VetCorreoArgs, contacto: Contacto): SendOpts {

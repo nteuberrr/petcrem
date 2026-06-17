@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getSheetData, appendRow, updateRow, getNextId, deleteRow } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 import { capitalizarNombre } from '@/lib/nombres'
+import { enviarBienvenidaConvenioVet } from '@/lib/vet-cremacion-mailer'
 
 const VetSchema = z.object({
   nombre: z.string().min(1),
@@ -42,6 +43,27 @@ export async function POST(req: NextRequest) {
     const now = todayISO()
     const row = { id, ...data, activo: 'TRUE', fecha_creacion: now }
     await appendRow('veterinarios', row)
+
+    // Correo de bienvenida al convenio (best-effort: no bloquea el alta).
+    if (data.correo && /\S+@\S+\.\S+/.test(data.correo)) {
+      try {
+        await enviarBienvenidaConvenioVet({
+          email: data.correo,
+          vetNombre: data.nombre,
+          contacto: data.nombre_contacto,
+          cargoContacto: data.cargo_contacto,
+          razonSocial: data.razon_social,
+          rut: data.rut,
+          giro: data.giro,
+          direccion: data.direccion,
+          comuna: data.comuna,
+          telefono: data.telefono,
+        })
+      } catch (e) {
+        console.warn('[veterinarios POST] fallo mail bienvenida convenio (no bloqueante):', e)
+      }
+    }
+
     return NextResponse.json(row, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })

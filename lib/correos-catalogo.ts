@@ -10,6 +10,7 @@ import {
 import { renderInformeFacturacionEmail } from './informe-mailer'
 import {
   buildRetiroConfirmadoVet, buildCodigoVet, buildInicioRutaVet, buildEntregaVet,
+  buildBienvenidaConvenioVet,
 } from './vet-cremacion-mailer'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -196,6 +197,18 @@ export const CORREOS: CorreoDef[] = [
   },
 
   // ── Convenio de cremación (al veterinario asociado a la ficha) ───────────────
+  {
+    key: 'vet_convenio_bienvenida',
+    titulo: 'Bienvenida al convenio (nueva veterinaria)',
+    modulo: 'Convenio cremación',
+    audiencia: 'Veterinario',
+    cuando: 'Al registrar una nueva veterinaria en convenio.',
+    build: (m, c) => pick(buildBienvenidaConvenioVet({
+      email: m.email, vetNombre: 'Veterinaria San Francisco', contacto: VET_MUESTRA, cargoContacto: 'Administradora',
+      razonSocial: 'Clínica Veterinaria San Francisco SpA', rut: '76.123.456-7', giro: 'Servicios veterinarios',
+      direccion: 'Av. Siempre Viva 742', comuna: 'Providencia', telefono: '912345678',
+    }, c)),
+  },
   {
     key: 'vet_cremacion_retiro',
     titulo: 'Retiro agendado (al veterinario)',
