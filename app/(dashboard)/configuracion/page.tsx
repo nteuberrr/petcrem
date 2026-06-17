@@ -204,6 +204,8 @@ export default function ConfiguracionPage() {
   const [tramoForm, setTramoForm] = useState({ peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' })
   const [especialForm, setEspecialForm] = useState({ veterinaria_id: '', peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' })
   const [especialVetFiltro, setEspecialVetFiltro] = useState('')
+  const [showDuplicarModal, setShowDuplicarModal] = useState(false)
+  const [duplicarForm, setDuplicarForm] = useState({ destino: '', origen: '' })
   const [usuarioForm, setUsuarioForm] = useState({ nombre: '', email: '', password: '', rol: 'operador' })
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -301,6 +303,23 @@ export default function ConfiguracionPage() {
       body: JSON.stringify({ id, direction }),
     })
     await refresh('precios')
+  }
+  const duplicarTabla = async () => {
+    const { destino, origen } = duplicarForm
+    if (!destino || !origen) { alert('Elige la veterinaria destino y la tabla de origen.'); return }
+    const yaTiene = preciosE.filter(pe => pe.veterinaria_id === destino).length
+    if (yaTiene > 0 && !confirm(`Esta veterinaria ya tiene ${yaTiene} tramo(s) especiales. Se REEMPLAZARÁN por la copia. ¿Continuar?`)) return
+    const res = await fetch('/api/precios/especiales/duplicar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ veterinaria_id: destino, origen, reemplazar: yaTiene > 0 }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) { alert(`Error al duplicar: ${data.error ?? res.status}`); return }
+    setShowDuplicarModal(false)
+    setDuplicarForm({ destino: '', origen: '' })
+    setEspecialVetFiltro(destino)
+    await refresh('precios')
+    alert(`Listo: ${data.copiados} tramo(s) copiados${data.reemplazados ? ` (se reemplazaron ${data.reemplazados})` : ''}. Ajústalos si hace falta.`)
   }
   const normalizarIds = async () => {
     if (!confirm('¿Renumerar IDs de todos los tramos (general, convenio y especiales)? Los IDs quedarán secuenciales 1, 2, 3...')) return
@@ -454,10 +473,16 @@ export default function ConfiguracionPage() {
                     <h2 className="font-semibold text-gray-900">Convenios especiales por veterinaria</h2>
                     <p className="text-xs text-gray-400 mt-0.5">Tarifas personalizadas asignadas a una veterinaria</p>
                   </div>
-                  <button onClick={() => { setEditingEspecial(null); setEspecialForm({ veterinaria_id: '', peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' }); setShowEspecialModal(true) }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
-                    + Nuevo convenio
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => { setDuplicarForm({ destino: especialVetFiltro || '', origen: '' }); setShowDuplicarModal(true) }}
+                      className="border border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                      ⎘ Duplicar tabla
+                    </button>
+                    <button onClick={() => { setEditingEspecial(null); setEspecialForm({ veterinaria_id: '', peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' }); setShowEspecialModal(true) }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                      + Nuevo convenio
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-700">Filtrar por veterinaria</label>
@@ -1510,6 +1535,48 @@ export default function ConfiguracionPage() {
           </div>
           <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
             {editingEspecial ? 'Guardar cambios' : 'Crear tramo'}
+          </button>
+        </form>
+      </Modal>
+
+      {/* Modal duplicar tabla → precios especiales de una veterinaria */}
+      <Modal open={showDuplicarModal} onClose={() => setShowDuplicarModal(false)} title="Duplicar tabla de precios a una veterinaria">
+        <form onSubmit={e => { e.preventDefault(); duplicarTabla() }} className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Copia todos los tramos de una tabla conocida a los <strong>precios especiales</strong> de una veterinaria, como punto de partida. Después puedes ajustarlos.
+          </p>
+          <div>
+            <label className="text-xs font-medium text-gray-700">Veterinaria destino</label>
+            <select required value={duplicarForm.destino} onChange={e => setDuplicarForm(f => ({ ...f, destino: e.target.value }))}
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">Seleccionar...</option>
+              {vets.filter(v => v.activo === 'TRUE').map(v => (
+                <option key={v.id} value={v.id}>{v.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700">Copiar desde</label>
+            <select required value={duplicarForm.origen} onChange={e => setDuplicarForm(f => ({ ...f, origen: e.target.value }))}
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">Seleccionar...</option>
+              <option value="general">Precios generales</option>
+              <option value="convenio">Precios convenio</option>
+              {[...new Set(preciosE.map(pe => pe.veterinaria_id).filter((v): v is string => !!v))]
+                .filter(vid => vid !== duplicarForm.destino)
+                .map(vid => {
+                  const v = vets.find(x => x.id === vid)
+                  return <option key={vid} value={vid}>Especiales de {v?.nombre ?? `Veterinaria #${vid}`}</option>
+                })}
+            </select>
+          </div>
+          {duplicarForm.destino && preciosE.some(pe => pe.veterinaria_id === duplicarForm.destino) && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Esta veterinaria ya tiene tramos especiales: se <strong>reemplazarán</strong> por la copia.
+            </p>
+          )}
+          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+            Duplicar
           </button>
         </form>
       </Modal>
