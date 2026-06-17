@@ -29,7 +29,9 @@ async function main() {
   const existentes = await getSheetData('veterinarios')
   const existeNombre = new Set(existentes.map(v => str(v.nombre).toLowerCase()).filter(Boolean))
 
-  let nextId = parseInt(await getNextId('veterinarios'), 10) || 1
+  // Pedimos el id FRESCO por fila (getNextId = nextval): la secuencia identity
+  // avanza con cada insert y nunca queda detrás de max(id). En DRY NO llamamos a
+  // getNextId, así no avanzamos la secuencia en una corrida de prueba.
   let creados = 0, saltados = 0
   for (const r of rows) {
     const nombre = str(r['Nombre'])
@@ -37,8 +39,7 @@ async function main() {
     if (existeNombre.has(nombre.toLowerCase())) {
       console.log(`  – saltado (ya existe): ${nombre}`); saltados++; continue
     }
-    const row = {
-      id: String(nextId),
+    const base = {
       nombre,
       rut: '',
       razon_social: str(r['Razon Social']),
@@ -54,10 +55,15 @@ async function main() {
       activo: 'TRUE',
       fecha_creacion: todayISO(),
     }
-    if (DRY) console.log(`  [dry] crearía id ${nextId}: ${nombre} · ${row.comuna} · ${row.correo} · convenio`)
-    else { await appendRow('veterinarios', row); console.log(`  ✓ creado id ${nextId}: ${nombre} · ${row.comuna} · convenio`) }
+    if (DRY) {
+      console.log(`  [dry] crearía: ${nombre} · ${base.comuna} · ${base.correo} · convenio`)
+    } else {
+      const id = await getNextId('veterinarios')
+      await appendRow('veterinarios', { id, ...base })
+      console.log(`  ✓ creado id ${id}: ${nombre} · ${base.comuna} · convenio`)
+    }
     existeNombre.add(nombre.toLowerCase())
-    nextId++; creados++
+    creados++
   }
   console.log(`\n${DRY ? '[DRY] ' : ''}Total: ${creados} a crear/creados, ${saltados} saltados.`)
 }

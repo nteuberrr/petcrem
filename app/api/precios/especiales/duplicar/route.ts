@@ -43,12 +43,16 @@ export async function POST(req: NextRequest) {
       for (const r of actuales) { await deleteById('precios_especiales', r.id); reemplazados++ }
     }
 
-    // 3) Insertar copias (ids secuenciales desde el próximo libre)
-    let nextId = parseInt(await getNextId('precios_especiales'), 10) || 1
+    // 3) Insertar copias. Pedimos un id FRESCO por fila (getNextId = nextval en
+    //    Postgres, max(id)+1 en Sheets): así la secuencia identity avanza con cada
+    //    insert y nunca queda detrás de max(id) — antes hacíamos un solo getNextId
+    //    + nextId++ y eso dejaba la secuencia desfasada → "duplicate key _pkey" al
+    //    re-duplicar. El loop DEBE ser secuencial (await por iteración): paralelizarlo
+    //    rompería la unicidad en el path de Sheets (todas leerían el mismo max).
     let copiados = 0
     for (const t of fuente) {
       await appendRow('precios_especiales', {
-        id: String(nextId++),
+        id: await getNextId('precios_especiales'),
         veterinaria_id: destino,
         peso_min: String(t.peso_min ?? ''),
         peso_max: String(t.peso_max ?? ''),
