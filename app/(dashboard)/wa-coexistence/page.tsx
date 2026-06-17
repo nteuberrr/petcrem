@@ -78,9 +78,10 @@ export default function WaCoexistencePage() {
   const conectar = useCallback(() => {
     if (!window.FB || !CONFIG_ID) { setMensaje('Falta configurar NEXT_PUBLIC_FB_COEX_CONFIG_ID / SDK.'); setEstado('error'); return }
     setEstado('lanzando'); setMensaje('')
-    window.FB.login(async (resp: FbLoginResponse) => {
-      const code = resp?.authResponse?.code
-      if (!code) { setEstado('error'); setMensaje('No se completó la conexión (sin code).'); return }
+
+    // Cierre del flujo: manda el code al backend. Se define aparte porque el
+    // callback de FB.login NO puede ser async (el SDK rechaza funciones async).
+    const enviar = async (code: string) => {
       setEstado('procesando')
       try {
         const r = await fetch('/api/whatsapp/coexistence', {
@@ -93,6 +94,14 @@ export default function WaCoexistencePage() {
       } catch (e) {
         setEstado('error'); setMensaje(e instanceof Error ? e.message : 'Error de red')
       }
+    }
+
+    // OJO: callback NO async (el SDK de Facebook lanza "Expression is of type
+    // asyncfunction, not function" si lo es).
+    window.FB.login((resp: FbLoginResponse) => {
+      const code = resp?.authResponse?.code
+      if (!code) { setEstado('error'); setMensaje('No se completó la conexión (cancelado o sin code).'); return }
+      void enviar(code)
     }, {
       config_id: CONFIG_ID,
       response_type: 'code',
