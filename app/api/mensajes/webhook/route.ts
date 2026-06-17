@@ -121,6 +121,8 @@ const EXT: Record<string, string> = {
 
 interface MetaMsg {
   from: string; id: string; timestamp: string; type: string
+  /** Presente en los echoes de coexistence (smb_message_echoes): destinatario (el cliente). */
+  to?: string
   text?: { body: string }
   image?: { id: string; caption?: string; mime_type?: string }
   audio?: { id: string; mime_type?: string }
@@ -379,6 +381,58 @@ async function procesarEntrante(value: Record<string, unknown>, msg: MetaMsg) {
   }
 }
 
+/**
+ * Coexistence — `smb_message_echoes`: un mensaje que el negocio envió DESDE la
+ * WhatsApp Business app (no por la API). Lo registramos como saliente (humano) en
+ * el inbox y PAUSAMOS la conversación, para que el agente no responda encima. Es
+ * el mismo guardrail que cuando un humano responde desde nuestro inbox.
+ * (Los mensajes enviados por la API NO llegan como echo, así que esto solo
+ * dispara cuando respondes tú a mano desde el teléfono/escritorio.)
+ */
+async function procesarEcho(echo: MetaMsg) {
+  if (!echo?.id) return
+  if (await existeMensajePorProvider(echo.id)) return // dedupe (entrega at-least-once)
+  const cliente = (echo.to || '').replace(/\D/g, '')
+  if (!cliente) return
+
+  const contacto = await upsertContacto({ wa_id: cliente, telefono: cliente, audiencia: 'A' })
+  const conv = await getOrCreateConversacion(contacto.id, 'whatsapp', contacto.audiencia, 'whatsapp')
+
+  const tipo = tipoInterno(echo.type)
+  let cuerpo: string | null = null
+  if (echo.type === 'text') cuerpo = echo.text?.body ?? ''
+  else {
+    const mediaObj = (echo.image || echo.audio || echo.voice || echo.video || echo.document) as { caption?: string } | undefined
+    cuerpo = mediaObj?.caption ?? `[${tipo}]`
+  }
+
+  try {
+    await insertarMensaje({
+      conversacion_id: conv.id, direccion: 'saliente', cuerpo, tipo,
+      provider_message_id: echo.id, estado: 'enviado', enviado_por: 'humano',
+      ts: new Date(Number(echo.timestamp) * 1000 || Date.now()).toISOString(),
+    })
+  } catch (e) {
+    const m = String(e).toLowerCase()
+    if ((m.includes('duplicate') || m.includes('unique')) && m.includes('provider')) return
+    throw e
+  }
+
+  // Respuesta manual desde la app → pausar al agente (si no estaba pausada ya).
+  if (!(conv.etiquetas || []).includes('pausado')) {
+    const tags = Array.from(new Set([...(conv.etiquetas || []), 'pausado']))
+    await actualizarConversacion(conv.id, { etiquetas: tags })
+  }
+}
+
+/** Coexistence — avisos de desconexión/reconexión del número. Best-effort. */
+async function avisarCoexistence(field: string) {
+  const txt = field === 'account_offboarded'
+    ? '⚠️ *WhatsApp Coexistence*: el número se DESCONECTÓ del sistema (account_offboarded). El bot dejó de recibir/responder. Hay que reconectarlo.'
+    : '✅ *WhatsApp Coexistence*: el número se reconectó al sistema (account_reconnected). El bot vuelve a operar.'
+  try { await enviarTextoWhatsapp(adminWhatsapp(), txt) } catch (e) { console.warn('[webhook] aviso coexistence falló:', e) }
+}
+
 /** Recepción de eventos (mensajes entrantes + cambios de estado). */
 export async function POST(req: NextRequest) {
   const raw = await req.text()
@@ -386,13 +440,18 @@ export async function POST(req: NextRequest) {
   if (!verificarFirmaWebhook(raw, sig)) {
     return NextResponse.json({ error: 'firma inválida' }, { status: 401 })
   }
-  let body: { entry?: Array<{ changes?: Array<{ value?: Record<string, unknown> }> }> }
+  let body: { entry?: Array<{ changes?: Array<{ field?: string; value?: Record<string, unknown> }> }> }
   try { body = JSON.parse(raw) } catch { return NextResponse.json({ ok: true }) }
 
   try {
     for (const entry of body.entry ?? []) {
       for (const change of entry.changes ?? []) {
         const value = change.value ?? {}
+        // Coexistence: el número se desconectó/reconectó del sistema.
+        if (change.field === 'account_offboarded' || change.field === 'account_reconnected') {
+          await avisarCoexistence(change.field)
+          continue
+        }
         for (const st of (value.statuses as Array<{ id?: string; status?: string }>) ?? []) {
           if (st.id && st.status && ESTADO_MAP[st.status]) await marcarEstadoMensaje(st.id, ESTADO_MAP[st.status])
         }
@@ -402,6 +461,10 @@ export async function POST(req: NextRequest) {
           // Relay: el admin respondió (citando) un aviso de ETA → reenviar al cliente.
           if (msg.type === 'text' && await procesarRelayAdmin(msg)) continue
           await procesarEntrante(value, msg)
+        }
+        // Coexistence: mensajes que enviaste TÚ desde la WhatsApp Business app.
+        for (const echo of (value.message_echoes as MetaMsg[]) ?? []) {
+          await procesarEcho(echo)
         }
       }
     }

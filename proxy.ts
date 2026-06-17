@@ -21,6 +21,8 @@ export async function proxy(req: NextRequest) {
   if (
     pathname === '/login' ||
     pathname.startsWith('/api/auth') ||
+    // Política de privacidad pública (la exige Meta para publicar la app + es buena práctica).
+    pathname === '/privacidad' ||
     pathname === '/api/init-sheets' ||
     pathname === '/api/reorder-columns' ||
     pathname === '/api/mailing/webhooks/resend' ||
