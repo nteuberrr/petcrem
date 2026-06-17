@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getSheetData, appendRow, getNextId, ensureColumns } from '@/lib/datastore'
 import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota } from '@/lib/cliente-mailer'
+import { resolverVet, enviarCodigoVet } from '@/lib/vet-cremacion-mailer'
 import { todayISO } from '@/lib/dates'
 import { calcularSnapshotFicha, type AdicionalItem } from '@/lib/price-calculator'
 import { capitalizarNombre } from '@/lib/nombres'
@@ -141,6 +142,15 @@ export async function POST(req: NextRequest) {
       })
     } catch (e) {
       console.warn('[clientes POST] fallo mail registro (no bloqueante):', e)
+    }
+
+    // Si la ficha está asociada a un veterinario de convenio, también le avisamos
+    // a él con el código (best-effort, no bloqueante).
+    try {
+      const vet = await resolverVet(row.veterinaria_id)
+      if (vet) await enviarCodigoVet({ ...vet, nombreMascota: row.nombre_mascota, codigo: row.codigo })
+    } catch (e) {
+      console.warn('[clientes POST] fallo mail código al vet (no bloqueante):', e)
     }
 
     return NextResponse.json({ ...row }, { status: 201 })

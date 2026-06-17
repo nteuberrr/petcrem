@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateRow } from '@/lib/datastore'
 import { enviarInicioDespacho } from '@/lib/cliente-mailer'
+import { resolverVet, enviarInicioRutaVet } from '@/lib/vet-cremacion-mailer'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,11 +31,23 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       try { mascotasIds = JSON.parse(row.mascotas_ids || '[]') } catch {}
       const clientes = await getSheetData('clientes')
       const byId = new Map(clientes.map(c => [c.id, c]))
-      const destinatarios = mascotasIds
+      const mascotas = mascotasIds
         .map(mid => byId.get(mid))
         .filter((c): c is Record<string, string> => !!c)
+      const destinatarios = mascotas
         .map(c => ({ email: c.email, nombreMascota: c.nombre_mascota, nombreTutor: c.nombre_tutor, clienteId: c.id }))
       await enviarInicioDespacho(destinatarios)
+
+      // Y a los veterinarios de convenio asociados a las mascotas de la ruta
+      // (best-effort). Leemos `veterinarios` una sola vez.
+      const conVet = mascotas.filter(c => c.veterinaria_id)
+      if (conVet.length > 0) {
+        const vets = await getSheetData('veterinarios')
+        for (const c of conVet) {
+          const vet = await resolverVet(c.veterinaria_id, vets)
+          if (vet) await enviarInicioRutaVet({ ...vet, nombreMascota: c.nombre_mascota, codigo: c.codigo })
+        }
+      }
     } catch (e) {
       console.warn('[despachos/iniciar] fallo correo (no bloqueante):', e)
     }

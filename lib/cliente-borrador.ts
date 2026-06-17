@@ -23,16 +23,24 @@ export interface BorradorInput {
   peso_declarado?: string | number
   /** CI | CP | SD si el cliente ya eligió. */
   codigo_servicio?: string
-  /** 'bot_retiro' | 'bot_eutanasia'. */
+  /** 'bot_retiro' | 'bot_eutanasia' | 'bot_vet'. */
   origen: string
+  /** Id del veterinario de convenio (hoja `veterinarios`) que originó el retiro. */
+  veterinaria_id?: string
+  /** Snapshot del tipo de precios del vet ('convenio' | 'especial'); default 'general'. */
+  tipo_precios?: string
   notas?: string
 }
 
 /** Crea un cliente borrador (sin código) y devuelve su id. */
 export async function crearClienteBorrador(d: BorradorInput): Promise<string> {
-  await ensureColumns('clientes', ['email', 'telefono', 'origen', 'notas', 'tipo_precios', 'estado_pago'])
+  await ensureColumns('clientes', ['email', 'telefono', 'origen', 'notas', 'tipo_precios', 'estado_pago', 'veterinaria_id'])
   const id = await getNextId('clientes')
-  const tel = (d.telefono || '').replace(/\D/g, '').slice(-9)
+  // Para retiros de VET no guardamos el teléfono del vet en la ficha: así el
+  // anti-duplicado por teléfono (bloqueFichaEnProceso) no bloquea a un vet que
+  // agenda varios retiros distintos. Su contacto vive en `veterinarios`.
+  const esVet = d.origen === 'bot_vet'
+  const tel = esVet ? '' : (d.telefono || '').replace(/\D/g, '').slice(-9)
   const dir = d.direccion_retiro ?? ''
   await appendRow('clientes', {
     id,
@@ -50,7 +58,8 @@ export async function crearClienteBorrador(d: BorradorInput): Promise<string> {
     tipo_servicio: d.codigo_servicio ?? '',
     codigo_servicio: d.codigo_servicio ?? '',
     estado: 'borrador',
-    tipo_precios: 'general',
+    veterinaria_id: d.veterinaria_id ?? '',
+    tipo_precios: d.tipo_precios || 'general',
     estado_pago: 'pendiente',
     origen: d.origen,
     notas: d.notas ?? '',

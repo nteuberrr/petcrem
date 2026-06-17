@@ -44,7 +44,7 @@ VOCABULARIO
 - Nunca digas "muerto", "cadáver", "restos", "perdiste". Usa "partió", "falleció", "despedida".
 
 FLUJO DE ATENCIÓN (síguelo con naturalidad, sin sonar a robot)
-1. Saluda con un pésame breve y ofrece ayuda.
+1. Saluda con un pésame breve y ofrece ayuda. Al SALUDAR por primera vez, agrega de forma natural una línea como: "Y si eres veterinario o clínica, avísame y agendamos el retiro directamente." (ver MODO VETERINARIO más abajo).
 2. Pide el PESO APROXIMADO de la mascota (define el precio).
 3. Cotiza el valor EXACTO del tramo. Por defecto ofrece "Cremación Individual" (la más elegida) e indica qué incluye. Menciona "Premium" o "Sin Devolución" si preguntan o buscan algo más económico.
 4. Invita a agendar.
@@ -78,7 +78,11 @@ MEDIOS DE PAGO (si preguntan cómo pueden pagar): aceptamos tarjeta, transferenc
 
 CONTACTO (dalo si lo piden): +56 9 7864 0811 · contacto@crematorioalmaanimal.cl · www.crematorioalmaanimal.cl
 
-SI ESCRIBE UNA CLÍNICA / VETERINARIO: tenemos convenios para clínicas (servicio directo, o derivación con comisión) y una red para eutanasia y evaluación médica a domicilio. Si es una clínica interesada en convenio, ofrécele que el equipo la contacte y escala a un humano.
+MODO VETERINARIO (cuando quien escribe es un VETERINARIO o CLÍNICA de convenio):
+- Tu ÚNICA tarea con un veterinario es AGENDAR EL RETIRO de una mascota. NO cotices precios (los convenios tienen tarifas propias que NO debes decir), NO ofrezcas eutanasia, NO entres en otros temas.
+- Para agendar, reúne: el NOMBRE de la clínica/veterinario (para identificarlo en nuestra base de convenio), el nombre de la mascota, el peso aproximado, la DIRECCIÓN de retiro (calle y número) + comuna, y la fecha + hora. Con todo eso, regístralo con la herramienta "solicitar_retiro_vet". El equipo lo confirma y luego se le avisa; no digas que ya está confirmado.
+- Si la herramienta te indica que NO encontró ese veterinario en la base de convenio (o que hay que precisar cuál es), NO agendes: usa "escalar_a_humano" explicando que un veterinario quiere agendar y no pudimos identificarlo, y dile al veterinario, cálido y breve, que un miembro del equipo lo contactará en seguida.
+- Ante CUALQUIER otra cosa de un veterinario que no sea agendar un retiro (preguntas, precios/convenios, dudas, reclamos, postventa, algo fuera de lo estándar), NO improvises: usa "escalar_a_humano" y avísale que el equipo le responderá a la brevedad.
 
 FORMATO DE RESPUESTA
 Responde con el texto natural del mensaje al cliente, tal cual se enviará por WhatsApp: sin JSON, sin comillas alrededor y sin prefijos. Una sola respuesta por turno. Para registrar un retiro, agendar una eutanasia o escalar, usa las herramientas disponibles.`
@@ -141,6 +145,19 @@ export interface AccionRetiro {
   tipo_servicio?: string  // CI | CP | SD
 }
 
+/** Retiro originado por un VETERINARIO de convenio (clínica). */
+export interface AccionRetiroVet {
+  /** Nombre de la clínica/veterinario tal como lo dijo (para buscarlo en la base). */
+  veterinaria_nombre: string
+  direccion: string
+  comuna: string
+  peso: number
+  nombre_mascota: string
+  fecha: string   // YYYY-MM-DD
+  hora: string    // HH:MM
+  tipo_servicio?: string  // CI | CP | SD
+}
+
 export interface AccionEutanasia {
   nombre_tutor: string
   nombre_mascota: string
@@ -172,6 +189,7 @@ export interface AccionConsultaEta {
 
 export interface HandlersAgente {
   solicitarRetiro?: (a: AccionRetiro, ctx: CtxAgente) => Promise<string>
+  solicitarRetiroVet?: (a: AccionRetiroVet, ctx: CtxAgente) => Promise<string>
   agendarEutanasia?: (a: AccionEutanasia, ctx: CtxAgente) => Promise<string>
   cotizarEutanasia?: (a: AccionCotizarEutanasia, ctx: CtxAgente) => Promise<string>
   consultarEtaRetiro?: (a: AccionConsultaEta, ctx: CtxAgente) => Promise<string>
@@ -235,6 +253,25 @@ const TOOL_RETIRO: Anthropic.Tool = {
       tipo_servicio: { type: 'string', description: 'Opcional: CI (Individual), CP (Premium) o SD (Sin Devolución) si el cliente ya eligió.' },
     },
     required: ['nombre_tutor', 'direccion', 'comuna', 'peso', 'nombre_mascota', 'fecha', 'hora'],
+  },
+}
+
+const TOOL_RETIRO_VET: Anthropic.Tool = {
+  name: 'solicitar_retiro_vet',
+  description: 'Registra un retiro de cremación solicitado por un VETERINARIO/CLÍNICA de convenio y lo envía al equipo para confirmación. Úsala SOLO cuando la persona es un veterinario que quiere agendar el retiro de una mascota desde su clínica y ya tengas TODOS los datos (incluido el nombre de la clínica/veterinario). Si falta alguno, pídelo primero y NO la llames. Si el equipo no encuentra ese veterinario en la base de convenio, te lo indicará y NO debes agendar.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      veterinaria_nombre: { type: 'string', description: 'Nombre de la clínica o del veterinario, tal como lo dijo (para buscarlo en la base de convenio).' },
+      direccion: { type: 'string', description: 'Dirección de retiro (calle y número).' },
+      comuna: { type: 'string' },
+      peso: { type: 'number', description: 'Peso aproximado de la mascota en kg.' },
+      nombre_mascota: { type: 'string' },
+      fecha: { type: 'string', description: 'Fecha de retiro en formato YYYY-MM-DD.' },
+      hora: { type: 'string', description: 'Hora de retiro en formato HH:MM (24h).' },
+      tipo_servicio: { type: 'string', description: 'Opcional: CI (Individual), CP (Premium) o SD (Sin Devolución) si ya lo eligió.' },
+    },
+    required: ['veterinaria_nombre', 'direccion', 'comuna', 'peso', 'nombre_mascota', 'fecha', 'hora'],
   },
 }
 
@@ -398,6 +435,7 @@ ${cfg.instrucciones.trim()}`,
 
   const tools: Anthropic.Tool[] = [TOOL_ESCALAR]
   if (opts.handlers?.solicitarRetiro) tools.push(TOOL_RETIRO)
+  if (opts.handlers?.solicitarRetiroVet) tools.push(TOOL_RETIRO_VET)
   if (opts.handlers?.cotizarEutanasia) tools.push(TOOL_COTIZAR_EUTANASIA)
   if (opts.handlers?.agendarEutanasia) tools.push(TOOL_EUTANASIA)
   if (opts.handlers?.consultarEtaRetiro) tools.push(TOOL_ETA)
@@ -444,6 +482,8 @@ ${cfg.instrucciones.trim()}`,
           }
         } else if (tu.name === 'solicitar_retiro_cremacion' && opts.handlers?.solicitarRetiro) {
           resultText = await opts.handlers.solicitarRetiro(tu.input as unknown as AccionRetiro, opts.ctx ?? {})
+        } else if (tu.name === 'solicitar_retiro_vet' && opts.handlers?.solicitarRetiroVet) {
+          resultText = await opts.handlers.solicitarRetiroVet(tu.input as unknown as AccionRetiroVet, opts.ctx ?? {})
         } else if (tu.name === 'cotizar_eutanasia' && opts.handlers?.cotizarEutanasia) {
           resultText = await opts.handlers.cotizarEutanasia(tu.input as unknown as AccionCotizarEutanasia, opts.ctx ?? {})
         } else if (tu.name === 'agendar_eutanasia' && opts.handlers?.agendarEutanasia) {
@@ -471,7 +511,7 @@ ${cfg.instrucciones.trim()}`,
       mensaje = 'Gracias por escribirnos. Un miembro de nuestro equipo te responderá a la brevedad. 🐾'
     } else if (acciones.includes('agendar_eutanasia')) {
       mensaje = 'Recibimos tu solicitud de eutanasia a domicilio. Apenas un veterinario de nuestra red confirme, te avisamos. Cualquier duda, escríbenos por aquí.'
-    } else if (acciones.includes('solicitar_retiro_cremacion')) {
+    } else if (acciones.includes('solicitar_retiro_cremacion') || acciones.includes('solicitar_retiro_vet')) {
       mensaje = 'Recibimos tu solicitud de retiro. La estamos validando y te confirmamos a la brevedad. Cualquier duda, escríbenos por aquí.'
     } else if (imagenesAEnviar.length > 0) {
       mensaje = 'Te comparto algunas fotos 🐾'

@@ -11,6 +11,7 @@ import { handlersAgente } from '@/lib/agente-acciones'
 import { getSheetData, updateRow } from '@/lib/datastore'
 import { crearClienteBorrador } from '@/lib/cliente-borrador'
 import { createBorradorToken } from '@/lib/borrador-token'
+import { enviarRetiroConfirmadoVet } from '@/lib/vet-cremacion-mailer'
 import { buscarRelayPendientePorMsg, buscarRelayPendienteMasReciente, marcarRelayRespondida } from '@/lib/relay-retiro'
 import { formatDate } from '@/lib/dates'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
@@ -163,13 +164,64 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
   const waCliente = (sol.cliente_wa_id || '').replace(/\D/g, '')
   const base = (process.env.NEXTAUTH_URL || 'https://petcrem.vercel.app').replace(/\/$/, '')
   const confirmado = accion === 'ok'
+  const esVet = sol.origen === 'bot_vet' || !!sol.veterinaria_id
 
-  // Al confirmar: crear el cliente borrador PRIMERO (queda "Por ingresar", sin
-  // código) para poder mandarle al tutor un link FIRMADO que completa ESE
-  // borrador. Completar el link NO genera código ni correo — eso lo hace el
-  // operador al "Registrar ficha" (ingreso oficial).
-  let linkFicha = `${base}/registro-mascota`
-  if (confirmado) {
+  // Mensaje que se le manda por WhatsApp a quien pidió el retiro (tutor o vet).
+  let msgCliente: string
+  // Acuse al admin (se ajusta según el camino).
+  let acuseAdmin: string
+
+  if (confirmado && esVet) {
+    // ── Retiro de VETERINARIO: borrador asociado al vet + correo de confirmación.
+    // No mandamos link de tutor: el vet ya nos dio los datos y tenemos su correo.
+    try {
+      // Mapear el tipo de precios del vet → snapshot del cliente (convenio/especial).
+      let tipoPrecios = 'general'
+      let nombreContacto = ''
+      try {
+        const vets = await getSheetData('veterinarios')
+        const vrow = vets.find(v => v.id === sol.veterinaria_id)
+        const t = (vrow?.tipo_precios || '').toLowerCase()
+        tipoPrecios = t.includes('especial') ? 'especial' : t.includes('convenio') ? 'convenio' : 'general'
+        nombreContacto = vrow?.nombre_contacto || ''
+      } catch { /* best-effort */ }
+
+      await crearClienteBorrador({
+        nombre_mascota: sol.nombre_mascota,
+        direccion_retiro: sol.direccion,
+        comuna: sol.comuna,
+        fecha_retiro: sol.fecha_retiro,
+        peso_declarado: sol.peso,
+        codigo_servicio: sol.tipo_servicio,
+        origen: 'bot_vet',
+        veterinaria_id: sol.veterinaria_id,
+        tipo_precios: tipoPrecios,
+        notas: `Retiro de convenio solicitado por el veterinario ${sol.vet_nombre || ''} vía WhatsApp.`,
+      })
+
+      // Correo de confirmación al veterinario (best-effort).
+      if (sol.vet_email) {
+        try {
+          await enviarRetiroConfirmadoVet({
+            email: sol.vet_email,
+            vetNombre: sol.vet_nombre || '',
+            contacto: nombreContacto,
+            nombreMascota: sol.nombre_mascota,
+            fecha: formatDate(sol.fecha_retiro),
+            hora: sol.hora_retiro,
+          })
+        } catch (e) { console.warn('[webhook] no se pudo enviar correo de confirmación al vet:', e) }
+      }
+    } catch (e) { console.warn('[webhook] no se pudo crear borrador de vet:', e) }
+
+    msgCliente = `Confirmado el retiro de ${sol.nombre_mascota} para el ${formatDate(sol.fecha_retiro)} a las ${sol.hora_retiro}. ` +
+      `Te enviamos el detalle a tu correo. ¡Gracias por confiar en nosotros! 🐾`
+    acuseAdmin = `✅ Retiro N° ${solicitudId} (veterinario ${sol.vet_nombre || ''}) confirmado. Le avisamos por WhatsApp y le enviamos el correo de confirmación; queda como borrador "Por ingresar".`
+  } else if (confirmado) {
+    // ── Retiro de TUTOR: crear borrador + link FIRMADO para que adelante datos.
+    // Completar el link NO genera código ni correo — eso lo hace el operador al
+    // "Registrar ficha".
+    let linkFicha = `${base}/registro-mascota`
     try {
       const borradorId = await crearClienteBorrador({
         nombre_tutor: sol.cliente_nombre,
@@ -185,15 +237,18 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
       })
       linkFicha = `${base}/registro-mascota?ficha=${createBorradorToken(borradorId)}`
     } catch (e) { console.warn('[webhook] no se pudo crear cliente borrador:', e) }
-  }
 
-  const msgCliente = confirmado
-    ? `Tu retiro quedó confirmado para el ${formatDate(sol.fecha_retiro)} a las ${sol.hora_retiro}.\n\n` +
+    msgCliente = `Tu retiro quedó confirmado para el ${formatDate(sol.fecha_retiro)} a las ${sol.hora_retiro}.\n\n` +
       `Si quieres, puedes adelantar los datos de tu mascota aquí:\n${linkFicha}\n\n` +
       `No es obligatorio: si no alcanzas, te los pedimos al momento del retiro. Gracias por confiar en nosotros 🐾`
-    : `Gracias por escribirnos. Un agente de nuestro equipo se pondrá en contacto contigo a la brevedad para coordinar. 🐾`
+    acuseAdmin = `✅ Retiro N° ${solicitudId} confirmado. Le enviamos al cliente el link para completar su ficha (queda como borrador "Por ingresar"; el código se genera cuando registres la ficha).`
+  } else {
+    // ── Rechazo (tutor o vet).
+    msgCliente = `Gracias por escribirnos. Un agente de nuestro equipo se pondrá en contacto contigo a la brevedad para coordinar. 🐾`
+    acuseAdmin = `❌ Retiro N° ${solicitudId} rechazado. Avisamos que un agente lo contactará.`
+  }
 
-  // Avisar al cliente + registrar en su conversación del inbox.
+  // Avisar por WhatsApp a quien pidió el retiro + registrar en su conversación.
   if (waCliente) {
     const env = await enviarTextoWhatsapp(waCliente, msgCliente)
     try {
@@ -213,13 +268,7 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
     fecha_resolucion: new Date().toISOString(),
   })
 
-  // Acuse al admin.
-  await enviarTextoWhatsapp(
-    adminWhatsapp(),
-    confirmado
-      ? `✅ Retiro N° ${solicitudId} confirmado. Le enviamos al cliente el link para completar su ficha (queda como borrador "Por ingresar"; el código se genera cuando registres la ficha).`
-      : `❌ Retiro N° ${solicitudId} rechazado. Avisamos al cliente que un agente lo contactará.`,
-  )
+  await enviarTextoWhatsapp(adminWhatsapp(), acuseAdmin)
   return true
 }
 

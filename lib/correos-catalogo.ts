@@ -8,6 +8,9 @@ import {
   renderRealizarServicio, renderAgradecimiento, renderClienteVetAsignado,
 } from './eutanasia-mailer'
 import { renderInformeFacturacionEmail } from './informe-mailer'
+import {
+  buildRetiroConfirmadoVet, buildCodigoVet, buildInicioRutaVet, buildEntregaVet,
+} from './vet-cremacion-mailer'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Catálogo central de TODOS los correos transaccionales. Es la única fuente para
@@ -190,6 +193,40 @@ export const CORREOS: CorreoDef[] = [
         fechaRealizacionISO: todayISO(),
       }, c),
     }),
+  },
+
+  // ── Convenio de cremación (al veterinario asociado a la ficha) ───────────────
+  {
+    key: 'vet_cremacion_retiro',
+    titulo: 'Retiro agendado (al veterinario)',
+    modulo: 'Convenio cremación',
+    audiencia: 'Veterinario',
+    cuando: 'Al confirmar un retiro agendado por el veterinario.',
+    build: (m, c) => pick(buildRetiroConfirmadoVet({ email: m.email, vetNombre: 'Veterinaria San Francisco', contacto: VET_MUESTRA, nombreMascota: m.nombreMascota, fecha: m.fechaCremacion, hora: '16:00' }, c)),
+  },
+  {
+    key: 'vet_cremacion_codigo',
+    titulo: 'Código de seguimiento (al veterinario)',
+    modulo: 'Convenio cremación',
+    audiencia: 'Veterinario',
+    cuando: 'Al registrar la ficha de una mascota asociada a un veterinario.',
+    build: (m, c) => pick(buildCodigoVet({ email: m.email, vetNombre: 'Veterinaria San Francisco', contacto: VET_MUESTRA, nombreMascota: m.nombreMascota, codigo: m.codigo }, c)),
+  },
+  {
+    key: 'vet_cremacion_ruta',
+    titulo: 'Ánfora en camino (al veterinario)',
+    modulo: 'Convenio cremación',
+    audiencia: 'Veterinario',
+    cuando: 'Al iniciar la ruta de despacho de una mascota asociada a un veterinario.',
+    build: (m, c) => pick(buildInicioRutaVet({ email: m.email, vetNombre: 'Veterinaria San Francisco', contacto: VET_MUESTRA, nombreMascota: m.nombreMascota, codigo: m.codigo }, c)),
+  },
+  {
+    key: 'vet_cremacion_entrega',
+    titulo: 'Entrega confirmada (al veterinario)',
+    modulo: 'Convenio cremación',
+    audiencia: 'Veterinario',
+    cuando: 'Al entregar el ánfora de una mascota asociada a un veterinario.',
+    build: (m, c) => pick(buildEntregaVet({ email: m.email, vetNombre: 'Veterinaria San Francisco', contacto: VET_MUESTRA, nombreMascota: m.nombreMascota, codigo: m.codigo }, c)),
   },
 
   // ── Veterinarias (facturación) ───────────────────────────────────────────────

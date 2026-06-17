@@ -7,7 +7,7 @@ import { fmtPrecio } from './format'
 import { precioClienteEutanasia } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
 import { capitalizarNombre } from './nombres'
-import type { HandlersAgente, AccionRetiro, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, CtxAgente } from './agente-mensajes'
+import type { HandlersAgente, AccionRetiro, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, CtxAgente } from './agente-mensajes'
 
 /**
  * Valida que una dirección + comuna exista y caiga dentro de Chile (geocoding).
@@ -42,6 +42,7 @@ const COLS_RETIRO = [
   'id', 'cliente_wa_id', 'cliente_nombre', 'nombre_mascota',
   'peso', 'direccion', 'comuna', 'fecha_retiro', 'hora_retiro', 'tipo_servicio',
   'estado', 'fecha_creacion', 'fecha_resolucion',
+  'origen', 'veterinaria_id', 'vet_nombre', 'vet_email',
 ]
 
 async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string> {
@@ -106,6 +107,103 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
 
   return `Solicitud de retiro registrada (N° ${id}) y enviada al equipo para confirmación. ` +
     `Confirma al cliente que RECIBIMOS su solicitud para el ${formatDate(a.fecha)} a las ${a.hora} y que le avisaremos por este mismo medio apenas la validemos. ` +
+    `NO le digas que ya está confirmada.`
+}
+
+// ─── Flujo A-vet: retiro originado por un veterinario de convenio ─────────────
+
+/** Normaliza un nombre para comparar (minúsculas, sin tildes ni puntuación). */
+function normalizaNombre(s: string): string {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+/** Busca un veterinario de convenio ACTIVO por nombre (match flexible). */
+async function buscarVetConvenio(nombre: string): Promise<{ unico?: Record<string, string>; varios?: Record<string, string>[] }> {
+  const q = normalizaNombre(nombre)
+  if (q.length < 3) return {}
+  const vets = (await getSheetData('veterinarios')).filter(v => /^(true|verdadero|1)$/i.test((v.activo || '').trim()))
+  const exactos = vets.filter(v => normalizaNombre(v.nombre) === q)
+  if (exactos.length === 1) return { unico: exactos[0] }
+  if (exactos.length > 1) return { varios: exactos }
+  const parciales = vets.filter(v => {
+    const n = normalizaNombre(v.nombre)
+    return n.length >= 3 && (n.includes(q) || q.includes(n))
+  })
+  if (parciales.length === 1) return { unico: parciales[0] }
+  if (parciales.length > 1) return { varios: parciales }
+  return {}
+}
+
+/**
+ * Handler del retiro originado por un VETERINARIO de convenio. Identifica al vet
+ * por NOMBRE en la hoja `veterinarios` (activos); si no lo encuentra, NO agenda y
+ * pide escalar. Si lo encuentra, registra la solicitud asociada al vet (origen
+ * 'bot_vet') y avisa al admin con botones ✅/❌. NO aplica el bloqueo de "una sola
+ * ficha en proceso" (un vet agenda muchos retiros distintos).
+ */
+async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<string> {
+  a.nombre_mascota = capitalizarNombre(a.nombre_mascota)
+  const { unico, varios } = await buscarVetConvenio(a.veterinaria_nombre)
+  if (varios && varios.length > 1) {
+    const nombres = varios.slice(0, 4).map(v => v.nombre).filter(Boolean).join(', ')
+    return `Hay varios veterinarios en la base que coinciden con "${a.veterinaria_nombre}" (${nombres}). Pídele al veterinario que indique el nombre exacto de su clínica para identificarlo bien. NO agendes todavía.`
+  }
+  if (!unico) {
+    return `No encontré al veterinario "${a.veterinaria_nombre}" en nuestra base de convenio. NO agendes el retiro. Usa la herramienta escalar_a_humano explicando que un veterinario quiere agendar un retiro y no pudimos identificarlo en la base, y dile al veterinario —cálido y breve— que un miembro del equipo lo contactará en seguida para coordinar.`
+  }
+
+  if (!(await direccionValida(a.direccion, a.comuna))) {
+    return `No pude validar la dirección "${a.direccion}, ${a.comuna}". Pídele al veterinario que la confirme o la corrija (calle y número) y vuelve a registrarla. NO la registres aún.`
+  }
+
+  await ensureSheet(SHEET_RETIRO)
+  await ensureColumns(SHEET_RETIRO, COLS_RETIRO)
+
+  const waVet = (ctx.waId || '').replace(/\D/g, '')
+  const id = await getNextId(SHEET_RETIRO)
+  await appendRow(SHEET_RETIRO, {
+    id,
+    cliente_wa_id: waVet,
+    cliente_nombre: unico.nombre || a.veterinaria_nombre,
+    nombre_mascota: a.nombre_mascota,
+    peso: a.peso,
+    direccion: a.direccion,
+    comuna: a.comuna,
+    fecha_retiro: a.fecha,
+    hora_retiro: a.hora,
+    tipo_servicio: a.tipo_servicio ?? '',
+    estado: 'pendiente',
+    fecha_creacion: todayISO(),
+    fecha_resolucion: '',
+    origen: 'bot_vet',
+    veterinaria_id: unico.id || '',
+    vet_nombre: unico.nombre || '',
+    vet_email: unico.correo || '',
+  })
+
+  const resumen =
+    `🐾 *Nueva solicitud de retiro (VETERINARIO)*\n\n` +
+    `Veterinario: ${unico.nombre || a.veterinaria_nombre}\n` +
+    `Mascota: ${a.nombre_mascota} (${a.peso} kg)\n` +
+    `Dirección: ${a.direccion}, ${a.comuna}\n` +
+    `Fecha: ${formatDate(a.fecha)} a las ${a.hora}\n` +
+    (a.tipo_servicio ? `Servicio: ${a.tipo_servicio}\n` : '') +
+    (waVet ? `Contacto: +${waVet}\n` : '') +
+    `\n¿Confirmas este retiro?`
+
+  const env = await enviarBotonesWhatsapp(adminWhatsapp(), resumen, [
+    { id: `retiro_ok:${id}`, title: '✅ Confirmar' },
+    { id: `retiro_no:${id}`, title: '❌ Rechazar' },
+  ])
+
+  if (!env.ok) {
+    console.warn('[agente-acciones] no se pudo avisar al admin (vet):', env.error)
+    return `La solicitud quedó registrada (N° ${id}) pero no pude avisar al equipo automáticamente. Dile al veterinario que su solicitud fue recibida y que le confirmaremos a la brevedad.`
+  }
+
+  return `Solicitud de retiro registrada (N° ${id}) para el veterinario ${unico.nombre || a.veterinaria_nombre} y enviada al equipo para confirmación. ` +
+    `Confirma al veterinario que RECIBIMOS la solicitud de retiro de ${a.nombre_mascota} para el ${formatDate(a.fecha)} a las ${a.hora} y que le avisaremos apenas la validemos. ` +
     `NO le digas que ya está confirmada.`
 }
 
@@ -238,5 +336,5 @@ async function consultarEtaRetiro(a: AccionConsultaEta, ctx: CtxAgente): Promise
 
 /** Handlers disponibles para el agente (Flujo A: retiro · Flujo B: eutanasia). */
 export function handlersAgente(): HandlersAgente {
-  return { solicitarRetiro, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro }
+  return { solicitarRetiro, solicitarRetiroVet, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro }
 }

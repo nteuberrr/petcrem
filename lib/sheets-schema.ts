@@ -256,6 +256,11 @@ export const SHEETS: Record<string, string[]> = {
     'id', 'cliente_wa_id', 'cliente_nombre', 'nombre_mascota',
     'peso', 'direccion', 'comuna', 'fecha_retiro', 'hora_retiro', 'tipo_servicio',
     'estado', 'fecha_creacion', 'fecha_resolucion',
+    // origen: 'bot_tutor' (default) | 'bot_vet'. Para las de vet, se guarda el
+    // veterinario de convenio (de la hoja `veterinarios`) que originó el retiro:
+    // veterinaria_id liga la ficha al vet (tarifas de convenio); vet_nombre/vet_email
+    // se usan para el correo de confirmación y los del ciclo.
+    'origen', 'veterinaria_id', 'vet_nombre', 'vet_email',
   ],
   // Relay de consultas de "¿cuánto falta para el retiro?": el agente avisa al
   // admin y guarda el message_id de ese aviso; cuando el admin RESPONDE CITANDO

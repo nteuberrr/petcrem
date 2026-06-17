@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateById, updateByIdIf } from '@/lib/datastore'
 import { enviarEntregaConfirmada } from '@/lib/cliente-mailer'
+import { resolverVet, enviarEntregaVet } from '@/lib/vet-cremacion-mailer'
 import { todayISO } from '@/lib/dates'
 
 export const dynamic = 'force-dynamic'
@@ -114,7 +115,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // tipo === 'entregada'
     if (cliente) {
       await updateById('clientes', clienteId, { ...cliente, estado: 'despachado', despacho_id: id })
-      // Correo de entrega + reseña (best-effort).
+      // Correo de entrega + reseña al tutor (best-effort).
       try {
         await enviarEntregaConfirmada({
           email: cliente.email,
@@ -125,6 +126,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         })
       } catch (e) {
         console.warn('[despachos/entregar] fallo correo entrega (no bloqueante):', e)
+      }
+      // Y al veterinario de convenio asociado, si lo hay (best-effort).
+      try {
+        const vet = await resolverVet(cliente.veterinaria_id)
+        if (vet) await enviarEntregaVet({ ...vet, nombreMascota: cliente.nombre_mascota, codigo: cliente.codigo })
+      } catch (e) {
+        console.warn('[despachos/entregar] fallo correo entrega al vet (no bloqueante):', e)
       }
     }
 

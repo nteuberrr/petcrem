@@ -551,9 +551,20 @@ create table if not exists "solicitudes_retiro" (
   "tipo_servicio" text not null default '',
   "estado" text not null default '',
   "fecha_creacion" text not null default '',
-  "fecha_resolucion" text not null default ''
+  "fecha_resolucion" text not null default '',
+  -- origen: 'bot_tutor' (default) | 'bot_vet'. Para 'bot_vet' se guarda el vet de
+  -- convenio que originó el retiro (liga la ficha y dispara los correos al vet).
+  "origen" text not null default '',
+  "veterinaria_id" text not null default '',
+  "vet_nombre" text not null default '',
+  "vet_email" text not null default ''
 );
 alter table "solicitudes_retiro" enable row level security;
+-- Idempotente para tablas creadas antes de estas columnas.
+alter table "solicitudes_retiro" add column if not exists "origen" text not null default '';
+alter table "solicitudes_retiro" add column if not exists "veterinaria_id" text not null default '';
+alter table "solicitudes_retiro" add column if not exists "vet_nombre" text not null default '';
+alter table "solicitudes_retiro" add column if not exists "vet_email" text not null default '';
 create index if not exists "solicitudes_retiro_estado_idx" on "solicitudes_retiro" ("estado");
 create index if not exists "solicitudes_retiro_cliente_wa_id_idx" on "solicitudes_retiro" ("cliente_wa_id");
 
