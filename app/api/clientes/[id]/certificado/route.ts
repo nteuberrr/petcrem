@@ -5,7 +5,7 @@ import { getSheetData, appendRow, ensureSheet, ensureColumns } from '@/lib/datas
 import { generarCertificadoBuffer, checkCertificateAssets, type FirmaInfo } from '@/lib/certificate-generator'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 import { firmarPDF, getSignerInfo, isSigningEnabled } from '@/lib/sign-pdf'
-import { todayISO } from '@/lib/dates'
+import { todayISO, horaChile } from '@/lib/dates'
 
 const CERT_COLS = [
   'id', 'cliente_id', 'codigo_mascota', 'nombre_mascota',
@@ -100,9 +100,7 @@ async function persistirCertificado(opts: {
       return null
     })
 
-    const now = new Date()
-    const hh = String(now.getHours()).padStart(2, '0')
-    const mm = String(now.getMinutes()).padStart(2, '0')
+    const [hh, mm] = horaChile().split(':') // hora de Chile (el server corre en UTC)
 
     await appendRow('certificados', {
       id: certId,

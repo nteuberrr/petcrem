@@ -193,6 +193,18 @@ export function formatHora(raw: string | number | null | undefined): string {
   return s
 }
 
+/**
+ * Hora actual "HH:MM" en zona de Chile (America/Santiago). Úsala para timestamps
+ * que se GENERAN en el servidor y se muestran tal cual: Vercel corre en UTC, así
+ * que `new Date().getHours()` daría la hora UTC (adelantada ~3-4 h respecto de
+ * Chile → "una hora que aún no pasó").
+ */
+export function horaChile(d: Date = new Date()): string {
+  return new Intl.DateTimeFormat('es-CL', {
+    timeZone: 'America/Santiago', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(d)
+}
+
 /** Convierte una hora (string "HH:MM" o serial Excel) a minutos desde medianoche. */
 export function horaToMinutos(raw: string | number | null | undefined): number | null {
   const s = formatHora(raw)

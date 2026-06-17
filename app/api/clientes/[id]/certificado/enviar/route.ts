@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, ensureSheet, ensureColumns, updateRow } from '@/lib/datastore'
 import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
 import { fmtFecha } from '@/lib/format'
-import { todayISO } from '@/lib/dates'
+import { todayISO, horaChile } from '@/lib/dates'
 import { getContacto } from '@/lib/email-layout'
 import { buildCertificado } from '@/lib/cliente-mailer'
 import { registrarEnvio } from '@/lib/correos-log'
@@ -104,9 +104,8 @@ export async function POST(
       from: FROM_DEFAULT,
       reply_to: 'contacto@crematorioalmaanimal.cl',
       attachments,
-      // El certificado (y el video, cuando se adjunta) son pesados y personales:
-      // no los copiamos al BCC de seguimiento.
-      noBcc: true,
+      // Copiamos el certificado (con el PDF + el video cuando se adjunta) a la
+      // casilla de seguimiento, igual que el resto de los correos al tutor.
     })
 
     if (!res.ok) {
@@ -120,9 +119,7 @@ export async function POST(
     try {
       const certIdx = certs.findIndex(c => c.id === cert.id)
       if (certIdx !== -1) {
-        const now = new Date()
-        const hh = String(now.getHours()).padStart(2, '0')
-        const mi = String(now.getMinutes()).padStart(2, '0')
+        const [hh, mi] = horaChile().split(':') // hora de Chile (el server corre en UTC)
         const previa = parseInt(cert.enviado_cantidad || '0', 10) || 0
         await updateRow('certificados', certIdx, {
           ...cert,

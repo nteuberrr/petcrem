@@ -7,7 +7,7 @@ import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib'
 import { generarInformeVeterinaria, type InformeVeterinaria } from '@/lib/informe-veterinaria'
 import { appendRow, ensureSheet, ensureColumns, getSheetData, getNextId } from '@/lib/datastore'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
-import { todayISO } from '@/lib/dates'
+import { todayISO, horaChile } from '@/lib/dates'
 import { esAdmin } from '@/lib/roles'
 
 const INFORMES_COLS = [
@@ -658,9 +658,7 @@ export async function POST(
       await ensureSheet('informes_veterinaria')
       await ensureColumns('informes_veterinaria', INFORMES_COLS)
       const informeId = await getNextId('informes_veterinaria')
-      const now = new Date()
-      const hh = String(now.getHours()).padStart(2, '0')
-      const mm = String(now.getMinutes()).padStart(2, '0')
+      const [hh, mm] = horaChile().split(':') // hora de Chile (el server corre en UTC)
       await appendRow('informes_veterinaria', {
         id: informeId,
         veterinaria_id: id,
