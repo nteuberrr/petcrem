@@ -1,4 +1,4 @@
-import { getSheetData, appendRow, ensureSheet, ensureColumns } from '@/lib/datastore'
+import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 
 const CACHE_SHEET = 'geocoding_cache'
@@ -22,7 +22,6 @@ export interface GeocodeResult {
 }
 
 let cacheMemoMap: Map<string, { lat: number; lng: number; formatted_address: string }> | null = null
-let cacheMaxId = 0
 
 async function loadCache(): Promise<Map<string, { lat: number; lng: number; formatted_address: string }>> {
   if (cacheMemoMap) return cacheMemoMap
@@ -30,7 +29,6 @@ async function loadCache(): Promise<Map<string, { lat: number; lng: number; form
   await ensureColumns(CACHE_SHEET, CACHE_COLS)
   const rows = await getSheetData(CACHE_SHEET)
   const m = new Map<string, { lat: number; lng: number; formatted_address: string }>()
-  let maxId = 0
   for (const r of rows) {
     const norm = r.direccion_normalizada
     const lat = parseFloat(r.lat)
@@ -38,17 +36,13 @@ async function loadCache(): Promise<Map<string, { lat: number; lng: number; form
     if (norm && Number.isFinite(lat) && Number.isFinite(lng)) {
       m.set(norm, { lat, lng, formatted_address: r.formatted_address || '' })
     }
-    const id = parseInt(r.id || '0', 10)
-    if (Number.isFinite(id) && id > maxId) maxId = id
   }
   cacheMemoMap = m
-  cacheMaxId = maxId
   return m
 }
 
 export function invalidarCacheMemo() {
   cacheMemoMap = null
-  cacheMaxId = 0
 }
 
 export async function geocodeAddress(direccion: string): Promise<GeocodeResult | null> {
@@ -77,8 +71,10 @@ export async function geocodeAddress(direccion: string): Promise<GeocodeResult |
   const lng = loc.lng
 
   try {
-    cacheMaxId += 1
-    const id = String(cacheMaxId)
+    // id desde la secuencia (nextval): único y atómico aún con varias instancias
+    // de Vercel escribiendo a la vez. Antes usábamos un contador en memoria que
+    // colisionaba entre instancias y desfasaba la secuencia identity.
+    const id = await getNextId(CACHE_SHEET)
     await appendRow(CACHE_SHEET, {
       id,
       direccion_normalizada: norm,

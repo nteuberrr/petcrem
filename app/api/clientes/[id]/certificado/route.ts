@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, appendRow, ensureSheet, ensureColumns } from '@/lib/datastore'
+import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { generarCertificadoBuffer, checkCertificateAssets, type FirmaInfo } from '@/lib/certificate-generator'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 import { firmarPDF, getSignerInfo, isSigningEnabled } from '@/lib/sign-pdf'
@@ -68,9 +68,11 @@ async function preparseCertificado(clienteId: string): Promise<{ certId: string;
   await ensureSheet('certificados')
   await ensureColumns('certificados', CERT_COLS)
   const rows = await getSheetData('certificados')
-  const ids = rows.map(r => parseInt(r.id, 10)).filter(n => Number.isFinite(n))
-  const certId = String((ids.length > 0 ? Math.max(...ids) : 0) + 1)
   const version = rows.filter(r => r.cliente_id === clienteId).length + 1
+  // id desde la secuencia (nextval): único y atómico — evita el race de dos
+  // emisiones simultáneas tomando el mismo max(id)+1, y mantiene la secuencia
+  // identity alineada (insertar un id explícito calculado en JS la desfasaba).
+  const certId = await getNextId('certificados')
   return { certId, version }
 }
 
