@@ -100,6 +100,8 @@ export async function POST(
       // El informe contiene datos de facturación de este vet: no se copia al BCC
       // de seguimiento (evita exponer datos de un tercero y adjuntos pesados).
       noBcc: true,
+      // Aunque no se copia al BCC, SÍ queda en el registro/respaldo (correos_log).
+      seguimiento: { tipo: 'vet_informe_facturacion', audiencia: 'Veterinario', nombre: vet.nombre },
     })
 
     if (!res.ok) {

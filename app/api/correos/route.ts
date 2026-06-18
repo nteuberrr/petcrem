@@ -26,6 +26,22 @@ async function getEmailSeguimiento(): Promise<string> {
   } catch { return '' }
 }
 
+/** Config de seguimiento completa: email + master on/off + map por-tipo. */
+async function getSeguimientoCfg(): Promise<{ email: string; activo: boolean; tipos: Record<string, boolean> }> {
+  try {
+    const rows = await getSheetData('empresa_config')
+    const r = rows.find(x => x.id === '1') || rows[0]
+    const email = (r?.email_seguimiento || '').trim()
+    const activo = String(r?.email_seguimiento_activo || '').toUpperCase() === 'TRUE'
+    let tipos: Record<string, boolean> = {}
+    try {
+      const p = JSON.parse(r?.seguimiento_tipos || '{}')
+      if (p && typeof p === 'object') tipos = p as Record<string, boolean>
+    } catch { /* */ }
+    return { email, activo, tipos }
+  } catch { return { email: '', activo: false, tipos: {} } }
+}
+
 /** Datos de muestra: el último cliente registrado (para que la prueba se vea real). */
 async function construirMuestra(): Promise<MuestraCorreo> {
   let last: Record<string, string> | undefined
@@ -61,8 +77,11 @@ export async function GET(req: NextRequest) {
       if (!r) return NextResponse.json({ error: 'Correo no encontrado' }, { status: 404 })
       return NextResponse.json(r)
     }
-    const seguimiento = await getEmailSeguimiento()
-    return NextResponse.json({ correos: listarCorreos(), muestra, seguimiento })
+    const cfg = await getSeguimientoCfg()
+    return NextResponse.json({
+      correos: listarCorreos(), muestra,
+      seguimiento: cfg.email, seguimientoActivo: cfg.activo, seguimientoTipos: cfg.tipos,
+    })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

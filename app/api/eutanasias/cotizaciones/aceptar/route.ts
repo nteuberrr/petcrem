@@ -147,6 +147,7 @@ export async function POST(req: NextRequest) {
             { name: 'cotizacion_id', value: String(c.id) },
             { name: 'vet_id', value: String(vet.id) },
           ],
+          seguimiento: { tipo: 'eutanasia_coordinar', audiencia: 'Veterinario', nombre: c.mascota_nombre },
         })
       } catch (e) {
         console.warn('[aceptar] error mandando mail de confirmación:', e)

@@ -113,6 +113,9 @@ export async function enviarCotizacionAVets(opts: {
         { name: 'cotizacion_id', value: String(c.id) },
         { name: 'vet_id', value: String(v.id) },
       ],
+      // Para el registro/respaldo (correos_log). Sin bccSeguimiento: es un
+      // broadcast a la red, no copiamos al admin una vez por veterinario.
+      seguimiento: { tipo: 'eutanasia_cotizacion', audiencia: 'Veterinario' as const, nombre: c.mascota_nombre },
     }
   })
 

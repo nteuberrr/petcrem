@@ -82,6 +82,7 @@ export async function enviarBienvenidaVet(args: {
       html: renderBienvenida({ nombreCompleto, baseUrl, linkDatosPago, contacto }),
       preview_text: 'Te damos la bienvenida a nuestra red de veterinarios.',
       tags: [{ name: 'tipo', value: 'eutanasia_bienvenida_vet' }],
+      seguimiento: { tipo: 'eutanasia_bienvenida_vet', audiencia: 'Veterinario', nombre: nombreCompleto },
     })
     if (res.ok) {
       console.log(`[eutanasia-mailer] OK bienvenida a ${to}, message_id=${res.message_id}`)
@@ -185,6 +186,7 @@ export async function enviarMailRealizarServicio(args: RealizarServicioArgs): Pr
         { name: 'tipo', value: 'eutanasia_post_confirmar' },
         { name: 'cotizacion_id', value: String(args.cotizacion.id) },
       ],
+      seguimiento: { tipo: 'eutanasia_realizar', audiencia: 'Veterinario', nombre: args.cotizacion.mascota_nombre },
     })
     if (res.ok) {
       console.log(`[eutanasia-mailer] OK realizarServicio a ${to}, message_id=${res.message_id}`)
@@ -261,6 +263,7 @@ export async function enviarMailAgradecimiento(args: AgradecimientoArgs): Promis
         { name: 'tipo', value: 'eutanasia_post_realizado' },
         { name: 'cotizacion_id', value: String(args.cotizacion.id) },
       ],
+      seguimiento: { tipo: 'eutanasia_agradecimiento', audiencia: 'Veterinario', nombre: args.cotizacion.mascota_nombre },
     })
     if (res.ok) {
       console.log(`[eutanasia-mailer] OK agradecimiento a ${to}, message_id=${res.message_id}`)
@@ -323,6 +326,7 @@ export async function enviarClienteVetAsignado(args: ClienteVetAsignadoArgs): Pr
       html: renderClienteVetAsignado(args, contacto),
       preview_text: `Un veterinario de la red se contactará contigo por ${args.mascotaNombre}.`,
       tags: [{ name: 'tipo', value: 'eutanasia_cliente_vet_asignado' }],
+      seguimiento: { tipo: 'eutanasia_cliente_vet_asignado', audiencia: 'Tutor', nombre: args.mascotaNombre },
     })
     return res.ok
       ? { ok: true, estado: 'enviado', message_id: res.message_id, to }

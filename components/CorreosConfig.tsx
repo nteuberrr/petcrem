@@ -3,11 +3,39 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 
 type CorreoMeta = { key: string; titulo: string; modulo: string; audiencia: 'Tutor' | 'Veterinario'; cuando: string }
 type Muestra = { nombreMascota: string; nombreTutor: string; codigo: string; email: string; fechaCremacion: string }
+type LogRow = {
+  id: string; fecha_envio: string; tipo: string; audiencia: string; destinatario: string
+  asunto: string; codigo: string; nombre: string; estado: string; motivo: string
+}
+
+/** Formatea un ISO (UTC) a "DD-MM-YYYY HH:MM" en hora de Chile. */
+function fmtCL(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  const p = new Intl.DateTimeFormat('es-CL', {
+    timeZone: 'America/Santiago', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(d)
+  const g = (t: string) => p.find(x => x.type === t)?.value ?? ''
+  return `${g('day')}-${g('month')}-${g('year')} ${g('hour')}:${g('minute')}`
+}
+
+function estadoBadge(estado: string): string {
+  const e = (estado || '').toLowerCase()
+  if (e === 'fallido') return 'bg-red-100 text-red-700'
+  if (e === 'rebotado' || e === 'spam') return 'bg-amber-100 text-amber-700'
+  if (e === 'entregado' || e === 'abierto' || e === 'clic') return 'bg-blue-100 text-blue-700'
+  return 'bg-emerald-100 text-emerald-700' // enviado
+}
 
 export default function CorreosConfig() {
   const [correos, setCorreos] = useState<CorreoMeta[]>([])
   const [muestra, setMuestra] = useState<Muestra | null>(null)
   const [seguimiento, setSeguimiento] = useState('')
+  const [segActivo, setSegActivo] = useState(false)
+  const [segTipos, setSegTipos] = useState<Record<string, boolean>>({})
+  const [savingSeg, setSavingSeg] = useState(false)
   const [sel, setSel] = useState<string>('')
   const [html, setHtml] = useState<string>('')
   const [subject, setSubject] = useState<string>('')
@@ -17,6 +45,18 @@ export default function CorreosConfig() {
   const [actualizando, setActualizando] = useState(false)
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'error'; msg: string } | null>(null)
 
+  // ── Registro / respaldo de correos enviados ──
+  const [logItems, setLogItems] = useState<LogRow[]>([])
+  const [logTotal, setLogTotal] = useState(0)
+  const [logPage, setLogPage] = useState(1)
+  const [logDesde, setLogDesde] = useState('')
+  const [logHasta, setLogHasta] = useState('')
+  const [logQ, setLogQ] = useState('')
+  const [logLoading, setLogLoading] = useState(false)
+  const [verMeta, setVerMeta] = useState<LogRow | null>(null)
+  const [verHtml, setVerHtml] = useState('')
+  const [verLoading, setVerLoading] = useState(false)
+
   const cargarLista = useCallback(async (opts?: { aviso?: boolean }) => {
     setActualizando(true)
     try {
@@ -25,6 +65,8 @@ export default function CorreosConfig() {
       setCorreos(list)
       setMuestra(d?.muestra ?? null)
       setSeguimiento(d?.seguimiento ?? '')
+      setSegActivo(!!d?.seguimientoActivo)
+      setSegTipos(d?.seguimientoTipos && typeof d.seguimientoTipos === 'object' ? d.seguimientoTipos : {})
       setSel(prev => prev || (list[0]?.key ?? ''))
       if (opts?.aviso) setFeedback({ kind: 'ok', msg: `Lista actualizada — ${list.length} correos en el catálogo.` })
     } catch {
@@ -51,6 +93,29 @@ export default function CorreosConfig() {
 
   useEffect(() => { if (sel) queueMicrotask(() => cargarPreview(sel)) }, [sel, cargarPreview])
 
+  // Fetcher estable del registro (no depende de estado → no se re-crea por tecla).
+  const cargarLog = useCallback(async (p: { page: number; desde: string; hasta: string; q: string }) => {
+    setLogLoading(true)
+    try {
+      const sp = new URLSearchParams()
+      if (p.desde) sp.set('desde', p.desde)
+      if (p.hasta) sp.set('hasta', p.hasta)
+      if (p.q.trim()) sp.set('q', p.q.trim())
+      sp.set('page', String(p.page))
+      sp.set('pageSize', '10')
+      const d = await fetch(`/api/correos/log?${sp.toString()}`, { cache: 'no-store' }).then(r => r.json())
+      setLogItems(Array.isArray(d?.items) ? d.items : [])
+      setLogTotal(d?.total || 0)
+      setLogPage(p.page)
+    } catch {
+      setLogItems([]); setLogTotal(0)
+    } finally {
+      setLogLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { queueMicrotask(() => cargarLog({ page: 1, desde: '', hasta: '', q: '' })) }, [cargarLog])
+
   const grupos = useMemo(() => {
     const map = new Map<string, CorreoMeta[]>()
     for (const c of correos) {
@@ -59,6 +124,12 @@ export default function CorreosConfig() {
       map.set(c.modulo, arr)
     }
     return Array.from(map.entries())
+  }, [correos])
+
+  const tituloPorKey = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of correos) m.set(c.key, c.titulo)
+    return m
   }, [correos])
 
   async function enviarPrueba() {
@@ -104,7 +175,41 @@ export default function CorreosConfig() {
     }
   }
 
+  // Activa/desactiva la copia de seguimiento para UN tipo de correo. Optimista.
+  async function toggleSeguimiento(key: string) {
+    if (!key) return
+    const copiaActual = segTipos[key] !== false
+    const next = { ...segTipos, [key]: !copiaActual }
+    setSegTipos(next)
+    setSavingSeg(true)
+    try {
+      const r = await fetch('/api/empresa-config', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seguimiento_tipos: JSON.stringify(next) }),
+      })
+      if (!r.ok) throw new Error()
+    } catch {
+      setSegTipos(segTipos) // revertir
+      setFeedback({ kind: 'error', msg: 'No se pudo guardar la preferencia de copia.' })
+    } finally {
+      setSavingSeg(false)
+    }
+  }
+
+  async function ver(row: LogRow) {
+    setVerMeta(row); setVerHtml(''); setVerLoading(true)
+    try {
+      const d = await fetch(`/api/correos/log?id=${encodeURIComponent(row.id)}`, { cache: 'no-store' }).then(r => r.json())
+      setVerHtml(d?.html || '')
+    } catch { setVerHtml('') }
+    finally { setVerLoading(false) }
+  }
+
   const seleccionado = correos.find(c => c.key === sel)
+  const copiaSel = sel ? segTipos[sel] !== false : true
+  const totalPaginas = Math.max(1, Math.ceil(logTotal / 10))
+  const buscarLog = () => cargarLog({ page: 1, desde: logDesde, hasta: logHasta, q: logQ })
+  const irPagina = (n: number) => cargarLog({ page: n, desde: logDesde, hasta: logHasta, q: logQ })
 
   return (
     <div>
@@ -117,7 +222,12 @@ export default function CorreosConfig() {
           </p>
           {!seguimiento && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
-              No hay correo de seguimiento configurado. Defínelo más abajo en esta sección para poder enviar pruebas.
+              No hay correo de seguimiento configurado. Defínelo en «Datos Personales» para poder enviar pruebas y recibir copias.
+            </p>
+          )}
+          {seguimiento && !segActivo && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+              La copia de seguimiento está <strong>desactivada</strong>. Actívala en «Datos Personales» para recibir copias; acá eliges, correo por correo, cuáles quieres recibir.
             </p>
           )}
         </div>
@@ -152,6 +262,7 @@ export default function CorreosConfig() {
               <div className="divide-y divide-gray-100">
                 {items.map(c => {
                   const activo = c.key === sel
+                  const copia = segTipos[c.key] !== false
                   return (
                     <button
                       key={c.key}
@@ -160,7 +271,13 @@ export default function CorreosConfig() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className={`text-sm font-medium ${activo ? 'text-indigo-800' : 'text-gray-800'}`}>{c.titulo}</span>
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${c.audiencia === 'Tutor' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{c.audiencia}</span>
+                        <span className="flex items-center gap-1.5 shrink-0">
+                          <span
+                            title={copia ? 'Recibes copia de este correo' : 'No recibes copia de este correo'}
+                            className={`inline-block w-2 h-2 rounded-full ${copia ? 'bg-emerald-500' : 'bg-gray-300'}`}
+                          />
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${c.audiencia === 'Tutor' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{c.audiencia}</span>
+                        </span>
                       </div>
                       <p className="text-[11px] text-gray-500 mt-0.5">{c.cuando}</p>
                     </button>
@@ -178,14 +295,31 @@ export default function CorreosConfig() {
               <p className="text-sm font-semibold text-gray-900 truncate">{seleccionado?.titulo ?? 'Selecciona un correo'}</p>
               {subject && <p className="text-xs text-gray-500 truncate">Asunto: {subject}</p>}
             </div>
-            <button
-              onClick={enviarPrueba}
-              disabled={enviando || !sel || !seguimiento}
-              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm shrink-0"
-              title={!seguimiento ? 'Configura el correo de seguimiento primero' : `Enviar prueba a ${seguimiento}`}
-            >
-              {enviando ? '⌛ Enviando…' : '📧 Enviar prueba'}
-            </button>
+            <div className="flex items-center gap-3 shrink-0">
+              {sel && (
+                <label
+                  className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer select-none"
+                  title="Recibir una copia (BCC) de este correo en la casilla de seguimiento"
+                >
+                  <input
+                    type="checkbox"
+                    checked={copiaSel}
+                    onChange={() => toggleSeguimiento(sel)}
+                    disabled={savingSeg}
+                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  Recibir copia
+                </label>
+              )}
+              <button
+                onClick={enviarPrueba}
+                disabled={enviando || !sel || !seguimiento}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm"
+                title={!seguimiento ? 'Configura el correo de seguimiento primero' : `Enviar prueba a ${seguimiento}`}
+              >
+                {enviando ? '⌛ Enviando…' : '📧 Enviar prueba'}
+              </button>
+            </div>
           </div>
 
           {feedback && (
@@ -215,6 +349,127 @@ export default function CorreosConfig() {
           </div>
         </div>
       </div>
+
+      {/* ── Registro / respaldo de correos enviados ── */}
+      <div className="mt-8">
+        <div className="mb-3">
+          <h3 className="text-base font-bold text-gray-900">Registro de correos enviados</h3>
+          <p className="text-sm text-gray-600 mt-0.5">
+            Respaldo de todos los correos transaccionales enviados (no incluye campañas de mailing). Filtra por fecha o busca por destinatario, código, nombre o asunto.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-2 mb-3">
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 mb-1">Desde</label>
+            <input type="date" value={logDesde} onChange={e => setLogDesde(e.target.value)}
+              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 mb-1">Hasta</label>
+            <input type="date" value={logHasta} onChange={e => setLogHasta(e.target.value)}
+              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+          </div>
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-[11px] font-semibold text-gray-500 mb-1">Buscar</label>
+            <input
+              type="text" value={logQ} onChange={e => setLogQ(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') buscarLog() }}
+              placeholder="destinatario, código, nombre, asunto…"
+              className="w-full border-2 border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+            />
+          </div>
+          <button onClick={buscarLog} disabled={logLoading}
+            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm">
+            {logLoading ? '⌛' : '🔍'} Buscar
+          </button>
+          {(logDesde || logHasta || logQ) && (
+            <button
+              onClick={() => { setLogDesde(''); setLogHasta(''); setLogQ(''); cargarLog({ page: 1, desde: '', hasta: '', q: '' }) }}
+              className="border-2 border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-semibold">
+              Limpiar
+            </button>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                  <th className="px-3 py-2 font-semibold">Fecha</th>
+                  <th className="px-3 py-2 font-semibold">Correo</th>
+                  <th className="px-3 py-2 font-semibold">Destinatario</th>
+                  <th className="px-3 py-2 font-semibold">Asunto</th>
+                  <th className="px-3 py-2 font-semibold">Estado</th>
+                  <th className="px-3 py-2 font-semibold text-right">Ver</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {logLoading ? (
+                  <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">Cargando…</td></tr>
+                ) : logItems.length === 0 ? (
+                  <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">No hay correos para mostrar.</td></tr>
+                ) : logItems.map(row => (
+                  <tr key={row.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-700">{fmtCL(row.fecha_envio)}</td>
+                    <td className="px-3 py-2">
+                      <span className="text-gray-800">{tituloPorKey.get(row.tipo) || row.tipo}</span>
+                      {row.nombre && <span className="block text-[11px] text-gray-400">{row.nombre}{row.codigo ? ` · ${row.codigo}` : ''}</span>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">{row.destinatario}</td>
+                    <td className="px-3 py-2 text-gray-600 max-w-[260px] truncate" title={row.asunto}>{row.asunto}</td>
+                    <td className="px-3 py-2">
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${estadoBadge(row.estado)}`}>{row.estado || 'enviado'}</span>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button onClick={() => ver(row)} className="text-indigo-600 hover:text-indigo-800 font-semibold text-xs">Ver</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-gray-200 bg-gray-50 text-xs text-gray-600">
+            <span>{logTotal} correo{logTotal === 1 ? '' : 's'} en total</span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => irPagina(logPage - 1)} disabled={logLoading || logPage <= 1}
+                className="border border-gray-300 rounded px-2 py-1 disabled:opacity-40 hover:bg-white">‹</button>
+              <span>Página {logPage} de {totalPaginas}</span>
+              <button onClick={() => irPagina(logPage + 1)} disabled={logLoading || logPage >= totalPaginas}
+                className="border border-gray-300 rounded px-2 py-1 disabled:opacity-40 hover:bg-white">›</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Visor de un correo del registro */}
+      {verMeta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setVerMeta(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-gray-200 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">{verMeta.asunto || '(sin asunto)'}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  {tituloPorKey.get(verMeta.tipo) || verMeta.tipo} · {verMeta.destinatario} · {fmtCL(verMeta.fecha_envio)}
+                </p>
+                {verMeta.motivo && <p className="text-[11px] text-red-600 mt-0.5">Error: {verMeta.motivo}</p>}
+              </div>
+              <button onClick={() => setVerMeta(null)} className="text-gray-400 hover:text-gray-700 text-xl leading-none shrink-0">✕</button>
+            </div>
+            <div className="flex-1 p-3 overflow-auto bg-gray-50">
+              {verLoading ? (
+                <div className="h-[420px] flex items-center justify-center text-gray-400 text-sm">Cargando…</div>
+              ) : verHtml ? (
+                <iframe title="correo-enviado" srcDoc={verHtml} className="w-full h-[60vh] min-h-[420px] rounded-lg border border-gray-200 bg-white" />
+              ) : (
+                <div className="h-[420px] flex items-center justify-center text-gray-400 text-sm">Este correo no guardó cuerpo (o no se pudo cargar).</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -106,6 +106,7 @@ export async function POST(
       attachments,
       // Copiamos el certificado (con el PDF + el video cuando se adjunta) a la
       // casilla de seguimiento, igual que el resto de los correos al tutor.
+      seguimiento: { tipo: 'cliente_certificado', audiencia: 'Tutor', nombre: cliente.nombre_mascota, codigo: cliente.codigo, clienteId: cliente.id },
     })
 
     if (!res.ok) {

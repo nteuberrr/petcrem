@@ -128,6 +128,9 @@ export const SHEETS: Record<string, string[]> = {
     'telefono', 'correo',
     'web', 'instagram', 'facebook',
     'google_review_url', 'email_seguimiento', 'email_seguimiento_activo',
+    // seguimiento_tipos: JSON {key_correo: bool} para activar/desactivar la copia
+    // de seguimiento POR TIPO de correo (vacío = todos los tipos copian).
+    'seguimiento_tipos',
     'fecha_actualizacion',
   ],
   mailing_veterinarios: [
@@ -168,6 +171,15 @@ export const SHEETS: Record<string, string[]> = {
   correos_cliente: [
     'id', 'cliente_id', 'tipo', 'email', 'message_id',
     'estado', 'motivo', 'fecha_envio', 'fecha_actualizacion',
+  ],
+  // Registro/respaldo de TODOS los correos transaccionales enviados (cliente +
+  // vet + eutanasia; NO las campañas de mailing). Guarda el cuerpo HTML (sin
+  // adjuntos) para poder reabrir el correo. Lo escribe sendEmail/sendBatch cuando
+  // recibe el campo `seguimiento`. Visor en Configuración → Correos.
+  correos_log: [
+    'id', 'fecha_envio', 'tipo', 'audiencia', 'destinatario', 'asunto',
+    'cliente_id', 'codigo', 'nombre', 'message_id', 'estado', 'motivo',
+    'html', 'fecha_creacion',
   ],
   // Banco de imágenes para campañas (generadas con Nano Banana Pro o subidas a
   // mano). Viven en R2 (url/key) y se RECICLAN entre correos: el generador IA

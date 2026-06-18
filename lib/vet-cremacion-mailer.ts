@@ -119,6 +119,7 @@ export function buildBienvenidaConvenioVet(args: BienvenidaConvenioArgs, contact
     html: renderEmailLayout({ titulo: 'Bienvenidos al convenio', bodyHtml: cuerpo, contacto, contexto: 'Convenio veterinarios' }),
     preview_text: 'Ingresamos su veterinaria al convenio. Confirme o corrija sus datos respondiendo este correo.',
     tags: [{ name: 'tipo', value: 'vet_convenio_bienvenida' }],
+    seguimiento: { tipo: 'vet_convenio_bienvenida', audiencia: 'Veterinario', nombre: args.vetNombre },
   }
 }
 
@@ -159,6 +160,7 @@ export function buildRetiroConfirmadoVet(args: VetCorreoArgs, contacto: Contacto
     html: renderEmailLayout({ titulo: 'Retiro agendado', bodyHtml: cuerpo, contacto, contexto: 'Convenio veterinarios' }),
     preview_text: `Agendamos el retiro de ${args.nombreMascota}.`,
     tags: [{ name: 'tipo', value: 'vet_cremacion_retiro' }],
+    seguimiento: { tipo: 'vet_cremacion_retiro', audiencia: 'Veterinario', nombre: args.nombreMascota },
   }
 }
 
@@ -186,6 +188,7 @@ export function buildCodigoVet(args: VetCorreoArgs, contacto: Contacto): SendOpt
     html: renderEmailLayout({ titulo: 'Ingresamos a la mascota al proceso', bodyHtml: cuerpo, contacto, contexto: 'Convenio veterinarios' }),
     preview_text: `Código de seguimiento de ${args.nombreMascota}.`,
     tags: [{ name: 'tipo', value: 'vet_cremacion_codigo' }],
+    seguimiento: { tipo: 'vet_cremacion_codigo', audiencia: 'Veterinario', nombre: args.nombreMascota, codigo: args.codigo },
   }
 }
 
@@ -213,6 +216,7 @@ export function buildInicioRutaVet(args: VetCorreoArgs, contacto: Contacto): Sen
     html: renderEmailLayout({ titulo: 'El ánfora va en camino', bodyHtml: cuerpo, contacto, contexto: 'Convenio veterinarios' }),
     preview_text: `El ánfora de ${args.nombreMascota} salió en ruta.`,
     tags: [{ name: 'tipo', value: 'vet_cremacion_ruta' }],
+    seguimiento: { tipo: 'vet_cremacion_ruta', audiencia: 'Veterinario', nombre: args.nombreMascota, codigo: args.codigo },
   }
 }
 
@@ -240,6 +244,7 @@ export function buildEntregaVet(args: VetCorreoArgs, contacto: Contacto): SendOp
     html: renderEmailLayout({ titulo: 'Entrega confirmada', bodyHtml: cuerpo, contacto, contexto: 'Convenio veterinarios' }),
     preview_text: `El ánfora de ${args.nombreMascota} fue entregada.`,
     tags: [{ name: 'tipo', value: 'vet_cremacion_entrega' }],
+    seguimiento: { tipo: 'vet_cremacion_entrega', audiencia: 'Veterinario', nombre: args.nombreMascota, codigo: args.codigo },
   }
 }
 

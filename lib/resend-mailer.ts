@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import { getSheetData } from './datastore'
+import { registrarCorreoLog } from './correos-audit'
 
 let cached: Resend | null = null
 
@@ -45,6 +46,15 @@ export interface AttachmentSpec {
   content_disposition?: 'attachment' | 'inline'
 }
 
+export interface SeguimientoMeta {
+  /** Key del catálogo (lib/correos-catalogo), p.ej. 'cliente_registro'. */
+  tipo: string
+  audiencia?: 'Tutor' | 'Veterinario'
+  codigo?: string
+  nombre?: string
+  clienteId?: string
+}
+
 export interface SendOpts {
   to: string
   subject: string
@@ -75,6 +85,13 @@ export interface SendOpts {
    * seguimiento los cubra igual que a los de sendEmail. Se respeta `noBcc`.
    */
   bccSeguimiento?: boolean
+  /**
+   * Metadatos de un correo TRANSACCIONAL (no mailing). Si se pasa:
+   *  - el BCC de seguimiento se decide POR TIPO (config en empresa_config), y
+   *  - el correo se registra en correos_log (respaldo, con su HTML, sin adjuntos).
+   * Las campañas de mailing NO lo pasan → quedan fuera del registro.
+   */
+  seguimiento?: SeguimientoMeta
 }
 
 /**
@@ -178,27 +195,82 @@ function buildAttachmentsPayload(attachments: AttachmentSpec[] | undefined) {
  * SOLO a los items con `bccSeguimiento: true` (opt-in) — así cubre los correos
  * de etapa al tutor sin inundar la casilla con las campañas masivas.
  */
-let segCache: { ts: number; bcc: string | null } | null = null
-async function getSeguimientoBcc(): Promise<string | null> {
+interface SeguimientoConfig { activo: boolean; email: string | null; tipos: Record<string, boolean> }
+let segCache: { ts: number; cfg: SeguimientoConfig } | null = null
+async function getSeguimientoConfig(): Promise<SeguimientoConfig> {
+  if (segCache && Date.now() - segCache.ts < 60000) return segCache.cfg
   try {
-    if (segCache && Date.now() - segCache.ts < 60000) return segCache.bcc
     const rows = await getSheetData('empresa_config')
     const row = rows.find(r => r.id === '1') || rows[0]
     const activo = String(row?.email_seguimiento_activo || '').toUpperCase() === 'TRUE'
-    const bcc = activo ? sanitizarEmail(row?.email_seguimiento) : null
-    segCache = { ts: Date.now(), bcc }
-    return bcc
+    const email = activo ? sanitizarEmail(row?.email_seguimiento) : null
+    let tipos: Record<string, boolean> = {}
+    try {
+      const parsed = JSON.parse(row?.seguimiento_tipos || '{}')
+      if (parsed && typeof parsed === 'object') tipos = parsed as Record<string, boolean>
+    } catch { /* JSON inválido → se asume todos los tipos ON */ }
+    const cfg: SeguimientoConfig = { activo, email, tipos }
+    segCache = { ts: Date.now(), cfg }
+    return cfg
   } catch (e) {
     console.warn('[resend-mailer] no se pudo leer seguimiento de correos:', e)
-    return null
+    return { activo: false, email: null, tipos: {} }
+  }
+}
+
+/**
+ * BCC de seguimiento para un correo. null si el master está apagado, si no hay
+ * dirección, o si el TIPO está desactivado explícitamente en la config por-tipo.
+ */
+async function getSeguimientoBcc(tipo?: string): Promise<string | null> {
+  const c = await getSeguimientoConfig()
+  if (!c.activo || !c.email) return null
+  if (tipo && c.tipos[tipo] === false) return null
+  return c.email
+}
+
+/** Registra el envío en correos_log si el correo trae metadatos de seguimiento. */
+async function logSeguimiento(
+  opts: SendOpts,
+  html: string,
+  res: { ok: boolean; messageId?: string; error?: string },
+): Promise<void> {
+  const s = opts.seguimiento
+  if (!s) return
+  await registrarCorreoLog({
+    tipo: s.tipo,
+    audiencia: s.audiencia,
+    destinatario: opts.to,
+    asunto: opts.subject,
+    codigo: s.codigo,
+    nombre: s.nombre,
+    clienteId: s.clienteId,
+    messageId: res.messageId,
+    ok: res.ok,
+    error: res.error,
+    html,
+  })
+}
+
+/** Registra en correos_log cada item del batch que traiga seguimiento. */
+async function logBatchSeguimiento(
+  items: { idx: number; opts: SendOpts }[],
+  htmls: string[],
+  results: SendResult[],
+): Promise<void> {
+  for (let i = 0; i < items.length; i++) {
+    const o = items[i].opts
+    if (!o.seguimiento) continue
+    const r = results[items[i].idx]
+    await logSeguimiento(o, htmls[i] ?? o.html, { ok: r.ok, messageId: r.message_id, error: r.error })
   }
 }
 
 export async function sendEmail(opts: SendOpts): Promise<SendResult> {
+  const html = prepararHtml(opts)
   try {
     const client = getClient()
-    const html = prepararHtml(opts)
-    const bcc = opts.noBcc ? null : await getSeguimientoBcc()
+    const bcc = opts.noBcc ? null : await getSeguimientoBcc(opts.seguimiento?.tipo)
     const res = await client.emails.send({
       from: opts.from || getFromAddress(),
       to: opts.to,
@@ -210,11 +282,16 @@ export async function sendEmail(opts: SendOpts): Promise<SendResult> {
       attachments: buildAttachmentsPayload(opts.attachments),
     })
     if (res.error) {
-      return { ok: false, error: res.error.message || JSON.stringify(res.error) }
+      const error = res.error.message || JSON.stringify(res.error)
+      await logSeguimiento(opts, html, { ok: false, error })
+      return { ok: false, error }
     }
+    await logSeguimiento(opts, html, { ok: true, messageId: res.data?.id })
     return { ok: true, message_id: res.data?.id }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    const error = e instanceof Error ? e.message : String(e)
+    await logSeguimiento(opts, html, { ok: false, error })
+    return { ok: false, error }
   }
 }
 
@@ -278,19 +355,28 @@ export async function sendBatch(emails: SendOpts[]): Promise<SendResult[]> {
   })
   if (validos.length === 0) return results
 
+  // HTML preparado por item (fuera del try → disponible para el logging en todos
+  // los caminos de retorno, incluido el catch).
+  const htmls = validos.map(v => prepararHtml(v.opts))
+
   try {
     const client = getClient()
-    // BCC de seguimiento: solo si algún item lo pide explícitamente (opt-in).
-    // Se lee una vez (está cacheado) y se aplica por item respetando noBcc.
-    const segBcc = validos.some(v => v.opts.bccSeguimiento && !v.opts.noBcc)
-      ? await getSeguimientoBcc()
+    // BCC de seguimiento: solo si algún item lo pide explícitamente (opt-in) y el
+    // tipo no está desactivado en la config por-tipo. Se lee una vez (cacheado).
+    const segCfg = validos.some(v => v.opts.bccSeguimiento && !v.opts.noBcc)
+      ? await getSeguimientoConfig()
       : null
-    const payload = validos.map(v => ({
+    const bccDe = (o: SendOpts): string | undefined => {
+      if (!o.bccSeguimiento || o.noBcc || !segCfg?.activo || !segCfg.email) return undefined
+      if (o.seguimiento?.tipo && segCfg.tipos[o.seguimiento.tipo] === false) return undefined
+      return segCfg.email
+    }
+    const payload = validos.map((v, i) => ({
       from: v.opts.from || getFromAddress(),
       to: v.toLimpio,
-      bcc: (v.opts.bccSeguimiento && !v.opts.noBcc && segBcc) ? segBcc : undefined,
+      bcc: bccDe(v.opts),
       subject: v.opts.subject,
-      html: prepararHtml(v.opts),
+      html: htmls[i],
       replyTo: v.opts.reply_to,
       tags: v.opts.tags,
       attachments: buildAttachmentsPayload(v.opts.attachments),
@@ -351,16 +437,19 @@ export async function sendBatch(emails: SendOpts[]): Promise<SendResult[]> {
         // Throttle base entre cada send individual (~7/sec, debajo de 10/sec de Pro)
         await sleep(140)
       }
+      await logBatchSeguimiento(validos, htmls, results)
       return results
     }
     // Batch ok: distribuir message_ids
     res.data.data.forEach((d: { id?: string }, i: number) => {
       results[validos[i].idx] = { ok: true, message_id: d.id }
     })
+    await logBatchSeguimiento(validos, htmls, results)
     return results
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     validos.forEach(v => { results[v.idx] = { ok: false, error: msg } })
+    await logBatchSeguimiento(validos, htmls, results)
     return results
   }
 }

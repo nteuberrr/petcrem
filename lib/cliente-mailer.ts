@@ -103,6 +103,7 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
     html: renderEmailLayout({ titulo: '¡Gracias por confiar en nosotros!', bodyHtml: cuerpo, contacto }),
     preview_text: `Te dejamos el código asociado a ${args.nombreMascota}.`,
     tags: [{ name: 'tipo', value: 'cliente_registro' }],
+    seguimiento: { tipo: 'cliente_registro', audiencia: 'Tutor', nombre: args.nombreMascota, codigo: args.codigo, clienteId: args.clienteId },
   }
 }
 
@@ -142,6 +143,7 @@ export function buildCremacion(d: DestinatarioTutor, contacto: Contacto): SendOp
     preview_text: `El proceso de cremación de ${d.nombreMascota} ha comenzado.`,
     tags: [{ name: 'tipo', value: 'cliente_inicio_cremacion' }],
     bccSeguimiento: true, // va en lote; opt-in para que el seguimiento lo copie
+    seguimiento: { tipo: 'cliente_inicio_cremacion', audiencia: 'Tutor', nombre: d.nombreMascota, clienteId: d.clienteId },
   }
 }
 
@@ -181,6 +183,7 @@ export function buildDespacho(d: DestinatarioTutor, contacto: Contacto): SendOpt
     preview_text: `Dentro de las próximas horas recibirás el ánfora de ${d.nombreMascota}.`,
     tags: [{ name: 'tipo', value: 'cliente_inicio_despacho' }],
     bccSeguimiento: true, // va en lote; opt-in para que el seguimiento lo copie
+    seguimiento: { tipo: 'cliente_inicio_despacho', audiencia: 'Tutor', nombre: d.nombreMascota, clienteId: d.clienteId },
   }
 }
 
@@ -250,6 +253,7 @@ export function buildEntrega(args: EntregaArgs, contacto: Contacto): SendOpts {
     html: renderEmailLayout({ titulo: `Entrega confirmada de ${args.codigo ? `${args.nombreMascota} (${args.codigo})` : args.nombreMascota}`, bodyHtml: cuerpo, contacto }),
     preview_text: `El ánfora de ${args.nombreMascota} fue entregada. ¡Gracias!`,
     tags: [{ name: 'tipo', value: 'cliente_entrega' }],
+    seguimiento: { tipo: 'cliente_entrega', audiencia: 'Tutor', nombre: args.nombreMascota, codigo: args.codigo, clienteId: args.clienteId },
   }
 }
 
@@ -295,6 +299,7 @@ export function buildCertificado(args: CertificadoEmailArgs, contacto: Contacto)
     html: renderEmailLayout({ titulo: `Certificado de cremación de ${args.nombreMascota}`, bodyHtml: cuerpo, contacto }),
     preview_text: `Adjuntamos el certificado de cremación de ${args.nombreMascota}.`,
     tags: [{ name: 'tipo', value: 'cliente_certificado' }],
+    seguimiento: { tipo: 'cliente_certificado', audiencia: 'Tutor', nombre: args.nombreMascota },
   }
 }
 

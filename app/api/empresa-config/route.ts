@@ -5,7 +5,7 @@ import { getSheetData, appendRow, updateRow, ensureSheet, ensureColumns, isSheet
 import { todayISO } from '@/lib/dates'
 
 const SHEET = 'empresa_config'
-const COLS = ['id', 'nombre', 'rut', 'giro', 'direccion', 'comuna', 'telefono', 'correo', 'web', 'instagram', 'facebook', 'google_review_url', 'email_seguimiento', 'email_seguimiento_activo', 'fecha_actualizacion']
+const COLS = ['id', 'nombre', 'rut', 'giro', 'direccion', 'comuna', 'telefono', 'correo', 'web', 'instagram', 'facebook', 'google_review_url', 'email_seguimiento', 'email_seguimiento_activo', 'seguimiento_tipos', 'fecha_actualizacion']
 
 type EmpresaConfig = {
   id?: string
@@ -24,6 +24,8 @@ type EmpresaConfig = {
   /** Correo al que se reenvía copia (BCC) de cada email transaccional, si email_seguimiento_activo='TRUE'. */
   email_seguimiento?: string
   email_seguimiento_activo?: string
+  /** JSON {key_correo: bool}: activa/desactiva la copia de seguimiento POR TIPO (vacío = todos ON). */
+  seguimiento_tipos?: string
   fecha_actualizacion?: string
 }
 
@@ -34,6 +36,7 @@ const EMPTY: EmpresaConfig = {
   web: '', instagram: '', facebook: '',
   google_review_url: '',
   email_seguimiento: '', email_seguimiento_activo: 'FALSE',
+  seguimiento_tipos: '',
   fecha_actualizacion: '',
 }
 
