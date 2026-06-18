@@ -80,6 +80,15 @@ export async function proxy(req: NextRequest) {
   // Admin 2: igual que admin, pero NO puede tocar el backend de "Configuración Avanzada"
   // (Datos personales, Agentes, Mantenimiento). El resto, acceso total.
   if (role === 'admin2') {
+    // Campañas (mailing) es solo del administrador principal. Las rutas públicas
+    // de mailing (webhooks/resend, pixel, click) ya pasaron en el passthrough de
+    // arriba, así que acá solo caen la página y las APIs internas de Campañas.
+    if (pathname === '/mailing' || pathname.startsWith('/mailing/') || pathname.startsWith('/api/mailing')) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'No autorizado: Campañas es solo del administrador principal.' }, { status: 403 })
+      }
+      return NextResponse.redirect(new URL('/dashboard', req.url))
+    }
     if (pathname.startsWith('/api/') && esApiAvanzada(pathname)) {
       return NextResponse.json({ error: 'No autorizado: Configuración Avanzada es solo del administrador.' }, { status: 403 })
     }

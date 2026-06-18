@@ -116,6 +116,9 @@ type ImagenBanco = {
 
 const TABS = ['Campañas', 'Base', 'Nueva campaña', 'Imágenes'] as const
 type Tab = typeof TABS[number]
+const TAB_ICONS: Record<Tab, string> = {
+  'Campañas': '📊', 'Base': '👥', 'Nueva campaña': '✏️', 'Imágenes': '🖼️',
+}
 
 /**
  * Reescribe las imágenes de R2 del HTML para que el PREVIEW las cargue por el
@@ -132,7 +135,90 @@ function proxyImgs(html: string): string {
 
 const CATEGORIAS = ['prospecto', 'cliente', 'inactivo'] as const
 
-export default function MailingPage() {
+// ===================== SELECTOR DE REDES =====================
+// La sección "Campañas" arranca pidiendo qué red revisar. Hoy solo "Mail" está
+// desarrollada (todo el módulo histórico); Instagram / Facebook / TikTok quedan
+// como botones "Próximamente" para construir más adelante (en ese orden).
+
+type Red = 'mail' | 'instagram' | 'facebook' | 'tiktok'
+
+const REDES: { key: Red; label: string; icon: string; desc: string; activa: boolean; cardClass: string; iconClass: string }[] = [
+  {
+    key: 'mail', label: 'Mail', icon: '✉️', desc: 'Campañas de correo a la base de veterinarios.', activa: true,
+    cardClass: 'border-indigo-200 hover:border-indigo-400 hover:shadow-md', iconClass: 'bg-indigo-100',
+  },
+  {
+    key: 'instagram', label: 'Instagram', icon: '📸', desc: 'Publicaciones e historias.', activa: false,
+    cardClass: 'border-pink-200 hover:border-pink-400 hover:shadow-md', iconClass: 'bg-gradient-to-br from-amber-200 via-pink-200 to-fuchsia-300',
+  },
+  {
+    key: 'facebook', label: 'Facebook', icon: '👍', desc: 'Publicaciones y anuncios.', activa: false,
+    cardClass: 'border-blue-200 hover:border-blue-400 hover:shadow-md', iconClass: 'bg-blue-100',
+  },
+  {
+    key: 'tiktok', label: 'TikTok', icon: '🎵', desc: 'Videos cortos.', activa: false,
+    cardClass: 'border-gray-300 hover:border-gray-500 hover:shadow-md', iconClass: 'bg-gray-900 text-white',
+  },
+]
+
+export default function CampanasPage() {
+  const [red, setRed] = useState<Red | null>(null)
+  if (red === 'mail') return <MailContent onBack={() => setRed(null)} />
+  if (red) {
+    const r = REDES.find(x => x.key === red)!
+    return <ProximamentePlaceholder red={r} onBack={() => setRed(null)} />
+  }
+  return <SelectorRedes onSelect={setRed} />
+}
+
+function SelectorRedes({ onSelect }: { onSelect: (r: Red) => void }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Campañas</h1>
+        <p className="text-sm text-gray-500">Elige la red para ver y gestionar sus campañas.</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {REDES.map(r => (
+          <button
+            key={r.key}
+            onClick={() => onSelect(r.key)}
+            className={`text-left bg-white rounded-2xl border-2 p-5 transition-all ${r.cardClass}`}
+          >
+            <div className={`w-12 h-12 rounded-xl grid place-items-center text-2xl ${r.iconClass}`}>{r.icon}</div>
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-bold text-gray-900">{r.label}</h2>
+              {r.activa
+                ? <span className="text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">Activo</span>
+                : <span className="text-[10px] font-bold uppercase tracking-wide bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">Próximamente</span>}
+            </div>
+            <p className="text-sm text-gray-500 mt-1">{r.desc}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ProximamentePlaceholder({ red, onBack }: { red: { label: string; icon: string; iconClass: string }; onBack: () => void }) {
+  return (
+    <div className="space-y-4">
+      <button onClick={onBack} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold">← Campañas</button>
+      <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-10 text-center">
+        <div className={`w-16 h-16 rounded-2xl grid place-items-center text-3xl mx-auto ${red.iconClass}`}>{red.icon}</div>
+        <h1 className="text-2xl font-bold text-gray-900 mt-4">{red.label}</h1>
+        <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
+          Las campañas de {red.label} todavía están en construcción. Pronto vas a poder crearlas y revisarlas desde acá.
+        </p>
+        <span className="inline-block mt-4 text-xs font-bold uppercase tracking-wide bg-gray-100 text-gray-500 px-3 py-1 rounded-full">Próximamente</span>
+      </div>
+    </div>
+  )
+}
+
+// ===================== MAIL (módulo histórico completo) =====================
+
+function MailContent({ onBack }: { onBack: () => void }) {
   const [tab, setTab] = useState<Tab>('Campañas')
   const [prefilled, setPrefilled] = useState<Prefilled>(null)
   const [campanasRefreshKey, setCampanasRefreshKey] = useState(0)
@@ -158,23 +244,28 @@ export default function MailingPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Mailing</h1>
-        <p className="text-sm text-gray-500">Campañas de email a la base de veterinarios.</p>
+        <button onClick={onBack} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold mb-1">← Campañas</button>
+        <div className="flex items-center gap-2">
+          <span className="w-9 h-9 rounded-lg bg-indigo-100 grid place-items-center text-xl">✉️</span>
+          <h1 className="text-2xl font-bold text-gray-900">Mail</h1>
+        </div>
+        <p className="text-sm text-gray-500 mt-0.5">Campañas de email a la base de veterinarios.</p>
       </div>
 
       {diag && <DiagBanner d={diag} />}
 
-      <div className="inline-flex gap-1 bg-gray-100 border border-gray-200 rounded-xl p-1.5 shadow-sm overflow-x-auto">
+      <div className="inline-flex gap-1 bg-gray-100 border border-gray-200 rounded-2xl p-1.5 shadow-sm overflow-x-auto">
         {TABS.map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-5 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${
+            className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
               tab === t
                 ? 'bg-indigo-600 text-white shadow-md ring-1 ring-indigo-700/10'
                 : 'text-gray-600 hover:bg-white hover:text-gray-900'
             }`}
           >
+            <span aria-hidden>{TAB_ICONS[t]}</span>
             {t}
           </button>
         ))}
@@ -407,11 +498,11 @@ function BasePanel() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <StatBox label="Total" value={stats.total} />
-        <StatBox label="Suscritos" value={stats.suscritos} accent="green" />
-        <StatBox label="Prospectos" value={stats.prospectos} accent="indigo" />
-        <StatBox label="Clientes" value={stats.clientes} accent="emerald" />
-        <StatBox label="Inactivos" value={stats.inactivos} accent="gray" />
+        <StatBox label="Total" value={stats.total} icon="📋" />
+        <StatBox label="Suscritos" value={stats.suscritos} accent="green" icon="✅" />
+        <StatBox label="Prospectos" value={stats.prospectos} accent="indigo" icon="🎯" />
+        <StatBox label="Clientes" value={stats.clientes} accent="emerald" icon="💚" />
+        <StatBox label="Inactivos" value={stats.inactivos} accent="gray" icon="💤" />
       </div>
 
       {vets.length > 0 && (
@@ -422,7 +513,7 @@ function BasePanel() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-100">
           <input
             type="text"
@@ -624,16 +715,23 @@ function BasePanel() {
   )
 }
 
-function StatBox({ label, value, accent }: { label: string; value: number; accent?: 'green' | 'indigo' | 'emerald' | 'gray' }) {
+function StatBox({ label, value, accent, icon }: { label: string; value: number; accent?: 'green' | 'indigo' | 'emerald' | 'gray'; icon?: string }) {
   const color = accent === 'green' ? 'text-green-700' :
                 accent === 'indigo' ? 'text-indigo-700' :
                 accent === 'emerald' ? 'text-emerald-700' :
                 accent === 'gray' ? 'text-gray-600' :
                 'text-gray-900'
+  const tint = accent === 'green' ? 'bg-green-100' :
+               accent === 'indigo' ? 'bg-indigo-100' :
+               accent === 'emerald' ? 'bg-emerald-100' :
+               'bg-gray-100'
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 px-4 py-3">
-      <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">{label}</div>
-      <div className={`text-2xl font-bold ${color}`}>{value}</div>
+    <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 px-4 py-3 flex items-center gap-3">
+      {icon && <div className={`w-10 h-10 rounded-xl grid place-items-center text-xl shrink-0 ${tint}`}>{icon}</div>}
+      <div className="min-w-0">
+        <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">{label}</div>
+        <div className={`text-2xl font-bold ${color}`}>{value}</div>
+      </div>
     </div>
   )
 }
@@ -663,7 +761,7 @@ function DistribucionPanel({ title, data, total, colorMap, maxRows }: {
   const otrosCount = restantes.reduce((sum, [, n]) => sum + n, 0)
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+    <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-4">
       <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">{title}</h3>
       {data.length === 0 ? (
         <p className="text-xs text-gray-400">Sin datos</p>
@@ -852,7 +950,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-sm text-gray-400">Cargando…</div>
         ) : campanasEnviadas.length === 0 ? (
@@ -1600,7 +1698,7 @@ function NuevaCampanaPanel({ initial, onCreada }: {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-9 gap-4">
-      <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
+      <div className="lg:col-span-5 bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-base font-bold text-gray-900">{draftId ? `Editando borrador N° ${draftId}` : 'Nueva campaña'}</h2>
           <div className="flex items-center gap-2">
@@ -1678,7 +1776,7 @@ function NuevaCampanaPanel({ initial, onCreada }: {
         </div>
       </div>
 
-      <div className="lg:col-span-4 bg-white rounded-xl shadow-sm border border-gray-200 p-3 flex flex-col">
+      <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-3 flex flex-col">
         <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center justify-between">
           <span>Preview (con vet de muestra)</span>
           <span className="text-[10px] font-normal text-gray-400">así lo va a ver el destinatario</span>
@@ -1711,7 +1809,7 @@ function NuevaCampanaPanel({ initial, onCreada }: {
       </div>
 
       {borradores.length > 0 && (
-        <div className="lg:col-span-9 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="lg:col-span-9 bg-white rounded-2xl shadow-sm border-2 border-gray-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-900">Borradores guardados ({borradores.length})</h3>
             <span className="text-xs text-gray-500">Click en una fila para cargar y editar</span>
@@ -2282,7 +2380,7 @@ function ImagenesPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
+      <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-5 space-y-4">
         <div>
           <h2 className="text-base font-bold text-gray-900">Banco de imágenes</h2>
           <p className="text-sm text-gray-500">Imágenes fotorrealistas reutilizables. El generador de campañas las recicla automáticamente cuando calzan con el contexto. Asigna un grupo a cada una para organizarlas.</p>
@@ -2334,9 +2432,9 @@ function ImagenesPanel() {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-sm text-gray-400">Cargando…</div>
+        <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-8 text-center text-sm text-gray-400">Cargando…</div>
       ) : imgs.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-sm text-gray-400">Sin imágenes todavía. Genera la primera arriba o sube una propia.</div>
+        <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-8 text-center text-sm text-gray-400">Sin imágenes todavía. Genera la primera arriba o sube una propia.</div>
       ) : (
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
@@ -2344,7 +2442,7 @@ function ImagenesPanel() {
             <button type="button" onClick={cargar} className="text-xs text-indigo-600 hover:underline">Actualizar</button>
           </div>
           {grupos.map(g => (
-            <details key={g.key} open className="bg-white rounded-xl shadow-sm border border-gray-200 group">
+            <details key={g.key} open className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 group">
               <summary className="cursor-pointer select-none px-4 py-3 flex items-center gap-2 list-none [&::-webkit-details-marker]:hidden">
                 <span className="text-gray-400 text-xs transition-transform group-open:rotate-90">▶</span>
                 <span className="text-sm font-semibold text-gray-900">{g.label}</span>

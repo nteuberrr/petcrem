@@ -3,9 +3,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import { useState, useEffect } from 'react'
-import { esAdmin } from '@/lib/roles'
+import { esAdmin, esAdminTotal } from '@/lib/roles'
 
-const nav = [
+const nav: { href: string; label: string; icon: string; adminOnly?: boolean; adminTotalOnly?: boolean }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: false },
   { href: '/clientes', label: 'Clientes', icon: '🐾', adminOnly: false },
   { href: '/mensajes', label: 'Mensajes', icon: '💬', adminOnly: true },
@@ -14,7 +14,7 @@ const nav = [
   { href: '/rendiciones', label: 'Rendiciones', icon: '🧾', adminOnly: true },
   { href: '/bases', label: 'Veterinarios', icon: '🏥', adminOnly: true },
   { href: '/servicios', label: 'Servicios', icon: '🤝', adminOnly: true },
-  { href: '/mailing', label: 'Mailing', icon: '✉️', adminOnly: true },
+  { href: '/mailing', label: 'Campañas', icon: '📣', adminTotalOnly: true },
   { href: '/configuracion', label: 'Configuración', icon: '⚙️', adminOnly: true },
   { href: '/reportes', label: 'Reportes', icon: '📈', adminOnly: true },
 ]
@@ -25,8 +25,9 @@ export default function Sidebar() {
   const userName = session?.user?.name ?? session?.user?.email ?? ''
   const role = session?.user?.role ?? 'operador'
   const isAdmin = esAdmin(role)
+  const isAdminTotal = esAdminTotal(role)
   const initials = userName.slice(0, 2).toUpperCase()
-  const items = nav.filter(n => !n.adminOnly || isAdmin)
+  const items = nav.filter(n => (!n.adminOnly || isAdmin) && (!n.adminTotalOnly || isAdminTotal))
   const [open, setOpen] = useState(false)
 
   // Cerrar el menú al navegar en móvil
