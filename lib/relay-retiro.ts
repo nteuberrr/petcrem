@@ -1,4 +1,4 @@
-import { getSheetData, appendRow, getNextId, updateById, ensureSheet, ensureColumns } from './datastore'
+import { getSheetData, appendRow, getNextId, updateByIdIf, ensureSheet, ensureColumns } from './datastore'
 import { todayISO } from './dates'
 
 /**
@@ -58,21 +58,29 @@ export async function buscarRelayPendientePorMsg(adminMsgId: string): Promise<Re
 }
 
 /**
- * El relay pendiente MÁS RECIENTE (mayor id). Permite que el admin responda sin
- * citar: su respuesta se asocia a la última consulta abierta. Si hay varias
- * abiertas a la vez, conviene que cite el aviso correspondiente.
+ * El ÚNICO relay pendiente, o null si hay 0 o MÁS DE UNO. Permite que el admin
+ * responda sin citar SOLO cuando es inequívoco (una sola consulta abierta). Si
+ * hay varias, debe citar el aviso correspondiente; si no cita, su mensaje no se
+ * reenvía a nadie. Antes esto tomaba "el más reciente", lo que podía secuestrar
+ * cualquier texto del admin y reenviarlo a un cliente equivocado.
  */
-export async function buscarRelayPendienteMasReciente(): Promise<RelayRetiroRow | null> {
+export async function buscarRelayPendienteUnico(): Promise<RelayRetiroRow | null> {
   const rows = await getSheetData(TABLE)
   const pend = rows.filter(r => r.estado === 'pendiente')
-  if (pend.length === 0) return null
-  pend.sort((a, b) => (parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0))
-  return pend[0] as unknown as RelayRetiroRow
+  return pend.length === 1 ? (pend[0] as unknown as RelayRetiroRow) : null
 }
 
-export async function marcarRelayRespondida(id: string): Promise<void> {
-  const rows = await getSheetData(TABLE)
-  const row = rows.find(r => String(r.id) === String(id))
-  if (!row) return
-  await updateById(TABLE, id, { ...row, estado: 'respondida', fecha_respuesta: new Date().toISOString() })
+/**
+ * Reclama un relay de forma ATÓMICA (pendiente → respondida). Devuelve true solo
+ * si esta llamada ganó el cambio; false si otra ejecución ya lo había respondido.
+ * Llamar ANTES de reenviar al cliente para no duplicar el envío ante una
+ * re-entrega del webhook o dos respuestas del admin casi simultáneas.
+ */
+export async function marcarRelayRespondida(id: string): Promise<boolean> {
+  return updateByIdIf(
+    TABLE,
+    id,
+    { estado: 'pendiente' },
+    { estado: 'respondida', fecha_respuesta: new Date().toISOString() },
+  )
 }

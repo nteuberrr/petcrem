@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow, updateByIdIf, ensureSheet, ensureColumns } from '@/lib/datastore'
+import { getSheetData, updateById, updateByIdIf, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { verifyToken, createToken, createVetToken } from '@/lib/eutanasia-tokens'
 import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
 import { nombreCompletoVet, renderCoordinarEmail, enviarClienteVetAsignado } from '@/lib/eutanasia-mailer'
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
       const envios = await getSheetData(SHEET_ENVIOS)
       const idxEnvio = envios.findIndex(e => e.cotizacion_id === cotizacion_id && e.vet_id === vet_id)
       if (idxEnvio !== -1) {
-        await updateRow(SHEET_ENVIOS, idxEnvio, {
+        await updateById(SHEET_ENVIOS, envios[idxEnvio].id, {
           ...envios[idxEnvio],
           estado_envio: 'aceptada',
           fecha_respuesta: ahora,

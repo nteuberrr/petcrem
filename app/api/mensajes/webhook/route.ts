@@ -8,11 +8,11 @@ import {
 } from '@/lib/mensajes'
 import { isAgenteConfigurado, generarRespuesta, redactarRelayCliente } from '@/lib/agente-mensajes'
 import { handlersAgente } from '@/lib/agente-acciones'
-import { getSheetData, updateRow } from '@/lib/datastore'
+import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { crearClienteBorrador } from '@/lib/cliente-borrador'
 import { createBorradorToken } from '@/lib/borrador-token'
 import { enviarRetiroConfirmadoVet } from '@/lib/vet-cremacion-mailer'
-import { buscarRelayPendientePorMsg, buscarRelayPendienteMasReciente, marcarRelayRespondida } from '@/lib/relay-retiro'
+import { buscarRelayPendientePorMsg, buscarRelayPendienteUnico, marcarRelayRespondida } from '@/lib/relay-retiro'
 import { formatDate } from '@/lib/dates'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 
@@ -158,14 +158,25 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
     return true
   }
   const sol = rows[idx]
-  if (sol.estado !== 'pendiente') {
-    await enviarTextoWhatsapp(adminWhatsapp(), `La solicitud N° ${solicitudId} ya estaba ${sol.estado}.`)
+  const confirmado = accion === 'ok'
+
+  // Cerrar la solicitud de forma ATÓMICA antes de cualquier efecto secundario:
+  // solo procede quien gana el cambio pendiente→(confirmada|rechazada). Meta
+  // reentrega el evento del botón (at-least-once) y el admin puede tocarlo dos
+  // veces; sin este compare-and-set se crearían DOS borradores y DOS avisos.
+  const gano = await updateByIdIf(
+    'solicitudes_retiro',
+    solicitudId,
+    { estado: 'pendiente' },
+    { estado: confirmado ? 'confirmada' : 'rechazada', fecha_resolucion: new Date().toISOString() },
+  )
+  if (!gano) {
+    await enviarTextoWhatsapp(adminWhatsapp(), `La solicitud N° ${solicitudId} ya estaba resuelta.`)
     return true
   }
 
   const waCliente = (sol.cliente_wa_id || '').replace(/\D/g, '')
   const base = (process.env.NEXTAUTH_URL || 'https://petcrem.vercel.app').replace(/\/$/, '')
-  const confirmado = accion === 'ok'
   const esVet = sol.origen === 'bot_vet' || !!sol.veterinaria_id
 
   // Mensaje que se le manda por WhatsApp a quien pidió el retiro (tutor o vet).
@@ -220,9 +231,11 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
       `Te enviamos el detalle a tu correo. ¡Gracias por confiar en nosotros! 🐾`
     acuseAdmin = `✅ Retiro N° ${solicitudId} (veterinario ${sol.vet_nombre || ''}) confirmado. Le avisamos por WhatsApp y le enviamos el correo de confirmación; queda como borrador "Por ingresar".`
   } else if (confirmado) {
-    // ── Retiro de TUTOR: crear borrador + link FIRMADO para que adelante datos.
+    // ── Retiro de TUTOR (cliente general): confirmación SOLO por WhatsApp, SIN
+    // correo. Creamos el borrador + un link FIRMADO para que adelante datos.
     // Completar el link NO genera código ni correo — eso lo hace el operador al
-    // "Registrar ficha".
+    // "Registrar ficha". (El correo de confirmación de retiro es exclusivo de los
+    // agendamientos de veterinarios.)
     let linkFicha = `${base}/registro-mascota`
     try {
       const borradorId = await crearClienteBorrador({
@@ -263,13 +276,6 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
     } catch (e) { console.warn('[webhook] no se pudo registrar aviso al cliente:', e) }
   }
 
-  // Cerrar la solicitud.
-  await updateRow('solicitudes_retiro', idx, {
-    ...sol,
-    estado: confirmado ? 'confirmada' : 'rechazada',
-    fecha_resolucion: new Date().toISOString(),
-  })
-
   await enviarTextoWhatsapp(adminWhatsapp(), acuseAdmin)
   return true
 }
@@ -284,12 +290,19 @@ async function procesarRelayAdmin(msg: MetaMsg): Promise<boolean> {
   if (msg.from.replace(/\D/g, '') !== adminWhatsapp()) return false
   const texto = msg.text?.body?.trim()
   if (!texto) return false
-  // Si citó el aviso, match exacto; si no, la consulta pendiente más reciente.
+  // Si citó el aviso, match exacto; si no, solo si hay UNA sola consulta pendiente
+  // (inequívoca). Con varias abiertas y sin cita, no reenviamos a nadie.
   let relay = msg.context?.id ? await buscarRelayPendientePorMsg(msg.context.id) : null
-  if (!relay) relay = await buscarRelayPendienteMasReciente()
-  if (!relay) return false // no hay consulta pendiente → no es un relay, sigue flujo normal
+  if (!relay) relay = await buscarRelayPendienteUnico()
+  if (!relay) return false // no hay consulta pendiente (o ambigua) → sigue flujo normal
 
   const cliente = (relay.cliente_wa_id || '').replace(/\D/g, '')
+
+  // Reclamar el relay de forma ATÓMICA antes de enviar: una re-entrega del webhook
+  // (o dos respuestas del admin casi simultáneas) no debe reenviar dos veces al
+  // cliente. Si ya lo tomó otra ejecución, consumimos el mensaje y salimos.
+  if (!(await marcarRelayRespondida(relay.id))) return true
+
   // El agente LEE tu respuesta y redacta el mensaje al cliente en la voz de marca.
   // Fallback (si la IA no está disponible o falla): reenvío simple de tu texto.
   let mensajeCliente = ''
@@ -314,7 +327,6 @@ async function procesarRelayAdmin(msg: MetaMsg): Promise<boolean> {
     })
   } catch (e) { console.warn('[webhook] no se pudo registrar el relay al cliente:', e) }
 
-  await marcarRelayRespondida(relay.id)
   await enviarTextoWhatsapp(
     adminWhatsapp(),
     env.ok

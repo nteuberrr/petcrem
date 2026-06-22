@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSheetData, appendRow, updateRow, getNextId, ensureColumns, deleteRow } from '@/lib/datastore'
+import { getSheetData, appendRow, updateById, getNextId, ensureColumns, deleteRow } from '@/lib/datastore'
 import { enviarInicioCremacion } from '@/lib/cliente-mailer'
 import { todayISO } from '@/lib/dates'
 import { parsePeso } from '@/lib/numbers'
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       data.mascotas_ids.map((mascotaId) => {
         const idx = idxById.get(mascotaId)
         if (idx === undefined) return Promise.resolve()
-        return updateRow('clientes', idx, {
+        return updateById('clientes', clientes[idx].id, {
           ...clientes[idx],
           estado: 'cremado',
           ciclo_id: id,
@@ -156,7 +156,7 @@ export async function PATCH(req: NextRequest) {
       updated.lt_mascota = mascotasIds.length > 0 ? litrosUsados / mascotasIds.length : 0
     }
 
-    await updateRow('ciclos', idx, updated)
+    await updateById('ciclos', id, updated)
     return NextResponse.json(updated)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })
@@ -189,7 +189,7 @@ export async function DELETE(req: NextRequest) {
           if (cIdx === undefined) return Promise.resolve()
           // Solo revertir si seguía en cremado vinculada a este ciclo
           if (clientes[cIdx].estado === 'cremado' && clientes[cIdx].ciclo_id === id) {
-            return updateRow('clientes', cIdx, { ...clientes[cIdx], estado: 'pendiente', ciclo_id: '' })
+            return updateById('clientes', clientes[cIdx].id, { ...clientes[cIdx], estado: 'pendiente', ciclo_id: '' })
           }
           return Promise.resolve()
         })

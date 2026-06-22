@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, updateById, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/datastore'
+import { getSheetData, appendRow, updateById, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 
 // Forzar evaluación dinámica: la planilla cambia fuera de Next, no queremos cache.
@@ -178,7 +178,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    await updateRow(HOJA, idx, updated)
+    await updateById(HOJA, id, updated)
     return NextResponse.json({ ok: true, id })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
@@ -206,7 +206,7 @@ export async function DELETE(req: NextRequest) {
           const cIdx = idxById.get(mid)
           if (cIdx === undefined) return Promise.resolve()
           if (clientes[cIdx].estado === 'despachado' && clientes[cIdx].despacho_id === id) {
-            return updateRow('clientes', cIdx, { ...clientes[cIdx], estado: 'cremado', despacho_id: '' })
+            return updateById('clientes', clientes[cIdx].id, { ...clientes[cIdx], estado: 'cremado', despacho_id: '' })
           }
           return Promise.resolve()
         })

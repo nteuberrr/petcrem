@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow } from '@/lib/datastore'
+import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { enviarInicioDespacho } from '@/lib/cliente-mailer'
 import { resolverVet, enviarInicioRutaVet } from '@/lib/vet-cremacion-mailer'
 
@@ -23,7 +23,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const now = new Date().toISOString()
-    await updateRow('despachos', idx, { ...row, estado_ruta: 'en_curso', hora_inicio_ruta: row.hora_inicio_ruta || now })
+    // Flip ATÓMICO: solo una ejecución gana el paso a "en_curso" desde el estado
+    // actual. Evita que un doble clic o dos requests concurrentes manden el correo
+    // "vamos en camino" dos veces a cada tutor y a cada vet de la ruta.
+    const gano = await updateByIdIf('despachos', id,
+      { estado_ruta: row.estado_ruta ?? '' },
+      { estado_ruta: 'en_curso', hora_inicio_ruta: row.hora_inicio_ruta || now },
+    )
+    if (!gano) {
+      return NextResponse.json({ ok: true, ya_iniciada: true, hora_inicio_ruta: row.hora_inicio_ruta })
+    }
 
     // Correo "vamos en camino" a todos los tutores de la ruta (best-effort).
     try {

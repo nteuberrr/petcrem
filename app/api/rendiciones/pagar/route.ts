@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, getNextId, ensureColumns, ensureSheet } from '@/lib/datastore'
+import { getSheetData, appendRow, updateByIdIf, getNextId, ensureColumns, ensureSheet } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 
 const HOJA_PAGOS = 'pagos_rendicion'
@@ -27,21 +27,43 @@ export async function POST(req: NextRequest) {
     }
     await ensurePagos()
 
-    // Buscar las rendiciones para calcular monto total
+    // Buscar las rendiciones seleccionadas y validar que existan y no estén pagadas.
     const rendiciones = await getSheetData('rendiciones')
-    const idxById = new Map(rendiciones.map((r, i) => [r.id, i]))
-    let montoTotal = 0
-    const indices: number[] = []
+    const byId = new Map(rendiciones.map(r => [r.id, r]))
+    const seleccionadas: Record<string, string>[] = []
     for (const id of rendicion_ids) {
-      const idx = idxById.get(id)
-      if (idx !== undefined) {
-        indices.push(idx)
-        montoTotal += parseFloat(rendiciones[idx].monto) || 0
+      const r = byId.get(id)
+      if (!r) return NextResponse.json({ error: 'Alguna rendición no existe. Refrescá la página.' }, { status: 400 })
+      seleccionadas.push(r)
+    }
+    const yaPagadas = seleccionadas.filter(r => r.estado === 'pagado' || r.pago_id)
+    if (yaPagadas.length > 0) {
+      return NextResponse.json({ error: `${yaPagadas.length} rendición(es) ya están pagadas. Refrescá la página.` }, { status: 409 })
+    }
+    const montoTotal = seleccionadas.reduce((s, r) => s + (parseFloat(r.monto) || 0), 0)
+
+    const pagoId = await getNextId(HOJA_PAGOS)
+
+    // Marcar cada rendición de forma ATÓMICA: solo la toma si sigue impaga
+    // (pago_id === ''). Si un pago concurrente ya tomó alguna, revertimos las que
+    // alcanzamos a marcar y abortamos — así no se paga dos veces.
+    const marcadas: { id: string; estadoPrev: string }[] = []
+    const revertir = async () => {
+      for (const m of marcadas) {
+        await updateByIdIf('rendiciones', m.id, { pago_id: String(pagoId) }, { estado: m.estadoPrev, pago_id: '' }).catch(() => {})
       }
     }
+    for (const r of seleccionadas) {
+      const ok = await updateByIdIf('rendiciones', r.id, { pago_id: '' }, { estado: 'pagado', pago_id: pagoId })
+      if (!ok) {
+        await revertir()
+        return NextResponse.json({ error: 'Alguna rendición ya fue pagada. Refrescá la página.' }, { status: 409 })
+      }
+      marcadas.push({ id: String(r.id), estadoPrev: r.estado ?? '' })
+    }
 
-    // Crear registro de pago
-    const pagoId = await getNextId(HOJA_PAGOS)
+    // Crear el registro de pago. Si falla, revertimos las marcas para no dejar
+    // rendiciones pagadas sin su pago correspondiente.
     const now = todayISO()
     const pagoRow = {
       id: pagoId,
@@ -52,20 +74,14 @@ export async function POST(req: NextRequest) {
       comentarios: comentarios ?? '',
       fecha_creacion: now,
     }
-    await appendRow(HOJA_PAGOS, pagoRow)
+    try {
+      await appendRow(HOJA_PAGOS, pagoRow)
+    } catch (e) {
+      await revertir()
+      throw e
+    }
 
-    // Marcar rendiciones como pagadas con referencia al pago
-    await Promise.all(
-      indices.map((idx) =>
-        updateRow('rendiciones', idx, {
-          ...rendiciones[idx],
-          estado: 'pagado',
-          pago_id: pagoId,
-        })
-      )
-    )
-
-    return NextResponse.json({ ok: true, pago_id: pagoId, monto_total: montoTotal, rendiciones_pagadas: indices.length }, { status: 201 })
+    return NextResponse.json({ ok: true, pago_id: pagoId, monto_total: montoTotal, rendiciones_pagadas: marcadas.length }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

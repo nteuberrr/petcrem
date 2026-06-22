@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, getNextId, ensureColumn, ensureColumns, deleteRow } from '@/lib/datastore'
+import { getSheetData, appendRow, updateById, getNextId, ensureColumns, deleteRow } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
+import { ajustarStock } from '@/lib/stock'
 
 export async function GET() {
   try {
@@ -70,16 +71,27 @@ export async function PATCH(req: NextRequest) {
     await ensureColumns('productos', ['stock', 'categoria'])
     const body = await req.json()
     const { id, delta_stock, ...updates } = body
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
     const rows = await getSheetData('productos')
-    const { idx, error } = findUniqueIndex(rows, id)
+    const { idx, error } = findUniqueIndex(rows, String(id))
     if (error) return NextResponse.json({ error }, { status: idx === -1 && error === 'No encontrado' ? 404 : 409 })
+
+    // Campos sueltos (nombre/precio/categoría/stock absoluto): replace por id.
     let updated = { ...rows[idx], ...updates }
-    // delta_stock: positive = add units, negative = remove
-    if (delta_stock !== undefined) {
-      const currentStock = parseInt(updated.stock || '0', 10)
-      updated = { ...updated, stock: String(Math.max(0, currentStock + delta_stock)) }
+    if (Object.keys(updates).length > 0) {
+      await updateById('productos', String(id), updated)
     }
-    await updateRow('productos', idx, updated)
+
+    // Ajuste RELATIVO de stock: atómico (compare-and-set con reintento), para no
+    // perder unidades cuando dos ajustes tocan el mismo producto a la vez.
+    if (delta_stock !== undefined && Number(delta_stock) !== 0) {
+      const nuevo = await ajustarStock(String(id), Number(delta_stock))
+      if (nuevo === null) {
+        return NextResponse.json({ error: 'No se pudo ajustar el stock (producto inexistente o demasiada concurrencia). Reintenta.' }, { status: 409 })
+      }
+      updated = { ...updated, stock: String(nuevo) }
+    }
+
     return NextResponse.json(updated)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })

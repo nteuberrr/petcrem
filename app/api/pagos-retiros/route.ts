@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { google, sheets_v4 } from 'googleapis'
-import { getSheetData, appendRow, getNextId, ensureColumns, ensureSheet } from '@/lib/datastore'
+import { getSheetData, appendRow, getNextId, updateById, updateByIdIf, deleteById, ensureColumns, ensureSheet } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { esAdmin } from '@/lib/roles'
 
@@ -18,69 +17,11 @@ const COLS = [
 const HOJA_RETIROS = 'retiros_adicionales'
 const COLS_RETIROS = ['id', 'usuario_id', 'usuario_nombre', 'fecha', 'hora', 'cliente_nombre', 'comentario', 'pago_id', 'fecha_creacion']
 
-const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
-
-function getAuth() {
-  const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
-  return new google.auth.JWT({
-    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: privateKey,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  })
-}
-
 async function ensure() {
   await ensureSheet(HOJA)
   await ensureColumns(HOJA, COLS)
   await ensureSheet(HOJA_RETIROS)
   await ensureColumns(HOJA_RETIROS, COLS_RETIROS)
-}
-
-function colLetter(idx: number): string {
-  let s = ''
-  let n = idx
-  while (true) {
-    s = String.fromCharCode(65 + (n % 26)) + s
-    if (n < 26) return s
-    n = Math.floor(n / 26) - 1
-  }
-}
-
-/**
- * Marca masivamente un set de retiros con un pago_id (o lo limpia con '').
- * Usa una sola escritura batch en lugar de N updateRow para evitar quota.
- */
-async function setPagoIdEnRetiros(sheets: sheets_v4.Sheets, retiroIds: Set<string>, pagoId: string) {
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
-    range: HOJA_RETIROS,
-    valueRenderOption: 'UNFORMATTED_VALUE',
-  })
-  const matrix = (res.data.values ?? []) as unknown[][]
-  if (matrix.length < 2) return 0
-  const headers = (matrix[0] as string[]) ?? []
-  const idIdx = headers.indexOf('id')
-  const pagoIdIdx = headers.indexOf('pago_id')
-  if (idIdx === -1 || pagoIdIdx === -1) return 0
-  const dataRows = matrix.slice(1)
-  let cambios = 0
-  for (const row of dataRows) {
-    const id = String(row[idIdx] ?? '')
-    if (retiroIds.has(id)) {
-      row[pagoIdIdx] = pagoId
-      cambios += 1
-    }
-  }
-  if (cambios > 0) {
-    const lastCol = colLetter(headers.length - 1)
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${HOJA_RETIROS}!A2:${lastCol}${dataRows.length + 1}`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: dataRows as (string | number | boolean)[][] },
-    })
-  }
-  return cambios
 }
 
 export async function GET() {
@@ -160,6 +101,22 @@ export async function POST(req: NextRequest) {
     const monto_total = retiros_ids.length * precio
 
     const id = await getNextId(HOJA)
+
+    // Marcar cada retiro de forma ATÓMICA: solo lo toma si sigue impago
+    // (pago_id === ''). Si un pago concurrente ya tomó alguno, revertimos los que
+    // alcanzamos a marcar y abortamos — así un retiro nunca se paga dos veces.
+    const marcados: string[] = []
+    for (const rid of retiros_ids) {
+      const ok = await updateByIdIf('retiros_adicionales', String(rid), { pago_id: '' }, { pago_id: id })
+      if (!ok) {
+        for (const done of marcados) {
+          await updateById('retiros_adicionales', done, { pago_id: '' }).catch(() => {})
+        }
+        return NextResponse.json({ error: 'Alguno de los retiros ya fue pagado. Refrescá la página.' }, { status: 409 })
+      }
+      marcados.push(String(rid))
+    }
+
     const row = {
       id,
       fecha_pago: fechaIso,
@@ -172,11 +129,17 @@ export async function POST(req: NextRequest) {
       creado_por: session.user?.email ?? '',
       fecha_creacion: todayISO(),
     }
-    await appendRow(HOJA, row)
 
-    // Marcar retiros con pago_id
-    const sheets = google.sheets({ version: 'v4', auth: getAuth() })
-    await setPagoIdEnRetiros(sheets, new Set(retiros_ids), id)
+    // Si el append falla, revertimos las marcas para no dejar retiros pagados
+    // sin su pago correspondiente.
+    try {
+      await appendRow(HOJA, row)
+    } catch (e) {
+      for (const done of marcados) {
+        await updateById('retiros_adicionales', done, { pago_id: '' }).catch(() => {})
+      }
+      throw e
+    }
 
     return NextResponse.json(row, { status: 201 })
   } catch (e) {
@@ -202,30 +165,13 @@ export async function DELETE(req: NextRequest) {
     let retirosIds: string[] = []
     try { retirosIds = JSON.parse(pago.retiros_ids || '[]') } catch { /* noop */ }
 
-    // Limpiar pago_id de los retiros asociados
-    if (retirosIds.length > 0) {
-      const sheets = google.sheets({ version: 'v4', auth: getAuth() })
-      await setPagoIdEnRetiros(sheets, new Set(retirosIds), '')
+    // Revertir: limpiar pago_id solo de los retiros que sigan apuntando a ESTE pago
+    for (const rid of retirosIds) {
+      await updateByIdIf('retiros_adicionales', rid, { pago_id: String(id) }, { pago_id: '' }).catch(() => {})
     }
 
-    // Eliminar la fila del pago — usar batchUpdate por rowIndex
-    const sheets = google.sheets({ version: 'v4', auth: getAuth() })
-    const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
-    const sheetInfo = meta.data.sheets?.find(s => s.properties?.title === HOJA)
-    if (sheetInfo?.properties?.sheetId !== undefined) {
-      const sheetId = sheetInfo.properties.sheetId
-      const rowToDelete = idx + 1 // 0-based + 1 header row = sheet row index 0-based
-      await sheets.spreadsheets.batchUpdate({
-        spreadsheetId: SPREADSHEET_ID,
-        requestBody: {
-          requests: [{
-            deleteDimension: {
-              range: { sheetId, dimension: 'ROWS', startIndex: rowToDelete, endIndex: rowToDelete + 1 },
-            },
-          }],
-        },
-      })
-    }
+    // Eliminar la fila del pago
+    await deleteById(HOJA, id)
 
     return NextResponse.json({ ok: true, retiros_revertidos: retirosIds.length })
   } catch (e) {

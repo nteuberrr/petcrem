@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, updateRow, ensureColumns, deleteRow } from '@/lib/datastore'
+import { getSheetData, updateById, ensureColumns, deleteRow } from '@/lib/datastore'
+import { ajustarStock } from '@/lib/stock'
 import { parseDecimal } from '@/lib/numbers'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 import { generarCodigo } from '@/lib/codigo-generator'
@@ -133,7 +134,7 @@ export async function PATCH(
     let intentosCodigo = 0
     for (;;) {
       try {
-        await updateRow('clientes', idx, updated)
+        await updateById('clientes', String(updated.id), updated)
         break
       } catch (e) {
         const msg = String(e).toLowerCase()
@@ -210,7 +211,7 @@ export async function DELETE(
           const idsArr = idsRaw.split(',').map(s => s.trim()).filter(Boolean)
           if (idsArr.includes(id)) {
             const filtrados = idsArr.filter(x => x !== id)
-            await updateRow('ciclos', cidx, { ...ciclo, mascotas_ids: filtrados.join(',') })
+            await updateById('ciclos', ciclo.id, { ...ciclo, mascotas_ids: filtrados.join(',') })
           }
         }
       } catch (err) {
@@ -242,7 +243,7 @@ export async function DELETE(
               .map((p, i) => ({ ...p, orden: i + 1 }))
             const nuevasEntregas: Record<string, { fecha_hora: string }> = {}
             for (const [k, v] of Object.entries(entregas)) if (k !== id) nuevasEntregas[k] = v
-            await updateRow('despachos', didx, {
+            await updateById('despachos', desp.id, {
               ...desp,
               mascotas_ids: JSON.stringify(nuevasMascotas),
               paradas: JSON.stringify(nuevasParadas),
@@ -280,9 +281,6 @@ async function adjustProductStock(
   oldItems: AdicionalItem[],
   newItems: AdicionalItem[]
 ) {
-  const productos = await getSheetData('productos')
-  const productoRows = productos
-
   // Build qty maps for products only
   const oldQty: Record<string, number> = {}
   const newQty: Record<string, number> = {}
@@ -290,17 +288,12 @@ async function adjustProductStock(
   newItems.filter(a => a.tipo === 'producto').forEach(a => { newQty[a.id] = (newQty[a.id] || 0) + (a.qty ?? 1) })
 
   const allIds = new Set([...Object.keys(oldQty), ...Object.keys(newQty)])
-  const idxById = new Map(productoRows.map((p, i) => [p.id, i]))
-  await Promise.all(
-    Array.from(allIds).map((pid) => {
-      const delta = (oldQty[pid] || 0) - (newQty[pid] || 0) // positive = freed, negative = consumed
-      if (delta === 0) return Promise.resolve()
-      const pidx = idxById.get(pid)
-      if (pidx === undefined) return Promise.resolve()
-      const currentStock = parseInt(productoRows[pidx].stock || '0', 10)
-      const newStock = Math.max(0, currentStock + delta)
-      productoRows[pidx] = { ...productoRows[pidx], stock: String(newStock) }
-      return updateRow('productos', pidx, productoRows[pidx])
-    })
-  )
+  // Secuencial (no Promise.all): cada ajuste es un compare-and-set atómico que
+  // relee el stock, así no se pierden unidades entre productos ni frente a otra
+  // venta/edición concurrente del mismo producto.
+  for (const pid of allIds) {
+    const delta = (oldQty[pid] || 0) - (newQty[pid] || 0) // positive = freed, negative = consumed
+    if (delta === 0) continue
+    await ajustarStock(pid, delta)
+  }
 }
