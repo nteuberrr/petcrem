@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateById, ensureColumns } from '@/lib/datastore'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
-import { verifyFotoToken } from '@/lib/foto-token'
+import { verifyTutorToken } from '@/lib/tutor-token'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Subida PÚBLICA de la foto de la mascota (auto-atención del tutor desde el link
 // del correo de registro: /subir-foto?token=XXX). La "autenticación" es un TOKEN
-// HMAC firmado por ficha (lib/foto-token), no el código de la mascota — el código
+// HMAC firmado por ficha (lib/tutor-token), no el código de la mascota — el código
 // era secuencial y adivinable (permitía enumerar nombres y subir a fichas ajenas).
 //
 //   GET  ?token=XXX → { ok, nombre_mascota }  (para precargar el landing)
@@ -22,7 +22,7 @@ const MAX_BYTES = 8 * 1024 * 1024 // 8 MB
 
 /** Resuelve la ficha del cliente a partir del token firmado, o null si no vale. */
 async function clienteDesdeToken(token: string): Promise<Record<string, string> | null> {
-  const v = verifyFotoToken(token)
+  const v = verifyTutorToken(token, 'subir_foto')
   if (!v.ok || !v.clienteId) return null
   const rows = await getSheetData('clientes')
   return rows.find(r => String(r.id) === v.clienteId) ?? null

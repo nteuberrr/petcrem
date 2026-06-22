@@ -1,20 +1,22 @@
 import crypto from 'crypto'
 
 /**
- * Token HMAC firmado para que el TUTOR suba la foto de su mascota desde el link
- * del correo de registro (sin sesión). Reemplaza al "código" de la mascota, que
- * era secuencial y adivinable (permitía enumerar nombres y subir imágenes a
- * fichas ajenas). Solo quien recibió el correo tiene el token de ESA ficha.
+ * Token HMAC firmado para las acciones de auto-atención del TUTOR desde el correo
+ * de registro (sin sesión): subir la foto de la mascota o solicitar el video del
+ * proceso. Reemplaza al "código" de la mascota, que era secuencial y adivinable.
+ * Solo quien recibió el correo tiene el token de ESA ficha y ESA acción.
  *
- * Firmado con NEXTAUTH_SECRET. TTL amplio (90 días): la foto se usa en el
- * certificado de cremación y el tutor puede tardar en subirla.
+ * Firmado con NEXTAUTH_SECRET. TTL 24 horas: los links de foto/video del correo
+ * valen solo un día (decisión del cliente).
  */
 
-const DEFAULT_TTL_SECONDS = 90 * 24 * 3600
+export type AccionTutor = 'subir_foto' | 'solicitar_video'
 
-interface FotoTokenPayload {
+const DEFAULT_TTL_SECONDS = 24 * 3600 // 24 horas
+
+interface TutorTokenPayload {
   cid: string // cliente id
-  t: 'subir_foto'
+  t: AccionTutor
   exp: number // unix seconds
 }
 
@@ -36,23 +38,24 @@ function sign(data: string): string {
   return b64url(crypto.createHmac('sha256', getSecret()).update(data).digest())
 }
 
-export function createFotoToken(clienteId: string, ttlSeconds: number = DEFAULT_TTL_SECONDS): string {
-  const payload: FotoTokenPayload = {
+export function createTutorToken(clienteId: string, accion: AccionTutor, ttlSeconds: number = DEFAULT_TTL_SECONDS): string {
+  const payload: TutorTokenPayload = {
     cid: String(clienteId),
-    t: 'subir_foto',
+    t: accion,
     exp: Math.floor(Date.now() / 1000) + ttlSeconds,
   }
   const payloadB64 = b64url(Buffer.from(JSON.stringify(payload), 'utf8'))
   return `${payloadB64}.${sign(payloadB64)}`
 }
 
-export interface VerifyFotoResult {
+export interface VerifyTutorResult {
   ok: boolean
   clienteId?: string
   error?: 'malformed' | 'invalid_signature' | 'expired' | 'bad_payload'
 }
 
-export function verifyFotoToken(token: string): VerifyFotoResult {
+/** Verifica firma + expiración + que el token sea de la acción esperada. */
+export function verifyTutorToken(token: string, accion: AccionTutor): VerifyTutorResult {
   if (!token || !token.includes('.')) return { ok: false, error: 'malformed' }
   const [payloadB64, sig] = token.split('.')
   if (!payloadB64 || !sig) return { ok: false, error: 'malformed' }
@@ -60,13 +63,13 @@ export function verifyFotoToken(token: string): VerifyFotoResult {
   const a = Buffer.from(sig)
   const b = Buffer.from(expected)
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return { ok: false, error: 'invalid_signature' }
-  let payload: FotoTokenPayload
+  let payload: TutorTokenPayload
   try {
     payload = JSON.parse(b64urlDecode(payloadB64).toString('utf8'))
   } catch {
     return { ok: false, error: 'bad_payload' }
   }
-  if (payload.t !== 'subir_foto' || !payload.cid) return { ok: false, error: 'bad_payload' }
+  if (payload.t !== accion || !payload.cid) return { ok: false, error: 'bad_payload' }
   if (typeof payload.exp !== 'number' || payload.exp < Math.floor(Date.now() / 1000)) return { ok: false, error: 'expired' }
   return { ok: true, clienteId: payload.cid }
 }

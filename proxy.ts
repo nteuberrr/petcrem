@@ -39,9 +39,11 @@ export async function proxy(req: NextRequest) {
     // Completar el borrador desde el link firmado del WhatsApp de retiro
     // confirmado (auth = token HMAC; NO genera código, solo enriquece el borrador).
     pathname === '/api/clientes/completar-borrador' ||
-    // Subida pública de la foto de la mascota (link del correo de registro).
+    // Subida pública de la foto + solicitud del video (links del correo de registro).
     pathname === '/subir-foto' ||
     pathname === '/api/clientes/foto' ||
+    pathname === '/solicitar-video' ||
+    pathname === '/api/clientes/video' ||
     pathname === '/api/eutanasias/precios' ||
     pathname === '/api/eutanasias/vets/inscribir' ||
     // Autocomplete de comunas usado tanto en el landing público como en el
