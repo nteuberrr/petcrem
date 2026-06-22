@@ -52,6 +52,11 @@ export async function GET(req: NextRequest) {
     }
 
     const ingresoCliente = (c: Record<string, string>): number => {
+      // Snapshot congelado al crear/editar la ficha → blinda el ingreso histórico
+      // contra cambios en las tablas de precio (mismo criterio que el dashboard).
+      const snap = parseDecimalOr0(c.precio_total)
+      if (snap > 0) return snap
+      // Fallback en vivo SOLO para fichas legacy sin snapshot guardado.
       const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
       const codigo = c.codigo_servicio || 'CI'
       let tabla: Tramo[] = preciosG
@@ -64,8 +69,13 @@ export async function GET(req: NextRequest) {
         if (vet?.tipo_precios === 'precios_especiales') tabla = preciosEByVet.get(c.veterinaria_id) ?? []
         else tabla = preciosC
       }
-      const tramo = findTramo(tabla, peso)
-      return precioDelTramo(tramo, codigo)
+      const servicio = precioDelTramo(findTramo(tabla, peso), codigo)
+      let adic = 0
+      try {
+        const items = JSON.parse(c.adicionales || '[]') as Array<{ precio?: number; qty?: number }>
+        adic = items.reduce((s, a) => s + Math.max(0, a.precio ?? 0) * Math.max(0, a.qty ?? 1), 0)
+      } catch { /* noop */ }
+      return servicio + adic
     }
 
     const enMes = (raw: string) => {
