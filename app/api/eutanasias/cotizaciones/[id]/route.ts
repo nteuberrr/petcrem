@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, updateRow, deleteRow } from '@/lib/datastore'
+import { getSheetData, updateById, deleteRow } from '@/lib/datastore'
 import { esAdmin } from '@/lib/roles'
+import { precioParaPeso } from '@/lib/eutanasia-matcher'
+import { parsePeso } from '@/lib/numbers'
 
 const SHEET = 'cotizaciones_eutanasia'
 
@@ -108,8 +110,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (partial.estado_pago === 'pago_confirmado' && !rows[idx].fecha_pago) {
       partial.fecha_pago = new Date().toISOString()
     }
+
+    // Si se corrige el PESO y la cotización aún no está comprometida con un vet
+    // (creada/enviada), recalculamos precio_snapshot (lo que se le paga al vet) con
+    // la MISMA tabla y regla que al crearla. Una vez aceptada/confirmada/realizada,
+    // el precio queda congelado (el vet ya aceptó ese monto).
+    if ('peso' in body && partial.peso !== rows[idx].peso) {
+      const estadoActual = partial.estado ?? rows[idx].estado
+      if (!['aceptada', 'confirmada', 'realizada', 'cancelada'].includes(estadoActual)) {
+        const tramos = await getSheetData('precios_eutanasia')
+        partial.precio_snapshot = String(precioParaPeso(tramos, parsePeso(partial.peso)))
+      }
+    }
+
     const updated = { ...rows[idx], ...partial }
-    await updateRow(SHEET, idx, updated)
+    await updateById(SHEET, id, updated)
     return NextResponse.json(updated)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })

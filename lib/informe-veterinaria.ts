@@ -1,6 +1,7 @@
 import { getSheetData } from '@/lib/datastore'
 import { formatDateForSheet, todayISO } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso, parseMonto } from '@/lib/numbers'
+import { findTramo, precioDelTramo } from '@/lib/tramos'
 
 /**
  * Genera los datos consolidados de un informe de facturación para una veterinaria.
@@ -77,26 +78,6 @@ export interface InformeVeterinaria {
     por_peso: Array<{ rango: string; count: number; monto: number }>
     por_servicio: Array<{ codigo: string; count: number; monto: number }>
   }
-}
-
-function findTramo(tabla: Tramo[], peso: number): Tramo | null {
-  if (!tabla.length || !isFinite(peso) || peso <= 0) return null
-  let maxMin = -Infinity
-  let top: Tramo | null = null
-  for (const t of tabla) {
-    const min = parseDecimalOr0(t.peso_min)
-    const max = parseDecimalOr0(t.peso_max)
-    if (min > maxMin) { maxMin = min; top = t }
-    if (peso >= min && peso <= max) return t
-  }
-  if (top && peso >= maxMin) return top
-  return null
-}
-
-function precioTramo(tramo: Tramo | null, codigo: string): number {
-  if (!tramo) return 0
-  const k = codigo === 'CP' ? tramo.precio_cp : codigo === 'SD' ? tramo.precio_sd : tramo.precio_ci
-  return parseDecimalOr0(k)
 }
 
 function parseDateSafe(raw: string): Date | null {
@@ -196,8 +177,8 @@ export async function generarInformeVeterinaria(vetId: string): Promise<InformeV
     else if (explicit === 'general') tabla = tramosG
     else if (vet.tipo_precios === 'precios_especiales') tabla = tramosEDeEstaVet
     const tramo = findTramo(tabla, peso)
-    const servicio = precioTramo(tramo, codigo)
-    const adi = items.reduce((s, a) => s + parseMonto(a.precio) * (a.qty ?? 1), 0)
+    const servicio = precioDelTramo(tramo, codigo)
+    const adi = items.reduce((s, a) => s + Math.max(0, parseMonto(a.precio)) * Math.max(0, a.qty ?? 1), 0)
     const subtotal = servicio + adi
     let descuento = 0
     const dVal = parseMonto(c.descuento_valor)

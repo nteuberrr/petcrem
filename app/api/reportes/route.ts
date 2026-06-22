@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData } from '@/lib/datastore'
 import { formatDateForSheet } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
+import { findTramo, precioDelTramo } from '@/lib/tramos'
 
 type Tramo = {
   id: string; peso_min: string; peso_max: string
@@ -15,26 +16,6 @@ function parseFecha(raw: string): Date | null {
   if (!iso) return null
   const d = new Date(`${iso}T12:00:00`)
   return isNaN(d.getTime()) ? null : d
-}
-
-function findTramo(tabla: Tramo[], pesoKg: number): Tramo | null {
-  if (!tabla.length || !isFinite(pesoKg) || pesoKg <= 0) return null
-  let maxMin = -Infinity
-  let top: Tramo | null = null
-  for (const t of tabla) {
-    const min = parseDecimalOr0(t.peso_min)
-    const max = parseDecimalOr0(t.peso_max)
-    if (min > maxMin) { maxMin = min; top = t }
-    if (pesoKg >= min && pesoKg <= max) return t
-  }
-  if (top && pesoKg >= maxMin) return top
-  return null
-}
-
-function precioTramo(tramo: Tramo | null, codigo: string): number {
-  if (!tramo) return 0
-  const raw = codigo === 'CP' ? tramo.precio_cp : codigo === 'SD' ? tramo.precio_sd : tramo.precio_ci
-  return parseDecimalOr0(raw)
 }
 
 export async function GET(req: NextRequest) {
@@ -84,7 +65,7 @@ export async function GET(req: NextRequest) {
         else tabla = preciosC
       }
       const tramo = findTramo(tabla, peso)
-      return precioTramo(tramo, codigo)
+      return precioDelTramo(tramo, codigo)
     }
 
     const enMes = (raw: string) => {
