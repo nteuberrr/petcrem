@@ -1,6 +1,7 @@
 import { sendEmail, sendBatch, isResendConfigured, type SendOpts } from './resend-mailer'
 import { renderEmailLayout, getContacto, escapeHtml, BRAND, type Contacto } from './email-layout'
 import { registrarEnvio, registrarEnvios, type TipoCorreo } from './correos-log'
+import { createFotoToken } from './foto-token'
 
 /**
  * Correos transaccionales al tutor (dueño de la mascota), enganchados en los
@@ -73,7 +74,12 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
   // Link al landing público para subir una foto de la mascota (se incluye en el
   // certificado de cremación). Si no hay base URL configurada, omitimos el botón.
   const base = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
-  const linkFoto = base ? `${base}/subir-foto?codigo=${encodeURIComponent(args.codigo)}` : ''
+  // Link firmado (HMAC) por ficha — reemplaza el "código" adivinable: solo quien
+  // recibió este correo puede subir la foto de ESTA mascota. Sin clienteId no se
+  // puede firmar el token, así que omitimos el botón.
+  const linkFoto = (base && args.clienteId)
+    ? `${base}/subir-foto?token=${encodeURIComponent(createFotoToken(String(args.clienteId)))}`
+    : ''
   const bloqueFoto = linkFoto ? `
       <div style="text-align:center;margin:22px 0 6px">
         <a href="${linkFoto}" style="display:inline-block;background:${BRAND.amber};color:${BRAND.navy};text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">

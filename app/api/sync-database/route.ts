@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { google, sheets_v4 } from 'googleapis'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/lib/auth'
+import { esAdminTotal } from '@/lib/roles'
 import { ensureColumns, ensureSheet } from '@/lib/datastore'
 import { parseMonto, parsePeso, parseDecimalOr0 } from '@/lib/numbers'
 import { formatDateForSheet, formatHora } from '@/lib/dates'
@@ -872,6 +875,12 @@ async function syncAsistencia(sheets: sheets_v4.Sheets) {
 
 export async function POST() {
   try {
+    // Defensa en profundidad: además del proxy (que ya bloquea admin2/operador),
+    // revalidamos el rol acá. Operación destructiva sobre toda la base.
+    const session = await getServerSession(authOptions)
+    if (!esAdminTotal((session?.user as { role?: string })?.role)) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    }
     const sheets = google.sheets({ version: 'v4', auth: getAuth() })
 
     const clientes = await syncClientes(sheets)

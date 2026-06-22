@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
         nombreMascota: row.nombre_mascota,
         nombreTutor: row.nombre_tutor,
         codigo: row.codigo,
+        clienteId: String(id),
       })
     } catch (e) {
       console.warn('[clientes POST] fallo mail registro (no bloqueante):', e)

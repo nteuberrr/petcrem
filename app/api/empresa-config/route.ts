@@ -42,6 +42,10 @@ const EMPTY: EmpresaConfig = {
 
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions)
+    if ((session?.user as { role?: string })?.role !== 'admin') {
+      return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
+    }
     await ensureSheet(SHEET)
     await ensureColumns(SHEET, COLS)
     const rows = await getSheetData(SHEET)

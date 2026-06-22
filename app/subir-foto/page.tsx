@@ -3,9 +3,9 @@ import { useState, useEffect, useRef } from 'react'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Landing PÚBLICO para que el tutor suba una foto de su mascota (link del correo
-// de registro: /subir-foto?codigo=XXX). El código viene en la URL, se precarga y
-// se resuelve el nombre de la mascota. Al enviar, la foto se guarda en su ficha
-// para poder incluirla en el certificado de cremación. Postea a /api/clientes/foto.
+// de registro: /subir-foto?token=XXX). El token (HMAC firmado) viene en la URL,
+// se valida y se resuelve el nombre de la mascota. Al enviar, la foto se guarda en
+// su ficha para incluirla en el certificado de cremación. Postea a /api/clientes/foto.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const COLOR = '#143C64'
@@ -16,9 +16,9 @@ const LOGO = '/brand/logo-alma-animal.png'
 const SELLO = '/brand/sello-alma-animal.png'
 
 export default function SubirFotoPage() {
-  const [codigo, setCodigo] = useState('')
+  const [token, setToken] = useState('')
   const [mascota, setMascota] = useState<string | null>(null)
-  const [estadoCodigo, setEstadoCodigo] = useState<'cargando' | 'ok' | 'invalido' | 'sin_codigo'>('cargando')
+  const [estadoCodigo, setEstadoCodigo] = useState<'cargando' | 'ok' | 'invalido' | 'sin_token'>('cargando')
   const [foto, setFoto] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -30,10 +30,10 @@ export default function SubirFotoPage() {
     // Diferido a un microtask: la URL solo existe en cliente y así evitamos
     // setState síncrono en el cuerpo del efecto (y mismatch de hidratación).
     queueMicrotask(() => {
-      const cod = (new URLSearchParams(window.location.search).get('codigo') || '').trim()
-      if (!cod) { setEstadoCodigo('sin_codigo'); return }
-      setCodigo(cod)
-      fetch(`/api/clientes/foto?codigo=${encodeURIComponent(cod)}`)
+      const tok = (new URLSearchParams(window.location.search).get('token') || '').trim()
+      if (!tok) { setEstadoCodigo('sin_token'); return }
+      setToken(tok)
+      fetch(`/api/clientes/foto?token=${encodeURIComponent(tok)}`)
         .then(r => r.json())
         .then(d => {
           if (d?.ok) { setMascota(d.nombre_mascota); setEstadoCodigo('ok') }
@@ -57,7 +57,7 @@ export default function SubirFotoPage() {
     setEnviando(true)
     try {
       const fd = new FormData()
-      fd.append('codigo', codigo)
+      fd.append('token', token)
       fd.append('foto', foto)
       const r = await fetch('/api/clientes/foto', { method: 'POST', body: fd })
       const d = await r.json().catch(() => ({}))
@@ -95,15 +95,15 @@ export default function SubirFotoPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-500">Cargando…</div>
         )}
 
-        {estadoCodigo === 'sin_codigo' && (
+        {estadoCodigo === 'sin_token' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-600">
-            El enlace no incluye el código de tu mascota. Usa el botón que te enviamos por correo.
+            El enlace no es válido. Usa el botón que te enviamos por correo.
           </div>
         )}
 
         {estadoCodigo === 'invalido' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-600">
-            No encontramos ese código. Revisa el enlace de tu correo o escríbenos a{' '}
+            El enlace no es válido o venció. Revisa el correo que te enviamos o escríbenos a{' '}
             <a href="mailto:contacto@crematorioalmaanimal.cl" className="underline" style={{ color: COLOR }}>contacto@crematorioalmaanimal.cl</a>.
           </div>
         )}
@@ -128,7 +128,7 @@ export default function SubirFotoPage() {
         {estadoCodigo === 'ok' && !exito && (
           <form onSubmit={enviar} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 sm:p-6 space-y-5">
             <p className="text-sm text-gray-700">
-              Foto de <strong>{mascota}</strong> <span className="text-gray-400">· {codigo}</span>
+              Foto de <strong>{mascota}</strong>
             </p>
 
             <input
