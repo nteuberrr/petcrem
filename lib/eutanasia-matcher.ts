@@ -113,7 +113,8 @@ export function matchVetsConDiagnostico(
     const nombre_completo = `${v.nombre ?? ''} ${v.apellido ?? ''}`.trim() || v.email || '(sin nombre)'
     const baseExc = { id: v.id, nombre_completo, email: v.email ?? '' }
 
-    if ((v.activo ?? 'TRUE').toUpperCase() !== 'TRUE') {
+    // Vacío = activo (solo 'FALSE' explícito excluye), igual que la UI de /servicios.
+    if ((v.activo || '').trim().toUpperCase() === 'FALSE') {
       excluidos.push({ ...baseExc, razon: 'inactivo', detalle: 'El vet está marcado como inactivo.' })
       continue
     }

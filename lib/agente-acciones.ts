@@ -68,6 +68,17 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
     return `Este cliente YA tiene una solicitud de retiro EN PROCESO${enProceso.nombre_mascota ? ` (${enProceso.nombre_mascota})` : ''}, que el equipo está terminando de ingresar. NO registres otra. Dile, cálido y breve, que su solicitud ya está en proceso y que la estamos gestionando; si necesita cambiar algún dato, que nos lo indique.`
   }
 
+  // El borrador recién existe cuando el admin CONFIRMA. Entre la solicitud y ese
+  // ✅, un 2º "agéndame" no vería borrador → se duplicaría la solicitud. Por eso
+  // también bloqueamos si ya hay una solicitud PENDIENTE de este mismo cliente.
+  const solicitudesPrevias = await getSheetData(SHEET_RETIRO)
+  const pendientePrevia = solicitudesPrevias.find(
+    s => s.estado === 'pendiente' && (s.cliente_wa_id || '').replace(/\D/g, '').slice(-9) === tel9
+  )
+  if (pendientePrevia) {
+    return `Este cliente YA tiene una solicitud de retiro PENDIENTE de confirmación${pendientePrevia.nombre_mascota ? ` (${pendientePrevia.nombre_mascota})` : ''}. NO registres otra. Dile, cálido y breve, que ya recibimos su solicitud y la estamos confirmando; si necesita cambiar algún dato, que nos lo indique.`
+  }
+
   const id = await getNextId(SHEET_RETIRO)
   await appendRow(SHEET_RETIRO, {
     id,

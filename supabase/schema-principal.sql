@@ -521,9 +521,18 @@ create table if not exists "cotizaciones_eutanasia" (
   "fecha_confirmacion" text not null default '',
   "fecha_realizacion" text not null default '',
   "fecha_cancelacion" text not null default '',
-  "creado_por" text not null default ''
+  "creado_por" text not null default '',
+  "tipo_servicio_cremacion" text not null default '',
+  "cliente_confirmo" text not null default '',
+  "fecha_cliente_confirmacion" text not null default ''
 );
 alter table "cotizaciones_eutanasia" enable row level security;
+-- Columnas del flujo de eutanasia del agente de WhatsApp (idempotente; ya están
+-- en la migración supabase/migracion-eutanasia-agente.sql para entornos previos).
+alter table "cotizaciones_eutanasia"
+  add column if not exists "tipo_servicio_cremacion" text not null default '',
+  add column if not exists "cliente_confirmo" text not null default '',
+  add column if not exists "fecha_cliente_confirmacion" text not null default '';
 create index if not exists "cotizaciones_eutanasia_estado_idx" on "cotizaciones_eutanasia" ("estado");
 create index if not exists "cotizaciones_eutanasia_vet_id_asignado_idx" on "cotizaciones_eutanasia" ("vet_id_asignado");
 
