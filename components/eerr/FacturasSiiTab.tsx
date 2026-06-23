@@ -31,6 +31,7 @@ export default function FacturasSiiTab() {
   const [bulk, setBulk] = useState(false)
   const [tipoFiltro, setTipoFiltro] = useState('')
   const [partidaFiltro, setPartidaFiltro] = useState('')
+  const [buscar, setBuscar] = useState('')
 
   async function cargarPartidas() {
     const r = await fetch('/api/eerr/partidas'); const d = await r.json()
@@ -93,9 +94,11 @@ export default function FacturasSiiTab() {
       default: return 0
     }
   }
+  const buscarLc = buscar.trim().toLowerCase()
   const filtradas = items.filter(f => {
     if (tipoFiltro && f.tipo_asignacion !== tipoFiltro) return false
     if (partidaFiltro && f.partida_id !== partidaFiltro) return false
+    if (buscarLc && !(f.razon_social || '').toLowerCase().includes(buscarLc) && !(f.rut || '').toLowerCase().includes(buscarLc)) return false
     return true
   })
   const sorted = sortBy
@@ -124,54 +127,62 @@ export default function FacturasSiiTab() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap items-end gap-3">
-        <div>
+      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+        {/* Carga arriba */}
+        <div className="flex items-center gap-3 flex-wrap">
           <input ref={fileRef} type="file" accept=".csv,text/csv" multiple className="hidden"
             onChange={e => { const fs = e.target.files; if (fs && fs.length) subir(fs) }} />
           <button onClick={() => fileRef.current?.click()} disabled={subiendo}
             className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
             {subiendo ? 'Subiendo…' : '⬆ Subir compras (CSV)'}
           </button>
-          <p className="text-xs text-gray-400 mt-1">Podés elegir varios archivos.{ultimaCarga ? ` Última carga: ${formatDate(ultimaCarga)}` : ''}</p>
+          <p className="text-xs text-gray-400">Podés elegir varios archivos.{ultimaCarga ? ` · Última carga: ${formatDate(ultimaCarga)}` : ''}</p>
         </div>
-        <div className="h-9 w-px bg-gray-200 hidden sm:block" />
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Desde</label>
-          <input type="date" value={desde} onChange={e => setDesde(e.target.value)} className="border border-gray-300 rounded px-2 py-1.5 text-sm" />
+
+        {/* Filtros + buscar en una fila */}
+        <div className="flex flex-wrap items-end gap-3 border-t border-gray-100 pt-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Buscar</label>
+            <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Razón social o RUT" className="border border-gray-300 rounded px-2 py-1.5 text-sm w-44" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Desde</label>
+            <input type="date" value={desde} onChange={e => setDesde(e.target.value)} className="border border-gray-300 rounded px-2 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Hasta</label>
+            <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} className="border border-gray-300 rounded px-2 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Estado</label>
+            <select value={estado} onChange={e => setEstado(e.target.value)} className="border border-gray-300 rounded px-2 py-1.5 text-sm">
+              <option value="">Todos</option>
+              <option value="contabilizado">Contabilizados</option>
+              <option value="pendiente">Pendientes</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Tipo</label>
+            <select value={tipoFiltro} onChange={e => { setTipoFiltro(e.target.value); setPartidaFiltro('') }} className="border border-gray-300 rounded px-2 py-1.5 text-sm">
+              <option value="">Todos</option>
+              <option value="costo">Costo</option>
+              <option value="gasto">Gasto</option>
+              <option value="impuesto">Impuesto</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Partida</label>
+            <select value={partidaFiltro} onChange={e => setPartidaFiltro(e.target.value)} className="border border-gray-300 rounded px-2 py-1.5 text-sm max-w-[200px]">
+              <option value="">Todas</option>
+              {partidas.filter(p => p.tipo !== 'ingreso' && p.activo === 'TRUE' && (!tipoFiltro || p.tipo === tipoFiltro)).map(p => (
+                <option key={p.id} value={p.id}>{tipoFiltro ? p.nombre : `${TIPO_LABEL[p.tipo] || ''} · ${p.nombre}`}</option>
+              ))}
+            </select>
+          </div>
+          {(desde || hasta || estado || tipoFiltro || partidaFiltro || buscar) && (
+            <button onClick={() => { setDesde(''); setHasta(''); setEstado(''); setTipoFiltro(''); setPartidaFiltro(''); setBuscar('') }} className="text-xs text-gray-400 hover:text-gray-700 mb-1.5">Limpiar</button>
+          )}
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Hasta</label>
-          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} className="border border-gray-300 rounded px-2 py-1.5 text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Estado</label>
-          <select value={estado} onChange={e => setEstado(e.target.value)} className="border border-gray-300 rounded px-2 py-1.5 text-sm">
-            <option value="">Todos</option>
-            <option value="contabilizado">Contabilizados</option>
-            <option value="pendiente">Pendientes</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Tipo</label>
-          <select value={tipoFiltro} onChange={e => setTipoFiltro(e.target.value)} className="border border-gray-300 rounded px-2 py-1.5 text-sm">
-            <option value="">Todos</option>
-            <option value="costo">Costo</option>
-            <option value="gasto">Gasto</option>
-            <option value="impuesto">Impuesto</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Partida</label>
-          <select value={partidaFiltro} onChange={e => setPartidaFiltro(e.target.value)} className="border border-gray-300 rounded px-2 py-1.5 text-sm max-w-[200px]">
-            <option value="">Todas</option>
-            {partidas.filter(p => p.tipo !== 'ingreso' && p.activo === 'TRUE').map(p => (
-              <option key={p.id} value={p.id}>{TIPO_LABEL[p.tipo] || ''} · {p.nombre}</option>
-            ))}
-          </select>
-        </div>
-        {(desde || hasta || estado || tipoFiltro || partidaFiltro) && (
-          <button onClick={() => { setDesde(''); setHasta(''); setEstado(''); setTipoFiltro(''); setPartidaFiltro('') }} className="text-xs text-gray-400 hover:text-gray-700 mb-1.5">Limpiar</button>
-        )}
       </div>
 
       {msg && <p className="text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">{msg}</p>}
@@ -193,7 +204,7 @@ export default function FacturasSiiTab() {
         <div className="text-gray-500 text-sm">Cargando…</div>
       ) : items.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
-          No hay compras {(desde || hasta || estado || tipoFiltro || partidaFiltro) ? 'con esos filtros' : 'cargadas todavía'}. Usá «Subir compras».
+          No hay compras {(desde || hasta || estado || tipoFiltro || partidaFiltro || buscar) ? 'con esos filtros' : 'cargadas todavía'}. Usá «Subir compras».
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
