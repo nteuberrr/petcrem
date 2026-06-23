@@ -28,6 +28,7 @@ export default function RendicionesPage() {
   const [filtroUsuario, setFiltroUsuario] = useState('')
   const [filtroDoc, setFiltroDoc] = useState('')
   const [filtroClasif, setFiltroClasif] = useState('')
+  const [filtroPartida, setFiltroPartida] = useState('')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [showBulk, setShowBulk] = useState(false)
 
@@ -172,6 +173,11 @@ export default function RendicionesPage() {
     if (filtroUsuario && r.usuario !== filtroUsuario) return false
     if (filtroDoc && r.tipo_documento !== filtroDoc) return false
     if (filtroClasif && (r.clasificacion || 'rendicion') !== filtroClasif) return false
+    if (filtroPartida === '__none__') {
+      // Sin asignar: una boleta de rendición que todavía no tiene partida.
+      const necesita = r.tipo_documento === 'boleta' && (r.clasificacion || 'rendicion') !== 'aporte'
+      if (!(necesita && !r.partida_id)) return false
+    } else if (filtroPartida && r.partida_id !== filtroPartida) return false
     return true
   })
 
@@ -278,8 +284,14 @@ export default function RendicionesPage() {
           <option value="rendicion">Rendición</option>
           <option value="aporte">Aporte</option>
         </select>
-        {(filtroEstado !== 'todos' || filtroUsuario || filtroDoc || filtroClasif) && (
-          <button onClick={() => { setFiltroEstado('todos'); setFiltroUsuario(''); setFiltroDoc(''); setFiltroClasif('') }}
+        <select value={filtroPartida} onChange={e => setFiltroPartida(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">Toda partida</option>
+          <option value="__none__">Sin asignar</option>
+          {partidas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+        </select>
+        {(filtroEstado !== 'todos' || filtroUsuario || filtroDoc || filtroClasif || filtroPartida) && (
+          <button onClick={() => { setFiltroEstado('todos'); setFiltroUsuario(''); setFiltroDoc(''); setFiltroClasif(''); setFiltroPartida('') }}
             className="text-xs text-gray-400 hover:text-gray-700 self-center">Limpiar</button>
         )}
       </div>
