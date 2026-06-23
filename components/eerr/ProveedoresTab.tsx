@@ -21,6 +21,7 @@ export default function ProveedoresTab() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [bulk, setBulk] = useState(false)
+  const [edit, setEdit] = useState<Prov | null>(null)
 
   async function cargar() {
     try {
@@ -31,12 +32,6 @@ export default function ProveedoresTab() {
     } catch { setError('Error de red') } finally { setLoading(false) }
   }
   useEffect(() => { cargar() }, [])
-
-  async function patch(id: string, updates: Record<string, unknown>) {
-    const r = await fetch('/api/eerr/proveedores', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, ...updates }) })
-    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d?.error || 'No se pudo guardar'); return }
-    cargar()
-  }
 
   // Partidas asignables: costo / gasto / impuesto, activas (las de ingreso se calculan).
   const asignables = partidas.filter(p => p.tipo !== 'ingreso' && p.activo === 'TRUE')
@@ -156,59 +151,93 @@ export default function ProveedoresTab() {
                 {th('auto', 'Auto')}
                 {th('tipo', 'Tipo')}
                 {th('partida', 'Partida')}
+                <th className="px-4 py-2.5"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {sorted.map(p => {
                 const auto = p.auto_contabiliza === 'TRUE'
-                const partidasTipo = asignables.filter(x => x.tipo === p.auto_tipo)
                 return (
                   <tr key={p.id} className={sel.has(p.id) ? 'bg-indigo-50/40' : ''}>
                     <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={sel.has(p.id)} onChange={() => toggleUno(p.id)} /></td>
                     <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{p.rut}</td>
                     <td className="px-4 py-2.5 text-gray-800">{p.razon_social}</td>
                     <td className="px-4 py-2.5">
-                      <button
-                        onClick={() => patch(p.id, { auto_contabiliza: !auto })}
-                        className={`text-xs px-2.5 py-0.5 rounded-full ${auto ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}
-                      >
-                        {auto ? 'Sí' : 'No'}
-                      </button>
+                      <span className={`text-xs px-2.5 py-0.5 rounded-full ${auto ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{auto ? 'Sí' : 'No'}</span>
                     </td>
-                    <td className="px-4 py-2.5">
-                      <select
-                        disabled={!auto}
-                        value={p.auto_tipo || ''}
-                        onChange={e => patch(p.id, { auto_tipo: e.target.value, auto_partida_id: '' })}
-                        className="border border-gray-300 rounded px-2 py-1 text-sm disabled:opacity-40"
-                      >
-                        <option value="">—</option>
-                        <option value="costo">Costo</option>
-                        <option value="gasto">Gasto</option>
-                        <option value="impuesto">Impuesto</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <select
-                        disabled={!auto || !p.auto_tipo}
-                        value={p.auto_partida_id || ''}
-                        onChange={e => patch(p.id, { auto_partida_id: e.target.value })}
-                        className="border border-gray-300 rounded px-2 py-1 text-sm disabled:opacity-40"
-                      >
-                        <option value="">—</option>
-                        {partidasTipo.map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}
-                      </select>
+                    <td className="px-4 py-2.5 text-gray-600">{p.auto_tipo ? (TIPO_LABEL[p.auto_tipo] || p.auto_tipo) : <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-2.5 text-gray-600">{p.auto_partida_id ? partidaNombre(p.auto_partida_id) : <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => setEdit(p)} className="border border-gray-200 text-gray-600 hover:bg-gray-50 px-2.5 py-1 rounded-lg text-xs font-medium">Editar</button>
                     </td>
                   </tr>
                 )
               })}
-              {sorted.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-sm text-gray-400 text-center">Nada con esos filtros.</td></tr>}
+              {sorted.length === 0 && <tr><td colSpan={7} className="px-4 py-6 text-sm text-gray-400 text-center">Nada con esos filtros.</td></tr>}
             </tbody>
           </table>
         </div>
       )}
 
+      {edit && <EditarProvModal prov={edit} asignables={asignables} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); cargar() }} />}
       {bulk && <BulkAutoModal ids={Array.from(sel)} asignables={asignables} onClose={() => setBulk(false)} onSaved={() => { setBulk(false); setSel(new Set()); cargar() }} />}
+    </div>
+  )
+}
+
+function EditarProvModal({ prov, asignables, onClose, onSaved }: { prov: Prov; asignables: Partida[]; onClose: () => void; onSaved: () => void }) {
+  const [auto, setAuto] = useState(prov.auto_contabiliza === 'TRUE')
+  const [tipo, setTipo] = useState(prov.auto_tipo || '')
+  const [partida, setPartida] = useState(prov.auto_partida_id || '')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const opciones = asignables.filter(p => p.tipo === tipo)
+
+  async function guardar() {
+    if (auto && (!tipo || !partida)) { setErr('Elegí tipo y partida, o desactivá el automático.'); return }
+    setSaving(true); setErr('')
+    const body = auto
+      ? { id: prov.id, auto_contabiliza: true, auto_tipo: tipo, auto_partida_id: partida }
+      : { id: prov.id, auto_contabiliza: false }
+    const r = await fetch('/api/eerr/proveedores', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    setSaving(false)
+    if (r.ok) onSaved()
+    else { const d = await r.json().catch(() => ({})); setErr(d?.error || 'No se pudo guardar') }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+        <h3 className="font-semibold text-gray-900 mb-1">Editar proveedor</h3>
+        <p className="text-xs text-gray-500 mb-4">{prov.razon_social} · {prov.rut}</p>
+
+        <label className="flex items-center gap-2 mb-4 cursor-pointer">
+          <input type="checkbox" checked={auto} onChange={e => { setAuto(e.target.checked); if (!e.target.checked) { setTipo(''); setPartida('') } }} />
+          <span className="text-sm text-gray-700">Contabilizar automáticamente sus compras</span>
+        </label>
+
+        <label className="block text-xs text-gray-500 mb-1">¿Costo, gasto o impuesto?</label>
+        <div className="flex gap-2 mb-4">
+          {(['costo', 'gasto', 'impuesto'] as const).map(t => (
+            <button key={t} disabled={!auto} onClick={() => { setTipo(t); setPartida('') }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 ${tipo === t ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>{TIPO_LABEL[t]}</button>
+          ))}
+        </div>
+
+        <label className="block text-xs text-gray-500 mb-1">Partida</label>
+        <select value={partida} onChange={e => setPartida(e.target.value)} disabled={!auto || !tipo}
+          className="w-full border border-gray-300 rounded px-2 py-2 text-sm mb-2 disabled:opacity-40">
+          <option value="">— Elegí una partida —</option>
+          {opciones.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+        </select>
+        <p className="text-xs text-gray-400 mb-5">Al guardar, se asigna esta partida a sus compras <strong>pendientes</strong> (las ya asignadas no se tocan) y a las futuras.</p>
+
+        {err && <p className="text-sm text-red-700 mb-3">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="text-sm text-gray-500 px-3 py-2">Cancelar</button>
+          <button onClick={guardar} disabled={saving} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
+        </div>
+      </div>
     </div>
   )
 }
