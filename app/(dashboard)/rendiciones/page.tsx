@@ -29,6 +29,7 @@ export default function RendicionesPage() {
   const [filtroDoc, setFiltroDoc] = useState('')
   const [filtroClasif, setFiltroClasif] = useState('')
   const [sel, setSel] = useState<Set<string>>(new Set())
+  const [showBulk, setShowBulk] = useState(false)
 
   const [showCrear, setShowCrear] = useState(false)
   const [showPagar, setShowPagar] = useState(false)
@@ -123,14 +124,6 @@ export default function RendicionesPage() {
     else alert('No se pudo eliminar')
   }
 
-  async function bulkSet(updates: Record<string, string>) {
-    const ids = Array.from(sel)
-    if (ids.length === 0) return
-    const res = await fetch('/api/rendiciones', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, ...updates }) })
-    if (res.ok) { setSel(new Set()); await fetchAll() }
-    else alert('No se pudo actualizar')
-  }
-
   async function pagarRendiciones(e: React.FormEvent) {
     e.preventDefault()
     if (pagoForm.rendicion_ids.length === 0) return alert('Selecciona al menos una rendición')
@@ -210,7 +203,6 @@ export default function RendicionesPage() {
   const todasSel = filtered.length > 0 && filtered.every(r => sel.has(r.id))
   const toggleSel = (id: string) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleAll = () => setSel(() => (todasSel ? new Set() : new Set(filtered.map(r => r.id))))
-  const pill = 'border border-indigo-300 text-indigo-700 bg-white px-2.5 py-1 rounded-lg text-xs font-medium hover:bg-indigo-100'
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -294,14 +286,9 @@ export default function RendicionesPage() {
 
       {/* Barra de edición masiva */}
       {sel.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
+        <div className="flex flex-wrap items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
           <span className="text-sm text-indigo-800 font-medium">{sel.size} seleccionada(s)</span>
-          <span className="text-xs text-gray-500 ml-2">Documento:</span>
-          <button onClick={() => bulkSet({ tipo_documento: 'boleta' })} className={pill}>Boleta</button>
-          <button onClick={() => bulkSet({ tipo_documento: 'factura' })} className={pill}>Factura</button>
-          <span className="text-xs text-gray-500 ml-2">Clasif.:</span>
-          <button onClick={() => bulkSet({ clasificacion: 'rendicion' })} className={pill}>Rendición</button>
-          <button onClick={() => bulkSet({ clasificacion: 'aporte' })} className={pill}>Aporte</button>
+          <button onClick={() => setShowBulk(true)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700">Editar seleccionadas</button>
           <button onClick={() => setSel(new Set())} className="text-sm text-gray-500 hover:text-gray-700 ml-auto">Limpiar selección</button>
         </div>
       )}
@@ -479,6 +466,90 @@ export default function RendicionesPage() {
           </button>
         </form>
       </Modal>
+
+      {showBulk && (
+        <BulkEditModal
+          ids={Array.from(sel)}
+          partidas={partidas}
+          onClose={() => setShowBulk(false)}
+          onSaved={() => { setShowBulk(false); setSel(new Set()); fetchAll() }}
+        />
+      )}
     </div>
+  )
+}
+
+function BulkEditModal({ ids, partidas, onClose, onSaved }: {
+  ids: string[]; partidas: Partida[]; onClose: () => void; onSaved: () => void
+}) {
+  const [campo, setCampo] = useState<'clasificacion' | 'tipo_documento' | 'partida_id'>('clasificacion')
+  const [valor, setValor] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const elegirCampo = (c: typeof campo) => { setCampo(c); setValor('') }
+  const opt = (active: boolean) => `px-3 py-1.5 rounded-lg text-sm font-medium ${active ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`
+
+  async function aplicar() {
+    if (!valor) { setErr('Elegí un valor.'); return }
+    setSaving(true); setErr('')
+    const res = await fetch('/api/rendiciones', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, [campo]: valor }) })
+    setSaving(false)
+    if (res.ok) onSaved()
+    else { const d = await res.json().catch(() => ({})); setErr(d?.error || 'No se pudo aplicar') }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Editar ${ids.length} rendición(es)`}>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1.5">¿Qué querés editar?</label>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => elegirCampo('clasificacion')} className={opt(campo === 'clasificacion')}>Clasificación</button>
+            <button onClick={() => elegirCampo('tipo_documento')} className={opt(campo === 'tipo_documento')}>Documento</button>
+            <button onClick={() => elegirCampo('partida_id')} className={opt(campo === 'partida_id')}>Partida</button>
+          </div>
+        </div>
+
+        <div className="border-t border-gray-100 pt-4">
+          {campo === 'clasificacion' && (
+            <>
+              <label className="block text-xs text-gray-500 mb-1.5">Marcar como</label>
+              <div className="flex gap-2">
+                <button onClick={() => setValor('rendicion')} className={opt(valor === 'rendicion')}>Rendición</button>
+                <button onClick={() => setValor('aporte')} className={opt(valor === 'aporte')}>Aporte</button>
+              </div>
+              {valor === 'aporte' && <p className="text-xs text-gray-400 mt-2">El aporte queda sin documento ni partida y no va al resultado del EERR.</p>}
+            </>
+          )}
+          {campo === 'tipo_documento' && (
+            <>
+              <label className="block text-xs text-gray-500 mb-1.5">Marcar como</label>
+              <div className="flex gap-2">
+                <button onClick={() => setValor('boleta')} className={opt(valor === 'boleta')}>Boleta</button>
+                <button onClick={() => setValor('factura')} className={opt(valor === 'factura')}>Factura</button>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">Solo aplica a rendiciones (no a aportes). La factura no lleva partida (viene del SII).</p>
+            </>
+          )}
+          {campo === 'partida_id' && (
+            <>
+              <label className="block text-xs text-gray-500 mb-1.5">Partida</label>
+              <select value={valor} onChange={e => setValor(e.target.value)} className="w-full border border-gray-300 rounded px-2 py-2 text-sm">
+                <option value="">Seleccionar partida...</option>
+                {partidas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+              <p className="text-xs text-gray-400 mt-2">Solo se aplica a las boletas de rendición (facturas y aportes no llevan partida).</p>
+            </>
+          )}
+        </div>
+
+        {err && <p className="text-sm text-red-700">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="text-sm text-gray-500 px-3 py-2">Cancelar</button>
+          <button onClick={aplicar} disabled={saving} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Aplicando…' : 'Aplicar a todas'}</button>
+        </div>
+      </div>
+    </Modal>
   )
 }
