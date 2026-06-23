@@ -1,0 +1,324 @@
+import Anthropic from '@anthropic-ai/sdk'
+import { getSheetData } from './datastore'
+import { fmtPrecio } from './format'
+import { getMarketingConfig } from './marketing-config'
+import { listarCalendario, crearItems, type NuevoItem } from './marketing-calendario'
+import { listarImagenes, type ImagenBanco } from './mailing-images'
+import { generarPieza } from './marketing-pieza'
+
+/**
+ * AGENTE DE MARKETING / CEO del Crematorio Alma Animal. Un solo agente Claude con
+ * herramientas (no un enjambre, por costo): planifica un CALENDARIO de campañas
+ * multicanal (email | instagram | facebook), con la voz de marca y los precios EN
+ * VIVO. Human-in-the-loop: PROPONE y GENERA piezas, pero NADA se publica solo.
+ *
+ * Control de costo: planificar es barato (solo texto/ideas); generar piezas es
+ * más caro, así que el agente solo genera cuando el equipo lo pide explícitamente.
+ */
+
+let client: Anthropic | null = null
+function getClient(): Anthropic {
+  if (client) return client
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) throw new Error('ANTHROPIC_API_KEY no configurada')
+  client = new Anthropic({ apiKey: key })
+  return client
+}
+
+export function isMarketingAgenteConfigurado(): boolean {
+  return !!process.env.ANTHROPIC_API_KEY
+}
+
+const MODEL = process.env.ANTHROPIC_MARKETING_MODEL || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6'
+
+const BASE = `Eres el **estratega de marketing y contenido** del **Crematorio Alma Animal** (cremación de mascotas, Recoleta, Santiago de Chile; cobertura Región Metropolitana; lema "Huellas que no se borran"). Asesoras al dueño como un director de marketing digital: ideas, calendario, copy y consistencia de marca. Hablas en español neutro de Chile (NUNCA voseo argentino).
+
+TU TRABAJO
+- Ayudar a planificar y mantener un CALENDARIO DE CAMPAÑAS multicanal y a producir las piezas.
+- Pensar como dueño: qué publicar, en qué canal, cuándo y con qué objetivo, sin saturar ni improvisar.
+- Eres claro y concreto. Propones, explicas el porqué brevemente, y dejas que el dueño apruebe.
+
+CANALES
+- email: campañas de correo a la BASE DE VETERINARIOS (B2B). Para informar novedades, fidelizar o captar clínicas.
+- instagram: posts orgánicos al público general (sobre todo TUTORES y comunidad). Educar, generar confianza y recordación de marca.
+- facebook: posts orgánicos a la Página (tutores + comunidad). Similar a IG, copy algo más extenso.
+- (TikTok queda fuera por ahora; si surge una idea de video, propónla igual marcándola para subir a mano.)
+
+OBJETIVOS POSIBLES (usa estas claves en objetivo): captacion_vets, recordacion, educacion_tutores, postventa, promocion.
+AUDIENCIAS (clave en audiencia): tutores, veterinarios, ambos.
+
+VOZ DE MARCA (según la audiencia de cada pieza)
+- Tutores (B2C): tuteo cálido pero sobrio, cercano y humano, profesional. Inspira confianza, no lástima.
+- Veterinarios (B2B): profesional, técnica, eficiente, de socio confiable (datos, plazos, procesos).
+- SIEMPRE: sin humor, sin religión, sin clichés del rubro ("puente del arcoíris", "angelito", "ya no sufre"). A la mascota por su nombre cuando aplique; genérico "tu mascota" (nunca "compañero/a" ni el frío "su mascota").
+SOBRE EL NEGOCIO Y EL SERVICIO (úsalo para que los ángulos y el copy sean concretos, no genéricos; nunca inventes precios)
+- Crematorio de mascotas en Recoleta (Santiago), cobertura Región Metropolitana, todos los días 08:00–23:00.
+- Instalaciones PROPIAS: horno certificado, cámara de refrigeración y vehículo habilitado. NO se externaliza nada → control directo y trazabilidad total.
+- Proceso (5 pasos): 1) contacto y coordinación, 2) retiro a domicilio o desde la clínica en vehículo habilitado (en menos de 3 horas), 3) refrigeración certificada, 4) cremación en horno certificado con código de seguimiento individual, 5) entrega de cenizas + certificado digital en máximo 4 días hábiles. Hay video del proceso disponible si lo piden.
+- Modalidades (qué incluye cada una; el precio sale SIEMPRE de TARIFAS VIGENTES):
+  · Individual (la más elegida): retiro, cremación individual trazable, certificado digital, nombre grabado en placa de madera, ánfora de greda marmoleada y botellita con mechón de pelo.
+  · Premium: todo lo de Individual + ánfora premium a elección + un cuadro estilo acuarela conmemorativo.
+  · Sin Devolución: retiro y cremación individual trazable, sin devolución de cenizas (la más económica).
+- Eutanasia a domicilio: red de veterinarios en convenio que va a la casa; se coordina junto con la cremación. Es un servicio aparte (precio propio, no las tarifas de cremación).
+- Recargo de $20.000 en comunas fuera de la zona habitual (Lampa, Buin, Colina, Calera de Tango, Paine).
+- Diferenciadores para comunicar: instalaciones propias, trazabilidad total con código de seguimiento, retiro a domicilio/clínica, entrega en 4 días hábiles, certificado digital, tecnología de punta, red de eutanasia a domicilio para clínicas.
+
+REGLAS DURAS
+- NUNCA inventes precios: cuando hables de valores usa SOLO la sección TARIFAS VIGENTES de abajo (son de cremación; la eutanasia tiene precio aparte). Si no la tienes, dilo y no inventes.
+- NUNCA inventes promociones, plazos ni datos que el dueño no haya confirmado.
+- Nada se publica automáticamente. Tú PROPONES (estado "propuesta") y, cuando te lo pidan, GENERAS la pieza; el dueño aprueba y publica.
+
+CADENCIA RECOMENDADA (para no saturar; ajustable por el equipo en las instrucciones)
+- Email a la base de veterinarios (B2B): máximo 1–2 por mes. Es lo más sensible (saturar genera bajas y rebotes).
+- Instagram: 2–4 posts por semana. Facebook: 1–2 por semana. Mezcla formatos (carrusel educativo, post simple, recordación).
+- En un mes, balanceá objetivos (no todo captación ni todo recordación) y las dos audiencias (tutores y veterinarios).
+- Antes de proponer, revisá con listar_calendario lo ya planificado (mira el resumen por canal/audiencia) para respetar esta cadencia.
+
+FECHAS RELEVANTES DE CHILE (para colgar campañas con sentido; confirmá el día exacto si dudás, no inventes)
+- Fijas: Día Internacional del Perro (26/7), Día Internacional del Gato (8/8) y Día del Gato en Chile (20/2), Día Mundial de los Animales (4/10), Día del Veterinario en Chile (~/9), Fiestas Patrias (18–19/9, ojo pirotecnia y mascotas), Navidad (25/12) y Año Nuevo (riesgo de fuegos artificiales y mascotas perdidas), vuelta a clases (marzo), Día de la Madre/Padre. Para tutores funcionan bien los ángulos de cuidado, prevención y acompañamiento; evitá lo festivo cuando el tema es sensible.
+
+FLUJO DE TRABAJO (síguelo)
+1. PLANIFICAR (barato): cuando te pidan un plan ("armá el plan de julio", "ideas para esta semana"), primero usa "listar_calendario" para ver qué ya hay (no duplicar ni saturar un canal), y luego propón con "proponer_campanas" un conjunto de ítems repartidos por canal/fecha/objetivo. En el plan da SOLO idea + fecha + canal + audiencia + objetivo (y un título/gancho corto opcional). NO generes las piezas todavía.
+2. GENERAR (más caro): solo cuando el dueño lo pida explícitamente sobre ítems concretos ("generá la pieza de la #5", "escribí el post del lunes"), usa "generar_pieza" con el id. No generes piezas por iniciativa propia ni en lote sin que te lo pidan.
+3. Si te piden ideas de imágenes, mira el banco con "consultar_banco_imagenes" y prioriza reutilizar lo que ya existe.
+
+FORMATO DE RESPUESTA
+- Responde en texto natural, claro y conversacional, como un asesor. Usa listas cuando ayude.
+- Cuando propongas campañas, hazlo con la herramienta "proponer_campanas" (no escribas el calendario como tabla a mano) y luego resume al dueño qué propusiste y por qué.`
+
+async function bloqueTarifas(): Promise<string> {
+  try {
+    const [pg, ts] = await Promise.all([getSheetData('precios_generales'), getSheetData('tipos_servicio')])
+    const tramos = [...pg]
+      .sort((a, b) => (parseFloat(a.peso_min) || 0) - (parseFloat(b.peso_min) || 0))
+      .map(r => {
+        const max = (r.peso_max && r.peso_max.trim()) ? `${r.peso_min}–${r.peso_max} kg` : `${r.peso_min}+ kg`
+        return `- ${max}: Individual ${fmtPrecio(parseInt(r.precio_ci, 10) || 0)} · Premium ${fmtPrecio(parseInt(r.precio_cp, 10) || 0)} · Sin Devolución ${fmtPrecio(parseInt(r.precio_sd, 10) || 0)}`
+      }).join('\n')
+    const nombres = ts.map(t => `${t.codigo}=${t.nombre}`).join(', ')
+    return `TARIFAS VIGENTES de cremación (CLP, por peso):\n${tramos}\n\nTipos de servicio: ${nombres}. Entrega en hasta 4 días hábiles.`
+  } catch {
+    return 'TARIFAS: (no disponibles ahora — no inventes precios).'
+  }
+}
+
+function bloqueFechaChile(): string {
+  const TZ = 'America/Santiago'
+  const fecha = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, weekday: 'long', year: 'numeric', month: 'long', day: '2-digit' }).format(new Date())
+  const iso = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  return `FECHA ACTUAL (Chile): hoy es ${fecha} (${iso}). Usa esto para planificar fechas. Las fechas van en formato YYYY-MM-DD. Considera fechas relevantes del año si aplican (no inventes campañas atadas a fechas que no existan).`
+}
+
+function bloqueBanco(banco: ImagenBanco[]): string {
+  if (banco.length === 0) return 'BANCO DE IMÁGENES: vacío.'
+  const porGrupo: Record<string, number> = {}
+  for (const b of banco) porGrupo[b.grupo || 'otro'] = (porGrupo[b.grupo || 'otro'] || 0) + 1
+  const resumen = Object.entries(porGrupo).map(([g, n]) => `${g}: ${n}`).join(', ')
+  return `BANCO DE IMÁGENES (${banco.length} imágenes — ${resumen}). Usa "consultar_banco_imagenes" para ver detalles y prioriza reutilizar.`
+}
+
+// ─── Herramientas ─────────────────────────────────────────────────────────────
+
+const TOOL_LISTAR: Anthropic.Tool = {
+  name: 'listar_calendario',
+  description: 'Lee el calendario de campañas en un rango de fechas para no duplicar ni saturar un canal antes de proponer. Devuelve los ítems existentes con su estado.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      desde: { type: 'string', description: 'Fecha inicio YYYY-MM-DD (opcional).' },
+      hasta: { type: 'string', description: 'Fecha fin YYYY-MM-DD (opcional).' },
+    },
+    required: [],
+  },
+}
+
+const TOOL_PROPONER: Anthropic.Tool = {
+  name: 'proponer_campanas',
+  description: 'Crea uno o varios ítems en el calendario con estado "propuesta" para que el dueño los apruebe. Úsalo para entregar un plan. Solo idea/fecha/canal/audiencia/objetivo (NO generes las piezas acá).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      items: {
+        type: 'array',
+        description: 'Campañas propuestas.',
+        items: {
+          type: 'object',
+          properties: {
+            fecha: { type: 'string', description: 'Fecha planificada YYYY-MM-DD.' },
+            canal: { type: 'string', enum: ['email', 'instagram', 'facebook'] },
+            audiencia: { type: 'string', enum: ['tutores', 'veterinarios', 'ambos'] },
+            objetivo: { type: 'string', enum: ['captacion_vets', 'recordacion', 'educacion_tutores', 'postventa', 'promocion'] },
+            idea: { type: 'string', description: 'Qué comunica la campaña (1-2 frases).' },
+            titulo: { type: 'string', description: 'Gancho/título corto opcional.' },
+          },
+          required: ['fecha', 'canal', 'idea'],
+        },
+      },
+    },
+    required: ['items'],
+  },
+}
+
+const TOOL_PRECIOS: Anthropic.Tool = {
+  name: 'leer_precios',
+  description: 'Devuelve las tarifas vigentes de cremación (ya las tienes en el contexto, pero úsala si necesitas reconfirmar antes de mencionar un valor).',
+  input_schema: { type: 'object', properties: {}, required: [] },
+}
+
+const TOOL_BANCO: Anthropic.Tool = {
+  name: 'consultar_banco_imagenes',
+  description: 'Lista imágenes del banco (para reutilizar en piezas). Filtra por grupo opcional (mascotas, personas, productos, instalaciones, otro).',
+  input_schema: {
+    type: 'object',
+    properties: { grupo: { type: 'string', description: 'Grupo a filtrar (opcional).' } },
+    required: [],
+  },
+}
+
+const TOOL_GENERAR: Anthropic.Tool = {
+  name: 'generar_pieza',
+  description: 'Genera la pieza (copy + imagen para social, o asunto + HTML para email) de un ítem del calendario por su id. Es más caro: úsalo SOLO cuando el dueño lo pida explícitamente sobre ítems concretos.',
+  input_schema: {
+    type: 'object',
+    properties: { id: { type: 'string', description: 'Id del ítem del calendario.' } },
+    required: ['id'],
+  },
+}
+
+export interface RespuestaMarketing {
+  mensaje: string
+  acciones: string[]
+  /** Ítems creados/afectados en este turno (para refrescar la UI). */
+  cambios: boolean
+}
+export interface TurnoMarketing { rol: 'usuario' | 'agente'; texto: string }
+
+function construirMensajes(historial: TurnoMarketing[]): Anthropic.MessageParam[] {
+  const out: Anthropic.MessageParam[] = []
+  for (const t of historial) {
+    if (!t.texto?.trim()) continue
+    const role = t.rol === 'usuario' ? 'user' : 'assistant'
+    const last = out[out.length - 1]
+    if (last && last.role === role) last.content = `${last.content}\n${t.texto}`
+    else out.push({ role, content: t.texto })
+  }
+  while (out.length && out[0].role === 'assistant') out.shift()
+  return out
+}
+
+interface ProponerInput { items?: Array<{ fecha?: string; canal?: string; audiencia?: string; objetivo?: string; idea?: string; titulo?: string }> }
+
+/**
+ * Genera la respuesta del agente de marketing con tool-use: planifica el
+ * calendario, lee precios/banco y (si se lo piden) genera piezas.
+ */
+export async function generarRespuestaMarketing(
+  historial: TurnoMarketing[],
+  opts: { creadoPor?: string } = {},
+): Promise<RespuestaMarketing> {
+  const base = construirMensajes(historial.slice(-20))
+  if (base.length === 0) return { mensaje: '', acciones: [], cambios: false }
+
+  const [tarifas, cfg, banco] = await Promise.all([
+    bloqueTarifas(),
+    getMarketingConfig().catch(() => null),
+    listarImagenes().catch(() => [] as ImagenBanco[]),
+  ])
+
+  const system: Anthropic.TextBlockParam[] = [
+    { type: 'text', text: `${BASE}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
+  ]
+  const ajustes = [
+    cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO (trátalos como la verdad actual; REEMPLAZAN el guion base si chocan, salvo: precios siempre de TARIFAS VIGENTES):\n${cfg.instrucciones.trim()}`,
+    cfg?.calibracion?.trim() && `GUÍA DE ESTILO / LÍNEA EDITORIAL:\n${cfg.calibracion.trim()}`,
+  ].filter(Boolean).join('\n\n')
+  if (ajustes) system.push({ type: 'text', text: ajustes })
+  system.push({ type: 'text', text: bloqueFechaChile() })
+  system.push({ type: 'text', text: bloqueBanco(banco) })
+
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR]
+  const convo: Anthropic.MessageParam[] = [...base]
+  const acciones: string[] = []
+  let cambios = false
+  let textoFinal = ''
+
+  for (let iter = 0; iter < 6; iter++) {
+    const res = await getClient().messages.create({ model: MODEL, max_tokens: 2200, system, messages: convo, tools })
+    const texto = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
+    if (texto) textoFinal = texto
+    if (res.stop_reason !== 'tool_use') break
+    const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+    if (toolUses.length === 0) break
+
+    convo.push({ role: 'assistant', content: res.content })
+    const results: Anthropic.ToolResultBlockParam[] = []
+    for (const tu of toolUses) {
+      acciones.push(tu.name)
+      let resultText = 'ok'
+      try {
+        if (tu.name === 'listar_calendario') {
+          const inp = tu.input as { desde?: string; hasta?: string }
+          const items = await listarCalendario({ desde: inp.desde, hasta: inp.hasta })
+          if (items.length === 0) resultText = 'El calendario no tiene ítems en ese rango.'
+          else {
+            const porCanal: Record<string, number> = {}
+            const porAud: Record<string, number> = {}
+            for (const it of items) {
+              porCanal[it.canal] = (porCanal[it.canal] || 0) + 1
+              porAud[it.audiencia || 'sin audiencia'] = (porAud[it.audiencia || 'sin audiencia'] || 0) + 1
+            }
+            const resumen = `Resumen: ${items.length} ítems · canal {${Object.entries(porCanal).map(([k, v]) => `${k}:${v}`).join(', ')}} · audiencia {${Object.entries(porAud).map(([k, v]) => `${k}:${v}`).join(', ')}}`
+            const lineas = items.map(it => `#${it.id} ${it.fecha} [${it.canal} · ${it.audiencia || '—'}] (${it.estado}) ${it.objetivo || ''} — ${it.idea || it.titulo}`.trim()).join('\n')
+            resultText = `${resumen}\n${lineas}`
+          }
+        } else if (tu.name === 'proponer_campanas') {
+          const inp = tu.input as ProponerInput
+          const nuevos: NuevoItem[] = (inp.items || [])
+            .filter(i => i?.idea && i?.fecha && i?.canal)
+            .map(i => ({
+              fecha: String(i.fecha),
+              canal: String(i.canal),
+              audiencia: i.audiencia || 'ambos',
+              objetivo: i.objetivo || '',
+              idea: String(i.idea),
+              titulo: i.titulo || '',
+              estado: 'propuesta',
+              generado_por: 'ia',
+              creadoPor: opts.creadoPor,
+            }))
+          if (nuevos.length === 0) {
+            resultText = 'No recibí ítems válidos (cada uno necesita fecha, canal e idea).'
+          } else {
+            const creados = await crearItems(nuevos)
+            cambios = true
+            resultText = `Creadas ${creados.length} propuestas: ${creados.map(c => `#${c.id} (${c.fecha}, ${c.canal})`).join(', ')}.`
+          }
+        } else if (tu.name === 'leer_precios') {
+          resultText = await bloqueTarifas()
+        } else if (tu.name === 'consultar_banco_imagenes') {
+          const grupo = (tu.input as { grupo?: string }).grupo
+          const lista = banco.filter(b => !grupo || b.grupo === grupo).slice(0, 40)
+          resultText = lista.length === 0
+            ? 'No hay imágenes en el banco con ese filtro.'
+            : lista.map(b => `#${b.id} [${b.grupo || 'otro'}] ${b.descripcion || b.alt || '(sin descripción)'}`).join('\n')
+        } else if (tu.name === 'generar_pieza') {
+          const id = String((tu.input as { id?: string }).id || '')
+          const r = await generarPieza(id, opts.creadoPor)
+          cambios = true
+          const prev = r.item.canal === 'email'
+            ? `Email generado. Asunto: "${r.item.titulo}".`
+            : `Post generado para ${r.item.canal}. Copy: "${(r.item.cuerpo || '').slice(0, 180)}${r.item.cuerpo.length > 180 ? '…' : ''}"${r.item.imagen_url ? ' (con imagen)' : ''}.`
+          resultText = `${prev}${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}`
+        } else {
+          resultText = 'Herramienta no disponible.'
+        }
+      } catch (e) {
+        resultText = `No se pudo completar la acción: ${e instanceof Error ? e.message : String(e)}.`
+      }
+      results.push({ type: 'tool_result', tool_use_id: tu.id, content: resultText })
+    }
+    convo.push({ role: 'user', content: results })
+  }
+
+  return { mensaje: textoFinal.trim(), acciones, cambios }
+}

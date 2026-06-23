@@ -206,6 +206,24 @@ export const SHEETS: Record<string, string[]> = {
     'origen', 'modelo',
     'creado_por', 'fecha_creacion',
   ],
+  // Calendario de campañas multicanal (email | instagram | facebook). Capa de
+  // planificación del agente de marketing. estado: propuesta → aprobada →
+  // generada → programada → publicada | descartada. El email aprobado puede
+  // materializarse en mailing_campanas; el social se publica vía Meta Graph API.
+  campaign_calendar: [
+    'id', 'fecha', 'canal', 'estado',
+    'objetivo', 'audiencia', 'idea', 'titulo', 'cuerpo',
+    'imagen_id', 'imagen_url', 'imagenes_json',
+    'campana_id', 'post_externo_id', 'post_url',
+    'estado_publicacion', 'error_publicacion',
+    'generado_por', 'aprobado_por', 'fecha_publicacion',
+    'notas', 'creado_por', 'fecha_creacion',
+  ],
+  // Config editable del agente de marketing (una sola fila, id=1): instrucciones
+  // del equipo + calibración. Espejo de agente_config del inbox.
+  marketing_config: [
+    'id', 'instrucciones', 'calibracion', 'updated_at',
+  ],
   // Convenio de eutanasias a domicilio. Vets se inscriben en /convenio-eutanasias
   // (auto-aprobado) o los carga el admin manualmente.
   // - comunas: JSON array de nombres de comuna donde puede atender.

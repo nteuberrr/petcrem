@@ -1,14 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
-import { esApiAvanzada, normalizarRol } from '@/lib/roles'
-
-// Rutas permitidas para rol 'operador'. Todo lo demás en el dashboard es solo admin.
-const OPERADOR_ALLOWED = ['/dashboard', '/clientes', '/operaciones', '/asistencia']
-
-function isOperadorAllowed(pathname: string): boolean {
-  return OPERADOR_ALLOWED.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'))
-}
+import { normalizarRol } from '@/lib/roles'
+import { esRutaAvanzada, getPermisosConfig, puedeAcceder } from '@/lib/permisos'
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
@@ -29,6 +23,9 @@ export async function proxy(req: NextRequest) {
     pathname === '/api/mensajes/webhook' ||
     // Backup automático (lo llama Vercel Cron; auth por Bearer CRON_SECRET dentro de la ruta)
     pathname === '/api/backup' ||
+    // Publicación programada de campañas sociales (Vercel Cron; auth Bearer CRON_SECRET
+    // o sesión admin dentro de la ruta)
+    pathname === '/api/mailing/cron-publicar' ||
     pathname.startsWith('/api/mailing/pixel/') ||
     pathname.startsWith('/api/mailing/click/') ||
     pathname === '/convenio-eutanasias' ||
@@ -76,56 +73,32 @@ export async function proxy(req: NextRequest) {
   // privilegiado) — antes un role '' caía al passthrough final = acceso total.
   const role = normalizarRol(token.role)
 
-  // Admin (1) tiene acceso total
+  // Admin (1, dueño) tiene acceso total
   if (role === 'admin') return NextResponse.next()
 
-  // Admin 2: igual que admin, pero NO puede tocar el backend de "Configuración Avanzada"
-  // (Datos personales, Agentes, Mantenimiento). El resto, acceso total.
-  if (role === 'admin2') {
-    // Campañas (mailing) es solo del administrador principal. Las rutas públicas
-    // de mailing (webhooks/resend, pixel, click) ya pasaron en el passthrough de
-    // arriba, así que acá solo caen la página y las APIs internas de Campañas.
-    if (pathname === '/mailing' || pathname.startsWith('/mailing/') || pathname.startsWith('/api/mailing')) {
-      if (pathname.startsWith('/api/')) {
-        return NextResponse.json({ error: 'No autorizado: Campañas es solo del administrador principal.' }, { status: 403 })
-      }
-      return NextResponse.redirect(new URL('/dashboard', req.url))
-    }
-    // Estado de Resultados (EERR): también solo del administrador principal.
-    if (pathname === '/estado-resultados' || pathname.startsWith('/estado-resultados/') || pathname.startsWith('/api/eerr')) {
-      if (pathname.startsWith('/api/')) {
-        return NextResponse.json({ error: 'No autorizado: Estado de Resultados es solo del administrador principal.' }, { status: 403 })
-      }
-      return NextResponse.redirect(new URL('/dashboard', req.url))
-    }
-    if (pathname.startsWith('/api/') && esApiAvanzada(pathname)) {
+  // Lo usa el sidebar de cualquier usuario logueado para saber qué módulos ve.
+  if (pathname === '/api/mis-modulos') return NextResponse.next()
+
+  // Configuración Avanzada SIEMPRE solo del admin (acá vive el editor de permisos →
+  // no es toggleable, para no permitir escalar privilegios).
+  if (esRutaAvanzada(pathname)) {
+    if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'No autorizado: Configuración Avanzada es solo del administrador.' }, { status: 403 })
     }
-    return NextResponse.next()
+    return NextResponse.redirect(new URL('/dashboard', req.url))
   }
 
-  // Operador: solo dashboard, clientes, operaciones y asistencia
-  if (role === 'operador') {
-    if (pathname === '/') {
+  // admin2 ("General") y operador: gateo DINÁMICO por módulo (editable, ~instantáneo).
+  if (role === 'admin2' || role === 'operador') {
+    if (role === 'operador' && pathname === '/') {
       return NextResponse.redirect(new URL('/dashboard', req.url))
     }
+    const config = await getPermisosConfig()
+    if (puedeAcceder(role, pathname, config)) return NextResponse.next()
     if (pathname.startsWith('/api/')) {
-      // Permitir APIs que las secciones de operador necesitan
-      const allowedApis = [
-        '/api/dashboard',
-        '/api/clientes', '/api/ciclos', '/api/petroleo',
-        '/api/vehiculo', '/api/despachos',
-        '/api/especies', '/api/servicios', '/api/productos',
-        '/api/veterinarios', '/api/precios', '/api/descuentos', '/api/upload',
-        '/api/places',
-        '/api/asistencia', '/api/jornada-config', '/api/retiros-adicionales',
-      ]
-      if (allowedApis.some(p => pathname.startsWith(p))) return NextResponse.next()
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
     }
-    if (!isOperadorAllowed(pathname)) {
-      return NextResponse.redirect(new URL('/dashboard', req.url))
-    }
+    return NextResponse.redirect(new URL('/dashboard', req.url))
   }
 
   return NextResponse.next()

@@ -12,12 +12,12 @@ export type Rol = 'admin' | 'admin2' | 'operador'
 
 export const ROLES: { value: Rol; label: string }[] = [
   { value: 'admin', label: 'Admin' },
-  { value: 'admin2', label: 'Admin 2' },
+  { value: 'admin2', label: 'General' },
   { value: 'operador', label: 'Operador' },
 ]
 
 export const ROL_LABEL: Record<string, string> = {
-  admin: 'Admin', admin2: 'Admin 2', operador: 'Operador',
+  admin: 'Admin', admin2: 'General', operador: 'Operador',
 }
 
 /** Normaliza un valor arbitrario a un Rol válido (default operador). */
@@ -41,7 +41,7 @@ export function puedeConfigAvanzada(r?: string | null): boolean {
 }
 
 /** Prefijos de API que SOLO el admin (1) puede tocar (backend de Configuración Avanzada). */
-export const APIS_AVANZADAS = ['/api/empresa-config', '/api/mensajes/agente', '/api/sync-database', '/api/correos']
+export const APIS_AVANZADAS = ['/api/empresa-config', '/api/mensajes/agente', '/api/sync-database', '/api/correos', '/api/usuarios', '/api/permisos']
 
 export function esApiAvanzada(pathname: string): boolean {
   return APIS_AVANZADAS.some(p => pathname.startsWith(p))
@@ -67,10 +67,11 @@ export const MATRIZ_ACCESOS: ModuloAcceso[] = [
   { modulo: 'Configuración · Precios', roles: ['admin', 'admin2'] },
   { modulo: 'Configuración · Artículos (Servicios, Bodega, Otros Productos)', roles: ['admin', 'admin2'] },
   { modulo: 'Configuración · Descuentos', roles: ['admin', 'admin2'] },
-  { modulo: 'Configuración · Usuarios', roles: ['admin', 'admin2'], nota: 'Admin 2 solo gestiona Operadores' },
   { modulo: 'Configuración · Jornada', roles: ['admin', 'admin2'] },
   { modulo: 'Configuración Avanzada · Datos Personales', roles: ['admin'] },
+  { modulo: 'Configuración Avanzada · Usuarios', roles: ['admin'], nota: 'Solo el administrador principal.' },
   { modulo: 'Configuración Avanzada · Agentes (IA)', roles: ['admin'] },
+  { modulo: 'Configuración Avanzada · Correos', roles: ['admin'] },
   { modulo: 'Configuración Avanzada · Mantenimiento', roles: ['admin'] },
   { modulo: 'Informe de accesos', roles: ['admin'] },
 ]

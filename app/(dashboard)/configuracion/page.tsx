@@ -9,14 +9,14 @@ import AgentesConfig from '@/components/AgentesConfig'
 import CorreosConfig from '@/components/CorreosConfig'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 import { formatDate, formatHora } from '@/lib/dates'
-import { esAdmin, esAdminTotal, ROLES, ROL_LABEL, MATRIZ_ACCESOS } from '@/lib/roles'
+import { esAdmin, esAdminTotal, ROLES, ROL_LABEL } from '@/lib/roles'
 
-const TABS = ['Precios', 'Artículos', 'Descuentos', 'Usuarios', 'Jornada', 'Configuración Avanzada'] as const
+const TABS = ['Precios', 'Artículos', 'Descuentos', 'Jornada', 'Configuración Avanzada'] as const
 type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
 type ArticuloTab = 'servicios' | 'bodega' | 'otros'
 type ServiciosTab = 'tipos' | 'especies'
-type AvanzadaTab = 'datos' | 'agentes' | 'correos'
+type AvanzadaTab = 'datos' | 'usuarios' | 'agentes' | 'correos'
 
 type Producto = { id: string; nombre: string; precio: string; foto_url: string; stock: string; categoria?: string; activo: string }
 type CategoriaProducto = { id: string; nombre: string; activo: string; fecha_creacion: string }
@@ -396,7 +396,7 @@ export default function ConfiguracionPage() {
       {/* Sub-pestañas de Configuración Avanzada */}
       {tab === 'Configuración Avanzada' && isAdminTotal && (
         <div className="flex gap-2 flex-wrap mb-4">
-          {([['datos', 'Datos Personales'], ['agentes', 'Agentes'], ['correos', 'Correos']] as const).map(([k, label]) => (
+          {([['datos', 'Datos Personales'], ['usuarios', 'Usuarios'], ['agentes', 'Agentes'], ['correos', 'Correos']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setAvanzadaTab(k)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${avanzadaTab === k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               {label}
@@ -843,8 +843,8 @@ export default function ConfiguracionPage() {
         </div>
       )}
 
-      {/* ─── USUARIOS ─── */}
-      {tab === 'Usuarios' && (
+      {/* ─── USUARIOS (dentro de Configuración Avanzada, solo admin principal) ─── */}
+      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'usuarios' && (
         <div className="space-y-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -921,53 +921,8 @@ export default function ConfiguracionPage() {
           </table>
         </div>
 
-        {/* Informe de accesos — solo Admin (1) */}
-        {isAdminTotal && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div>
-                <h2 className="font-semibold text-gray-900">Informe de accesos</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Qué puede ver/usar cada rol. Se actualiza a medida que sumamos módulos.</p>
-              </div>
-              <button onClick={() => window.print()}
-                className="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0">
-                🖨 Imprimir
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[560px]">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Módulo</th>
-                    {['Admin', 'Admin 2', 'Operador'].map(h => (
-                      <th key={h} className="text-center px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {MATRIZ_ACCESOS.map(m => (
-                    <tr key={m.modulo} className="hover:bg-gray-50">
-                      <td className="px-4 py-2.5 text-gray-800">
-                        {m.modulo}
-                        {m.nota && <span className="block text-[10px] text-amber-600">{m.nota}</span>}
-                      </td>
-                      {(['admin', 'admin2', 'operador'] as const).map(r => (
-                        <td key={r} className="px-4 py-2.5 text-center">
-                          {m.roles.includes(r)
-                            ? <span className="text-emerald-600 font-bold">✓</span>
-                            : <span className="text-gray-300">✗</span>}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-500">
-              Usuarios creados: {usuarios.length} · {usuarios.filter(u => u.rol === 'admin').length} Admin · {usuarios.filter(u => u.rol === 'admin2').length} Admin 2 · {usuarios.filter(u => u.rol === 'operador').length} Operador
-            </div>
-          </div>
-        )}
+        {/* Editor de permisos por rol — solo Admin (1) */}
+        {isAdminTotal && <PermisosEditor usuarios={usuarios} />}
         </div>
       )}
 
@@ -1864,6 +1819,85 @@ function Field({ label, value, onChange, type = 'text', placeholder }: {
       <input type={type} value={value} placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
         className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+    </div>
+  )
+}
+
+// ─── Editor de permisos por rol (Configuración Avanzada → Usuarios, solo Admin) ──
+type PermisoModulo = { key: string; label: string; def: { admin2: boolean; operador: boolean } }
+type PermisosData = { modulos: PermisoModulo[]; config: Record<string, { admin2: boolean; operador: boolean }> }
+
+function PermisosEditor({ usuarios }: { usuarios: Usuario[] }) {
+  const [data, setData] = useState<PermisosData | null>(null)
+  const [saving, setSaving] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch('/api/permisos').then(r => (r.ok ? r.json() : null)).then(d => { if (d) setData(d) }).catch(() => {})
+  }, [])
+
+  async function toggle(modulo: string, rol: 'admin2' | 'operador', permitido: boolean) {
+    setSaving(`${modulo}:${rol}`); setError('')
+    try {
+      const r = await fetch('/api/permisos', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modulo, rol, permitido }) })
+      const d = await r.json()
+      if (r.ok && d.config) setData(prev => (prev ? { ...prev, config: d.config } : prev))
+      else setError(d.error || 'No se pudo guardar')
+    } catch { setError('Error de conexión') }
+    finally { setSaving('') }
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100">
+        <h2 className="font-semibold text-gray-900">Permisos por rol</h2>
+        <p className="text-xs text-gray-400 mt-0.5">Marcá qué puede ver y usar cada rol. Los cambios se aplican casi al instante (la persona los ve en su próxima navegación). El <b>Admin</b> (vos) siempre tiene todo.</p>
+      </div>
+      {!data ? (
+        <div className="px-6 py-8 text-center text-gray-400 text-sm">Cargando…</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[560px]">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Módulo</th>
+                {['Admin', 'General', 'Operador'].map(h => (
+                  <th key={h} className="text-center px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {data.modulos.map(m => {
+                const c = data.config[m.key] || m.def
+                return (
+                  <tr key={m.key} className="hover:bg-gray-50">
+                    <td className="px-4 py-2.5 text-gray-800">{m.label}</td>
+                    <td className="px-4 py-2.5 text-center"><span className="text-emerald-600 font-bold">✓</span></td>
+                    {(['admin2', 'operador'] as const).map(rol => (
+                      <td key={rol} className="px-4 py-2.5 text-center">
+                        <input type="checkbox" checked={!!c[rol]} disabled={saving === `${m.key}:${rol}`}
+                          onChange={e => toggle(m.key, rol, e.target.checked)}
+                          className="w-4 h-4 accent-indigo-600 cursor-pointer disabled:opacity-40" />
+                      </td>
+                    ))}
+                  </tr>
+                )
+              })}
+              <tr className="bg-amber-50/40">
+                <td className="px-4 py-2.5 text-gray-800">Configuración Avanzada
+                  <span className="block text-[10px] text-amber-600">Solo el administrador principal (acá se editan estos permisos).</span></td>
+                <td className="px-4 py-2.5 text-center"><span className="text-emerald-600 font-bold">✓</span></td>
+                <td className="px-4 py-2.5 text-center"><span className="text-gray-300">✗</span></td>
+                <td className="px-4 py-2.5 text-center"><span className="text-gray-300">✗</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+      {error && <div className="px-6 py-2 text-xs text-red-600">{error}</div>}
+      <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-500">
+        Usuarios: {usuarios.length} · {usuarios.filter(u => u.rol === 'admin').length} Admin · {usuarios.filter(u => u.rol === 'admin2').length} General · {usuarios.filter(u => u.rol === 'operador').length} Operador
+      </div>
     </div>
   )
 }

@@ -21,6 +21,10 @@ async function rolSesion(): Promise<string> {
 
 export async function GET() {
   try {
+    // Gestión de usuarios = Configuración Avanzada → solo el admin principal.
+    if ((await rolSesion()) !== 'admin') {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+    }
     await ensureUsuariosSheet()
     const rows = await getSheetData('usuarios')
     return NextResponse.json(rows.map(u => ({
@@ -39,7 +43,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const caller = await rolSesion()
-    if (caller !== 'admin' && caller !== 'admin2') {
+    if (caller !== 'admin') {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
     }
     const body = await req.json()
@@ -52,8 +56,7 @@ export async function POST(req: NextRequest) {
     if (existentes.some(u => u.email?.trim().toLowerCase() === String(body.email).trim().toLowerCase())) {
       return NextResponse.json({ error: 'Ya existe un usuario con ese email' }, { status: 409 })
     }
-    // Admin 2 solo puede crear operadores; Admin (1) puede crear cualquier rol.
-    const rol = caller === 'admin2' ? 'operador' : normalizarRol(body.rol)
+    const rol = normalizarRol(body.rol)
     const id = await getNextId('usuarios')
     const now = todayISO()
     const row = {
@@ -82,13 +85,9 @@ export async function DELETE(req: NextRequest) {
     const idx = rows.findIndex(r => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     const caller = await rolSesion()
-    // Defensa en profundidad: el proxy ya bloquea a operadores, pero el route no
-    // debe confiar solo en eso. Solo admin / admin2 pueden gestionar usuarios.
-    if (caller !== 'admin' && caller !== 'admin2') {
+    // Gestión de usuarios = Configuración Avanzada → solo el admin principal.
+    if (caller !== 'admin') {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
-    }
-    if (caller === 'admin2' && normalizarRol(rows[idx].rol) !== 'operador') {
-      return NextResponse.json({ error: 'Admin 2 solo puede eliminar operadores' }, { status: 403 })
     }
     await deleteRow('usuarios', idx)
     return NextResponse.json({ ok: true })
@@ -105,19 +104,11 @@ export async function PATCH(req: NextRequest) {
     const idx = rows.findIndex(r => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     const caller = await rolSesion()
-    // Defensa en profundidad (no confiar solo en el proxy): solo admin / admin2.
-    if (caller !== 'admin' && caller !== 'admin2') {
+    // Gestión de usuarios = Configuración Avanzada → solo el admin principal.
+    if (caller !== 'admin') {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
     }
     const target = rows[idx]
-    if (caller === 'admin2') {
-      if (normalizarRol(target.rol) !== 'operador') {
-        return NextResponse.json({ error: 'Admin 2 solo puede gestionar operadores' }, { status: 403 })
-      }
-      if (updates.rol !== undefined && normalizarRol(updates.rol) !== 'operador') {
-        return NextResponse.json({ error: 'Admin 2 no puede asignar roles de administrador' }, { status: 403 })
-      }
-    }
     if (updates.rol !== undefined) updates.rol = normalizarRol(updates.rol)
     // Password vacío/omitido = no cambiar; si viene, se guarda hasheado
     if (updates.password) {

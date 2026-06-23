@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { formatDate, formatDateTime, formatHoraDia } from '@/lib/dates'
+import CalendarioContent from '@/components/marketing/CalendarioContent'
 
 type Vet = {
   id: string
@@ -148,11 +149,11 @@ const REDES: { key: Red; label: string; icon: string; desc: string; activa: bool
     cardClass: 'border-indigo-200 hover:border-indigo-400 hover:shadow-md', iconClass: 'bg-indigo-100',
   },
   {
-    key: 'instagram', label: 'Instagram', icon: '📸', desc: 'Publicaciones e historias.', activa: false,
+    key: 'instagram', label: 'Instagram', icon: '📸', desc: 'Planifica y publica posts orgánicos.', activa: true,
     cardClass: 'border-pink-200 hover:border-pink-400 hover:shadow-md', iconClass: 'bg-gradient-to-br from-amber-200 via-pink-200 to-fuchsia-300',
   },
   {
-    key: 'facebook', label: 'Facebook', icon: '👍', desc: 'Publicaciones y anuncios.', activa: false,
+    key: 'facebook', label: 'Facebook', icon: '👍', desc: 'Planifica y publica posts orgánicos.', activa: true,
     cardClass: 'border-blue-200 hover:border-blue-400 hover:shadow-md', iconClass: 'bg-blue-100',
   },
   {
@@ -161,23 +162,44 @@ const REDES: { key: Red; label: string; icon: string; desc: string; activa: bool
   },
 ]
 
+type Vista = Red | 'calendario'
+
 export default function CampanasPage() {
-  const [red, setRed] = useState<Red | null>(null)
-  if (red === 'mail') return <MailContent onBack={() => setRed(null)} />
-  if (red) {
-    const r = REDES.find(x => x.key === red)!
-    return <ProximamentePlaceholder red={r} onBack={() => setRed(null)} />
+  const [vista, setVista] = useState<Vista | null>(null)
+  if (vista === 'mail') return <MailContent onBack={() => setVista(null)} />
+  if (vista === 'calendario') return <CalendarioContent onBack={() => setVista(null)} />
+  // Instagram y Facebook se gestionan desde el calendario, filtrados por ese canal.
+  if (vista === 'instagram' || vista === 'facebook') return <CalendarioContent canalInicial={vista} onBack={() => setVista(null)} />
+  if (vista === 'tiktok') {
+    const r = REDES.find(x => x.key === 'tiktok')!
+    return <ProximamentePlaceholder red={r} onBack={() => setVista(null)} />
   }
-  return <SelectorRedes onSelect={setRed} />
+  return <SelectorRedes onSelect={setVista} />
 }
 
-function SelectorRedes({ onSelect }: { onSelect: (r: Red) => void }) {
+function SelectorRedes({ onSelect }: { onSelect: (r: Vista) => void }) {
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Campañas</h1>
-        <p className="text-sm text-gray-500">Elige la red para ver y gestionar sus campañas.</p>
+        <p className="text-sm text-gray-500">Planifica con el agente de marketing o entra a una red para gestionar sus campañas.</p>
       </div>
+
+      {/* Entrada destacada: Calendario + Agente (cerebro multicanal) */}
+      <button
+        onClick={() => onSelect('calendario')}
+        className="w-full text-left bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-2xl p-5 transition-all hover:shadow-lg hover:from-indigo-700 hover:to-violet-700"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl grid place-items-center text-2xl bg-white/15">🧠</div>
+          <div className="flex-1">
+            <h2 className="text-lg font-bold">Calendario y Agente de Marketing</h2>
+            <p className="text-sm text-white/80 mt-0.5">Pedile un plan, aprobá las campañas, generá las piezas y publicá en email, Instagram y Facebook desde un solo lugar.</p>
+          </div>
+          <span className="text-2xl">→</span>
+        </div>
+      </button>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {REDES.map(r => (
           <button

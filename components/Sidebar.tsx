@@ -3,21 +3,22 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import { useState, useEffect } from 'react'
-import { esAdmin, esAdminTotal } from '@/lib/roles'
 
-const nav: { href: string; label: string; icon: string; adminOnly?: boolean; adminTotalOnly?: boolean }[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: false },
-  { href: '/clientes', label: 'Clientes', icon: '🐾', adminOnly: false },
-  { href: '/mensajes', label: 'Mensajes', icon: '💬', adminOnly: true },
-  { href: '/operaciones', label: 'Operaciones', icon: '🔥', adminOnly: false },
-  { href: '/asistencia', label: 'Asistencia', icon: '🕐', adminOnly: false },
-  { href: '/rendiciones', label: 'Rendiciones', icon: '🧾', adminOnly: true },
-  { href: '/bases', label: 'Veterinarios', icon: '🏥', adminOnly: true },
-  { href: '/servicios', label: 'Servicios', icon: '🤝', adminOnly: true },
-  { href: '/mailing', label: 'Campañas', icon: '📣', adminTotalOnly: true },
-  { href: '/estado-resultados', label: 'Estado de Resultados', icon: '💰', adminTotalOnly: true },
-  { href: '/configuracion', label: 'Configuración', icon: '⚙️', adminOnly: true },
-  { href: '/reportes', label: 'Reportes', icon: '📈', adminOnly: true },
+// Cada ítem se asocia a un módulo; el sidebar muestra solo los módulos permitidos
+// para el rol (dinámico, vía /api/mis-modulos). El admin (dueño) ve todos.
+const nav: { href: string; label: string; icon: string; modulo: string }[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: '📊', modulo: 'dashboard' },
+  { href: '/clientes', label: 'Clientes', icon: '🐾', modulo: 'clientes' },
+  { href: '/mensajes', label: 'Mensajes', icon: '💬', modulo: 'mensajes' },
+  { href: '/operaciones', label: 'Operaciones', icon: '🔥', modulo: 'operaciones' },
+  { href: '/asistencia', label: 'Asistencia', icon: '🕐', modulo: 'asistencia' },
+  { href: '/rendiciones', label: 'Rendiciones', icon: '🧾', modulo: 'rendiciones' },
+  { href: '/bases', label: 'Veterinarios', icon: '🏥', modulo: 'bases' },
+  { href: '/servicios', label: 'Servicios', icon: '🤝', modulo: 'servicios' },
+  { href: '/mailing', label: 'Campañas', icon: '📣', modulo: 'mailing' },
+  { href: '/estado-resultados', label: 'Estado de Resultados', icon: '💰', modulo: 'eerr' },
+  { href: '/configuracion', label: 'Configuración', icon: '⚙️', modulo: 'configuracion' },
+  { href: '/reportes', label: 'Reportes', icon: '📈', modulo: 'reportes' },
 ]
 
 export default function Sidebar() {
@@ -25,11 +26,22 @@ export default function Sidebar() {
   const { data: session } = useSession()
   const userName = session?.user?.name ?? session?.user?.email ?? ''
   const role = session?.user?.role ?? 'operador'
-  const isAdmin = esAdmin(role)
-  const isAdminTotal = esAdminTotal(role)
   const initials = userName.slice(0, 2).toUpperCase()
-  const items = nav.filter(n => (!n.adminOnly || isAdmin) && (!n.adminTotalOnly || isAdminTotal))
   const [open, setOpen] = useState(false)
+  // Módulos permitidos para este usuario (dinámico). null = cargando.
+  const [allowed, setAllowed] = useState<Set<string> | null>(null)
+
+  useEffect(() => {
+    let cancel = false
+    fetch('/api/mis-modulos')
+      .then(r => (r.ok ? r.json() : { modulos: [] }))
+      .then(d => { if (!cancel) setAllowed(new Set<string>(Array.isArray(d.modulos) ? d.modulos : [])) })
+      .catch(() => { if (!cancel) setAllowed(new Set<string>()) })
+    return () => { cancel = true }
+  }, [])
+
+  // Mientras carga, mostramos solo Dashboard (evita parpadeo de ítems no permitidos).
+  const items = allowed ? nav.filter(n => allowed.has(n.modulo)) : nav.filter(n => n.modulo === 'dashboard')
 
   // Cerrar el menú al navegar en móvil
   useEffect(() => { setOpen(false) }, [pathname])

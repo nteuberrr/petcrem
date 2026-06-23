@@ -1,3 +1,4 @@
+import sharp from 'sharp'
 import { getSheetData, appendRow, getNextId, deleteById, updateById, ensureSheet, ensureColumns } from './datastore'
 import { uploadToR2, deleteFromR2, keyFromPublicUrl } from './cloudflare-r2'
 import { generarImagen, extFromMime } from './nano-banana'
@@ -136,10 +137,23 @@ export async function generarYGuardarImagen(args: {
   referencias?: { data: Buffer; mime: string }[]
 }): Promise<ImagenGeneradaResult> {
   const img = await generarImagen({ prompt: args.prompt, aspect: args.aspect, referencias: args.referencias })
-  const ext = extFromMime(img.mime)
+  // Normaliza a JPEG: Instagram (Content Publishing API) SOLO acepta JPEG, y el
+  // generador suele devolver PNG. Convertir acá deja toda imagen generada lista
+  // para publicar en IG/FB y más liviana. Si la conversión falla, sube el original.
+  let buffer = img.buffer
+  let mime = img.mime
+  if (mime !== 'image/jpeg') {
+    try {
+      buffer = await sharp(img.buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 88 }).toBuffer()
+      mime = 'image/jpeg'
+    } catch (e) {
+      console.warn('[mailing-images] no se pudo convertir a JPEG, se sube el original:', e)
+    }
+  }
+  const ext = extFromMime(mime)
   const ts = Date.now()
   const key = `mailing/ai-images/${ts}.${ext}`
-  const up = await uploadToR2(img.buffer, key, img.mime)
+  const up = await uploadToR2(buffer, key, mime)
   const imagen = await registrarImagen({
     url: up.url,
     key: up.key,
@@ -153,7 +167,7 @@ export async function generarYGuardarImagen(args: {
     modelo: img.modelo,
     creadoPor: args.creadoPor,
   })
-  return { imagen, buffer: img.buffer, mime: img.mime }
+  return { imagen, buffer, mime }
 }
 
 /**
