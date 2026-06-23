@@ -32,7 +32,32 @@ export async function PATCH(req: NextRequest) {
   if (await noAutorizado()) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   try {
     const b = await req.json()
-    const { id, ...updates } = b
+    const { id, ids, ...updates } = b
+
+    // Bulk: activar contabilización automática (mismo tipo + partida) en varios
+    // proveedores a la vez, y aplicarla a sus facturas pendientes.
+    if (Array.isArray(ids) && ids.length > 0) {
+      const tipo = String(updates.auto_tipo || '')
+      const partida = String(updates.auto_partida_id || '')
+      if (!tipo || !partida) return NextResponse.json({ error: 'Elegí tipo y partida' }, { status: 400 })
+      const rows = await getSheetData(SHEET)
+      const byId = new Map(rows.map(r => [String(r.id), r]))
+      const gastos = await getSheetData('eerr_gastos_sii')
+      let aplicadas = 0
+      for (const pid of ids) {
+        const row = byId.get(String(pid))
+        if (!row) continue
+        await updateById(SHEET, row.id, { ...row, auto_contabiliza: 'TRUE', auto_tipo: tipo, auto_partida_id: partida })
+        aplicadas++
+        for (const g of gastos) {
+          if (g.rut === row.rut && !g.partida_id) {
+            await updateById('eerr_gastos_sii', g.id, { ...g, tipo_asignacion: tipo, partida_id: partida, contabilizado: 'TRUE' })
+          }
+        }
+      }
+      return NextResponse.json({ ok: true, aplicadas })
+    }
+
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
     if ('auto_contabiliza' in updates) {
       updates.auto_contabiliza = updates.auto_contabiliza === true || updates.auto_contabiliza === 'TRUE' ? 'TRUE' : 'FALSE'
