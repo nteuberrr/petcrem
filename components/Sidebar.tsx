@@ -15,6 +15,7 @@ const nav: { href: string; label: string; icon: string; adminOnly?: boolean; adm
   { href: '/bases', label: 'Veterinarios', icon: '🏥', adminOnly: true },
   { href: '/servicios', label: 'Servicios', icon: '🤝', adminOnly: true },
   { href: '/mailing', label: 'Campañas', icon: '📣', adminTotalOnly: true },
+  { href: '/estado-resultados', label: 'Estado de Resultados', icon: '💰', adminTotalOnly: true },
   { href: '/configuracion', label: 'Configuración', icon: '⚙️', adminOnly: true },
   { href: '/reportes', label: 'Reportes', icon: '📈', adminOnly: true },
 ]

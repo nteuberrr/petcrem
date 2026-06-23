@@ -91,6 +91,13 @@ export async function proxy(req: NextRequest) {
       }
       return NextResponse.redirect(new URL('/dashboard', req.url))
     }
+    // Estado de Resultados (EERR): también solo del administrador principal.
+    if (pathname === '/estado-resultados' || pathname.startsWith('/estado-resultados/') || pathname.startsWith('/api/eerr')) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'No autorizado: Estado de Resultados es solo del administrador principal.' }, { status: 403 })
+      }
+      return NextResponse.redirect(new URL('/dashboard', req.url))
+    }
     if (pathname.startsWith('/api/') && esApiAvanzada(pathname)) {
       return NextResponse.json({ error: 'No autorizado: Configuración Avanzada es solo del administrador.' }, { status: 403 })
     }

@@ -62,6 +62,7 @@ export const MATRIZ_ACCESOS: ModuloAcceso[] = [
   { modulo: 'Veterinarios (Bases)', roles: ['admin', 'admin2'] },
   { modulo: 'Servicios (Eutanasias a domicilio)', roles: ['admin', 'admin2'] },
   { modulo: 'Campañas (FB/IG/TikTok/Mail)', roles: ['admin'], nota: 'Solo el administrador principal.' },
+  { modulo: 'Estado de Resultados (EERR)', roles: ['admin'], nota: 'Solo el administrador principal.' },
   { modulo: 'Reportes', roles: ['admin', 'admin2'] },
   { modulo: 'Configuración · Precios', roles: ['admin', 'admin2'] },
   { modulo: 'Configuración · Artículos (Servicios, Bodega, Otros Productos)', roles: ['admin', 'admin2'] },
