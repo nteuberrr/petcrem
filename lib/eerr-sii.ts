@@ -46,10 +46,18 @@ function aIso(s: string): string {
   return ''
 }
 
-/** Número de celda del SII (enteros): trim, '0' si viene vacío. */
+/**
+ * Número de celda del SII (montos en CLP, enteros). Normaliza a un entero "limpio":
+ * algunos archivos vienen con separador de miles ('502.521') o con decimales por
+ * coma ('502.521,00'); guardarlos así rompe el `parseInt` de la UI/EERR
+ * ('502.521' → 502). Quitamos el separador de miles y cualquier parte decimal,
+ * dejando solo dígitos (y signo). '0' si viene vacío.
+ */
 function num(v?: string): string {
   const s = (v || '').trim()
-  return s === '' ? '0' : s
+  if (s === '') return '0'
+  const limpio = s.split(',')[0].replace(/[^\d-]/g, '')
+  return limpio === '' || limpio === '-' ? '0' : limpio
 }
 
 /**
