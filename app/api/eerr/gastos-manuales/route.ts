@@ -65,7 +65,25 @@ export async function PATCH(req: NextRequest) {
   if (await noAutorizado()) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   try {
     const b = await req.json()
-    const { id, ...updates } = b
+    const { id, ids, ...updates } = b
+
+    // Bulk: asignar la misma partida/tipo a varios gastos manuales a la vez.
+    if (Array.isArray(ids) && ids.length > 0) {
+      const tipo = String(updates.tipo_asignacion || '')
+      const partida = String(updates.partida_id || '')
+      if (tipo && !TIPOS.includes(tipo)) return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })
+      const rows = await getSheetData(SHEET)
+      const byId = new Map(rows.map(r => [String(r.id), r]))
+      let asignadas = 0
+      for (const rid of ids) {
+        const row = byId.get(String(rid))
+        if (!row) continue
+        await updateById(SHEET, row.id, { ...row, tipo_asignacion: tipo, partida_id: partida })
+        asignadas++
+      }
+      return NextResponse.json({ ok: true, asignadas })
+    }
+
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
     if ('tipo_asignacion' in updates && !TIPOS.includes(String(updates.tipo_asignacion))) {
       return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })
