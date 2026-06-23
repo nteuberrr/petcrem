@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/datastore'
+import { getSheetData, appendRow, updateById, getNextId, deleteById, ensureColumns, ensureSheet } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 
 const HOJA = 'rendiciones'
-const COLS = ['id', 'usuario', 'descripcion', 'fecha', 'monto', 'tipo_documento', 'estado', 'pago_id', 'fecha_creacion']
+const COLS = ['id', 'usuario', 'descripcion', 'fecha', 'monto', 'tipo_documento', 'partida_id', 'estado', 'pago_id', 'fecha_creacion']
+const TIPOS_DOC = ['boleta', 'factura', 'prestamo']
 
 async function ensure() {
   await ensureSheet(HOJA)
@@ -28,13 +29,16 @@ export async function POST(req: NextRequest) {
     }
     await ensure()
     const id = await getNextId(HOJA)
+    const tipoDoc = TIPOS_DOC.includes(body.tipo_documento) ? String(body.tipo_documento) : 'boleta'
     const row = {
       id,
       usuario: String(body.usuario),
       descripcion: String(body.descripcion),
       fecha: String(body.fecha),
       monto: String(body.monto),
-      tipo_documento: body.tipo_documento === 'factura' ? 'factura' : 'boleta',
+      tipo_documento: tipoDoc,
+      // Solo las boletas se asignan a una partida del EERR (factura/préstamo no).
+      partida_id: tipoDoc === 'boleta' ? String(body.partida_id || '') : '',
       estado: 'pendiente',
       pago_id: '',
       fecha_creacion: todayISO(),
@@ -50,12 +54,15 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
     const { id, ...updates } = body
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
     await ensure()
     const rows = await getSheetData(HOJA)
-    const idx = rows.findIndex(r => r.id === id)
-    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
-    const updated = { ...rows[idx], ...updates }
-    await updateRow(HOJA, idx, updated)
+    const row = rows.find(r => String(r.id) === String(id))
+    if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    // Factura/préstamo no llevan partida; al cambiar a esos tipos la limpiamos.
+    if (updates.tipo_documento === 'factura' || updates.tipo_documento === 'prestamo') updates.partida_id = ''
+    const updated = { ...row, ...updates }
+    await updateById(HOJA, String(id), updated)
     return NextResponse.json(updated)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })
@@ -69,9 +76,8 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
     await ensure()
     const rows = await getSheetData(HOJA)
-    const idx = rows.findIndex(r => r.id === id)
-    if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
-    await deleteRow(HOJA, idx)
+    if (!rows.some(r => String(r.id) === String(id))) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    await deleteById(HOJA, id)
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

@@ -2,16 +2,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { fmtPrecio } from '@/lib/format'
-import { formatDate, todayISO } from '@/lib/dates'
+import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 
 type Rendicion = {
   id: string; usuario: string; descripcion: string; fecha: string
-  monto: string; tipo_documento: string; estado: string; pago_id: string
+  monto: string; tipo_documento: string; partida_id: string; estado: string; pago_id: string
 }
 
 type Usuario = { id: string; nombre: string; email: string; rol: string }
+type Partida = { id: string; tipo: string; nombre: string }
 
 export default function RendicionesPage() {
   const { data: session, status } = useSession()
@@ -19,12 +20,14 @@ export default function RendicionesPage() {
 
   const [rendiciones, setRendiciones] = useState<Rendicion[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [partidas, setPartidas] = useState<Partida[]>([])
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'pagado'>('todos')
   const [filtroUsuario, setFiltroUsuario] = useState('')
 
   const [showCrear, setShowCrear] = useState(false)
   const [showPagar, setShowPagar] = useState(false)
-  const [form, setForm] = useState({ usuario: '', descripcion: '', fecha: todayISO(), monto: '', tipo_documento: 'boleta' })
+  const [editId, setEditId] = useState<string | null>(null)
+  const [form, setForm] = useState({ usuario: '', descripcion: '', fecha: todayISO(), monto: '', tipo_documento: 'boleta', partida_id: '' })
 
   const [pagoForm, setPagoForm] = useState({
     rendicion_ids: [] as string[],
@@ -35,11 +38,13 @@ export default function RendicionesPage() {
   const [saving, setSaving] = useState(false)
 
   const fetchAll = useCallback(async () => {
-    const [r, u] = await Promise.all([
+    const [r, u, p] = await Promise.all([
       fetch('/api/rendiciones').then(r => r.json()),
       fetch('/api/usuarios').then(r => r.json()),
+      fetch('/api/rendiciones/partidas').then(r => r.json()).catch(() => []),
     ])
     setRendiciones(Array.isArray(r) ? r : [])
+    setPartidas(Array.isArray(p) ? p : [])
     // Incluir al admin como usuario seleccionable
     const adminUser: Usuario = {
       id: 'admin-env',
@@ -53,22 +58,33 @@ export default function RendicionesPage() {
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
+  function resetForm() {
+    setForm({ usuario: '', descripcion: '', fecha: todayISO(), monto: '', tipo_documento: 'boleta', partida_id: '' })
+    setEditId(null)
+  }
+
   async function crear(e: React.FormEvent) {
     e.preventDefault()
+    if (form.tipo_documento === 'boleta' && !form.partida_id) {
+      return alert('Elegí la partida para la boleta.')
+    }
     setSaving(true)
+    const payload = {
+      ...(editId ? { id: editId } : {}),
+      usuario: form.usuario,
+      descripcion: form.descripcion,
+      fecha: form.fecha,
+      monto: parseFloat(form.monto) || 0,
+      tipo_documento: form.tipo_documento,
+      partida_id: form.tipo_documento === 'boleta' ? form.partida_id : '',
+    }
     const res = await fetch('/api/rendiciones', {
-      method: 'POST',
+      method: editId ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        usuario: form.usuario,
-        descripcion: form.descripcion,
-        fecha: form.fecha,
-        monto: parseFloat(form.monto) || 0,
-        tipo_documento: form.tipo_documento,
-      }),
+      body: JSON.stringify(payload),
     })
     if (res.ok) {
-      setForm({ usuario: '', descripcion: '', fecha: todayISO(), monto: '', tipo_documento: 'boleta' })
+      resetForm()
       setShowCrear(false)
       await fetchAll()
     } else {
@@ -76,6 +92,23 @@ export default function RendicionesPage() {
       alert(`Error: ${err.error ?? res.status}`)
     }
     setSaving(false)
+  }
+
+  function editar(r: Rendicion) {
+    setForm({
+      usuario: r.usuario, descripcion: r.descripcion,
+      fecha: formatDateForSheet(r.fecha) || r.fecha,
+      monto: r.monto, tipo_documento: r.tipo_documento || 'boleta', partida_id: r.partida_id || '',
+    })
+    setEditId(r.id)
+    setShowCrear(true)
+  }
+
+  async function eliminar(r: Rendicion) {
+    if (!confirm(`¿Eliminar la rendición de ${r.usuario} (${fmtPrecio(r.monto)})?`)) return
+    const res = await fetch(`/api/rendiciones?id=${encodeURIComponent(r.id)}`, { method: 'DELETE' })
+    if (res.ok) await fetchAll()
+    else alert('No se pudo eliminar')
   }
 
   async function pagarRendiciones(e: React.FormEvent) {
@@ -150,6 +183,8 @@ export default function RendicionesPage() {
     return s + (r ? parseFloat(r.monto) || 0 : 0)
   }, 0)
 
+  const partidaNombre = (id: string) => partidas.find(p => p.id === id)?.nombre || ''
+
   return (
     <div className="max-w-6xl space-y-6">
       <div className="flex items-start justify-between">
@@ -158,7 +193,7 @@ export default function RendicionesPage() {
           <p className="text-gray-500 text-sm mt-0.5">Gastos del personal y control de pagos</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowCrear(true)}
+          <button onClick={() => { resetForm(); setShowCrear(true) }}
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             + Nueva rendición
           </button>
@@ -215,12 +250,12 @@ export default function RendicionesPage() {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+        <table className="w-full text-sm min-w-[820px]">
           <thead className="bg-gray-50">
             <tr>
-              {['Usuario', 'Descripción', 'Fecha', 'Monto', 'Tipo doc.', 'Estado'].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
+              {['Usuario', 'Descripción', 'Fecha', 'Monto', 'Tipo doc.', 'Partida', 'Estado', ''].map((h, i) => (
+                <th key={i} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
               ))}
             </tr>
           </thead>
@@ -229,23 +264,32 @@ export default function RendicionesPage() {
               <tr key={r.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium text-gray-900">{r.usuario}</td>
                 <td className="px-4 py-3 text-gray-700">{r.descripcion}</td>
-                <td className="px-4 py-3 text-gray-700">{formatDate(r.fecha)}</td>
-                <td className="px-4 py-3 font-semibold text-gray-900">{fmtPrecio(r.monto)}</td>
-                <td className="px-4 py-3 text-gray-700 capitalize">{r.tipo_documento}</td>
+                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(r.fecha)}</td>
+                <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(r.monto)}</td>
+                <td className="px-4 py-3 text-gray-700 capitalize">{r.tipo_documento === 'prestamo' ? 'Préstamo' : r.tipo_documento}</td>
+                <td className="px-4 py-3 text-xs">
+                  {r.tipo_documento === 'boleta'
+                    ? (r.partida_id ? <span className="text-gray-700">{partidaNombre(r.partida_id)}</span> : <span className="text-amber-600 font-bold" title="Pendiente de asignación">(!)</span>)
+                    : <span className="text-gray-300">—</span>}
+                </td>
                 <td className="px-4 py-3">
                   <Badge variant={r.estado === 'pagado' ? 'green' : 'yellow'}>{r.estado}</Badge>
+                </td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <button onClick={() => editar(r)} className="text-xs text-gray-400 hover:text-indigo-600 mr-3">Editar</button>
+                  <button onClick={() => eliminar(r)} className="text-xs text-gray-300 hover:text-red-600">Eliminar</button>
                 </td>
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">Sin rendiciones</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-400">Sin rendiciones</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
       {/* Modal nueva rendición */}
-      <Modal open={showCrear} onClose={() => setShowCrear(false)} title="Nueva rendición">
+      <Modal open={showCrear} onClose={() => { setShowCrear(false); resetForm() }} title={editId ? 'Editar rendición' : 'Nueva rendición'}>
         <form onSubmit={crear} className="space-y-3">
           <div>
             <label className="text-xs font-medium text-gray-700">Usuario</label>
@@ -275,17 +319,30 @@ export default function RendicionesPage() {
           <div>
             <label className="text-xs font-medium text-gray-700">Tipo de documento</label>
             <div className="mt-2 flex gap-4">
-              {(['boleta', 'factura'] as const).map(t => (
+              {(['boleta', 'factura', 'prestamo'] as const).map(t => (
                 <label key={t} className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" checked={form.tipo_documento === t} onChange={() => setForm(f => ({ ...f, tipo_documento: t }))} />
-                  <span className="text-sm capitalize">{t}</span>
+                  <input type="radio" checked={form.tipo_documento === t} onChange={() => setForm(f => ({ ...f, tipo_documento: t, partida_id: t === 'boleta' ? f.partida_id : '' }))} />
+                  <span className="text-sm capitalize">{t === 'prestamo' ? 'Préstamo' : t}</span>
                 </label>
               ))}
             </div>
+            {form.tipo_documento !== 'boleta' && (
+              <p className="text-xs text-gray-400 mt-1">Factura y préstamo no se asignan a una partida.</p>
+            )}
           </div>
+          {form.tipo_documento === 'boleta' && (
+            <div>
+              <label className="text-xs font-medium text-gray-700">Partida (Estado de Resultados)</label>
+              <select required value={form.partida_id} onChange={e => setForm(f => ({ ...f, partida_id: e.target.value }))}
+                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="">Seleccionar partida...</option>
+                {partidas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            </div>
+          )}
           <button type="submit" disabled={saving}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-50">
-            {saving ? 'Guardando...' : 'Crear rendición'}
+            {saving ? 'Guardando...' : (editId ? 'Guardar cambios' : 'Crear rendición')}
           </button>
         </form>
       </Modal>
