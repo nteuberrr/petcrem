@@ -65,28 +65,34 @@ export default function EerrIntegralTab() {
         // 12 meses → cifras en miles (entran sin scroll); 1 columna (mes/año) → pesos exactos.
         const enMiles = data.periodos.length > 1
 
-        // Una fila del estado de resultados (grilla con bordes, números centrados).
-        // 'sghead' = nombre del subgrupo (sin números, es un rótulo); 'subsub' =
-        // SUBTOTAL del subgrupo; 'itemSg' = partida dentro de un subgrupo (indentada).
-        type Kind = 'item' | 'itemSg' | 'sghead' | 'subsub' | 'subtotal' | 'accent' | 'result'
+        // Tabla financiera top-down: cada sección muestra su TÍTULO + TOTAL arriba
+        // y el detalle debajo. Jerarquía de tamaños (de mayor a menor):
+        //   section / accent / result  >  sgHead (subtotal)  >  item (detalle)
+        type Kind = 'section' | 'accent' | 'result' | 'sgHead' | 'item' | 'loose'
+        // Tamaño ÚNICO para TODAS las celdas (look ejecutivo): la jerarquía se da por
+        // peso (bold/semibold/normal), color y banda de fondo — nunca por tamaños de
+        // número distintos, que se ven disparejos.
+        const SIZE = 'text-[13px]'
+        const CFG: Record<Kind, { bg: string; text: string; weight: string; num: string; upper: string; top: string; indent: string }> = {
+          section: { bg: 'bg-gray-100', text: 'text-gray-900', weight: 'font-bold', num: 'font-bold', upper: 'uppercase tracking-wide', top: 'border-t-2 border-t-gray-400', indent: 'pl-3' },
+          accent: { bg: 'bg-indigo-50', text: 'text-indigo-900', weight: 'font-bold', num: 'font-bold', upper: '', top: 'border-t-2 border-t-indigo-200', indent: 'pl-3' },
+          result: { bg: 'bg-gray-900', text: 'text-white', weight: 'font-bold', num: 'font-bold', upper: 'uppercase tracking-wide', top: 'border-t-2 border-t-gray-700', indent: 'pl-3' },
+          sgHead: { bg: 'bg-white', text: 'text-gray-700', weight: 'font-semibold', num: 'font-semibold', upper: '', top: 'border-t border-t-gray-200', indent: 'pl-6' },
+          item: { bg: 'bg-white', text: 'text-gray-500', weight: 'font-normal', num: 'font-normal', upper: '', top: '', indent: 'pl-10' },
+          loose: { bg: 'bg-white', text: 'text-gray-500', weight: 'font-normal', num: 'font-normal', upper: '', top: '', indent: 'pl-6' },
+        }
         const row = (key: string, label: string, vals: number[], kind: Kind) => {
-          const esItem = kind === 'item' || kind === 'itemSg'
-          const bg = kind === 'result' ? 'bg-gray-900' : kind === 'accent' ? 'bg-indigo-50' : kind === 'subtotal' ? 'bg-gray-100' : kind === 'sghead' ? 'bg-gray-50' : 'bg-white'
-          const text = kind === 'result' ? 'text-white' : esItem ? 'text-gray-600' : 'text-gray-900'
-          const bold = esItem ? '' : 'font-semibold'
-          const top = (kind === 'subtotal' || kind === 'accent' || kind === 'result') ? 'border-t-2 border-t-gray-300' : (kind === 'sghead' || kind === 'subsub') ? 'border-t border-t-gray-200' : ''
-          const indent = kind === 'itemSg' ? 'pl-8' : kind === 'item' ? 'pl-5' : kind === 'subsub' ? 'pl-5' : kind === 'sghead' ? 'pl-3' : ''
-          const base = `border border-gray-200 px-2 py-1.5 ${bg} ${text} ${bold} ${top}`
-          const conInRojo = (v: number) => v < 0 && (kind === 'accent' || kind === 'result')
+          const c = CFG[kind]
+          const base = `border border-gray-200 px-2 py-1.5 ${SIZE} ${c.bg} ${c.text} ${c.top}`
+          const neg = (v: number) => v < 0 && (kind === 'accent' || kind === 'result')
           return (
             <tr key={key}>
-              <td className={`${base} text-left whitespace-nowrap sticky left-0 border-r-2 border-r-gray-300 pr-3 ${indent} ${esItem ? 'font-normal' : ''}`}>{kind === 'sghead' ? `▸ ${label}` : label}</td>
+              <td className={`${base} ${c.weight} ${c.upper} text-left whitespace-nowrap sticky left-0 border-r-2 border-r-gray-300 pr-3 ${c.indent}`}>{label}</td>
               {vals.map((v, i) => {
-                if (kind === 'sghead') return <td key={i} className={base}></td>
                 const n = enMiles ? Math.round(v / 1000) : Math.round(v)
                 return (
-                  <td key={i} className={`${base} text-center tabular-nums whitespace-nowrap ${conInRojo(v) ? (kind === 'result' ? 'text-red-300' : 'text-red-600') : ''}`}>
-                    {n === 0 ? <span className={kind === 'result' ? 'text-gray-500' : 'text-gray-300'}>—</span> : (enMiles ? fmtNumero(n) : fmtPrecio(n))}
+                  <td key={i} className={`${base} ${c.num} text-center tabular-nums whitespace-nowrap ${neg(v) ? (kind === 'result' ? 'text-red-300' : 'text-red-600') : ''}`}>
+                    {n === 0 ? <span className={kind === 'result' ? 'text-gray-600' : 'text-gray-300'}>—</span> : (enMiles ? fmtNumero(n) : fmtPrecio(n))}
                   </td>
                 )
               })}
@@ -94,10 +100,10 @@ export default function EerrIntegralTab() {
           )
         }
 
-        // Renderiza un grupo (ingresos/costos/…): cada subgrupo va como rótulo +
-        // sus partidas + una fila "Subtotal X"; las sueltas (sin subgrupo) directas.
-        const renderGrupo = (filas: Fila[], pre: string) => {
-          const out: React.ReactNode[] = []
+        // Una sección (ingresos/costos/…): título + total ARRIBA y debajo el
+        // detalle; cada subgrupo muestra su subtotal arriba de sus partidas.
+        const renderSection = (titulo: string, filas: Fila[], total: number[], pre: string) => {
+          const out: React.ReactNode[] = [row(`${pre}-head`, titulo, total, 'section')]
           let i = 0
           while (i < filas.length) {
             const sg = filas[i].subgrupo
@@ -105,11 +111,10 @@ export default function EerrIntegralTab() {
               const block: Fila[] = []
               while (i < filas.length && filas[i].subgrupo === sg) { block.push(filas[i]); i++ }
               const sub = block.reduce((acc, f) => acc.map((v, k) => v + (f.valores[k] || 0)), new Array(N).fill(0) as number[])
-              out.push(row(`${pre}-h-${sg}`, sg, sub, 'sghead'))
-              block.forEach((f, k) => out.push(row(`${pre}-${sg}-${k}`, f.nombre, f.valores, 'itemSg')))
-              out.push(row(`${pre}-st-${sg}`, `Subtotal ${sg}`, sub, 'subsub'))
+              out.push(row(`${pre}-sg-${sg}`, sg, sub, 'sgHead'))
+              block.forEach((f, k) => out.push(row(`${pre}-${sg}-${k}`, f.nombre, f.valores, 'item')))
             } else {
-              out.push(row(`${pre}-s-${i}`, filas[i].nombre, filas[i].valores, 'item'))
+              out.push(row(`${pre}-l-${i}`, filas[i].nombre, filas[i].valores, 'loose'))
               i++
             }
           }
@@ -119,24 +124,21 @@ export default function EerrIntegralTab() {
         return (
           <div>
             {enMiles && <p className="text-xs font-medium text-gray-500 mb-2">Cifras en <strong className="text-gray-700">miles de $</strong> (CLP). Filtrá un mes o un año para ver pesos exactos.</p>}
-            <div className="bg-white rounded-xl border border-gray-300 overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
+            <div className="bg-white rounded-xl border border-gray-300 overflow-x-auto shadow-sm">
+            <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-gray-100 text-gray-600 text-xs uppercase">
-                  <th className="border border-gray-200 px-2 py-2.5 text-left font-semibold sticky left-0 bg-gray-100 border-r-2 border-r-gray-300 z-10 pr-3">Concepto</th>
-                  {data.periodos.map(p => <th key={p.key} className="border border-gray-200 px-2 py-2.5 text-center font-semibold whitespace-nowrap">{p.label}</th>)}
+                <tr className="bg-gray-800 text-gray-100 text-xs uppercase">
+                  <th className="border border-gray-700 px-2 py-3 text-left font-semibold sticky left-0 bg-gray-800 border-r-2 border-r-gray-600 z-10 pr-3 tracking-wide">Concepto</th>
+                  {data.periodos.map(p => <th key={p.key} className="border border-gray-700 px-2 py-3 text-center font-semibold whitespace-nowrap">{p.label}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {renderGrupo(data.ingresos, 'ing')}
-                {row('totIng', 'Total Ingresos', totIng, 'subtotal')}
-                {renderGrupo(data.costos, 'cos')}
-                {row('totCos', 'Total Costo', totCos, 'subtotal')}
+                {renderSection('Ingresos', data.ingresos, totIng, 'ing')}
+                {renderSection('Costos', data.costos, totCos, 'cos')}
                 {row('margen', 'Margen Operacional', margen, 'accent')}
-                {renderGrupo(data.gastos, 'gas')}
-                {row('totGas', 'Total Gasto', totGas, 'subtotal')}
+                {renderSection('Gastos', data.gastos, totGas, 'gas')}
                 {row('rai', 'Resultado Antes de Impuestos', rai, 'accent')}
-                {renderGrupo(data.impuestos, 'imp')}
+                {renderSection('Impuestos', data.impuestos, totImp, 'imp')}
                 {row('res', 'Resultado del Ejercicio', resultado, 'result')}
               </tbody>
             </table>
