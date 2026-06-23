@@ -19,7 +19,10 @@ const clasifLabel = (c: string) => ((c || 'rendicion') === 'aporte' ? 'Aporte' :
 
 export default function RendicionesPage() {
   const { data: session, status } = useSession()
-  const isAdmin = status === 'authenticated' && (session?.user?.role === 'admin' || session?.user?.role === undefined)
+  const role = session?.user?.role
+  // Admin principal: ve TODO y es el único que edita/elimina. admin2: ve, crea y paga.
+  const esPrincipal = status === 'authenticated' && (role === 'admin' || role === undefined)
+  const puedeVer = esPrincipal || role === 'admin2'
 
   const [rendiciones, setRendiciones] = useState<Rendicion[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
@@ -160,7 +163,7 @@ export default function RendicionesPage() {
   }
 
   if (status === 'loading') return <div className="p-8 text-gray-400 text-sm">Cargando...</div>
-  if (!isAdmin) return (
+  if (!puedeVer) return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
       <p className="text-4xl mb-4">🔒</p>
       <h2 className="text-xl font-bold text-gray-900 mb-2">Acceso restringido</h2>
@@ -296,8 +299,8 @@ export default function RendicionesPage() {
         )}
       </div>
 
-      {/* Barra de edición masiva */}
-      {sel.size > 0 && (
+      {/* Barra de edición masiva (solo admin principal) */}
+      {esPrincipal && sel.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
           <span className="text-sm text-indigo-800 font-medium">{sel.size} seleccionada(s)</span>
           <button onClick={() => setShowBulk(true)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700">Editar seleccionadas</button>
@@ -310,7 +313,7 @@ export default function RendicionesPage() {
         <table className="w-full text-sm min-w-[920px]">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-3 w-8 text-center"><input type="checkbox" checked={todasSel} onChange={toggleAll} title="Seleccionar todas" /></th>
+              <th className="px-3 py-3 w-8 text-center">{esPrincipal && <input type="checkbox" checked={todasSel} onChange={toggleAll} title="Seleccionar todas" />}</th>
               {['Usuario', 'Descripción', 'Fecha', 'Monto', 'Documento', 'Clasif.', 'Partida', 'Estado', ''].map((h, i) => (
                 <th key={i} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
               ))}
@@ -321,7 +324,7 @@ export default function RendicionesPage() {
               const esAporte = (r.clasificacion || 'rendicion') === 'aporte'
               return (
                 <tr key={r.id} className={`hover:bg-gray-50 ${sel.has(r.id) ? 'bg-indigo-50/40' : ''}`}>
-                  <td className="px-3 py-3 text-center"><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggleSel(r.id)} /></td>
+                  <td className="px-3 py-3 text-center">{esPrincipal && <input type="checkbox" checked={sel.has(r.id)} onChange={() => toggleSel(r.id)} />}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{r.usuario}</td>
                   <td className="px-4 py-3 text-gray-700">{r.descripcion}</td>
                   <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(r.fecha)}</td>
@@ -339,8 +342,12 @@ export default function RendicionesPage() {
                     <Badge variant={r.estado === 'pagado' ? 'green' : 'yellow'}>{r.estado}</Badge>
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <button onClick={() => editar(r)} className="text-xs text-gray-400 hover:text-indigo-600 mr-3">Editar</button>
-                    <button onClick={() => eliminar(r)} className="text-xs text-gray-300 hover:text-red-600">Eliminar</button>
+                    {esPrincipal ? (
+                      <>
+                        <button onClick={() => editar(r)} className="text-xs text-gray-400 hover:text-indigo-600 mr-3">Editar</button>
+                        <button onClick={() => eliminar(r)} className="text-xs text-gray-300 hover:text-red-600">Eliminar</button>
+                      </>
+                    ) : <span className="text-gray-300">—</span>}
                   </td>
                 </tr>
               )

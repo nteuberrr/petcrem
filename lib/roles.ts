@@ -58,7 +58,7 @@ export const MATRIZ_ACCESOS: ModuloAcceso[] = [
   { modulo: 'Operaciones (ciclos, petróleo, vehículo, despachos)', roles: ['admin', 'admin2', 'operador'] },
   { modulo: 'Asistencia', roles: ['admin', 'admin2', 'operador'] },
   { modulo: 'Mensajes (inbox WhatsApp)', roles: ['admin', 'admin2'] },
-  { modulo: 'Rendiciones', roles: ['admin', 'admin2'] },
+  { modulo: 'Rendiciones', roles: ['admin', 'admin2'], nota: 'admin2 ve, crea y paga; editar/eliminar solo admin principal.' },
   { modulo: 'Veterinarios (Bases)', roles: ['admin', 'admin2'] },
   { modulo: 'Servicios (Eutanasias a domicilio)', roles: ['admin', 'admin2'] },
   { modulo: 'Campañas (FB/IG/TikTok/Mail)', roles: ['admin'], nota: 'Solo el administrador principal.' },
