@@ -20,7 +20,8 @@ export async function GET() {
   if (await noAutorizado()) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   try {
     const rows = await getSheetData(SHEET)
-    const boletas = rows.filter(r => r.tipo_documento === 'boleta')
+    // Boletas de rendición (no aportes): las únicas que se asignan a una partida del EERR.
+    const boletas = rows.filter(r => r.tipo_documento === 'boleta' && r.clasificacion !== 'aporte')
     boletas.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
     return NextResponse.json(boletas)
   } catch (e) {

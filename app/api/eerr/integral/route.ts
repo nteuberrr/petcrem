@@ -155,7 +155,9 @@ export async function GET(req: NextRequest) {
     }
     for (const g of gastosMan as Cli[]) add(g.partida_id, g.fecha, parseInt(g.monto) || 0)
     for (const r of rendiciones as Cli[]) {
-      if (r.tipo_documento === 'boleta' && r.partida_id) add(r.partida_id, r.fecha, parseInt(r.monto) || 0)
+      // Solo boletas de rendición con partida. Las facturas vienen del SII y los
+      // aportes (préstamos a la empresa) no van al resultado.
+      if (r.tipo_documento === 'boleta' && r.clasificacion !== 'aporte' && r.partida_id) add(r.partida_id, r.fecha, parseInt(r.monto) || 0)
     }
 
     const sgById = new Map<string, { nombre: string; orden: number }>()

@@ -57,9 +57,12 @@ export const SHEETS: Record<string, string[]> = {
   ],
   rendiciones: [
     'id', 'usuario', 'descripcion', 'fecha', 'monto', 'tipo_documento',
-    // partida_id: partida del EERR para las rendiciones con BOLETA (las de
-    // factura/préstamo no se asignan). tipo_documento: boleta | factura | prestamo.
-    'partida_id',
+    // partida_id: partida del EERR para las rendiciones con BOLETA que sean
+    // clasificacion=rendicion (las de factura no se asignan; vienen del SII).
+    // tipo_documento: boleta | factura | '' (vacío para aportes).
+    // clasificacion: rendicion | aporte. "aporte" = préstamo a la empresa, se
+    // clasifica pero NO va al resultado del EERR. ("manual" vive en eerr_gastos_manuales.)
+    'partida_id', 'clasificacion',
     'estado', 'pago_id', 'fecha_creacion',
   ],
   pagos_rendicion: [

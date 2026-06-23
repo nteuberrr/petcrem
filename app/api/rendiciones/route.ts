@@ -3,8 +3,10 @@ import { getSheetData, appendRow, updateById, getNextId, deleteById, ensureColum
 import { todayISO } from '@/lib/dates'
 
 const HOJA = 'rendiciones'
-const COLS = ['id', 'usuario', 'descripcion', 'fecha', 'monto', 'tipo_documento', 'partida_id', 'estado', 'pago_id', 'fecha_creacion']
-const TIPOS_DOC = ['boleta', 'factura', 'prestamo']
+const COLS = ['id', 'usuario', 'descripcion', 'fecha', 'monto', 'tipo_documento', 'partida_id', 'clasificacion', 'estado', 'pago_id', 'fecha_creacion']
+// Documento: boleta | factura | '' (vacío en los aportes). Clasificación: rendicion | aporte.
+const DOCS = ['boleta', 'factura']
+const CLASIF = ['rendicion', 'aporte']
 
 async function ensure() {
   await ensureSheet(HOJA)
@@ -29,7 +31,12 @@ export async function POST(req: NextRequest) {
     }
     await ensure()
     const id = await getNextId(HOJA)
-    const tipoDoc = TIPOS_DOC.includes(body.tipo_documento) ? String(body.tipo_documento) : 'boleta'
+    // Clasificación: rendicion | aporte. El aporte (préstamo a la empresa) no tiene
+    // documento ni partida y NO va al resultado del EERR.
+    const clasif = CLASIF.includes(body.clasificacion) ? String(body.clasificacion) : 'rendicion'
+    const tipoDoc = clasif === 'aporte' ? '' : (DOCS.includes(body.tipo_documento) ? String(body.tipo_documento) : 'boleta')
+    // Solo una BOLETA de una RENDICIÓN se asigna a una partida del EERR.
+    const partida = clasif === 'rendicion' && tipoDoc === 'boleta' ? String(body.partida_id || '') : ''
     const row = {
       id,
       usuario: String(body.usuario),
@@ -37,8 +44,8 @@ export async function POST(req: NextRequest) {
       fecha: String(body.fecha),
       monto: String(body.monto),
       tipo_documento: tipoDoc,
-      // Solo las boletas se asignan a una partida del EERR (factura/préstamo no).
-      partida_id: tipoDoc === 'boleta' ? String(body.partida_id || '') : '',
+      clasificacion: clasif,
+      partida_id: partida,
       estado: 'pendiente',
       pago_id: '',
       fecha_creacion: todayISO(),
@@ -53,15 +60,36 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { id, ...updates } = body
-    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+    const { id, ids, ...updates } = body
     await ensure()
+
+    // Aplica las reglas de coherencia: un aporte no tiene documento ni partida;
+    // una factura no lleva partida (solo la boleta de una rendición).
+    const normalizar = (u: Record<string, unknown>) => {
+      if (u.clasificacion === 'aporte') { u.tipo_documento = ''; u.partida_id = '' }
+      else if (u.tipo_documento === 'factura') { u.partida_id = '' }
+      return u
+    }
+
+    // Bulk: cambiar documento y/o clasificación de varias rendiciones a la vez.
+    if (Array.isArray(ids) && ids.length > 0) {
+      const rows = await getSheetData(HOJA)
+      const byId = new Map(rows.map(r => [String(r.id), r]))
+      let asignadas = 0
+      for (const rid of ids) {
+        const row = byId.get(String(rid))
+        if (!row) continue
+        await updateById(HOJA, row.id, normalizar({ ...row, ...updates }))
+        asignadas++
+      }
+      return NextResponse.json({ ok: true, asignadas })
+    }
+
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
     const rows = await getSheetData(HOJA)
     const row = rows.find(r => String(r.id) === String(id))
     if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
-    // Factura/préstamo no llevan partida; al cambiar a esos tipos la limpiamos.
-    if (updates.tipo_documento === 'factura' || updates.tipo_documento === 'prestamo') updates.partida_id = ''
-    const updated = { ...row, ...updates }
+    const updated = normalizar({ ...row, ...updates })
     await updateById(HOJA, String(id), updated)
     return NextResponse.json(updated)
   } catch (e) {

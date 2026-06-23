@@ -8,11 +8,14 @@ import { Badge } from '@/components/ui/Badge'
 
 type Rendicion = {
   id: string; usuario: string; descripcion: string; fecha: string
-  monto: string; tipo_documento: string; partida_id: string; estado: string; pago_id: string
+  monto: string; tipo_documento: string; clasificacion: string; partida_id: string; estado: string; pago_id: string
 }
 
 type Usuario = { id: string; nombre: string; email: string; rol: string }
 type Partida = { id: string; tipo: string; nombre: string }
+
+const docLabel = (d: string) => (d === 'boleta' ? 'Boleta' : d === 'factura' ? 'Factura' : '—')
+const clasifLabel = (c: string) => ((c || 'rendicion') === 'aporte' ? 'Aporte' : 'Rendición')
 
 export default function RendicionesPage() {
   const { data: session, status } = useSession()
@@ -23,11 +26,14 @@ export default function RendicionesPage() {
   const [partidas, setPartidas] = useState<Partida[]>([])
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'pagado'>('todos')
   const [filtroUsuario, setFiltroUsuario] = useState('')
+  const [filtroDoc, setFiltroDoc] = useState('')
+  const [filtroClasif, setFiltroClasif] = useState('')
+  const [sel, setSel] = useState<Set<string>>(new Set())
 
   const [showCrear, setShowCrear] = useState(false)
   const [showPagar, setShowPagar] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
-  const [form, setForm] = useState({ usuario: '', descripcion: '', fecha: todayISO(), monto: '', tipo_documento: 'boleta', partida_id: '' })
+  const [form, setForm] = useState({ usuario: '', descripcion: '', fecha: todayISO(), monto: '', clasificacion: 'rendicion', tipo_documento: 'boleta', partida_id: '' })
 
   const [pagoForm, setPagoForm] = useState({
     rendicion_ids: [] as string[],
@@ -59,24 +65,27 @@ export default function RendicionesPage() {
   useEffect(() => { fetchAll() }, [fetchAll])
 
   function resetForm() {
-    setForm({ usuario: '', descripcion: '', fecha: todayISO(), monto: '', tipo_documento: 'boleta', partida_id: '' })
+    setForm({ usuario: '', descripcion: '', fecha: todayISO(), monto: '', clasificacion: 'rendicion', tipo_documento: 'boleta', partida_id: '' })
     setEditId(null)
   }
 
   async function crear(e: React.FormEvent) {
     e.preventDefault()
-    if (form.tipo_documento === 'boleta' && !form.partida_id) {
+    if (form.clasificacion === 'rendicion' && form.tipo_documento === 'boleta' && !form.partida_id) {
       return alert('Elegí la partida para la boleta.')
     }
     setSaving(true)
+    const esAporte = form.clasificacion === 'aporte'
+    const tipoDoc = esAporte ? '' : form.tipo_documento
     const payload = {
       ...(editId ? { id: editId } : {}),
       usuario: form.usuario,
       descripcion: form.descripcion,
       fecha: form.fecha,
       monto: parseFloat(form.monto) || 0,
-      tipo_documento: form.tipo_documento,
-      partida_id: form.tipo_documento === 'boleta' ? form.partida_id : '',
+      clasificacion: form.clasificacion,
+      tipo_documento: tipoDoc,
+      partida_id: !esAporte && tipoDoc === 'boleta' ? form.partida_id : '',
     }
     const res = await fetch('/api/rendiciones', {
       method: editId ? 'PATCH' : 'POST',
@@ -98,7 +107,10 @@ export default function RendicionesPage() {
     setForm({
       usuario: r.usuario, descripcion: r.descripcion,
       fecha: formatDateForSheet(r.fecha) || r.fecha,
-      monto: r.monto, tipo_documento: r.tipo_documento || 'boleta', partida_id: r.partida_id || '',
+      monto: r.monto,
+      clasificacion: r.clasificacion || 'rendicion',
+      tipo_documento: r.tipo_documento || 'boleta',
+      partida_id: r.partida_id || '',
     })
     setEditId(r.id)
     setShowCrear(true)
@@ -109,6 +121,14 @@ export default function RendicionesPage() {
     const res = await fetch(`/api/rendiciones?id=${encodeURIComponent(r.id)}`, { method: 'DELETE' })
     if (res.ok) await fetchAll()
     else alert('No se pudo eliminar')
+  }
+
+  async function bulkSet(updates: Record<string, string>) {
+    const ids = Array.from(sel)
+    if (ids.length === 0) return
+    const res = await fetch('/api/rendiciones', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, ...updates }) })
+    if (res.ok) { setSel(new Set()); await fetchAll() }
+    else alert('No se pudo actualizar')
   }
 
   async function pagarRendiciones(e: React.FormEvent) {
@@ -157,6 +177,8 @@ export default function RendicionesPage() {
   const filtered = rendiciones.filter(r => {
     if (filtroEstado !== 'todos' && r.estado !== filtroEstado) return false
     if (filtroUsuario && r.usuario !== filtroUsuario) return false
+    if (filtroDoc && r.tipo_documento !== filtroDoc) return false
+    if (filtroClasif && (r.clasificacion || 'rendicion') !== filtroClasif) return false
     return true
   })
 
@@ -184,6 +206,11 @@ export default function RendicionesPage() {
   }, 0)
 
   const partidaNombre = (id: string) => partidas.find(p => p.id === id)?.nombre || ''
+
+  const todasSel = filtered.length > 0 && filtered.every(r => sel.has(r.id))
+  const toggleSel = (id: string) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleAll = () => setSel(() => (todasSel ? new Set() : new Set(filtered.map(r => r.id))))
+  const pill = 'border border-indigo-300 text-indigo-700 bg-white px-2.5 py-1 rounded-lg text-xs font-medium hover:bg-indigo-100'
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -235,7 +262,7 @@ export default function RendicionesPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value as typeof filtroEstado)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
           <option value="todos">Todos los estados</option>
@@ -247,42 +274,80 @@ export default function RendicionesPage() {
           <option value="">Todos los usuarios</option>
           {usuarios.map(u => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
         </select>
+        <select value={filtroDoc} onChange={e => setFiltroDoc(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">Todo documento</option>
+          <option value="boleta">Boleta</option>
+          <option value="factura">Factura</option>
+        </select>
+        <select value={filtroClasif} onChange={e => setFiltroClasif(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">Toda clasificación</option>
+          <option value="rendicion">Rendición</option>
+          <option value="aporte">Aporte</option>
+        </select>
+        {(filtroEstado !== 'todos' || filtroUsuario || filtroDoc || filtroClasif) && (
+          <button onClick={() => { setFiltroEstado('todos'); setFiltroUsuario(''); setFiltroDoc(''); setFiltroClasif('') }}
+            className="text-xs text-gray-400 hover:text-gray-700 self-center">Limpiar</button>
+        )}
       </div>
+
+      {/* Barra de edición masiva */}
+      {sel.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
+          <span className="text-sm text-indigo-800 font-medium">{sel.size} seleccionada(s)</span>
+          <span className="text-xs text-gray-500 ml-2">Documento:</span>
+          <button onClick={() => bulkSet({ tipo_documento: 'boleta' })} className={pill}>Boleta</button>
+          <button onClick={() => bulkSet({ tipo_documento: 'factura' })} className={pill}>Factura</button>
+          <span className="text-xs text-gray-500 ml-2">Clasif.:</span>
+          <button onClick={() => bulkSet({ clasificacion: 'rendicion' })} className={pill}>Rendición</button>
+          <button onClick={() => bulkSet({ clasificacion: 'aporte' })} className={pill}>Aporte</button>
+          <button onClick={() => setSel(new Set())} className="text-sm text-gray-500 hover:text-gray-700 ml-auto">Limpiar selección</button>
+        </div>
+      )}
 
       {/* Tabla */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-        <table className="w-full text-sm min-w-[820px]">
+        <table className="w-full text-sm min-w-[920px]">
           <thead className="bg-gray-50">
             <tr>
-              {['Usuario', 'Descripción', 'Fecha', 'Monto', 'Tipo doc.', 'Partida', 'Estado', ''].map((h, i) => (
+              <th className="px-3 py-3 w-8 text-center"><input type="checkbox" checked={todasSel} onChange={toggleAll} title="Seleccionar todas" /></th>
+              {['Usuario', 'Descripción', 'Fecha', 'Monto', 'Documento', 'Clasif.', 'Partida', 'Estado', ''].map((h, i) => (
                 <th key={i} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.map(r => (
-              <tr key={r.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium text-gray-900">{r.usuario}</td>
-                <td className="px-4 py-3 text-gray-700">{r.descripcion}</td>
-                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(r.fecha)}</td>
-                <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(r.monto)}</td>
-                <td className="px-4 py-3 text-gray-700 capitalize">{r.tipo_documento === 'prestamo' ? 'Préstamo' : r.tipo_documento}</td>
-                <td className="px-4 py-3 text-xs">
-                  {r.tipo_documento === 'boleta'
-                    ? (r.partida_id ? <span className="text-gray-700">{partidaNombre(r.partida_id)}</span> : <span className="text-amber-600 font-bold" title="Pendiente de asignación">(!)</span>)
-                    : <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-4 py-3">
-                  <Badge variant={r.estado === 'pagado' ? 'green' : 'yellow'}>{r.estado}</Badge>
-                </td>
-                <td className="px-4 py-3 text-right whitespace-nowrap">
-                  <button onClick={() => editar(r)} className="text-xs text-gray-400 hover:text-indigo-600 mr-3">Editar</button>
-                  <button onClick={() => eliminar(r)} className="text-xs text-gray-300 hover:text-red-600">Eliminar</button>
-                </td>
-              </tr>
-            ))}
+            {filtered.map(r => {
+              const esAporte = (r.clasificacion || 'rendicion') === 'aporte'
+              return (
+                <tr key={r.id} className={`hover:bg-gray-50 ${sel.has(r.id) ? 'bg-indigo-50/40' : ''}`}>
+                  <td className="px-3 py-3 text-center"><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggleSel(r.id)} /></td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{r.usuario}</td>
+                  <td className="px-4 py-3 text-gray-700">{r.descripcion}</td>
+                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(r.fecha)}</td>
+                  <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(r.monto)}</td>
+                  <td className="px-4 py-3 text-gray-700">{docLabel(r.tipo_documento)}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded ${esAporte ? 'bg-purple-50 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>{clasifLabel(r.clasificacion)}</span>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {r.tipo_documento === 'boleta' && !esAporte
+                      ? (r.partida_id ? <span className="text-gray-700">{partidaNombre(r.partida_id)}</span> : <span className="text-amber-600 font-bold" title="Pendiente de asignación">(!)</span>)
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={r.estado === 'pagado' ? 'green' : 'yellow'}>{r.estado}</Badge>
+                  </td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <button onClick={() => editar(r)} className="text-xs text-gray-400 hover:text-indigo-600 mr-3">Editar</button>
+                    <button onClick={() => eliminar(r)} className="text-xs text-gray-300 hover:text-red-600">Eliminar</button>
+                  </td>
+                </tr>
+              )
+            })}
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-400">Sin rendiciones</td></tr>
+              <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-400">Sin rendiciones</td></tr>
             )}
           </tbody>
         </table>
@@ -317,20 +382,36 @@ export default function RendicionesPage() {
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-700">Tipo de documento</label>
+            <label className="text-xs font-medium text-gray-700">Clasificación</label>
             <div className="mt-2 flex gap-4">
-              {(['boleta', 'factura', 'prestamo'] as const).map(t => (
-                <label key={t} className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" checked={form.tipo_documento === t} onChange={() => setForm(f => ({ ...f, tipo_documento: t, partida_id: t === 'boleta' ? f.partida_id : '' }))} />
-                  <span className="text-sm capitalize">{t === 'prestamo' ? 'Préstamo' : t}</span>
+              {(['rendicion', 'aporte'] as const).map(c => (
+                <label key={c} className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" checked={form.clasificacion === c} onChange={() => setForm(f => ({ ...f, clasificacion: c }))} />
+                  <span className="text-sm">{c === 'aporte' ? 'Aporte (préstamo)' : 'Rendición'}</span>
                 </label>
               ))}
             </div>
-            {form.tipo_documento !== 'boleta' && (
-              <p className="text-xs text-gray-400 mt-1">Factura y préstamo no se asignan a una partida.</p>
+            {form.clasificacion === 'aporte' && (
+              <p className="text-xs text-gray-400 mt-1">El aporte es un préstamo a la empresa: se clasifica pero no va al resultado del EERR.</p>
             )}
           </div>
-          {form.tipo_documento === 'boleta' && (
+          {form.clasificacion === 'rendicion' && (
+            <div>
+              <label className="text-xs font-medium text-gray-700">Documento</label>
+              <div className="mt-2 flex gap-4">
+                {(['boleta', 'factura'] as const).map(t => (
+                  <label key={t} className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" checked={form.tipo_documento === t} onChange={() => setForm(f => ({ ...f, tipo_documento: t, partida_id: t === 'boleta' ? f.partida_id : '' }))} />
+                    <span className="text-sm capitalize">{t}</span>
+                  </label>
+                ))}
+              </div>
+              {form.tipo_documento === 'factura' && (
+                <p className="text-xs text-gray-400 mt-1">La factura no se asigna a partida (viene del SII).</p>
+              )}
+            </div>
+          )}
+          {form.clasificacion === 'rendicion' && form.tipo_documento === 'boleta' && (
             <div>
               <label className="text-xs font-medium text-gray-700">Partida (Estado de Resultados)</label>
               <select required value={form.partida_id} onChange={e => setForm(f => ({ ...f, partida_id: e.target.value }))}
@@ -363,7 +444,7 @@ export default function RendicionesPage() {
                     className="w-4 h-4 text-indigo-600" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-gray-900 truncate">{r.usuario} · {r.descripcion}</div>
-                    <div className="text-xs text-gray-500">{formatDate(r.fecha)} · {r.tipo_documento}</div>
+                    <div className="text-xs text-gray-500">{formatDate(r.fecha)} · {clasifLabel(r.clasificacion)}{r.tipo_documento ? ` · ${docLabel(r.tipo_documento)}` : ''}</div>
                   </div>
                   <div className="text-sm font-semibold text-gray-900">{fmtPrecio(r.monto)}</div>
                 </label>

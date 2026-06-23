@@ -147,6 +147,7 @@ create table if not exists "rendiciones" (
   "fecha" text not null default '',
   "monto" text not null default '',
   "tipo_documento" text not null default '',
+  "clasificacion" text not null default 'rendicion',
   "estado" text not null default '',
   "pago_id" text not null default '',
   "fecha_creacion" text not null default ''
@@ -745,3 +746,4 @@ alter table "eerr_gastos_manuales" enable row level security;
 create index if not exists "eerr_gastos_manuales_fecha_idx" on "eerr_gastos_manuales" ("fecha");
 
 alter table "rendiciones" add column if not exists "partida_id" text not null default '';
+alter table "rendiciones" add column if not exists "clasificacion" text not null default 'rendicion';
