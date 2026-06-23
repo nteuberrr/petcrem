@@ -57,6 +57,9 @@ export const SHEETS: Record<string, string[]> = {
   ],
   rendiciones: [
     'id', 'usuario', 'descripcion', 'fecha', 'monto', 'tipo_documento',
+    // partida_id: partida del EERR para las rendiciones con BOLETA (las de
+    // factura/préstamo no se asignan). tipo_documento: boleta | factura | prestamo.
+    'partida_id',
     'estado', 'pago_id', 'fecha_creacion',
   ],
   pagos_rendicion: [
@@ -281,5 +284,32 @@ export const SHEETS: Record<string, string[]> = {
   relay_retiro: [
     'id', 'admin_msg_id', 'cliente_wa_id', 'cliente_nombre', 'mascota',
     'pregunta', 'estado', 'fecha_creacion', 'fecha_respuesta',
+  ],
+  // ── Módulo "Estado de Resultados" (EERR) — DDL real en supabase/eerr-schema.sql ──
+  // Partidas del EERR. tipo: ingreso | costo | gasto | impuesto. clave: solo para
+  // las de ingreso (calculadas desde ventas): general | convenio | adicionales | eutanasias.
+  eerr_partidas: [
+    'id', 'tipo', 'nombre', 'clave', 'orden', 'subgrupo_id', 'activo', 'fecha_creacion',
+  ],
+  // Subgrupos que agrupan partidas dentro de un tipo (con subtotal en el EERR).
+  eerr_subgrupos: [
+    'id', 'tipo', 'nombre', 'orden', 'fecha_creacion',
+  ],
+  // Proveedores: contabilización automática por proveedor (rut único).
+  eerr_proveedores: [
+    'id', 'rut', 'razon_social', 'auto_contabiliza', 'auto_tipo', 'auto_partida_id',
+    'fecha_creacion',
+  ],
+  // Facturas del SII (§2.1). Dedup: rut + tipo_doc + folio. fecha_documento = emisión (mes).
+  eerr_gastos_sii: [
+    'id', 'tipo_doc', 'tipo_compra', 'rut', 'razon_social', 'folio',
+    'fecha_documento', 'fecha_recepcion',
+    'monto_exento', 'monto_neto', 'monto_iva', 'monto_total', 'valor_otro_impuesto',
+    'comentario', 'tipo_asignacion', 'partida_id', 'contabilizado',
+    'fecha_carga', 'fecha_creacion',
+  ],
+  // Gastos manuales (§2.2) — todo neto.
+  eerr_gastos_manuales: [
+    'id', 'tipo_asignacion', 'partida_id', 'detalle', 'monto', 'fecha', 'fecha_creacion',
   ],
 }
