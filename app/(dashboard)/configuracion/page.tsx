@@ -5,7 +5,7 @@ import { Toggle } from '@/components/ui/Toggle'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
-import AgentesConfig from '@/components/AgentesConfig'
+import AgentesPanel from '@/components/AgentesPanel'
 import CorreosConfig from '@/components/CorreosConfig'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 import { formatDate, formatHora } from '@/lib/dates'
@@ -927,7 +927,7 @@ export default function ConfiguracionPage() {
       )}
 
       {/* ─── AGENTES ─── */}
-      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'agentes' && <AgentesConfig />}
+      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'agentes' && <AgentesPanel />}
       {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'correos' && (
         <div className="space-y-6">
           <CorreosConfig />

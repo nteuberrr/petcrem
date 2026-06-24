@@ -115,10 +115,10 @@ type ImagenBanco = {
   fecha_creacion: string
 }
 
-const TABS = ['Campañas', 'Base', 'Nueva campaña', 'Imágenes'] as const
+const TABS = ['Campañas', 'Base', 'Nueva campaña'] as const
 type Tab = typeof TABS[number]
 const TAB_ICONS: Record<Tab, string> = {
-  'Campañas': '📊', 'Base': '👥', 'Nueva campaña': '✏️', 'Imágenes': '🖼️',
+  'Campañas': '📊', 'Base': '👥', 'Nueva campaña': '✏️',
 }
 
 /**
@@ -162,70 +162,55 @@ const REDES: { key: Red; label: string; icon: string; desc: string; activa: bool
   },
 ]
 
-type Vista = Red | 'calendario'
+type Vista = Red | 'calendario' | 'imagenes'
+
+// Barra de accesos fija arriba: el Calendario + Agente es la vista de inicio, y los
+// canales + el banco de Imágenes quedan al mismo nivel (Imágenes salió de Mailing).
+const NAV: { key: Vista; label: string; icon: string }[] = [
+  { key: 'calendario', label: 'Calendario', icon: '🧠' },
+  { key: 'mail', label: 'Mailing', icon: '✉️' },
+  { key: 'instagram', label: 'Instagram', icon: '📸' },
+  { key: 'facebook', label: 'Facebook', icon: '👍' },
+  { key: 'tiktok', label: 'TikTok', icon: '🎵' },
+  { key: 'imagenes', label: 'Imágenes', icon: '🖼️' },
+]
 
 export default function CampanasPage() {
-  const [vista, setVista] = useState<Vista | null>(null)
-  if (vista === 'mail') return <MailContent onBack={() => setVista(null)} />
-  if (vista === 'calendario') return <CalendarioContent onBack={() => setVista(null)} />
-  // Instagram y Facebook se gestionan desde el calendario, filtrados por ese canal.
-  if (vista === 'instagram' || vista === 'facebook') return <CalendarioContent canalInicial={vista} onBack={() => setVista(null)} />
-  if (vista === 'tiktok') {
-    const r = REDES.find(x => x.key === 'tiktok')!
-    return <ProximamentePlaceholder red={r} onBack={() => setVista(null)} />
-  }
-  return <SelectorRedes onSelect={setVista} />
-}
-
-function SelectorRedes({ onSelect }: { onSelect: (r: Vista) => void }) {
+  const [vista, setVista] = useState<Vista>('calendario')
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Campañas</h1>
-        <p className="text-sm text-gray-500">Planifica con el agente de marketing o entra a una red para gestionar sus campañas.</p>
-      </div>
-
-      {/* Entrada destacada: Calendario + Agente (cerebro multicanal) */}
-      <button
-        onClick={() => onSelect('calendario')}
-        className="w-full text-left bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-2xl p-5 transition-all hover:shadow-lg hover:from-indigo-700 hover:to-violet-700"
-      >
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl grid place-items-center text-2xl bg-white/15">🧠</div>
-          <div className="flex-1">
-            <h2 className="text-lg font-bold">Calendario y Agente de Marketing</h2>
-            <p className="text-sm text-white/80 mt-0.5">Pedile un plan, aprobá las campañas, generá las piezas y publicá en email, Instagram y Facebook desde un solo lugar.</p>
-          </div>
-          <span className="text-2xl">→</span>
+        <p className="text-sm text-gray-500">Planificá con el agente, gestioná cada red y el banco de imágenes desde un solo lugar.</p>
+        <div className="inline-flex gap-1 bg-gray-100 border border-gray-200 rounded-2xl p-1.5 shadow-sm overflow-x-auto mt-3 max-w-full">
+          {NAV.map(n => (
+            <button
+              key={n.key}
+              onClick={() => setVista(n.key)}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                vista === n.key ? 'bg-indigo-600 text-white shadow-md ring-1 ring-indigo-700/10' : 'text-gray-600 hover:bg-white hover:text-gray-900'
+              }`}
+            >
+              <span aria-hidden>{n.icon}</span>{n.label}
+            </button>
+          ))}
         </div>
-      </button>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {REDES.map(r => (
-          <button
-            key={r.key}
-            onClick={() => onSelect(r.key)}
-            className={`text-left bg-white rounded-2xl border-2 p-5 transition-all ${r.cardClass}`}
-          >
-            <div className={`w-12 h-12 rounded-xl grid place-items-center text-2xl ${r.iconClass}`}>{r.icon}</div>
-            <div className="mt-3 flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg font-bold text-gray-900">{r.label}</h2>
-              {r.activa
-                ? <span className="text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">Activo</span>
-                : <span className="text-[10px] font-bold uppercase tracking-wide bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">Próximamente</span>}
-            </div>
-            <p className="text-sm text-gray-500 mt-1">{r.desc}</p>
-          </button>
-        ))}
       </div>
+
+      {vista === 'calendario' && <CalendarioContent />}
+      {vista === 'mail' && <MailContent />}
+      {vista === 'instagram' && <CalendarioContent key="ig" canalInicial="instagram" />}
+      {vista === 'facebook' && <CalendarioContent key="fb" canalInicial="facebook" />}
+      {vista === 'tiktok' && <ProximamentePlaceholder red={REDES.find(x => x.key === 'tiktok')!} />}
+      {vista === 'imagenes' && <ImagenesPanel />}
     </div>
   )
 }
 
-function ProximamentePlaceholder({ red, onBack }: { red: { label: string; icon: string; iconClass: string }; onBack: () => void }) {
+function ProximamentePlaceholder({ red, onBack }: { red: { label: string; icon: string; iconClass: string }; onBack?: () => void }) {
   return (
     <div className="space-y-4">
-      <button onClick={onBack} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold">← Campañas</button>
+      {onBack && <button onClick={onBack} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold">← Campañas</button>}
       <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-10 text-center">
         <div className={`w-16 h-16 rounded-2xl grid place-items-center text-3xl mx-auto ${red.iconClass}`}>{red.icon}</div>
         <h1 className="text-2xl font-bold text-gray-900 mt-4">{red.label}</h1>
@@ -240,7 +225,7 @@ function ProximamentePlaceholder({ red, onBack }: { red: { label: string; icon: 
 
 // ===================== MAIL (módulo histórico completo) =====================
 
-function MailContent({ onBack }: { onBack: () => void }) {
+function MailContent({ onBack }: { onBack?: () => void }) {
   const [tab, setTab] = useState<Tab>('Campañas')
   const [prefilled, setPrefilled] = useState<Prefilled>(null)
   const [campanasRefreshKey, setCampanasRefreshKey] = useState(0)
@@ -266,10 +251,10 @@ function MailContent({ onBack }: { onBack: () => void }) {
   return (
     <div className="space-y-4">
       <div>
-        <button onClick={onBack} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold mb-1">← Campañas</button>
+        {onBack && <button onClick={onBack} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold mb-1">← Campañas</button>}
         <div className="flex items-center gap-2">
           <span className="w-9 h-9 rounded-lg bg-indigo-100 grid place-items-center text-xl">✉️</span>
-          <h1 className="text-2xl font-bold text-gray-900">Mail</h1>
+          <h2 className="text-xl font-bold text-gray-900">Mailing</h2>
         </div>
         <p className="text-sm text-gray-500 mt-0.5">Campañas de email a la base de veterinarios.</p>
       </div>
@@ -296,7 +281,6 @@ function MailContent({ onBack }: { onBack: () => void }) {
       {tab === 'Campañas' && <CampanasPanel refreshKey={campanasRefreshKey} onDuplicar={abrirDuplicar} />}
       {tab === 'Base' && <BasePanel />}
       {tab === 'Nueva campaña' && <NuevaCampanaPanel initial={prefilled} onCreada={onCampanaCreada} />}
-      {tab === 'Imágenes' && <ImagenesPanel />}
     </div>
   )
 }

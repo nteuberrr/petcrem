@@ -84,7 +84,7 @@ function nImgs(it: { imagenes_json: string; imagen_url: string }): number {
   return it.imagen_url ? 1 : 0
 }
 
-export default function CalendarioContent({ onBack, canalInicial }: { onBack: () => void; canalInicial?: string }) {
+export default function CalendarioContent({ onBack, canalInicial }: { onBack?: () => void; canalInicial?: string }) {
   const [items, setItems] = useState<Item[]>([])
   const [cargando, setCargando] = useState(true)
   const [vista, setVista] = useState<'calendario' | 'lista'>('calendario')
@@ -237,7 +237,7 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack: ()
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <button onClick={onBack} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold">← Campañas</button>
+          {onBack && <button onClick={onBack} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold">← Campañas</button>}
           <h1 className="text-2xl font-bold text-gray-900 mt-1">Calendario y Agente de Marketing</h1>
           <p className="text-sm text-gray-500">El agente propone el plan; vos apruebas, generas y publicas. Nada se publica solo.</p>
         </div>
