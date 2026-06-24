@@ -123,7 +123,7 @@ export default function WaCoexistencePage() {
         </div>
       )}
 
-      <ol className="text-sm text-gray-700 list-decimal pl-5 space-y-1.5 bg-white border border-gray-200 rounded-lg p-4">
+      <ol className="text-sm text-gray-700 list-decimal pl-5 space-y-1.5 bg-white border border-gray-300 rounded-lg p-4">
         <li>Asegúrate de tener el número registrado en la <strong>WhatsApp Business app</strong> (no en el Cloud API).</li>
         <li>Presiona <strong>Conectar</strong> abajo y completa el flujo de Meta.</li>
         <li>Te llegará un <strong>QR</strong> / un mensaje de la cuenta oficial de Facebook en tu WhatsApp Business app: <strong>escanéalo</strong> para enlazar.</li>

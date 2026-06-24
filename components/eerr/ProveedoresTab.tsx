@@ -90,7 +90,7 @@ export default function ProveedoresTab() {
       </p>
 
       {/* Filtros + buscar */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="bg-white rounded-xl border border-gray-300 p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Buscar</label>
@@ -129,19 +129,19 @@ export default function ProveedoresTab() {
       </div>
 
       {sel.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
-          <span className="text-sm text-indigo-800 font-medium">{sel.size} proveedor(es)</span>
-          <button onClick={() => setBulk(true)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700">Contabilizar a una partida</button>
+        <div className="flex flex-wrap items-center gap-3 bg-brand/10 border border-brand/30 rounded-lg px-4 py-2.5">
+          <span className="text-sm text-brand font-medium">{sel.size} proveedor(es)</span>
+          <button onClick={() => setBulk(true)} className="bg-brand text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-brand-dark">Contabilizar a una partida</button>
           <button onClick={() => setSel(new Set())} className="text-sm text-gray-500 hover:text-gray-700">Limpiar selección</button>
         </div>
       )}
 
       {provs.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
+        <div className="bg-white rounded-xl border border-gray-300 p-8 text-center text-gray-400 text-sm">
           Aún no hay proveedores. Aparecerán cuando cargues facturas del SII.
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <div className="bg-white rounded-xl border border-gray-300 overflow-x-auto">
           <table className="min-w-[760px] w-full text-sm">
             <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
               <tr>
@@ -158,7 +158,7 @@ export default function ProveedoresTab() {
               {sorted.map(p => {
                 const auto = p.auto_contabiliza === 'TRUE'
                 return (
-                  <tr key={p.id} className={sel.has(p.id) ? 'bg-indigo-50/40' : ''}>
+                  <tr key={p.id} className={sel.has(p.id) ? 'bg-brand/10/40' : ''}>
                     <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={sel.has(p.id)} onChange={() => toggleUno(p.id)} /></td>
                     <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{p.rut}</td>
                     <td className="px-4 py-2.5 text-gray-800">{p.razon_social}</td>
@@ -168,7 +168,7 @@ export default function ProveedoresTab() {
                     <td className="px-4 py-2.5 text-gray-600">{p.auto_tipo ? (TIPO_LABEL[p.auto_tipo] || p.auto_tipo) : <span className="text-gray-300">—</span>}</td>
                     <td className="px-4 py-2.5 text-gray-600">{p.auto_partida_id ? partidaNombre(p.auto_partida_id) : <span className="text-gray-300">—</span>}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <button onClick={() => setEdit(p)} className="border border-gray-200 text-gray-600 hover:bg-gray-50 px-2.5 py-1 rounded-lg text-xs font-medium">Editar</button>
+                      <button onClick={() => setEdit(p)} className="border border-gray-300 text-gray-600 hover:bg-gray-50 px-2.5 py-1 rounded-lg text-xs font-medium">Editar</button>
                     </td>
                   </tr>
                 )
@@ -220,7 +220,7 @@ function EditarProvModal({ prov, asignables, onClose, onSaved }: { prov: Prov; a
         <div className="flex gap-2 mb-4">
           {(['costo', 'gasto', 'impuesto'] as const).map(t => (
             <button key={t} disabled={!auto} onClick={() => { setTipo(t); setPartida('') }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 ${tipo === t ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>{TIPO_LABEL[t]}</button>
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 ${tipo === t ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600'}`}>{TIPO_LABEL[t]}</button>
           ))}
         </div>
 
@@ -235,7 +235,7 @@ function EditarProvModal({ prov, asignables, onClose, onSaved }: { prov: Prov; a
         {err && <p className="text-sm text-red-700 mb-3">{err}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="text-sm text-gray-500 px-3 py-2">Cancelar</button>
-          <button onClick={guardar} disabled={saving} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
+          <button onClick={guardar} disabled={saving} className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
         </div>
       </div>
     </div>
@@ -267,7 +267,7 @@ function BulkAutoModal({ ids, asignables, onClose, onSaved }: { ids: string[]; a
         <label className="block text-xs text-gray-500 mb-1">¿Costo, gasto o impuesto?</label>
         <div className="flex gap-2 mb-4">
           {(['costo', 'gasto', 'impuesto'] as const).map(t => (
-            <button key={t} onClick={() => { setTipo(t); setPartida('') }} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tipo === t ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>{TIPO_LABEL[t]}</button>
+            <button key={t} onClick={() => { setTipo(t); setPartida('') }} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tipo === t ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600'}`}>{TIPO_LABEL[t]}</button>
           ))}
         </div>
 
@@ -280,7 +280,7 @@ function BulkAutoModal({ ids, asignables, onClose, onSaved }: { ids: string[]; a
         {err && <p className="text-sm text-red-700 mb-3">{err}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="text-sm text-gray-500 px-3 py-2">Cancelar</button>
-          <button onClick={guardar} disabled={saving} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Guardando…' : 'Aplicar'}</button>
+          <button onClick={guardar} disabled={saving} className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50">{saving ? 'Guardando…' : 'Aplicar'}</button>
         </div>
       </div>
     </div>

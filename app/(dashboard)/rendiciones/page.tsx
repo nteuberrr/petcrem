@@ -217,12 +217,12 @@ export default function RendicionesPage() {
     <div className="max-w-6xl space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Rendiciones</h1>
+          <h1 className="text-2xl font-extrabold text-brand tracking-tight">Rendiciones</h1>
           <p className="text-gray-500 text-sm mt-0.5">Gastos del personal y control de pagos</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => { resetForm(); setShowCrear(true) }}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             + Nueva rendición
           </button>
           <button onClick={() => setShowPagar(true)}
@@ -265,30 +265,30 @@ export default function RendicionesPage() {
       {/* Filtros */}
       <div className="flex flex-wrap gap-3">
         <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value as typeof filtroEstado)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
           <option value="todos">Todos los estados</option>
           <option value="pendiente">Pendientes</option>
           <option value="pagado">Pagados</option>
         </select>
         <select value={filtroUsuario} onChange={e => setFiltroUsuario(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
           <option value="">Todos los usuarios</option>
           {usuarios.map(u => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
         </select>
         <select value={filtroDoc} onChange={e => setFiltroDoc(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
           <option value="">Todo documento</option>
           <option value="boleta">Boleta</option>
           <option value="factura">Factura</option>
         </select>
         <select value={filtroClasif} onChange={e => setFiltroClasif(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
           <option value="">Toda clasificación</option>
           <option value="rendicion">Rendición</option>
           <option value="aporte">Aporte</option>
         </select>
         <select value={filtroPartida} onChange={e => setFiltroPartida(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
           <option value="">Toda partida</option>
           <option value="__none__">Sin asignar</option>
           {partidas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
@@ -301,15 +301,15 @@ export default function RendicionesPage() {
 
       {/* Barra de edición masiva (solo admin principal) */}
       {esPrincipal && sel.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
-          <span className="text-sm text-indigo-800 font-medium">{sel.size} seleccionada(s)</span>
-          <button onClick={() => setShowBulk(true)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700">Editar seleccionadas</button>
+        <div className="flex flex-wrap items-center gap-3 bg-brand/10 border border-brand/30 rounded-lg px-4 py-2.5">
+          <span className="text-sm text-brand font-medium">{sel.size} seleccionada(s)</span>
+          <button onClick={() => setShowBulk(true)} className="bg-brand text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-brand-dark">Editar seleccionadas</button>
           <button onClick={() => setSel(new Set())} className="text-sm text-gray-500 hover:text-gray-700 ml-auto">Limpiar selección</button>
         </div>
       )}
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-x-auto">
         <table className="w-full text-sm min-w-[920px]">
           <thead className="bg-gray-50">
             <tr>
@@ -323,7 +323,7 @@ export default function RendicionesPage() {
             {filtered.map(r => {
               const esAporte = (r.clasificacion || 'rendicion') === 'aporte'
               return (
-                <tr key={r.id} className={`hover:bg-gray-50 ${sel.has(r.id) ? 'bg-indigo-50/40' : ''}`}>
+                <tr key={r.id} className={`hover:bg-gray-50 ${sel.has(r.id) ? 'bg-brand/10/40' : ''}`}>
                   <td className="px-3 py-3 text-center">{esPrincipal && <input type="checkbox" checked={sel.has(r.id)} onChange={() => toggleSel(r.id)} />}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{r.usuario}</td>
                   <td className="px-4 py-3 text-gray-700">{r.descripcion}</td>
@@ -344,7 +344,7 @@ export default function RendicionesPage() {
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     {esPrincipal ? (
                       <>
-                        <button onClick={() => editar(r)} className="text-xs text-gray-400 hover:text-indigo-600 mr-3">Editar</button>
+                        <button onClick={() => editar(r)} className="text-xs text-gray-400 hover:text-brand mr-3">Editar</button>
                         <button onClick={() => eliminar(r)} className="text-xs text-gray-300 hover:text-red-600">Eliminar</button>
                       </>
                     ) : <span className="text-gray-300">—</span>}
@@ -365,7 +365,7 @@ export default function RendicionesPage() {
           <div>
             <label className="text-xs font-medium text-gray-700">Usuario</label>
             <select required value={form.usuario} onChange={e => setForm(f => ({ ...f, usuario: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="">Seleccionar...</option>
               {usuarios.map(u => <option key={u.id} value={u.nombre}>{u.nombre} ({u.email})</option>)}
             </select>
@@ -373,18 +373,18 @@ export default function RendicionesPage() {
           <div>
             <label className="text-xs font-medium text-gray-700">Descripción</label>
             <textarea required value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} rows={3}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-gray-700">Fecha</label>
               <input type="date" required value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-700">Monto ($)</label>
               <input type="number" min="0" required value={form.monto} onChange={e => setForm(f => ({ ...f, monto: e.target.value }))}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
           </div>
           <div>
@@ -421,14 +421,14 @@ export default function RendicionesPage() {
             <div>
               <label className="text-xs font-medium text-gray-700">Partida (Estado de Resultados)</label>
               <select required value={form.partida_id} onChange={e => setForm(f => ({ ...f, partida_id: e.target.value }))}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                 <option value="">Seleccionar partida...</option>
                 {partidas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </div>
           )}
           <button type="submit" disabled={saving}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-50">
+            className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-50">
             {saving ? 'Guardando...' : (editId ? 'Guardar cambios' : 'Crear rendición')}
           </button>
         </form>
@@ -439,7 +439,7 @@ export default function RendicionesPage() {
         <form onSubmit={pagarRendiciones} className="space-y-3">
           <div>
             <label className="text-xs font-medium text-gray-700">Rendiciones pendientes</label>
-            <div className="mt-2 max-h-60 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+            <div className="mt-2 max-h-60 overflow-y-auto border border-gray-300 rounded-lg divide-y divide-gray-100">
               {pendientesParaPago.length === 0 ? (
                 <p className="p-4 text-xs text-gray-400 text-center">Sin rendiciones pendientes</p>
               ) : pendientesParaPago.map(r => (
@@ -447,7 +447,7 @@ export default function RendicionesPage() {
                   <input type="checkbox"
                     checked={pagoForm.rendicion_ids.includes(r.id)}
                     onChange={() => togglePago(r.id)}
-                    className="w-4 h-4 text-indigo-600" />
+                    className="w-4 h-4 text-brand" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-gray-900 truncate">{r.usuario} · {r.descripcion}</div>
                     <div className="text-xs text-gray-500">{formatDate(r.fecha)} · {clasifLabel(r.clasificacion)}{r.tipo_documento ? ` · ${docLabel(r.tipo_documento)}` : ''}</div>
@@ -464,7 +464,7 @@ export default function RendicionesPage() {
           <div>
             <label className="text-xs font-medium text-gray-700">A quién se paga</label>
             <select required value={pagoForm.usuario_pagado} onChange={e => setPagoForm(p => ({ ...p, usuario_pagado: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="">Seleccionar...</option>
               {usuarios.map(u => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
             </select>
@@ -472,12 +472,12 @@ export default function RendicionesPage() {
           <div>
             <label className="text-xs font-medium text-gray-700">Fecha del pago</label>
             <input type="date" required value={pagoForm.fecha_pago} onChange={e => setPagoForm(p => ({ ...p, fecha_pago: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Comentarios</label>
             <textarea value={pagoForm.comentarios} onChange={e => setPagoForm(p => ({ ...p, comentarios: e.target.value }))} rows={2}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
           </div>
           <button type="submit" disabled={saving || pagoForm.rendicion_ids.length === 0}
             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-50">
@@ -507,7 +507,7 @@ function BulkEditModal({ ids, partidas, onClose, onSaved }: {
   const [err, setErr] = useState('')
 
   const elegirCampo = (c: typeof campo) => { setCampo(c); setValor('') }
-  const opt = (active: boolean) => `px-3 py-1.5 rounded-lg text-sm font-medium ${active ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`
+  const opt = (active: boolean) => `px-3 py-1.5 rounded-lg text-sm font-medium ${active ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600'}`
 
   async function aplicar() {
     if (!valor) { setErr('Elegí un valor.'); return }
@@ -530,7 +530,7 @@ function BulkEditModal({ ids, partidas, onClose, onSaved }: {
           </div>
         </div>
 
-        <div className="border-t border-gray-100 pt-4">
+        <div className="border-t border-gray-300 pt-4">
           {campo === 'clasificacion' && (
             <>
               <label className="block text-xs text-gray-500 mb-1.5">Marcar como</label>
@@ -566,7 +566,7 @@ function BulkEditModal({ ids, partidas, onClose, onSaved }: {
         {err && <p className="text-sm text-red-700">{err}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="text-sm text-gray-500 px-3 py-2">Cancelar</button>
-          <button onClick={aplicar} disabled={saving} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Aplicando…' : 'Aplicar a todas'}</button>
+          <button onClick={aplicar} disabled={saving} className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50">{saving ? 'Aplicando…' : 'Aplicar a todas'}</button>
         </div>
       </div>
     </Modal>

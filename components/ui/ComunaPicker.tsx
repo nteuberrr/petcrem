@@ -29,7 +29,7 @@ const MIN_CHARS = 2
  * en pantallas chicas.
  */
 export default function ComunaPicker({ value, onChange, color, placeholder }: Props) {
-  const colorChip = color ?? '#4f46e5' // indigo-600
+  const colorChip = color ?? '#143C64' // brand navy
   const [adding, setAdding] = useState(false)
   const [q, setQ] = useState('')
   const [sugs, setSugs] = useState<Sugerencia[]>([])
@@ -161,12 +161,12 @@ export default function ComunaPicker({ value, onChange, color, placeholder }: Pr
               }
             }}
             placeholder={placeholder ?? 'Escribe una comuna…'}
-            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-brand focus:border-brand outline-none"
             autoComplete="off"
             autoCapitalize="words"
           />
           {(loading || sugs.length > 0 || q.trim().length >= MIN_CHARS) && (
-            <ul className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+            <ul className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
               {loading && (
                 <li className="px-3 py-2.5 text-sm text-gray-500">Buscando…</li>
               )}

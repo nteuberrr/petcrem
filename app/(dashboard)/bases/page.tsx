@@ -54,16 +54,16 @@ export default function BasesPage() {
   return (
     <div className="max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Veterinarios</h1>
+        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Veterinarios</h1>
         <p className="text-gray-500 text-sm mt-0.5">Fichas de veterinarias derivantes</p>
       </div>
 
       {/* ─── VETERINARIOS ─── */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Veterinarios</h2>
             <button onClick={() => { setEditingVet(null); setVetForm(emptyVet); setShowVetModal(true) }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
               + Agregar
             </button>
           </div>
@@ -90,7 +90,7 @@ export default function BasesPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Link href={`/bases/veterinarios/${v.id}`}
-                        className="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                        className="bg-brand hover:bg-brand-dark text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
                         Ver
                       </Link>
                       <button
@@ -138,24 +138,24 @@ export default function BasesPage() {
                   value={(vetForm as Record<string, string>)[key]}
                   onChange={v => setVetForm(f => ({ ...f, [key]: v }))}
                   placeholder="Empieza a escribir la dirección…"
-                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                 />
               ) : (
                 <input value={(vetForm as Record<string, string>)[key]}
                   onChange={e => setVetForm(f => ({ ...f, [key]: e.target.value }))}
-                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               )}
             </div>
           ))}
           <div>
             <label className="text-xs font-medium text-gray-700">Tipo de precios</label>
             <select value={vetForm.tipo_precios} onChange={e => setVetForm(f => ({ ...f, tipo_precios: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="precios_convenio">Precios convenio</option>
               <option value="precios_especiales">Precios especiales</option>
             </select>
           </div>
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">
             {editingVet ? 'Guardar cambios' : 'Guardar'}
           </button>
         </form>

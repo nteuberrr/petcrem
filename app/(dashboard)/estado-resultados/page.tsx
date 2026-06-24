@@ -17,7 +17,7 @@ export default function EstadoResultadosPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Estado de Resultados</h1>
+      <h1 className="text-2xl font-extrabold text-brand tracking-tight mb-1">Estado de Resultados</h1>
       <p className="text-sm text-gray-500 mb-5">Resultado del crematorio por mes: ingresos, costos y gastos (en neto).</p>
 
       <div className="flex gap-2 flex-wrap mb-6">
@@ -26,7 +26,7 @@ export default function EstadoResultadosPage() {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === t.key ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              tab === t.key ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
           >
             {t.label}

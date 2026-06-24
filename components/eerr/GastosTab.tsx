@@ -18,7 +18,7 @@ export default function GastosTab() {
             key={s.key}
             onClick={() => setSub(s.key)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              sub === s.key ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              sub === s.key ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
           >
             {s.label}

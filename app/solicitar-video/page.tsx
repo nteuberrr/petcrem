@@ -83,24 +83,24 @@ export default function SolicitarVideoPage() {
 
       <main className="max-w-2xl mx-auto px-4 py-8 sm:py-10">
         {estado === 'cargando' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-500">Cargando…</div>
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center text-gray-500">Cargando…</div>
         )}
 
         {estado === 'sin_token' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-600">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center text-gray-600">
             El enlace no es válido. Usa el botón que te enviamos por correo.
           </div>
         )}
 
         {estado === 'invalido' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-600">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center text-gray-600">
             El enlace no es válido o venció. Revisa el correo que te enviamos o escríbenos a{' '}
             <a href="mailto:contacto@crematorioalmaanimal.cl" className="underline" style={{ color: COLOR }}>contacto@crematorioalmaanimal.cl</a>.
           </div>
         )}
 
         {estado === 'ok' && confirmado && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center">
             <div className="text-5xl mb-3">🎥</div>
             <p className="text-base text-gray-800">
               Registramos que quieres el video del proceso de <strong>{mascota}</strong>. Te lo haremos llegar como parte del servicio.
@@ -110,7 +110,7 @@ export default function SolicitarVideoPage() {
         )}
 
         {estado === 'ok' && !confirmado && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 sm:p-6 space-y-5 text-center">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5 sm:p-6 space-y-5 text-center">
             <p className="text-base text-gray-800">
               ¿Quieres recibir el <strong>video del proceso</strong> de <strong>{mascota}</strong>?
             </p>

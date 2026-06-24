@@ -646,19 +646,19 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       )}
 
       {/* Header limpio sobre fondo claro: borde lateral indigo + tipografía grande */}
-      <div className="rounded-2xl bg-white border-2 border-gray-200 shadow-md overflow-hidden mb-6">
-        <div className="border-l-4 border-indigo-600 px-6 py-6 sm:px-8 sm:py-7">
+      <div className="rounded-2xl bg-white border-2 border-gray-300 shadow-md overflow-hidden mb-6">
+        <div className="border-l-4 border-brand px-6 py-6 sm:px-8 sm:py-7">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex-1 min-w-[260px]">
               <div className="flex items-center gap-2 flex-wrap mb-2">
-                <span className={`font-mono text-xs font-bold px-2.5 py-1 rounded border ${cliente.codigo ? 'text-indigo-700 bg-indigo-50 border-indigo-200' : 'text-gray-400 bg-gray-100 border-gray-200'}`}>{cliente.codigo || 'sin código'}</span>
+                <span className={`font-mono text-xs font-bold px-2.5 py-1 rounded border ${cliente.codigo ? 'text-brand bg-brand/10 border-brand/30' : 'text-gray-400 bg-gray-100 border-gray-300'}`}>{cliente.codigo || 'sin código'}</span>
                 <Badge variant={estadoVariant}>{cliente.estado === 'borrador' ? 'Por ingresar' : cliente.estado && cliente.estado !== 'pendiente' ? cliente.estado : 'retirado'}</Badge>
                 {cliente.estado !== 'borrador' && (cliente.estado_pago === 'pagado'
                   ? <Badge variant="green">Pagado</Badge>
                   : <Badge variant="yellow">Pago pendiente</Badge>)}
                 {vetSeleccionada && <Badge variant="blue">{vetSeleccionada.nombre}</Badge>}
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 truncate">{cliente.nombre_mascota}</h1>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-brand truncate">{cliente.nombre_mascota}</h1>
               <p className="text-sm text-gray-600 mt-1">Tutor: <span className="font-semibold text-gray-900">{cliente.nombre_tutor || '—'}</span></p>
             </div>
             {cliente.estado !== 'borrador' && (
@@ -681,7 +681,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
                 <button
                   onClick={() => setDocsOpen(o => !o)}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
                 >
                   📁 Documentos <span className="text-[10px]">▾</span>
                 </button>
@@ -690,9 +690,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   <>
                   {/* Backdrop solo en móvil (el panel es un bottom-sheet) */}
                   <div className="fixed inset-0 bg-black/30 z-40 sm:hidden" onClick={() => setDocsOpen(false)} aria-hidden="true" />
-                  <div className="fixed inset-x-3 bottom-3 z-50 max-h-[80vh] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-2xl p-1 sm:absolute sm:inset-x-auto sm:right-0 sm:bottom-auto sm:mt-2 sm:w-80 sm:max-w-[88vw] sm:max-h-[70vh] sm:shadow-xl">
+                  <div className="fixed inset-x-3 bottom-3 z-50 max-h-[80vh] overflow-y-auto rounded-xl border border-gray-300 bg-white shadow-2xl p-1 sm:absolute sm:inset-x-auto sm:right-0 sm:bottom-auto sm:mt-2 sm:w-80 sm:max-w-[88vw] sm:max-h-[70vh] sm:shadow-xl">
                     {/* Cabecera (solo móvil): deja claro que es un panel cerrable */}
-                    <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 sm:hidden">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-gray-300 sm:hidden">
                       <span className="text-sm font-bold text-gray-800">Documentos</span>
                       <button onClick={() => setDocsOpen(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none px-1">×</button>
                     </div>
@@ -702,7 +702,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                       onClick={() => { setDocsOpen(false); abrirModalCertificado() }}
                       disabled={!puedeGenerarCert || descargandoCert}
                       title={!puedeGenerarCert ? 'Disponible cuando la mascota esté cremada' : ''}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-brand/10 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       📄 <span>{certUltimo ? 'Emitir nueva versión' : 'Emitir certificado'}</span>
                     </button>
@@ -710,7 +710,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                       onClick={() => { setDocsOpen(false); intentarEnviarCertificado() }}
                       disabled={enviandoCert || !cliente.email || !certUltimo}
                       title={!certUltimo ? 'Emite primero un certificado' : !cliente.email ? 'El cliente no tiene email' : `Enviar a ${cliente.email}`}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-brand/10 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {certUltimo?.enviado_ultima_fecha ? '🔄' : '📧'} <span>Reenviar certificado al correo</span>
                     </button>
@@ -723,20 +723,20 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                             className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 ${c.pdf_url ? 'text-gray-700' : 'text-gray-400 pointer-events-none'}`}>
                             📄 <span className="flex-1 truncate">Certificado V{c.version}</span>
                             <span className="text-[11px] text-gray-400 shrink-0">{fmtFecha(c.fecha_emision)}</span>
-                            {c.pdf_url && <span className="text-[11px] font-medium text-indigo-600 shrink-0">Abrir</span>}
+                            {c.pdf_url && <span className="text-[11px] font-medium text-brand shrink-0">Abrir</span>}
                           </a>
                         ))}
                       </div>
                     )}
 
-                    <div className="my-1 border-t border-gray-100" />
+                    <div className="my-1 border-t border-gray-300" />
 
                     {/* Archivos */}
                     <div className="flex items-center justify-between px-3 pt-2 pb-1">
                       <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Archivos</p>
                       <div className="flex gap-2">
-                        <button onClick={() => videoInputRef.current?.click()} disabled={subiendoVideo} className="text-[11px] font-medium text-indigo-600 hover:underline disabled:opacity-50">{subiendoVideo ? 'Subiendo…' : '+ Video'}</button>
-                        <button onClick={() => fotoEvidenciaInputRef.current?.click()} disabled={subiendoFoto} className="text-[11px] font-medium text-indigo-600 hover:underline disabled:opacity-50">{subiendoFoto ? 'Subiendo…' : '+ Foto'}</button>
+                        <button onClick={() => videoInputRef.current?.click()} disabled={subiendoVideo} className="text-[11px] font-medium text-brand hover:underline disabled:opacity-50">{subiendoVideo ? 'Subiendo…' : '+ Video'}</button>
+                        <button onClick={() => fotoEvidenciaInputRef.current?.click()} disabled={subiendoFoto} className="text-[11px] font-medium text-brand hover:underline disabled:opacity-50">{subiendoFoto ? 'Subiendo…' : '+ Foto'}</button>
                       </div>
                     </div>
                     <div className="px-1 pb-2 space-y-0.5">
@@ -822,8 +822,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
       {/* Correos al tutor: estado de entrega por etapa del proceso. */}
       {cliente.estado !== 'borrador' && (
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 mb-6 overflow-hidden">
-          <div className="bg-gradient-to-r from-sky-50 to-indigo-50 px-6 py-3 border-b-2 border-sky-100 flex items-center gap-2">
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 mb-6 overflow-hidden">
+          <div className="bg-gradient-to-r from-sky-50 to-brand/10 px-6 py-3 border-b-2 border-sky-100 flex items-center gap-2">
             <span className="text-lg">✉️</span>
             <h2 className="text-sm font-bold text-sky-900 uppercase tracking-wide">Correos al tutor</h2>
           </div>
@@ -864,7 +864,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       )}
 
       {/* Proceso de cremación — rediseñado con header colorido y mejor jerarquía */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 mb-6 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 mb-6 overflow-hidden">
         <div className="bg-gradient-to-r from-rose-50 to-orange-50 px-6 py-3 border-b-2 border-rose-100 flex items-center gap-2">
           <span className="text-lg">🔥</span>
           <h2 className="text-sm font-bold text-rose-900 uppercase tracking-wide">Proceso de cremación</h2>
@@ -904,7 +904,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       )}
 
       {/* Datos de ingreso */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 mb-6">
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 mb-6">
         <h2 className="text-base font-bold text-gray-900 mb-4">Datos de ingreso</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
@@ -983,7 +983,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               value={form.codigo_servicio}
               required
               onChange={e => setForm(f => ({ ...f, codigo_servicio: e.target.value }))}
-              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
             >
               <option value="CI">Cremación Individual (CI)</option>
               <option value="CP">Cremación Premium (CP)</option>
@@ -993,7 +993,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
 
         {/* Veterinaria */}
-        <div className="mt-5 pt-5 border-t border-gray-100">
+        <div className="mt-5 pt-5 border-t border-gray-300">
           <label className="flex items-center gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -1002,7 +1002,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 setEsVeterinaria(e.target.checked)
                 if (!e.target.checked) setForm(f => ({ ...f, veterinaria_id: '', tipo_precios: 'general' }))
               }}
-              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand"
             />
             <span className="text-sm font-medium text-gray-700">Cliente Veterinaria</span>
           </label>
@@ -1014,7 +1014,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 <select
                   value={form.veterinaria_id ?? ''}
                   onChange={e => setForm(f => ({ ...f, veterinaria_id: e.target.value }))}
-                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                 >
                   <option value="">Seleccionar veterinaria...</option>
                   {veterinarias.map(v => (
@@ -1027,7 +1027,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 <select
                   value={form.tipo_precios ?? 'general'}
                   onChange={e => setForm(f => ({ ...f, tipo_precios: e.target.value }))}
-                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                 >
                   {precioOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
@@ -1040,7 +1040,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
 
         {/* Pago */}
-        <div className="mt-5 pt-5 border-t-2 border-gray-200">
+        <div className="mt-5 pt-5 border-t-2 border-gray-300">
           <p className="text-sm font-bold text-gray-900 mb-3">Pago</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -1051,7 +1051,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 value={form.tipo_pago ?? ''}
                 required
                 onChange={e => setForm(f => ({ ...f, tipo_pago: e.target.value }))}
-                className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${
                   !form.tipo_pago ? 'border-red-300 bg-red-50' : 'border-gray-300'
                 }`}
               >
@@ -1070,7 +1070,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 value={form.estado_pago ?? 'pendiente'}
                 required
                 onChange={e => setForm(f => ({ ...f, estado_pago: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
               >
                 <option value="pendiente">Pendiente de pago</option>
                 <option value="pagado">Pagado</option>
@@ -1080,14 +1080,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
 
         {/* Notas */}
-        <div className="mt-5 pt-5 border-t border-gray-100">
+        <div className="mt-5 pt-5 border-t border-gray-300">
           <label className="text-sm font-semibold text-gray-900">Notas</label>
           <textarea
             value={form.notas ?? ''}
             onChange={e => setForm(f => ({ ...f, notas: e.target.value }))}
             rows={3}
             placeholder="Comentarios sobre el servicio, la mascota o el tutor..."
-            className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none"
           />
         </div>
 
@@ -1113,7 +1113,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             <button
               onClick={() => handleSave()}
               disabled={saving}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              className="bg-brand hover:bg-brand-dark text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             >
               {saving ? 'Guardando...' : 'Guardar cambios'}
             </button>
@@ -1122,7 +1122,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       </div>
 
       {/* Adicionales */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 mb-6 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 mb-6 overflow-hidden">
         <button
           onClick={() => setShowAdicionales(!showAdicionales)}
           className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
@@ -1130,7 +1130,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <div className="flex items-center gap-3">
             <h2 className="text-base font-semibold text-gray-900">Adicionales</h2>
             {adicionales.length > 0 && (
-              <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+              <span className="bg-brand/10 text-brand text-xs font-semibold px-2 py-0.5 rounded-full">
                 {adicionales.length} ítem(s) · {fmtPrecio(totalAdicionales)}
               </span>
             )}
@@ -1139,7 +1139,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </button>
 
         {showAdicionales && (
-          <div className="border-t border-gray-100 px-6 pb-6 pt-4">
+          <div className="border-t border-gray-300 px-6 pb-6 pt-4">
             {/* Productos — agrupados por categoría, sin info de stock (oculta);
                 los productos con stock = 0 quedan tachados y no seleccionables */}
             {productosDisp.length > 0 && (() => {
@@ -1161,7 +1161,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   <div className="space-y-4">
                     {orden.map(cat => (
                       <div key={cat}>
-                        <p className="text-[11px] font-bold text-indigo-700 uppercase tracking-wide mb-2 border-b border-indigo-100 pb-1">{cat}</p>
+                        <p className="text-[11px] font-bold text-brand uppercase tracking-wide mb-2 border-b border-brand/20 pb-1">{cat}</p>
                         <div className="space-y-2 pl-1">
                           {grupos.get(cat)!.map(p => {
                             const item = adicionales.find(a => a.tipo === 'producto' && a.id === p.id)
@@ -1174,7 +1174,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                                   checked={!!item}
                                   disabled={sinStock && !item}
                                   onChange={() => toggleAdicional('producto', p)}
-                                  className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                                  className="w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand disabled:cursor-not-allowed"
                                 />
                                 <span className={`flex-1 text-sm ${sinStock ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{p.nombre}</span>
                                 <span className={`text-xs ${sinStock ? 'text-gray-400 line-through' : 'text-gray-500'}`}>{fmtPrecio(p.precio)}</span>
@@ -1185,7 +1185,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                                     min={1}
                                     value={item.qty}
                                     onChange={e => updateQty('producto', p.id, parseInt(e.target.value) || 1)}
-                                    className="w-16 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    className="w-16 border border-gray-300 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-brand"
                                   />
                                 )}
                               </div>
@@ -1212,7 +1212,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                           type="checkbox"
                           checked={!!item}
                           onChange={() => toggleAdicional('servicio', s)}
-                          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          className="w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand"
                         />
                         <span className="flex-1 text-sm text-gray-900">{s.nombre}</span>
                         <span className="text-xs text-gray-500">{fmtPrecio(s.precio)}</span>
@@ -1224,7 +1224,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             )}
 
             {adicionales.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center">
+              <div className="mt-4 pt-4 border-t border-gray-300 flex justify-between items-center">
                 <span className="text-sm text-gray-600">{adicionales.length} ítem(s) seleccionado(s)</span>
                 <span className="font-semibold text-gray-900">{fmtPrecio(totalAdicionales)}</span>
               </div>
@@ -1238,7 +1238,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               <button
                 onClick={() => handleSave()}
                 disabled={saving}
-                className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                className="bg-brand text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50"
               >
                 {saving ? 'Guardando...' : 'Guardar adicionales'}
               </button>
@@ -1248,14 +1248,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       </div>
 
       {/* Resumen del servicio */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 mb-6">
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-gray-900">Resumen del servicio</h2>
           <span className="text-xs text-gray-400">{tablaNombre}</span>
         </div>
 
         <div className="space-y-2.5">
-          <div className="flex items-start justify-between py-2 border-b border-gray-100">
+          <div className="flex items-start justify-between py-2 border-b border-gray-300">
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-900">
                 Cremación {codigoServ}
@@ -1288,7 +1288,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   <p className="text-sm text-gray-700">{fmtPrecio(a.precio * a.qty)}</p>
                 </div>
               ))}
-              <div className="flex items-center justify-between py-1 border-t border-gray-100 pt-2">
+              <div className="flex items-center justify-between py-1 border-t border-gray-300 pt-2">
                 <p className="text-xs text-gray-500">Subtotal adicionales</p>
                 <p className="text-sm font-medium text-gray-700">{fmtPrecio(totalAdicionales)}</p>
               </div>
@@ -1296,7 +1296,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           )}
 
           {/* Descuento */}
-          <div className="border-t border-gray-100 pt-3 mt-2">
+          <div className="border-t border-gray-300 pt-3 mt-2">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -1305,7 +1305,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   setAplicarDescuento(e.target.checked)
                   if (!e.target.checked) setDescuentoId('')
                 }}
-                className="w-4 h-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
+                className="w-4 h-4 rounded border-gray-400 text-brand focus:ring-brand"
               />
               <span className="text-sm font-medium text-gray-700">Aplicar descuento</span>
             </label>
@@ -1314,7 +1314,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 <select
                   value={descuentoId}
                   onChange={e => setDescuentoId(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                 >
                   <option value="">— Seleccionar descuento —</option>
                   {/* Si el cliente quedó con un descuento que ya no está activo, lo mostramos igual para no perderlo silenciosamente */}
@@ -1351,9 +1351,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             )}
           </div>
 
-          <div className="flex items-center justify-between pt-3 mt-2 border-t-2 border-gray-200">
+          <div className="flex items-center justify-between pt-3 mt-2 border-t-2 border-gray-300">
             <p className="text-base font-bold text-gray-900">Total</p>
-            <p className="text-lg font-bold text-indigo-700">{fmtPrecio(totalServicio)}</p>
+            <p className="text-lg font-bold text-brand">{fmtPrecio(totalServicio)}</p>
           </div>
         </div>
       </div>
@@ -1376,7 +1376,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             </div>
             <button
               onClick={() => { setDeleteConfirmText(''); setDeleteError(''); setShowDeleteModal(true) }}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md"
             >
               Eliminar ficha
             </button>
@@ -1429,7 +1429,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               type="button"
               disabled={deletingFicha || deleteConfirmText.trim().toUpperCase() !== cliente.codigo.toUpperCase()}
               onClick={eliminarFicha}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 text-sm font-semibold shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {deletingFicha ? 'Eliminando…' : 'Eliminar definitivamente'}
             </button>
@@ -1466,7 +1466,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                               if (sel) { setCertFotoUrl(null) }
                               else { setCertFotoUrl(url); setCertFoto(null) }
                             }}
-                            className={`relative w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${sel ? 'border-amber-600 ring-2 ring-amber-300' : 'border-gray-200 hover:border-amber-400'}`}
+                            className={`relative w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${sel ? 'border-amber-600 ring-2 ring-amber-300' : 'border-gray-300 hover:border-amber-400'}`}
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={url} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
@@ -1490,7 +1490,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                       className="hidden"
                     />
                     <button type="button" onClick={() => certInputRef.current?.click()}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors">
+                      className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors">
                       📷 Subir foto
                     </button>
                     {certFoto ? (
@@ -1510,7 +1510,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             )
           })()}
 
-          <p className="text-[11px] text-gray-500 pt-1 border-t-2 border-gray-100">
+          <p className="text-[11px] text-gray-500 pt-1 border-t-2 border-gray-300">
             Si no eliges ninguna foto, el certificado se genera <strong>sin foto</strong>.
           </p>
 
@@ -1552,7 +1552,7 @@ function Field({ label, value, onChange, type = 'text', step, required, placehol
         required={required}
         placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
-        className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+        className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${
           faltante ? 'border-red-300 bg-red-50' : 'border-gray-300'
         }`}
       />
@@ -1576,7 +1576,7 @@ function AddressField({ label, value, onChange, required, placeholder }: {
           onChange={onChange}
           required={required}
           placeholder={placeholder ?? 'Empieza a escribir la dirección…'}
-          className={`w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+          className={`w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${
             faltante ? 'border-red-300 bg-red-50' : 'border-gray-300'
           }`}
         />
@@ -1629,7 +1629,7 @@ function PesoIngresoField({ value, onChange, pesoDeclarado, tabla, codigoServ }:
           value={value}
           onChange={e => onChange(e.target.value)}
           className={`mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
-            isAlerta ? 'border-amber-400 bg-amber-50 focus:ring-amber-500' : 'border-gray-200 focus:ring-indigo-500'
+            isAlerta ? 'border-amber-400 bg-amber-50 focus:ring-amber-500' : 'border-gray-300 focus:ring-brand'
           }`}
         />
         {isAlerta && (

@@ -467,7 +467,7 @@ export default function AsistenciaPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Asistencia</h1>
+          <h1 className="text-2xl font-extrabold text-brand tracking-tight">Asistencia</h1>
           <p className="text-gray-600 text-sm mt-0.5">{isAdmin ? 'Control de asistencia y horas extra' : 'Fichaje diario de entrada y salida'}</p>
         </div>
         {isAdmin && tab === 'retiros' && (
@@ -493,10 +493,10 @@ export default function AsistenciaPage() {
       {tab === 'fichajes' && <>
 
       {/* Form fichaje (todos los roles) */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 max-w-3xl">
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 max-w-3xl">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-base font-bold text-gray-900">Fichar día</h2>
-          <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-full">
+          <span className="text-xs font-semibold text-brand bg-brand/10 px-2 py-1 rounded-full">
             Operador: {myName}
           </span>
         </div>
@@ -528,28 +528,28 @@ export default function AsistenciaPage() {
               <div>
                 <label className="text-xs font-semibold text-gray-700">Fecha</label>
                 <input type="date" required value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Hora entrada *</label>
                 <input type="time" required value={form.hora_entrada} onChange={e => setForm(f => ({ ...f, hora_entrada: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Hora salida (opcional)</label>
                 <input type="time" value={form.hora_salida} onChange={e => setForm(f => ({ ...f, hora_salida: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 <p className="text-[10px] text-gray-500 mt-0.5">Puedes dejarla en blanco y completarla más tarde con &quot;Editar&quot;.</p>
               </div>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Comentario (opcional)</label>
               <input value={form.comentario} onChange={e => setForm(f => ({ ...f, comentario: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             {errorForm && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{errorForm}</p>}
             <button type="submit" disabled={saving || !vigente}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+              className="bg-brand hover:bg-brand-dark text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
               {saving ? 'Guardando...' : 'Fichar día'}
             </button>
           </form>
@@ -558,25 +558,25 @@ export default function AsistenciaPage() {
 
       {/* Filtros (solo admin) */}
       {isAdmin && (
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-4">
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-gray-700">Mes</label>
                 {filtroMes && (
                   <button type="button" onClick={() => setFiltroMes('')}
-                    className="text-[10px] text-indigo-600 hover:text-indigo-800 underline">
+                    className="text-[10px] text-brand hover:text-brand underline">
                     Limpiar
                   </button>
                 )}
               </div>
               <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Operador</label>
               <select value={filtroUsuario} onChange={e => setFiltroUsuario(e.target.value)}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                 <option value="">Todos</option>
                 {usuariosUnicos.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
               </select>
@@ -584,7 +584,7 @@ export default function AsistenciaPage() {
             <div>
               <label className="text-xs font-semibold text-gray-700">Estado</label>
               <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value as typeof filtroEstado)}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                 <option value="todos">Todos</option>
                 <option value="abierto">Abierto (sin salida)</option>
                 <option value="pendiente">Pendiente</option>
@@ -603,7 +603,7 @@ export default function AsistenciaPage() {
       {isAdmin && resumenPorOperador.length > 0 && (
         <div className="space-y-4">
           {resumenPorOperador.map(op => (
-            <div key={op.usuario_id} className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-5">
+            <div key={op.usuario_id} className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-base font-bold text-gray-900">{op.usuario_nombre}</h3>
                 <span className="text-[10px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
@@ -633,8 +633,8 @@ export default function AsistenciaPage() {
       )}
 
       {/* Tabla de registros */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b-2 border-gray-200">
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 overflow-hidden">
+        <div className="px-6 py-4 border-b-2 border-gray-300">
           <h2 className="text-base font-bold text-gray-900">{isAdmin ? 'Registros' : 'Mis fichajes'}</h2>
         </div>
         {filtrados.length === 0 ? (
@@ -694,7 +694,7 @@ export default function AsistenciaPage() {
                           )}
                           {puedeEditar && (
                             <button onClick={() => abrirEditar(r)}
-                              className="bg-blue-500 hover:bg-blue-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                              className="bg-brand hover:bg-brand-dark text-white px-2.5 py-1 rounded-md text-xs font-medium">
                               Editar
                             </button>
                           )}
@@ -719,10 +719,10 @@ export default function AsistenciaPage() {
 
       {tab === 'retiros' && <>
         {/* Form crear retiro adicional */}
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 max-w-3xl">
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 max-w-3xl">
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-base font-bold text-gray-900">Registrar retiro adicional</h2>
-            <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-full">
+            <span className="text-xs font-semibold text-brand bg-brand/10 px-2 py-1 rounded-full">
               Operador: {myName}
             </span>
           </div>
@@ -742,28 +742,28 @@ export default function AsistenciaPage() {
               <div>
                 <label className="text-xs font-semibold text-gray-700">Fecha</label>
                 <input type="date" required value={retiroForm.fecha} onChange={e => setRetiroForm(f => ({ ...f, fecha: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Hora del retiro *</label>
                 <input type="time" required value={retiroForm.hora} onChange={e => setRetiroForm(f => ({ ...f, hora: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Cliente *</label>
               <input value={retiroForm.cliente_nombre} onChange={e => setRetiroForm(f => ({ ...f, cliente_nombre: e.target.value }))}
                 placeholder="Nombre del tutor o referencia"
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Comentario (opcional)</label>
               <input value={retiroForm.comentario} onChange={e => setRetiroForm(f => ({ ...f, comentario: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             {errorRetiro && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{errorRetiro}</p>}
             <button type="submit" disabled={savingRetiro}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+              className="bg-brand hover:bg-brand-dark text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
               {savingRetiro ? 'Guardando...' : 'Registrar retiro'}
             </button>
           </form>
@@ -771,23 +771,23 @@ export default function AsistenciaPage() {
 
         {/* Filtros admin para retiros + botón Pagar */}
         {isAdmin && (
-          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-4 space-y-3">
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-gray-700">Mes</label>
                   {filtroMes && (
                     <button type="button" onClick={() => setFiltroMes('')}
-                      className="text-[10px] text-indigo-600 hover:text-indigo-800 underline">Limpiar</button>
+                      className="text-[10px] text-brand hover:text-brand underline">Limpiar</button>
                   )}
                 </div>
                 <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Operador</label>
                 <select value={filtroUsuario} onChange={e => setFiltroUsuario(e.target.value)}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                   <option value="">Todos</option>
                   {usuariosUnicos.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
                 </select>
@@ -795,7 +795,7 @@ export default function AsistenciaPage() {
               <div>
                 <label className="text-xs font-semibold text-gray-700">Estado pago</label>
                 <select value={filtroPago} onChange={e => setFiltroPago(e.target.value as typeof filtroPago)}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                   <option value="todos">Todos</option>
                   <option value="pendiente">Pendientes</option>
                   <option value="pagado">Pagados</option>
@@ -809,7 +809,7 @@ export default function AsistenciaPage() {
         {isAdmin && resumenRetirosPorOperador.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {resumenRetirosPorOperador.map(op => (
-              <div key={op.usuario_id} className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-5">
+              <div key={op.usuario_id} className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-5">
                 <h3 className="text-base font-bold text-gray-900 mb-3">{op.usuario_nombre}</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-3">
@@ -829,8 +829,8 @@ export default function AsistenciaPage() {
         )}
 
         {/* Tabla de retiros */}
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b-2 border-gray-200">
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 overflow-hidden">
+          <div className="px-6 py-4 border-b-2 border-gray-300">
             <h2 className="text-base font-bold text-gray-900">{isAdmin ? 'Retiros registrados' : 'Mis retiros'}</h2>
           </div>
           {retirosFiltrados.length === 0 ? (
@@ -867,7 +867,7 @@ export default function AsistenciaPage() {
                           <div className="flex items-center gap-2">
                             {puedeEditar && (
                               <button onClick={() => abrirEditarRetiro(r)}
-                                className="bg-blue-500 hover:bg-blue-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                                className="bg-brand hover:bg-brand-dark text-white px-2.5 py-1 rounded-md text-xs font-medium">
                                 Editar
                               </button>
                             )}
@@ -893,8 +893,8 @@ export default function AsistenciaPage() {
 
         {/* Historial de pagos (solo admin) */}
         {isAdmin && pagos.length > 0 && (
-          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b-2 border-gray-200">
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 overflow-hidden">
+            <div className="px-6 py-4 border-b-2 border-gray-300">
               <h2 className="text-base font-bold text-gray-900">Pagos realizados</h2>
               <p className="text-xs text-gray-500 mt-0.5">Anular un pago revierte los retiros a estado pendiente.</p>
             </div>
@@ -940,26 +940,26 @@ export default function AsistenciaPage() {
                 <label className="text-xs font-semibold text-gray-700">Fecha</label>
                 <input type="date" required value={editForm.fecha}
                   onChange={e => setEditForm(f => ({ ...f, fecha: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Hora entrada</label>
                 <input type="time" required value={editForm.hora_entrada}
                   onChange={e => setEditForm(f => ({ ...f, hora_entrada: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Hora salida</label>
                 <input type="time" value={editForm.hora_salida}
                   onChange={e => setEditForm(f => ({ ...f, hora_salida: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Comentario</label>
               <input value={editForm.comentario}
                 onChange={e => setEditForm(f => ({ ...f, comentario: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             {errorEdit && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{errorEdit}</p>}
             <div className="flex gap-3 pt-2">
@@ -968,7 +968,7 @@ export default function AsistenciaPage() {
                 Cancelar
               </button>
               <button type="submit" disabled={savingEdit}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md disabled:opacity-50">
+                className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold shadow-md disabled:opacity-50">
                 {savingEdit ? 'Guardando...' : 'Guardar cambios'}
               </button>
             </div>
@@ -986,7 +986,7 @@ export default function AsistenciaPage() {
             <form onSubmit={guardarPago} className="space-y-3">
               <div>
                 <label className="text-xs font-medium text-gray-700">Retiros pendientes</label>
-                <div className="mt-2 max-h-72 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                <div className="mt-2 max-h-72 overflow-y-auto border border-gray-300 rounded-lg divide-y divide-gray-100">
                   {pendientesAgrupados.length === 0 ? (
                     <p className="p-4 text-xs text-gray-400 text-center">Sin retiros pendientes</p>
                   ) : pendientesAgrupados.map(g => {
@@ -1004,7 +1004,7 @@ export default function AsistenciaPage() {
                                   return s
                                 })
                               }}
-                              className="w-4 h-4 text-indigo-600" />
+                              className="w-4 h-4 text-brand" />
                             <span className="text-sm font-semibold text-gray-900">{g.usuario_nombre}</span>
                             <span className="text-xs text-gray-500">({g.retiros.length})</span>
                           </div>
@@ -1014,7 +1014,7 @@ export default function AsistenciaPage() {
                             <input type="checkbox"
                               checked={pagoSeleccion.has(r.id)}
                               onChange={() => togglePagoRetiro(r.id)}
-                              className="w-4 h-4 text-indigo-600" />
+                              className="w-4 h-4 text-brand" />
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium text-gray-900 truncate">{r.cliente_nombre}</div>
                               <div className="text-xs text-gray-500">{fmtFecha(r.fecha)} · {formatHora(r.hora)} {r.comentario ? `· ${r.comentario}` : ''}</div>
@@ -1034,12 +1034,12 @@ export default function AsistenciaPage() {
               <div>
                 <label className="text-xs font-medium text-gray-700">Fecha del pago</label>
                 <input type="date" required value={pagoFecha} onChange={e => setPagoFecha(e.target.value)}
-                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-700">Comentarios</label>
                 <textarea value={pagoComentario} onChange={e => setPagoComentario(e.target.value)} rows={2}
-                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
               </div>
               {errorPago && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{errorPago}</p>}
               <button type="submit" disabled={savingPago || pagoSeleccion.size === 0}
@@ -1061,26 +1061,26 @@ export default function AsistenciaPage() {
                 <label className="text-xs font-semibold text-gray-700">Fecha</label>
                 <input type="date" required value={editRetiroForm.fecha}
                   onChange={e => setEditRetiroForm(f => ({ ...f, fecha: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Hora</label>
                 <input type="time" required value={editRetiroForm.hora}
                   onChange={e => setEditRetiroForm(f => ({ ...f, hora: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Cliente</label>
               <input required value={editRetiroForm.cliente_nombre}
                 onChange={e => setEditRetiroForm(f => ({ ...f, cliente_nombre: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Comentario</label>
               <input value={editRetiroForm.comentario}
                 onChange={e => setEditRetiroForm(f => ({ ...f, comentario: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             {errorEditRetiro && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{errorEditRetiro}</p>}
             <div className="flex gap-3 pt-2">
@@ -1089,7 +1089,7 @@ export default function AsistenciaPage() {
                 Cancelar
               </button>
               <button type="submit" disabled={savingEditRetiro}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md disabled:opacity-50">
+                className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold shadow-md disabled:opacity-50">
                 {savingEditRetiro ? 'Guardando...' : 'Guardar cambios'}
               </button>
             </div>

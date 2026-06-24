@@ -212,14 +212,14 @@ export default function RegistroMascotaPage() {
         )}
 
         {yaIngresada ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 text-center">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6 sm:p-8 text-center">
             <div className="text-5xl mb-3">🐾</div>
             <p className="text-base text-gray-800">
               Esta ficha ya fue ingresada por nuestro equipo. No necesitas hacer nada más — cualquier duda, escríbenos a <a href="mailto:contacto@crematorioalmaanimal.cl" className="underline" style={{ color: COLOR }}>contacto@crematorioalmaanimal.cl</a>.
             </p>
           </div>
         ) : (
-        <form onSubmit={enviar} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 space-y-6">
+        <form onSubmit={enviar} className="bg-white rounded-xl shadow-md border border-gray-300 p-4 sm:p-6 space-y-6">
           {/* Datos del tutor */}
           <section>
             <h2 className="text-lg font-bold text-gray-900 mb-3">Tus datos</h2>
@@ -245,7 +245,7 @@ export default function RegistroMascotaPage() {
           </section>
 
           {/* Dirección */}
-          <section className="border-t border-gray-100 pt-5">
+          <section className="border-t border-gray-300 pt-5">
             <h2 className="text-lg font-bold text-gray-900 mb-3">Dirección de retiro</h2>
             <FormField label="Dirección donde retiramos a tu mascota" required>
               <input type="text" required value={form.direccion_retiro}
@@ -269,7 +269,7 @@ export default function RegistroMascotaPage() {
           </section>
 
           {/* Mascota */}
-          <section className="border-t border-gray-100 pt-5">
+          <section className="border-t border-gray-300 pt-5">
             <h2 className="text-lg font-bold text-gray-900 mb-3">Datos de tu mascota</h2>
             <div className="grid sm:grid-cols-2 gap-4">
               <FormField label="Nombre de tu mascota" required>
@@ -303,7 +303,7 @@ export default function RegistroMascotaPage() {
           </section>
 
           {/* Tipo de servicio */}
-          <section className="border-t border-gray-100 pt-5">
+          <section className="border-t border-gray-300 pt-5">
             <h2 className="text-lg font-bold text-gray-900 mb-3">Tipo de servicio</h2>
             <div className="space-y-2">
               {SERVICIOS.map(s => {
@@ -330,7 +330,7 @@ export default function RegistroMascotaPage() {
           </section>
 
           {/* Resumen de precio */}
-          <section className="border-t border-gray-100 pt-5">
+          <section className="border-t border-gray-300 pt-5">
             <div className="rounded-xl p-4" style={{ backgroundColor: CREAM, border: `1px solid ${HAIRLINE}` }}>
               <div className="flex items-center justify-between">
                 <div>

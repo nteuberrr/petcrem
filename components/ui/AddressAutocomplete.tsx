@@ -152,13 +152,13 @@ export default function AddressAutocomplete({
         </div>
       )}
       {open && sugs.length > 0 && (
-        <ul className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+        <ul className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
           {sugs.map((s, i) => (
             <li
               key={s.placeId || i}
               onMouseDown={e => { e.preventDefault(); pick(s) }}
               onMouseEnter={() => setHighlight(i)}
-              className={`px-3 py-2 text-sm cursor-pointer ${i === highlight ? 'bg-indigo-50 text-indigo-900' : 'text-gray-800 hover:bg-gray-50'}`}
+              className={`px-3 py-2 text-sm cursor-pointer ${i === highlight ? 'bg-brand/10 text-brand' : 'text-gray-800 hover:bg-gray-50'}`}
             >
               <div className="flex items-start gap-2">
                 <svg className="w-4 h-4 mt-0.5 text-gray-400 shrink-0" viewBox="0 0 20 20" fill="currentColor">

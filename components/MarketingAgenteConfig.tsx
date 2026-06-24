@@ -56,18 +56,18 @@ export default function MarketingAgenteConfig() {
       )}
 
       {/* Instrucciones */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-300">
           <h2 className="font-semibold text-gray-900">Instrucciones al agente</h2>
           <p className="text-xs text-gray-400 mt-0.5">En lenguaje natural, con prioridad sobre su guion base. Ej.: «Publicá los posts a las 19:00», «Tono más cercano», «Priorizá captación de veterinarios este mes».</p>
         </div>
         <div className="p-5 space-y-3">
           <textarea value={instrucciones} onChange={e => setInstrucciones(e.target.value)} rows={6}
             placeholder="Escribí acá indicaciones para el agente de marketing…"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y" />
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-y" />
           <div className="flex items-center gap-3">
             <button onClick={() => guardar({ instrucciones }, 'instr')} disabled={guardandoInstr || instrucciones === (cfg?.instrucciones ?? '')}
-              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              className="bg-brand hover:bg-brand-dark disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
               {guardandoInstr ? 'Guardando…' : 'Guardar instrucciones'}
             </button>
             {instrucciones !== (cfg?.instrucciones ?? '') && <span className="text-xs text-amber-600">Cambios sin guardar</span>}
@@ -76,18 +76,18 @@ export default function MarketingAgenteConfig() {
       </div>
 
       {/* Guía de marca y tono (texto libre, editable) */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-300">
           <h2 className="font-semibold text-gray-900">Guía de marca y tono</h2>
           <p className="text-xs text-gray-400 mt-0.5">Notas de estilo que el agente usa al redactar (voz, qué sí / qué no, ejemplos). Texto libre.</p>
         </div>
         <div className="p-5 space-y-3">
           <textarea value={calibracion} onChange={e => setCalibracion(e.target.value)} rows={10}
             placeholder="Ej.: Voz cercana y profesional, sin clichés del rubro. Evitar «puente del arcoíris». La mascota va por su nombre…"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y" />
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand resize-y" />
           <div className="flex items-center gap-3">
             <button onClick={() => guardar({ calibracion }, 'calib')} disabled={guardandoCalib || calibracion === (cfg?.calibracion ?? '')}
-              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              className="bg-brand hover:bg-brand-dark disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
               {guardandoCalib ? 'Guardando…' : 'Guardar guía'}
             </button>
             {calibracion !== (cfg?.calibracion ?? '') && <span className="text-xs text-amber-600">Cambios sin guardar</span>}

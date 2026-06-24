@@ -499,14 +499,14 @@ export default function DespachosTab() {
   return (
     <>
       {/* Calendario de entregas — próximos 5 días hábiles */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5 mb-4">
         <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <h2 className="text-base font-semibold text-gray-900">Calendario de entregas</h2>
             <button
               type="button"
               onClick={() => setOptimOpen(true)}
-              className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg px-3 py-1.5 shadow-sm transition-colors"
+              className="inline-flex items-center gap-1.5 bg-brand hover:bg-brand-dark text-white text-xs font-semibold rounded-lg px-3 py-1.5 shadow-md transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
@@ -528,12 +528,12 @@ export default function DespachosTab() {
             const total = col.pendientes.length + col.atrasadas.length
             const esHoy = isoFecha(col.fecha) === isoFecha(new Date())
             return (
-              <div key={isoFecha(col.fecha)} className={`rounded-lg border-2 ${esHoy ? 'border-indigo-300 bg-indigo-50/30' : 'border-gray-200 bg-gray-50/30'} p-3`}>
-                <div className="text-center pb-2 border-b border-gray-200 mb-2">
+              <div key={isoFecha(col.fecha)} className={`rounded-lg border-2 ${esHoy ? 'border-brand/40 bg-brand/10/30' : 'border-gray-300 bg-gray-50/30'} p-3`}>
+                <div className="text-center pb-2 border-b border-gray-300 mb-2">
                   <p className="text-[10px] uppercase font-semibold text-gray-500 tracking-wide">
                     {col.fecha.toLocaleDateString('es-CL', { weekday: 'long' })}
                   </p>
-                  <p className={`text-base font-bold ${esHoy ? 'text-indigo-700' : 'text-gray-900'}`}>
+                  <p className={`text-base font-bold ${esHoy ? 'text-brand' : 'text-gray-900'}`}>
                     {String(col.fecha.getDate()).padStart(2, '0')}/{String(col.fecha.getMonth() + 1).padStart(2, '0')}
                   </p>
                   <p className="text-[10px] text-gray-400">
@@ -568,30 +568,30 @@ export default function DespachosTab() {
       </div>
 
       {/* Form */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-5">Nuevo recorrido</h2>
         <form onSubmit={guardar} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-gray-700">Fecha</label>
               <input type="date" required value={fecha} onChange={e => setFecha(e.target.value)}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div className="flex items-end">
               <button type="button" onClick={abrirModal}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                 🔍 Seleccionar mascotas
               </button>
             </div>
           </div>
 
           {seleccionadas.length > 0 && (
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="border border-gray-300 rounded-xl overflow-hidden">
               <div className="divide-y divide-gray-100">
                 {seleccionadas.map(c => (
                   <div key={c.id} className="flex items-center justify-between px-4 py-3">
                     <div className="flex-1 min-w-0">
-                      <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
+                      <span className="font-mono text-xs text-brand font-semibold">{c.codigo}</span>
                       <span className="ml-2 text-sm text-gray-900 font-medium">{c.nombre_mascota}</span>
                       <span className="ml-2 text-xs text-gray-500">· {c.nombre_tutor}</span>
                       {c.direccion_despacho && <div className="text-xs text-gray-500 mt-0.5">{c.direccion_despacho}{c.comuna ? ` · ${c.comuna}` : ''}</div>}
@@ -601,7 +601,7 @@ export default function DespachosTab() {
                   </div>
                 ))}
               </div>
-              <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-xs text-gray-600 font-medium">
+              <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-300 text-xs text-gray-600 font-medium">
                 {seleccionadas.length} mascota(s)
               </div>
             </div>
@@ -610,19 +610,19 @@ export default function DespachosTab() {
           <div>
             <label className="text-xs font-medium text-gray-700">Nota</label>
             <textarea value={nota} onChange={e => setNota(e.target.value)} rows={2}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
           </div>
 
           <button type="submit" disabled={saving}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+            className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
             {saving ? 'Guardando...' : 'Guardar recorrido'}
           </button>
         </form>
       </div>
 
       {/* Historial */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-300">
           <h2 className="text-base font-semibold text-gray-900">Rutas de entrega</h2>
         </div>
         {despachos.length === 0 ? (
@@ -646,7 +646,7 @@ export default function DespachosTab() {
                 return (
                 <Fragment key={d.id}>
                   <tr className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-xs text-indigo-700 font-bold cursor-pointer" onClick={() => toggleExpandir(d)}>#{d.numero_global || '—'}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-brand font-bold cursor-pointer" onClick={() => toggleExpandir(d)}>#{d.numero_global || '—'}</td>
                     <td className="px-4 py-3 font-semibold text-gray-900 cursor-pointer" onClick={() => toggleExpandir(d)}>N° {d.numero_recorrido}</td>
                     <td className="px-4 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(d)}>{formatDate(d.fecha)}</td>
                     <td className="px-4 py-3 cursor-pointer" onClick={() => toggleExpandir(d)}>
@@ -677,7 +677,7 @@ export default function DespachosTab() {
                         <div className="flex flex-wrap items-center gap-2 mb-3">
                           {estado === 'guardada' && (
                             <button onClick={() => iniciarRuta(d)} disabled={routeBusy === d.id}
-                              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg px-3 py-1.5 disabled:opacity-50">
+                              className="bg-brand hover:bg-brand-dark text-white text-xs font-semibold rounded-lg px-3 py-1.5 disabled:opacity-50">
                               {routeBusy === d.id ? 'Iniciando…' : '▶ Iniciar ruta'}
                             </button>
                           )}
@@ -701,14 +701,14 @@ export default function DespachosTab() {
                         </div>
 
                         {/* Paradas en orden con toggle de entrega */}
-                        <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                        <div className="border border-gray-300 rounded-lg overflow-hidden bg-white">
                           {paradasOrdenadas(d, false).map((p, i) => {
                             const m = clientesMap[p.cliente_id]
                             const ent = d.entregas?.[p.cliente_id]
                             const busy = routeBusy === d.id + ':' + p.cliente_id
                             return (
-                              <div key={p.cliente_id} className={`flex items-start gap-3 px-3 py-2 border-t first:border-t-0 border-gray-100 ${ent ? 'bg-green-50/50' : ''}`}>
-                                <span className="shrink-0 w-6 h-6 bg-indigo-600 text-white text-xs font-bold rounded-full flex items-center justify-center">{i + 1}</span>
+                              <div key={p.cliente_id} className={`flex items-start gap-3 px-3 py-2 border-t first:border-t-0 border-gray-300 ${ent ? 'bg-green-50/50' : ''}`}>
+                                <span className="shrink-0 w-6 h-6 bg-brand text-white text-xs font-bold rounded-full flex items-center justify-center">{i + 1}</span>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-semibold text-sm text-gray-900">{m?.nombre_mascota ?? p.cliente_id}</span>
@@ -746,23 +746,23 @@ export default function DespachosTab() {
             placeholder="Filtrar por nombre, código, tutor, dirección o comuna..."
             value={buscar}
             onChange={e => setBuscar(e.target.value)}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {cargando ? (
             <p className="text-sm text-gray-400 text-center py-4">Cargando...</p>
           ) : disponiblesFiltradas.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-4">Sin mascotas disponibles para despacho</p>
           ) : (
-            <div className="max-h-80 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-lg">
+            <div className="max-h-80 overflow-y-auto divide-y divide-gray-100 border border-gray-300 rounded-lg">
               {disponiblesFiltradas.map(c => {
                 const isSelected = seleccionadas.some(s => s.id === c.id)
                 return (
-                  <label key={c.id} className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${isSelected ? 'bg-indigo-50' : ''}`}>
+                  <label key={c.id} className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${isSelected ? 'bg-brand/10' : ''}`}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggle(c)}
-                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mt-0.5" />
+                      className="w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <div>
-                        <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
+                        <span className="font-mono text-xs text-brand font-semibold">{c.codigo}</span>
                         <span className="ml-2 text-sm text-gray-900 font-medium">{c.nombre_mascota}</span>
                         <span className="ml-1 text-xs text-gray-500">({c.nombre_tutor})</span>
                       </div>
@@ -775,11 +775,11 @@ export default function DespachosTab() {
               })}
             </div>
           )}
-          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+          <div className="flex items-center justify-between pt-2 border-t border-gray-300">
             <span className="text-xs text-gray-500">{seleccionadas.length} seleccionada(s)</span>
             <button
               onClick={() => setShowModal(false)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
               Confirmar selección
             </button>
@@ -793,13 +793,13 @@ export default function DespachosTab() {
           <div>
             <label className="text-xs font-semibold text-gray-700">Fecha</label>
             <input type="date" required value={editFecha} onChange={e => setEditFecha(e.target.value)}
-              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
 
           <div>
             <label className="text-xs font-semibold text-gray-700">Nota</label>
             <textarea rows={2} value={editNota} onChange={e => setEditNota(e.target.value)}
-              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
           </div>
 
           <div>
@@ -812,7 +812,7 @@ export default function DespachosTab() {
               ) : editMascotas.map(c => (
                 <div key={c.id} className="flex items-center justify-between px-3 py-2">
                   <div className="flex-1 min-w-0">
-                    <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
+                    <span className="font-mono text-xs text-brand font-semibold">{c.codigo}</span>
                     <span className="ml-2 text-sm text-gray-900">{c.nombre_mascota}</span>
                     <span className="ml-1 text-xs text-gray-500">({c.nombre_tutor})</span>
                   </div>
@@ -826,14 +826,14 @@ export default function DespachosTab() {
           <div>
             <label className="text-xs font-semibold text-gray-700">Agregar mascotas (cremadas disponibles)</label>
             <input type="text" placeholder="Buscar..." value={editBuscar} onChange={e => setEditBuscar(e.target.value)}
-              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            <div className="mt-2 max-h-48 overflow-y-auto divide-y divide-gray-100 border-2 border-gray-200 rounded-lg">
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            <div className="mt-2 max-h-48 overflow-y-auto divide-y divide-gray-100 border-2 border-gray-300 rounded-lg">
               {editDisponiblesFiltradas.length === 0 ? (
                 <p className="text-xs text-gray-400 text-center py-3">Sin mascotas disponibles</p>
               ) : editDisponiblesFiltradas.map(c => (
                 <button type="button" key={c.id} onClick={() => agregarEdit(c)}
                   className="w-full text-left px-3 py-2 hover:bg-emerald-50 transition-colors">
-                  <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
+                  <span className="font-mono text-xs text-brand font-semibold">{c.codigo}</span>
                   <span className="ml-2 text-sm text-gray-900">{c.nombre_mascota}</span>
                   <span className="ml-1 text-xs text-gray-500">({c.nombre_tutor})</span>
                 </button>
@@ -847,7 +847,7 @@ export default function DespachosTab() {
               Cancelar
             </button>
             <button type="submit" disabled={savingEdit}
-              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+              className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
               {savingEdit ? 'Guardando...' : 'Guardar cambios'}
             </button>
           </div>
@@ -865,7 +865,7 @@ export default function DespachosTab() {
                 value={optimOrigin}
                 onChange={setOptimOrigin}
                 placeholder="Ej. Av. Apoquindo 4700, Las Condes"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none"
               />
             </div>
             <div>
@@ -874,7 +874,7 @@ export default function DespachosTab() {
                 value={optimDest}
                 onChange={setOptimDest}
                 placeholder="Vacío = vuelve al origen"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none"
               />
             </div>
             <div>
@@ -883,13 +883,13 @@ export default function DespachosTab() {
                 type="date"
                 value={optimFechaBase}
                 onChange={e => setOptimFechaBase(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-brand focus:outline-none"
               />
               <p className="text-[10px] text-gray-500 mt-0.5">Obligatorias = entregas que vencen hasta esta fecha</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Máximo desvío para sugeridas: <span className="font-bold text-indigo-700">{optimMaxDetour} min</span>
+                Máximo desvío para sugeridas: <span className="font-bold text-brand">{optimMaxDetour} min</span>
               </label>
               <input
                 type="range" min={0} max={30} step={1}
@@ -900,7 +900,7 @@ export default function DespachosTab() {
             </div>
             <div className="sm:col-span-2">
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Días hábiles a futuro para buscar sugeridas: <span className="font-bold text-indigo-700">{optimDiasRec}</span>
+                Días hábiles a futuro para buscar sugeridas: <span className="font-bold text-brand">{optimDiasRec}</span>
               </label>
               <input
                 type="range" min={1} max={5} step={1}
@@ -915,7 +915,7 @@ export default function DespachosTab() {
             type="button"
             onClick={() => optimCalcular()}
             disabled={optimLoading || !optimOrigin.trim()}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg py-2.5 text-sm shadow-md transition-colors disabled:opacity-50"
+            className="w-full bg-brand hover:bg-brand-dark text-white font-semibold rounded-lg py-2.5 text-sm shadow-md transition-colors disabled:opacity-50"
           >
             {optimLoading ? 'Calculando ruta…' : 'Calcular ruta'}
           </button>
@@ -929,18 +929,18 @@ export default function DespachosTab() {
           {optimResult && (
             <div className="space-y-3">
               {/* Origen/destino formateados */}
-              <div className="text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+              <div className="text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2 border border-gray-300">
                 <div><span className="font-semibold text-gray-700">Origen:</span> {optimResult.origin.address}</div>
                 <div><span className="font-semibold text-gray-700">Destino:</span> {optimResult.destination.address}</div>
               </div>
 
               {/* Ruta obligatoria */}
-              <div className="border border-indigo-200 rounded-lg overflow-hidden">
-                <div className="bg-indigo-50 px-3 py-2 flex items-center justify-between">
-                  <div className="font-semibold text-indigo-900 text-sm">
+              <div className="border border-brand/30 rounded-lg overflow-hidden">
+                <div className="bg-brand/10 px-3 py-2 flex items-center justify-between">
+                  <div className="font-semibold text-brand text-sm">
                     Ruta obligatoria · {optimResult.obligatorias.length} {optimResult.obligatorias.length === 1 ? 'parada' : 'paradas'}
                   </div>
-                  <div className="text-xs text-indigo-700">
+                  <div className="text-xs text-brand">
                     {optimResult.baseline.distance_km} km · {optimResult.baseline.duration_minutes} min
                   </div>
                 </div>
@@ -950,7 +950,7 @@ export default function DespachosTab() {
                   <ul className="divide-y divide-gray-100">
                     {optimResult.obligatorias.map(o => (
                       <li key={o.cliente_id} className="px-3 py-2 flex items-start gap-3">
-                        <span className="shrink-0 w-6 h-6 bg-indigo-600 text-white text-xs font-bold rounded-full flex items-center justify-center">{o.order}</span>
+                        <span className="shrink-0 w-6 h-6 bg-brand text-white text-xs font-bold rounded-full flex items-center justify-center">{o.order}</span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-sm text-gray-900">{o.nombre_mascota}</span>
@@ -979,7 +979,7 @@ export default function DespachosTab() {
                           type="checkbox"
                           checked={optimPicks.has(c.cliente_id)}
                           onChange={() => optimToggle(c.cliente_id)}
-                          className="mt-1 w-4 h-4 text-indigo-600 rounded"
+                          className="mt-1 w-4 h-4 text-brand rounded"
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -1013,7 +1013,7 @@ export default function DespachosTab() {
                   )}
                 </div>
               ) : (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600">
+                <div className="bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-600">
                   No hay sugeridas dentro del umbral de {optimMaxDetour} min de desvío. Sube el slider para considerar más opciones.
                 </div>
               )}
@@ -1049,7 +1049,7 @@ export default function DespachosTab() {
 
               {/* Skipped */}
               {optimResult.skipped.length > 0 && (
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="border border-gray-300 rounded-lg overflow-hidden">
                   <div className="bg-gray-50 px-3 py-2 font-semibold text-gray-700 text-sm">
                     No procesadas · {optimResult.skipped.length}
                   </div>
@@ -1078,7 +1078,7 @@ export default function DespachosTab() {
                   type="button"
                   onClick={optimGuardarRuta}
                   disabled={saving || (optimResult.obligatorias.length + optimPicks.size === 0)}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg py-2.5 text-sm shadow-md transition-colors disabled:opacity-50"
+                  className="flex-1 bg-brand hover:bg-brand-dark text-white font-semibold rounded-lg py-2.5 text-sm shadow-md transition-colors disabled:opacity-50"
                 >
                   {saving ? 'Guardando…' : '💾 Guardar ruta'}
                 </button>

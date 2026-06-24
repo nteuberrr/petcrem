@@ -92,24 +92,24 @@ export default function SubirFotoPage() {
 
       <main className="max-w-2xl mx-auto px-4 py-8 sm:py-10">
         {estadoCodigo === 'cargando' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-500">Cargando…</div>
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center text-gray-500">Cargando…</div>
         )}
 
         {estadoCodigo === 'sin_token' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-600">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center text-gray-600">
             El enlace no es válido. Usa el botón que te enviamos por correo.
           </div>
         )}
 
         {estadoCodigo === 'invalido' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-600">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center text-gray-600">
             El enlace no es válido o venció. Revisa el correo que te enviamos o escríbenos a{' '}
             <a href="mailto:contacto@crematorioalmaanimal.cl" className="underline" style={{ color: COLOR }}>contacto@crematorioalmaanimal.cl</a>.
           </div>
         )}
 
         {estadoCodigo === 'ok' && exito && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center">
             <div className="text-5xl mb-3">🐾</div>
             <p className="text-base text-gray-800">
               Hemos recibido la foto de <strong>{mascota}</strong>. La usaremos para incluirla en su certificado de cremación.
@@ -126,7 +126,7 @@ export default function SubirFotoPage() {
         )}
 
         {estadoCodigo === 'ok' && !exito && (
-          <form onSubmit={enviar} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 sm:p-6 space-y-5">
+          <form onSubmit={enviar} className="bg-white rounded-xl shadow-md border border-gray-300 p-5 sm:p-6 space-y-5">
             <p className="text-sm text-gray-700">
               Foto de <strong>{mascota}</strong>
             </p>
@@ -142,7 +142,7 @@ export default function SubirFotoPage() {
             {preview ? (
               <div className="flex flex-col items-center gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={preview} alt="vista previa" className="max-h-64 rounded-lg border border-gray-200 object-contain" />
+                <img src={preview} alt="vista previa" className="max-h-64 rounded-lg border border-gray-300 object-contain" />
                 <button type="button" onClick={() => elegirFoto(null)} className="text-sm text-red-600 hover:text-red-800 font-medium">
                   Quitar foto
                 </button>

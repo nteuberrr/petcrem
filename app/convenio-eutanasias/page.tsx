@@ -158,7 +158,7 @@ export default function ConvenioEutanasiasPage() {
             Estos son los montos fijos que <strong>te pagamos a ti</strong> por cada eutanasia a domicilio realizada, según el peso de la mascota.
             Son los mismos para todos los veterinarios del convenio.
           </p>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-xl">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden max-w-xl">
             {tramos.length === 0 ? (
               <div className="p-6 text-center text-gray-400 text-sm">Cargando tarifas…</div>
             ) : (
@@ -194,7 +194,7 @@ export default function ConvenioEutanasiasPage() {
             </div>
           )}
 
-          <form onSubmit={enviar} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 space-y-5 sm:space-y-6">
+          <form onSubmit={enviar} className="bg-white rounded-xl shadow-md border border-gray-300 p-4 sm:p-6 space-y-5 sm:space-y-6">
             {/* Honeypot — invisible a usuarios humanos, los bots lo llenan */}
             <input
               type="text"
@@ -288,7 +288,7 @@ export default function ConvenioEutanasiasPage() {
                     {DIAS.map(d => {
                       const h = horarios[d.key] ?? { am: false, pm: false }
                       return (
-                        <tr key={d.key} className="border-t border-gray-100">
+                        <tr key={d.key} className="border-t border-gray-300">
                           <td className="px-3 py-3 font-medium text-gray-800">{d.label}</td>
                           <td className="px-3 py-3 text-center">
                             <input type="checkbox" checked={h.am} onChange={() => toggleHorario(d.key, 'am')} className="w-5 h-5 cursor-pointer" />
@@ -313,7 +313,7 @@ export default function ConvenioEutanasiasPage() {
               />
             </FormField>
 
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2 border-t border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2 border-t border-gray-300">
               <p className="text-xs text-gray-500 sm:flex-1">
                 Al enviar aceptas que te contactemos cuando llegue una solicitud que coincida con tu zona.
               </p>
@@ -379,7 +379,7 @@ export default function ConvenioEutanasiasPage() {
 
 function Card({ num, titulo, children }: { num: string; titulo: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl p-5 border shadow-sm" style={{ borderColor: HAIRLINE }}>
+    <div className="bg-white rounded-xl p-5 border shadow-md" style={{ borderColor: HAIRLINE }}>
       <div
         className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-base mb-3"
         style={{ backgroundColor: COLOR, color: AMBER }}

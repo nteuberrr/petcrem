@@ -87,7 +87,7 @@ export default function AgentesConfig() {
 
   return (
     <div className="space-y-4 max-w-3xl">
-      <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-5 py-3 text-sm text-indigo-900">
+      <div className="bg-brand/10 border border-brand/20 rounded-xl px-5 py-3 text-sm text-brand">
         🤖 El <strong>agente de WhatsApp</strong> responde solo a los clientes usando el flujo de atención + los precios en vivo. Aquí lo afinas: dale <strong>instrucciones</strong> y/o <strong>calíbralo</strong> con las conversaciones reales.
       </div>
 
@@ -98,18 +98,18 @@ export default function AgentesConfig() {
       )}
 
       {/* Instrucciones */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-300">
           <h2 className="font-semibold text-gray-900">Instrucciones al agente</h2>
           <p className="text-xs text-gray-400 mt-0.5">En lenguaje natural. Tienen efecto inmediato y prioridad sobre su guion base (salvo no inventar precios y escalar reclamos). Ej.: «Cuando pregunten por convenios, ofrece hablar con el equipo», «Sé más breve».</p>
         </div>
         <div className="p-5 space-y-3">
           <textarea value={instrucciones} onChange={e => setInstrucciones(e.target.value)} rows={6}
             placeholder="Escribe aquí indicaciones para el agente…"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y" />
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-y" />
           <div className="flex items-center gap-3">
             <button onClick={() => guardar({ instrucciones }, 'instr')} disabled={guardandoInstr || instrucciones === (cfg?.instrucciones ?? '')}
-              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              className="bg-brand hover:bg-brand-dark disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
               {guardandoInstr ? 'Guardando…' : 'Guardar instrucciones'}
             </button>
             {instrucciones !== (cfg?.instrucciones ?? '') && <span className="text-xs text-amber-600">Cambios sin guardar</span>}
@@ -118,8 +118,8 @@ export default function AgentesConfig() {
       </div>
 
       {/* Calibración */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between gap-3">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-300 flex items-start justify-between gap-3">
           <div>
             <h2 className="font-semibold text-gray-900">Calibración con conversaciones reales</h2>
             <p className="text-xs text-gray-400 mt-0.5">La IA analiza una muestra de los chats (históricos <strong>y</strong> los nuevos que van entrando) y arma una guía de tono y respuestas. Puedes editarla a mano.</p>
@@ -136,10 +136,10 @@ export default function AgentesConfig() {
         <div className="p-5 space-y-3">
           <textarea value={calibracion} onChange={e => setCalibracion(e.target.value)} rows={12}
             placeholder="Aún no hay calibración. Presiona «Calibrar ahora» para generarla a partir de las conversaciones."
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y" />
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand resize-y" />
           <div className="flex items-center gap-3">
             <button onClick={() => guardar({ calibracion }, 'calib')} disabled={guardandoCalib || calibracion === (cfg?.calibracion ?? '')}
-              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              className="bg-brand hover:bg-brand-dark disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
               {guardandoCalib ? 'Guardando…' : 'Guardar calibración'}
             </button>
             {calibracion !== (cfg?.calibracion ?? '') && <span className="text-xs text-amber-600">Cambios sin guardar</span>}

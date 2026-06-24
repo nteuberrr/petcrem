@@ -357,7 +357,7 @@ export default function ConfiguracionPage() {
   return (
     <div className="max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
+        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Configuración</h1>
         <p className="text-gray-500 text-sm mt-0.5">Precios, productos y catálogos</p>
       </div>
 
@@ -376,7 +376,7 @@ export default function ConfiguracionPage() {
         <div className="flex gap-2 flex-wrap mb-4">
           {([['servicios', 'Servicios Generales'], ['bodega', 'Bodega'], ['otros', 'Otros Productos']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setArticuloTab(k)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${articuloTab === k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${articuloTab === k ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
               {label}
             </button>
           ))}
@@ -398,7 +398,7 @@ export default function ConfiguracionPage() {
         <div className="flex gap-2 flex-wrap mb-4">
           {([['datos', 'Datos Personales'], ['usuarios', 'Usuarios'], ['agentes', 'Agentes'], ['correos', 'Correos']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setAvanzadaTab(k)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${avanzadaTab === k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${avanzadaTab === k ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
               {label}
             </button>
           ))}
@@ -413,27 +413,27 @@ export default function ConfiguracionPage() {
             <div className="flex gap-2">
               {(['general', 'convenio', 'especial'] as PrecioSubTab[]).map(st => (
                 <button key={st} onClick={() => setPrecioTab(st)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${precioTab === st ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${precioTab === st ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
                   {st === 'general' ? 'Precio general' : st === 'convenio' ? 'Precio convenio' : 'Convenios especiales'}
                 </button>
               ))}
             </div>
             <button onClick={normalizarIds} title="Renumera IDs duplicados en las hojas de precios"
-              className="text-xs text-gray-500 hover:text-indigo-600 underline">
+              className="text-xs text-gray-500 hover:text-brand underline">
               Normalizar IDs
             </button>
           </div>
 
           {/* General y Convenio */}
           {(precioTab === 'general' || precioTab === 'convenio') && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
                 <div>
                   <h2 className="font-semibold text-gray-900">{precioTab === 'general' ? 'Precios generales' : 'Precios convenio'}</h2>
                   <p className="text-xs text-gray-400 mt-0.5">Clic en celda para editar · Último tramo = "X kg o más"</p>
                 </div>
                 <button onClick={() => { setTramoForm({ peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' }); setShowTramoModal({ tipo: precioTab }) }}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                  className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                   + Agregar tramo
                 </button>
               </div>
@@ -467,7 +467,7 @@ export default function ConfiguracionPage() {
           {/* Especiales */}
           {precioTab === 'especial' && (
             <div className="space-y-4">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="font-semibold text-gray-900">Convenios especiales por veterinaria</h2>
@@ -475,11 +475,11 @@ export default function ConfiguracionPage() {
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => { setDuplicarForm({ destino: especialVetFiltro || '', origen: '' }); setShowDuplicarModal(true) }}
-                      className="border border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                      className="border border-brand/30 text-brand hover:bg-brand/10 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                       ⎘ Duplicar tabla
                     </button>
                     <button onClick={() => { setEditingEspecial(null); setEspecialForm({ veterinaria_id: '', peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' }); setShowEspecialModal(true) }}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                      className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                       + Nuevo convenio
                     </button>
                   </div>
@@ -487,7 +487,7 @@ export default function ConfiguracionPage() {
                 <div>
                   <label className="text-xs font-medium text-gray-700">Filtrar por veterinaria</label>
                   <select value={especialVetFiltro} onChange={e => setEspecialVetFiltro(e.target.value)}
-                    className="mt-1 block border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    className="mt-1 block border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                     <option value="">Todas</option>
                     {vets.filter(v => v.activo === 'TRUE').map(v => (
                       <option key={v.id} value={v.id}>{v.nombre}</option>
@@ -507,11 +507,11 @@ export default function ConfiguracionPage() {
                 const vet = vets.find(v => v.id === vetId)
                 const maxPesoMin = tramos.length ? Math.max(...tramos.map(t => parseFloat(t.peso_min) || 0)) : 0
                 return (
-                  <div key={vetId} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="px-6 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                  <div key={vetId} className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+                    <div className="px-6 py-3 border-b border-gray-300 bg-gray-50 flex items-center justify-between">
                       <p className="font-semibold text-gray-900 text-sm">{vet?.nombre ?? `Veterinaria #${vetId}`}</p>
                       <button onClick={() => { setEditingEspecial(null); setEspecialForm({ veterinaria_id: vetId, peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' }); setShowEspecialModal(true) }}
-                        className="text-indigo-600 hover:text-indigo-800 text-xs font-medium">+ Tramo</button>
+                        className="text-brand hover:text-brand text-xs font-medium">+ Tramo</button>
                     </div>
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
@@ -539,7 +539,7 @@ export default function ConfiguracionPage() {
                 )
               })}
               {filteredEspeciales.length === 0 && (
-                <div className="bg-white rounded-xl border border-gray-100 p-8 text-center text-gray-400 text-sm">Sin convenios especiales</div>
+                <div className="bg-white rounded-xl border border-gray-300 p-8 text-center text-gray-400 text-sm">Sin convenios especiales</div>
               )}
             </div>
           )}
@@ -551,14 +551,14 @@ export default function ConfiguracionPage() {
         <div className="space-y-4">
 
         {/* Categorías */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <div>
               <h2 className="font-semibold text-gray-900">Categorías de productos</h2>
               <p className="text-xs text-gray-500 mt-0.5">Agrupá productos por tipo (ej: Ánforas, Relicarios). Editar el nombre actualiza también los productos asociados.</p>
             </div>
             <button onClick={() => { setEditingCat(null); setCatForm({ nombre: '' }); setCatError(''); setShowCatModal(true) }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Nueva categoría</button>
+              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Nueva categoría</button>
           </div>
           {categoriasProd.length === 0 ? (
             <div className="px-6 py-6 text-center text-sm text-gray-400">
@@ -572,7 +572,7 @@ export default function ConfiguracionPage() {
                   <div key={c.id} className="flex items-center justify-between px-6 py-3 gap-3 flex-wrap">
                     <div className="flex items-center gap-3">
                       <span className="font-medium text-gray-900">{c.nombre}</span>
-                      <span className="text-[11px] text-indigo-700 font-semibold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                      <span className="text-[11px] text-brand font-semibold bg-brand/10 border border-brand/30 px-2 py-0.5 rounded-full">
                         {cantidad} producto{cantidad !== 1 ? 's' : ''}
                       </span>
                     </div>
@@ -606,11 +606,11 @@ export default function ConfiguracionPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Bodega</h2>
             <button onClick={() => { setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '' }); setShowProdModal(true) }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           {productos.length === 0 ? (
             <div className="px-6 py-8 text-center text-sm text-gray-400">Sin productos registrados</div>
@@ -632,9 +632,9 @@ export default function ConfiguracionPage() {
                 <div className="divide-y-2 divide-gray-200">
                   {orden.map(cat => (
                     <div key={cat}>
-                      <div className="bg-indigo-50 px-6 py-2 border-b border-indigo-100 flex items-center justify-between">
-                        <h3 className="text-xs font-bold text-indigo-900 uppercase tracking-wide">{cat}</h3>
-                        <span className="text-[10px] text-indigo-700 font-semibold bg-indigo-100 px-2 py-0.5 rounded-full">
+                      <div className="bg-brand/10 px-6 py-2 border-b border-brand/20 flex items-center justify-between">
+                        <h3 className="text-xs font-bold text-brand uppercase tracking-wide">{cat}</h3>
+                        <span className="text-[10px] text-brand font-semibold bg-brand/10 px-2 py-0.5 rounded-full">
                           {grupos.get(cat)!.length} producto{grupos.get(cat)!.length !== 1 ? 's' : ''}
                         </span>
                       </div>
@@ -644,8 +644,8 @@ export default function ConfiguracionPage() {
                           return (
                             <div key={p.id} className="flex items-center gap-4 px-6 py-4 flex-wrap">
                               {p.foto_url
-                                ? <img src={p.foto_url} alt={p.nombre} className="w-12 h-12 object-cover rounded-lg border border-gray-100" />
-                                : <div className="w-12 h-12 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-center text-gray-300 text-xl">📦</div>
+                                ? <img src={p.foto_url} alt={p.nombre} className="w-12 h-12 object-cover rounded-lg border border-gray-300" />
+                                : <div className="w-12 h-12 bg-gray-50 rounded-lg border border-gray-300 flex items-center justify-center text-gray-300 text-xl">📦</div>
                               }
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{p.nombre}</p>
@@ -655,7 +655,7 @@ export default function ConfiguracionPage() {
                                 <p className={`text-sm font-bold ${stockNum < 50 ? 'text-red-600' : 'text-gray-700'}`}>{fmtNumero(stockNum)}</p>
                                 <p className="text-xs text-gray-400">en stock{stockNum < 50 && <span className="text-red-500 ml-1">⚠</span>}</p>
                               </div>
-                              <button onClick={() => setShowStockModal(p)} className="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors mr-2">+ Unidades</button>
+                              <button onClick={() => setShowStockModal(p)} className="bg-brand hover:bg-brand-dark text-white px-3 py-1 rounded-md text-xs font-medium transition-colors mr-2">+ Unidades</button>
                               <Toggle checked={p.activo === 'TRUE'} onChange={val => patch('/api/productos', { id: p.id, activo: val ? 'TRUE' : 'FALSE' })} />
                               <div className="flex items-center gap-2 ml-3">
                                 <button
@@ -683,11 +683,11 @@ export default function ConfiguracionPage() {
 
       {/* ─── ESPECIES ─── */}
       {tab === 'Artículos' && articuloTab === 'servicios' && serviciosTab === 'especies' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Especies</h2>
             <button onClick={() => { setEditingEspecie(null); setEspecieForm({ nombre: '', letra: '' }); setShowEspecieModal(true) }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50"><tr>{['Nombre', 'Letra', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
@@ -695,7 +695,7 @@ export default function ConfiguracionPage() {
               {especies.map(e => (
                 <tr key={e.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">{e.nombre}</td>
-                  <td className="px-4 py-3"><span className="font-mono font-bold text-indigo-700">{e.letra}</span></td>
+                  <td className="px-4 py-3"><span className="font-mono font-bold text-brand">{e.letra}</span></td>
                   <td className="px-4 py-3"><Toggle checked={e.activo === 'TRUE'} onChange={val => patch('/api/especies', { id: e.id, activo: val ? 'TRUE' : 'FALSE' })} /></td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -721,11 +721,11 @@ export default function ConfiguracionPage() {
 
       {/* ─── TIPOS SERVICIO ─── */}
       {tab === 'Artículos' && articuloTab === 'servicios' && serviciosTab === 'tipos' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Tipos de servicio</h2>
             <button onClick={() => { setEditingTipoServicio(null); setTipoServicioForm({ nombre: '', codigo: '', plazo_entrega_dias: '3' }); setShowTipoServicioModal(true) }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50"><tr>{['Nombre', 'Código', 'Plazo entrega', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
@@ -760,11 +760,11 @@ export default function ConfiguracionPage() {
 
       {/* ─── OTROS SERVICIOS ─── */}
       {tab === 'Artículos' && articuloTab === 'otros' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Otros Productos</h2>
             <button onClick={() => { setEditingOtro(null); setOtroForm({ nombre: '', precio: '' }); setShowOtroModal(true) }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50"><tr>{['Nombre', 'Precio', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
@@ -798,14 +798,14 @@ export default function ConfiguracionPage() {
 
       {/* ─── DESCUENTOS ─── */}
       {tab === 'Descuentos' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <div>
               <h2 className="font-semibold text-gray-900">Descuentos</h2>
               <p className="text-xs text-gray-400 mt-0.5">Variable (%) o Fijo (monto en CLP) · Aplica sobre el total del servicio (cremación + adicionales)</p>
             </div>
             <button onClick={() => { setEditingDescuento(null); setDescuentoForm({ nombre: '', tipo: 'variable', valor: '' }); setShowDescuentoModal(true) }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50"><tr>{['Nombre', 'Tipo', 'Valor', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
@@ -846,11 +846,11 @@ export default function ConfiguracionPage() {
       {/* ─── USUARIOS (dentro de Configuración Avanzada, solo admin principal) ─── */}
       {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'usuarios' && (
         <div className="space-y-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Usuarios del sistema</h2>
             <button onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: '', email: '', password: '', rol: 'operador' }); setShowUsuarioModal(true) }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
               + Agregar usuario
             </button>
           </div>
@@ -867,7 +867,7 @@ export default function ConfiguracionPage() {
                 // Si no hay admin en la hoja aún, mostrar fila informativa con opción de "inscribirlo"
                 if (!adminEnRow) {
                   return (
-                    <tr className="bg-indigo-50/40">
+                    <tr className="bg-brand/10/40">
                       <td className="px-4 py-3 font-medium text-gray-900">Administrador</td>
                       <td className="px-4 py-3 text-gray-600 text-xs">{adminEmail || '(env)'}</td>
                       <td className="px-4 py-3"><Badge variant="purple">admin</Badge></td>
@@ -933,7 +933,7 @@ export default function ConfiguracionPage() {
           <CorreosConfig />
 
           {/* Seguimiento en vivo de correos enviados (BCC a un correo personal) */}
-          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 max-w-3xl">
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 max-w-3xl">
             <h2 className="text-base font-bold text-gray-900 mb-1">Seguimiento en vivo de correos electrónicos enviados</h2>
             <p className="text-sm text-gray-600 mb-4">
               Si está activo, te llega una <b>copia oculta (BCC)</b> a tu correo de <b>cada email transaccional</b> que envíe el sistema (registro, inicio de cremación, despachos, eutanasias, informes de veterinaria…). <b>No incluye</b> el mailing masivo.
@@ -945,10 +945,10 @@ export default function ConfiguracionPage() {
             <label className="text-xs font-semibold text-gray-700">Reenviar copia a este correo</label>
             <input type="email" value={segEmail} onChange={e => setSegEmail(e.target.value)}
               placeholder="tucorreo@ejemplo.com"
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             <div className="flex items-center gap-3 mt-4">
               <button onClick={guardarSeguimiento} disabled={segSaving}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+                className="bg-brand hover:bg-brand-dark text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
                 {segSaving ? 'Guardando…' : 'Guardar'}
               </button>
               {segMsg && <span className={`text-sm ${segMsg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{segMsg.texto}</span>}
@@ -961,7 +961,7 @@ export default function ConfiguracionPage() {
       {tab === 'Jornada' && (
         <div className="space-y-6 max-w-3xl">
           {/* Vigente */}
-          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6">
             <h2 className="text-base font-bold text-gray-900 mb-3">Jornada vigente</h2>
             {jornadaVigente ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
@@ -998,7 +998,7 @@ export default function ConfiguracionPage() {
           </div>
 
           {/* Crear nueva */}
-          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6">
             <h2 className="text-base font-bold text-gray-900 mb-1">Nueva configuración</h2>
             <p className="text-xs text-gray-500 mb-4">Aplica desde la fecha indicada en adelante. Los registros previos mantienen su jornada original.</p>
             <form onSubmit={guardarJornada} className="space-y-3">
@@ -1006,27 +1006,27 @@ export default function ConfiguracionPage() {
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Vigente desde</label>
                   <input type="date" required value={jornadaForm.vigente_desde} onChange={e => setJornadaForm(f => ({ ...f, vigente_desde: e.target.value }))}
-                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Hora entrada</label>
                   <input type="time" required value={jornadaForm.hora_entrada} onChange={e => setJornadaForm(f => ({ ...f, hora_entrada: e.target.value }))}
-                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Hora salida</label>
                   <input type="time" required value={jornadaForm.hora_salida} onChange={e => setJornadaForm(f => ({ ...f, hora_salida: e.target.value }))}
-                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-700">$ hora extra</label>
                   <input type="number" min="0" required value={jornadaForm.precio_hora_extra} onChange={e => setJornadaForm(f => ({ ...f, precio_hora_extra: e.target.value }))}
-                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Tolerancia</label>
                   <select value={jornadaForm.tolerancia_minutos} onChange={e => setJornadaForm(f => ({ ...f, tolerancia_minutos: e.target.value }))}
-                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                     <option value="0">Sin tolerancia</option>
                     <option value="30">30 min</option>
                     <option value="45">45 min</option>
@@ -1037,7 +1037,7 @@ export default function ConfiguracionPage() {
                   <label className="text-xs font-semibold text-gray-700">$ retiro adicional</label>
                   <input type="number" min="0" value={jornadaForm.precio_retiro_adicional} onChange={e => setJornadaForm(f => ({ ...f, precio_retiro_adicional: e.target.value }))}
                     placeholder="0"
-                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
               </div>
               <p className="text-xs text-gray-500">
@@ -1046,7 +1046,7 @@ export default function ConfiguracionPage() {
               </p>
               {jornadaError && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{jornadaError}</p>}
               <button type="submit" disabled={savingJornada}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+                className="bg-brand hover:bg-brand-dark text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
                 {savingJornada ? 'Guardando...' : 'Guardar configuración'}
               </button>
             </form>
@@ -1054,8 +1054,8 @@ export default function ConfiguracionPage() {
 
           {/* Histórico */}
           {jornadaConfigs.length > 0 && (
-            <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 border-b-2 border-gray-200">
+            <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 overflow-hidden">
+              <div className="px-6 py-4 border-b-2 border-gray-300">
                 <h2 className="text-base font-bold text-gray-900">Histórico de configuraciones</h2>
               </div>
               <div className="overflow-x-auto">
@@ -1079,7 +1079,7 @@ export default function ConfiguracionPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <button onClick={() => abrirEditarJornada(c)}
-                              className="bg-blue-500 hover:bg-blue-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                              className="bg-brand hover:bg-brand-dark text-white px-2.5 py-1 rounded-md text-xs font-medium">
                               Editar
                             </button>
                             <button onClick={() => eliminarJornada(c.id)}
@@ -1109,13 +1109,13 @@ export default function ConfiguracionPage() {
                 <label className="text-xs font-semibold text-gray-700">Vigente desde</label>
                 <input type="date" required value={editJornadaForm.vigente_desde}
                   onChange={e => setEditJornadaForm(f => ({ ...f, vigente_desde: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Tolerancia</label>
                 <select value={editJornadaForm.tolerancia_minutos}
                   onChange={e => setEditJornadaForm(f => ({ ...f, tolerancia_minutos: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                   <option value="0">Sin tolerancia</option>
                   <option value="30">30 min</option>
                   <option value="45">45 min</option>
@@ -1126,25 +1126,25 @@ export default function ConfiguracionPage() {
                 <label className="text-xs font-semibold text-gray-700">Hora entrada</label>
                 <input type="time" required value={editJornadaForm.hora_entrada}
                   onChange={e => setEditJornadaForm(f => ({ ...f, hora_entrada: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Hora salida</label>
                 <input type="time" required value={editJornadaForm.hora_salida}
                   onChange={e => setEditJornadaForm(f => ({ ...f, hora_salida: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">$ hora extra</label>
                 <input type="number" min="0" required value={editJornadaForm.precio_hora_extra}
                   onChange={e => setEditJornadaForm(f => ({ ...f, precio_hora_extra: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">$ retiro adicional</label>
                 <input type="number" min="0" value={editJornadaForm.precio_retiro_adicional}
                   onChange={e => setEditJornadaForm(f => ({ ...f, precio_retiro_adicional: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
             </div>
             {editJornadaError && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{editJornadaError}</p>}
@@ -1154,7 +1154,7 @@ export default function ConfiguracionPage() {
                 Cancelar
               </button>
               <button type="submit" disabled={savingEditJornada}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md disabled:opacity-50">
+                className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold shadow-md disabled:opacity-50">
                 {savingEditJornada ? 'Guardando...' : 'Guardar cambios'}
               </button>
             </div>
@@ -1182,7 +1182,7 @@ export default function ConfiguracionPage() {
         }} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>
-            <input required value={prodForm.nombre} onChange={e => setProdForm(f => ({ ...f, nombre: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <input required value={prodForm.nombre} onChange={e => setProdForm(f => ({ ...f, nombre: e.target.value }))} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Categoría <span className="text-red-500">*</span></label>
@@ -1192,7 +1192,7 @@ export default function ConfiguracionPage() {
               value={prodForm.categoria}
               onChange={e => setProdForm(f => ({ ...f, categoria: e.target.value }))}
               placeholder="Elige una existente o escribe una nueva (Ánforas, Relicarios, etc.)"
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
             />
             <datalist id="categorias-productos">
               {(() => {
@@ -1206,7 +1206,7 @@ export default function ConfiguracionPage() {
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Precio (CLP)</label>
-            <input required type="number" min="0" value={prodForm.precio} onChange={e => setProdForm(f => ({ ...f, precio: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <input required type="number" min="0" value={prodForm.precio} onChange={e => setProdForm(f => ({ ...f, precio: e.target.value }))} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Foto</label>
@@ -1219,13 +1219,13 @@ export default function ConfiguracionPage() {
               setUploadingFoto(false)
             }} />
             <button type="button" onClick={() => fileInputRef.current?.click()}
-              className="mt-1 flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 w-full transition-colors">
+              className="mt-1 flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 w-full transition-colors">
               <span>📷</span>
-              {uploadingFoto ? <span className="text-indigo-500">Subiendo...</span> : <span>{prodForm.foto_url ? 'Cambiar foto' : 'Seleccionar foto'}</span>}
+              {uploadingFoto ? <span className="text-brand-soft">Subiendo...</span> : <span>{prodForm.foto_url ? 'Cambiar foto' : 'Seleccionar foto'}</span>}
             </button>
             {prodForm.foto_url && <img src={prodForm.foto_url} alt="preview" className="mt-2 w-20 h-20 object-cover rounded-lg" />}
           </div>
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingProducto ? 'Guardar cambios' : 'Guardar'}</button>
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingProducto ? 'Guardar cambios' : 'Guardar'}</button>
         </form>
       </Modal>
 
@@ -1262,7 +1262,7 @@ export default function ConfiguracionPage() {
             <input required autoFocus value={catForm.nombre}
               onChange={e => setCatForm({ nombre: e.target.value })}
               placeholder="Ej: Ánforas, Relicarios, Urnas…"
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           {editingCat && (
             <p className="text-[11px] text-gray-500">
@@ -1270,7 +1270,7 @@ export default function ConfiguracionPage() {
             </p>
           )}
           {catError && <p className="text-xs text-red-700 bg-red-50 border-2 border-red-200 rounded-lg p-2">{catError}</p>}
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">
             {editingCat ? 'Guardar cambios' : 'Crear categoría'}
           </button>
         </form>
@@ -1287,9 +1287,9 @@ export default function ConfiguracionPage() {
           <p className="text-sm text-gray-600">Stock actual: <span className="font-bold">{fmtNumero(showStockModal?.stock || '0')}</span></p>
           <div>
             <label className="text-xs font-medium text-gray-700">Unidades a ingresar</label>
-            <input required type="number" min="1" value={stockDelta} onChange={e => setStockDelta(e.target.value)} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ej: 50" />
+            <input required type="number" min="1" value={stockDelta} onChange={e => setStockDelta(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" placeholder="Ej: 50" />
           </div>
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">Registrar ingreso</button>
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">Registrar ingreso</button>
         </form>
       </Modal>
 
@@ -1308,13 +1308,13 @@ export default function ConfiguracionPage() {
         }} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>
-            <input required value={especieForm.nombre} onChange={e => setEspecieForm(f => ({ ...f, nombre: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <input required value={especieForm.nombre} onChange={e => setEspecieForm(f => ({ ...f, nombre: e.target.value }))} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Letra (1 char mayúscula)</label>
-            <input required maxLength={1} value={especieForm.letra} onChange={e => setEspecieForm(f => ({ ...f, letra: e.target.value.toUpperCase() }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <input required maxLength={1} value={especieForm.letra} onChange={e => setEspecieForm(f => ({ ...f, letra: e.target.value.toUpperCase() }))} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingEspecie ? 'Guardar cambios' : 'Guardar'}</button>
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingEspecie ? 'Guardar cambios' : 'Guardar'}</button>
         </form>
       </Modal>
 
@@ -1333,20 +1333,20 @@ export default function ConfiguracionPage() {
         }} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>
-            <input required value={tipoServicioForm.nombre} onChange={e => setTipoServicioForm(f => ({ ...f, nombre: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <input required value={tipoServicioForm.nombre} onChange={e => setTipoServicioForm(f => ({ ...f, nombre: e.target.value }))} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Código (ej: CI, CP, SD)</label>
-            <input required value={tipoServicioForm.codigo} onChange={e => setTipoServicioForm(f => ({ ...f, codigo: e.target.value.toUpperCase() }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <input required value={tipoServicioForm.codigo} onChange={e => setTipoServicioForm(f => ({ ...f, codigo: e.target.value.toUpperCase() }))} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Plazo máximo de entrega (días hábiles)</label>
             <input type="number" min="0" required value={tipoServicioForm.plazo_entrega_dias}
               onChange={e => setTipoServicioForm(f => ({ ...f, plazo_entrega_dias: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             <p className="text-[10px] text-gray-500 mt-1">Cantidad de días hábiles desde la fecha de retiro hasta la entrega objetivo. Usado para el calendario de entregas en Despachos.</p>
           </div>
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingTipoServicio ? 'Guardar cambios' : 'Guardar'}</button>
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingTipoServicio ? 'Guardar cambios' : 'Guardar'}</button>
         </form>
       </Modal>
 
@@ -1365,13 +1365,13 @@ export default function ConfiguracionPage() {
         }} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>
-            <input required value={otroForm.nombre} onChange={e => setOtroForm(f => ({ ...f, nombre: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <input required value={otroForm.nombre} onChange={e => setOtroForm(f => ({ ...f, nombre: e.target.value }))} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Precio (CLP)</label>
-            <input required type="number" min="0" value={otroForm.precio} onChange={e => setOtroForm(f => ({ ...f, precio: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <input required type="number" min="0" value={otroForm.precio} onChange={e => setOtroForm(f => ({ ...f, precio: e.target.value }))} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingOtro ? 'Guardar cambios' : 'Guardar'}</button>
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingOtro ? 'Guardar cambios' : 'Guardar'}</button>
         </form>
       </Modal>
 
@@ -1395,13 +1395,13 @@ export default function ConfiguracionPage() {
             <input required value={descuentoForm.nombre}
               onChange={e => setDescuentoForm(f => ({ ...f, nombre: e.target.value }))}
               placeholder="Ej: Descuento Municipalidad de Recoleta"
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Tipo</label>
             <select value={descuentoForm.tipo}
               onChange={e => setDescuentoForm(f => ({ ...f, tipo: e.target.value as 'fijo' | 'variable' }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="variable">Variable (% del total)</option>
               <option value="fijo">Fijo (monto en CLP)</option>
             </select>
@@ -1414,14 +1414,14 @@ export default function ConfiguracionPage() {
               step={descuentoForm.tipo === 'variable' ? '0.1' : '1'}
               value={descuentoForm.valor}
               onChange={e => setDescuentoForm(f => ({ ...f, valor: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             <p className="mt-1 text-xs text-gray-400">
               {descuentoForm.tipo === 'variable'
                 ? 'Se aplica como porcentaje sobre el total (servicio + adicionales).'
                 : 'Se descuenta este monto del total. Si el total es menor, se descuenta el total completo.'}
             </p>
           </div>
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingDescuento ? 'Guardar cambios' : 'Guardar'}</button>
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingDescuento ? 'Guardar cambios' : 'Guardar'}</button>
         </form>
       </Modal>
 
@@ -1445,12 +1445,12 @@ export default function ConfiguracionPage() {
                 <label className="text-xs font-medium text-gray-700">{label}</label>
                 <input required type="number" min="0" value={(tramoForm as Record<string, string>)[key]}
                   onChange={e => setTramoForm(f => ({ ...f, [key]: e.target.value }))}
-                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
             ))}
           </div>
           <p className="text-xs text-gray-400">El último tramo se mostrará como "X kg o más".</p>
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">Guardar tramo</button>
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">Guardar tramo</button>
         </form>
       </Modal>
 
@@ -1470,7 +1470,7 @@ export default function ConfiguracionPage() {
             <div>
               <label className="text-xs font-medium text-gray-700">Veterinaria</label>
               <select required value={especialForm.veterinaria_id} onChange={e => setEspecialForm(f => ({ ...f, veterinaria_id: e.target.value }))}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                 <option value="">Seleccionar...</option>
                 {vets.filter(v => v.activo === 'TRUE').map(v => (
                   <option key={v.id} value={v.id}>{v.nombre}</option>
@@ -1484,11 +1484,11 @@ export default function ConfiguracionPage() {
                 <label className="text-xs font-medium text-gray-700">{label}</label>
                 <input required type="number" min="0" value={(especialForm as Record<string, string>)[key]}
                   onChange={e => setEspecialForm(f => ({ ...f, [key]: e.target.value }))}
-                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
             ))}
           </div>
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">
             {editingEspecial ? 'Guardar cambios' : 'Crear tramo'}
           </button>
         </form>
@@ -1503,7 +1503,7 @@ export default function ConfiguracionPage() {
           <div>
             <label className="text-xs font-medium text-gray-700">Veterinaria destino</label>
             <select required value={duplicarForm.destino} onChange={e => setDuplicarForm(f => ({ ...f, destino: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="">Seleccionar...</option>
               {vets.filter(v => v.activo === 'TRUE').map(v => (
                 <option key={v.id} value={v.id}>{v.nombre}</option>
@@ -1513,7 +1513,7 @@ export default function ConfiguracionPage() {
           <div>
             <label className="text-xs font-medium text-gray-700">Copiar desde</label>
             <select required value={duplicarForm.origen} onChange={e => setDuplicarForm(f => ({ ...f, origen: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="">Seleccionar...</option>
               <option value="general">Precios generales</option>
               <option value="convenio">Precios convenio</option>
@@ -1530,7 +1530,7 @@ export default function ConfiguracionPage() {
               Esta veterinaria ya tiene tramos especiales: se <strong>reemplazarán</strong> por la copia.
             </p>
           )}
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">
             Duplicar
           </button>
         </form>
@@ -1555,12 +1555,12 @@ export default function ConfiguracionPage() {
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>
             <input required value={usuarioForm.nombre} onChange={e => setUsuarioForm(f => ({ ...f, nombre: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Email</label>
             <input required type="email" value={usuarioForm.email} onChange={e => setUsuarioForm(f => ({ ...f, email: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">
@@ -1569,7 +1569,7 @@ export default function ConfiguracionPage() {
             <div className="mt-1 relative">
               <input required={!editingUsuario} type={mostrarPassword ? 'text' : 'password'}
                 value={usuarioForm.password} onChange={e => setUsuarioForm(f => ({ ...f, password: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               <button type="button" onClick={() => setMostrarPassword(v => !v)}
                 className="absolute inset-y-0 right-0 px-3 text-gray-400 hover:text-gray-700 text-sm"
                 title={mostrarPassword ? 'Ocultar' : 'Mostrar'}>
@@ -1580,13 +1580,13 @@ export default function ConfiguracionPage() {
           <div>
             <label className="text-xs font-medium text-gray-700">Rol</label>
             <select value={usuarioForm.rol} onChange={e => setUsuarioForm(f => ({ ...f, rol: e.target.value }))}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               {ROLES.filter(r => isAdminTotal || r.value === 'operador').map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
             </select>
           </div>
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+          <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">
             {editingUsuario ? 'Guardar cambios' : 'Crear usuario'}
           </button>
         </form>
@@ -1629,10 +1629,10 @@ function TramoRow({ tramo, isLast, tipo, onDelete, onEdit, onUpdate, isAdmin, ca
               <input autoFocus type="number" value={editCell.valor}
                 onChange={e => setEditCell(ec => ec ? { ...ec, valor: e.target.value } : null)}
                 onBlur={saveCell} onKeyDown={e => e.key === 'Enter' && saveCell()}
-                className="w-full border border-indigo-400 rounded px-2 py-1 text-sm focus:outline-none" />
+                className="w-full border border-brand rounded px-2 py-1 text-sm focus:outline-none" />
             ) : (
               <span onClick={() => setEditCell({ campo: c.key, valor: (tramo as Record<string, string>)[c.key] })}
-                className="cursor-pointer text-sm text-gray-700 hover:text-indigo-600 hover:underline">{c.label}</span>
+                className="cursor-pointer text-sm text-gray-700 hover:text-brand hover:underline">{c.label}</span>
             )}
           </td>
         )
@@ -1641,9 +1641,9 @@ function TramoRow({ tramo, isLast, tipo, onDelete, onEdit, onUpdate, isAdmin, ca
         <div className="flex items-center gap-1.5">
           <div className="flex flex-col">
             <button onClick={onMoveUp} disabled={!canMoveUp} title="Mover arriba"
-              className="text-gray-400 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-gray-400 text-[10px] leading-none px-1">▲</button>
+              className="text-gray-400 hover:text-brand disabled:opacity-30 disabled:hover:text-gray-400 text-[10px] leading-none px-1">▲</button>
             <button onClick={onMoveDown} disabled={!canMoveDown} title="Mover abajo"
-              className="text-gray-400 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-gray-400 text-[10px] leading-none px-1">▼</button>
+              className="text-gray-400 hover:text-brand disabled:opacity-30 disabled:hover:text-gray-400 text-[10px] leading-none px-1">▼</button>
           </div>
           {onEdit && (
             <button onClick={onEdit} className="bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1 rounded text-xs font-medium transition-colors">Editar</button>
@@ -1725,7 +1725,7 @@ function DatosPersonalesPanel() {
   }
 
   return (
-    <form onSubmit={guardar} className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 max-w-3xl space-y-4">
+    <form onSubmit={guardar} className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 max-w-3xl space-y-4">
       <div>
         <h2 className="text-base font-bold text-gray-900">Datos de la empresa</h2>
         <p className="text-xs text-gray-500">Estos datos están disponibles para mostrarlos en certificados, facturas y reportes.</p>
@@ -1747,7 +1747,7 @@ function DatosPersonalesPanel() {
               value={form.direccion}
               onChange={v => setForm(f => ({ ...f, direccion: v }))}
               placeholder="Empieza a escribir la dirección…"
-              className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
             />
           </div>
         </div>
@@ -1783,7 +1783,7 @@ function DatosPersonalesPanel() {
 
       <div className="flex items-center gap-3 pt-2">
         <button type="submit" disabled={saving}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg px-5 py-2 text-sm shadow-md disabled:opacity-50 transition-colors">
+          className="bg-brand hover:bg-brand-dark text-white font-semibold rounded-lg px-5 py-2 text-sm shadow-md disabled:opacity-50 transition-colors">
           {saving ? 'Guardando…' : 'Guardar'}
         </button>
         {savedMsg && <span className="text-sm text-green-600 font-medium">✓ {savedMsg}</span>}
@@ -1799,7 +1799,7 @@ function DatosPersonalesPanel() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="border-t border-gray-100 pt-3 space-y-2">
+    <div className="border-t border-gray-300 pt-3 space-y-2">
       <div className="text-[11px] uppercase tracking-wider font-semibold text-gray-500">{title}</div>
       {children}
     </div>
@@ -1818,7 +1818,7 @@ function Field({ label, value, onChange, type = 'text', placeholder }: {
       <label className="text-xs font-semibold text-gray-700">{label}</label>
       <input type={type} value={value} placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
-        className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
     </div>
   )
 }
@@ -1848,8 +1848,8 @@ function PermisosEditor({ usuarios }: { usuarios: Usuario[] }) {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100">
+    <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-300">
         <h2 className="font-semibold text-gray-900">Permisos por rol</h2>
         <p className="text-xs text-gray-400 mt-0.5">Marcá qué puede ver y usar cada rol. Los cambios se aplican casi al instante (la persona los ve en su próxima navegación). El <b>Admin</b> (vos) siempre tiene todo.</p>
       </div>
@@ -1877,7 +1877,7 @@ function PermisosEditor({ usuarios }: { usuarios: Usuario[] }) {
                       <td key={rol} className="px-4 py-2.5 text-center">
                         <input type="checkbox" checked={!!c[rol]} disabled={saving === `${m.key}:${rol}`}
                           onChange={e => toggle(m.key, rol, e.target.checked)}
-                          className="w-4 h-4 accent-indigo-600 cursor-pointer disabled:opacity-40" />
+                          className="w-4 h-4 accent-brand cursor-pointer disabled:opacity-40" />
                       </td>
                     ))}
                   </tr>
@@ -1895,7 +1895,7 @@ function PermisosEditor({ usuarios }: { usuarios: Usuario[] }) {
         </div>
       )}
       {error && <div className="px-6 py-2 text-xs text-red-600">{error}</div>}
-      <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-500">
+      <div className="px-6 py-3 border-t border-gray-300 text-xs text-gray-500">
         Usuarios: {usuarios.length} · {usuarios.filter(u => u.rol === 'admin').length} Admin · {usuarios.filter(u => u.rol === 'admin2').length} General · {usuarios.filter(u => u.rol === 'operador').length} Operador
       </div>
     </div>

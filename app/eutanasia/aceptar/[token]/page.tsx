@@ -54,7 +54,7 @@ export default function AceptarPage() {
           <p className="text-[11px] uppercase tracking-widest opacity-80">Alma Animal · Convenio Eutanasias</p>
           <h1 className="text-xl font-bold mt-1">Confirmación de disponibilidad</h1>
         </div>
-        <div className="bg-white border border-gray-200 rounded-b-2xl p-6 shadow-sm">
+        <div className="bg-white border border-gray-300 rounded-b-2xl p-6 shadow-md">
           {!token && (
             <div className="text-center py-6">
               <p className="text-5xl mb-3">⚠</p>

@@ -12,6 +12,20 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* ── Sistema de diseño Alma Animal — tokens de marca ──────────────────────────
+   Generan utilidades Tailwind: bg-brand, text-brand, border-brand, ring-brand,
+   bg-brand-dark, text-brand-soft, bg-gold, text-gold, bg-cream, text-ink, etc.
+   Úsalas SIEMPRE en vez de hex sueltos o de indigo/gray dispares. */
+@theme {
+  --color-brand: #143C64;        /* navy: títulos, headers, botón primario, activo */
+  --color-brand-dark: #0F2E4D;   /* hover del primario */
+  --color-brand-soft: #2A6DB0;   /* enlaces / navy claro */
+  --color-gold: #F2B84B;         /* acentos / hover / detalles */
+  --color-gold-soft: #FBF1DC;    /* fondos suaves dorados */
+  --color-cream: #FBF8F3;        /* fondos suaves */
+  --color-ink: #1F2937;          /* texto principal */
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -28,7 +42,8 @@ textarea {
 input:not([type="checkbox"]):not([type="radio"]):focus,
 select:focus,
 textarea:focus {
-  border-color: #4f46e5; /* indigo-600 */
+  border-color: #143C64; /* brand navy */
+  outline-color: #143C64;
 }
 
 /* Responsive: en móvil las tablas scrollean horizontalmente en vez de romper

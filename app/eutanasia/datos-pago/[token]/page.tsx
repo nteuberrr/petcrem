@@ -123,11 +123,11 @@ export default function DatosPagoPage() {
 
       <main className="max-w-2xl mx-auto px-4 py-8">
         {estado === 'cargando' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-gray-500 text-sm">Verificando…</div>
+          <div className="bg-white rounded-xl border border-gray-300 p-6 text-center text-gray-500 text-sm">Verificando…</div>
         )}
 
         {estado === 'error' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
+          <div className="bg-white rounded-xl border border-gray-300 p-6 text-center">
             <p className="text-5xl mb-3">⚠</p>
             <h2 className="text-lg font-semibold text-gray-900 mb-1">No pudimos cargar tu información</h2>
             <p className="text-sm text-gray-600">{errorMsg}</p>
@@ -139,7 +139,7 @@ export default function DatosPagoPage() {
         )}
 
         {estado === 'ya_completado' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
+          <div className="bg-white rounded-xl border border-gray-300 p-6 text-center">
             <p className="text-5xl mb-3">🐾</p>
             <h2 className="text-lg font-semibold text-gray-900 mb-1">Tus datos ya están registrados</h2>
             <p className="text-sm text-gray-600">{yaCompletadoMsg}</p>
@@ -150,7 +150,7 @@ export default function DatosPagoPage() {
         )}
 
         {estado === 'listo' && vet && (
-          <form onSubmit={enviar} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 space-y-4">
+          <form onSubmit={enviar} className="bg-white rounded-xl shadow-md border border-gray-300 p-4 sm:p-6 space-y-4">
             <Field label="Nombre completo" required>
               <input type="text" required value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={inputCls} />
             </Field>
@@ -253,4 +253,4 @@ function Field({ label, required, hint, children }: { label: string; required?: 
   )
 }
 
-const inputCls = 'w-full px-3 py-2.5 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none'
+const inputCls = 'w-full px-3 py-2.5 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-brand focus:border-brand outline-none'

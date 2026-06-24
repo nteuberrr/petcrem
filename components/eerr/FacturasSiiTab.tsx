@@ -127,20 +127,20 @@ export default function FacturasSiiTab() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+      <div className="bg-white rounded-xl border border-gray-300 p-4 space-y-3">
         {/* Carga arriba */}
         <div className="flex items-center gap-3 flex-wrap">
           <input ref={fileRef} type="file" accept=".csv,text/csv" multiple className="hidden"
             onChange={e => { const fs = e.target.files; if (fs && fs.length) subir(fs) }} />
           <button onClick={() => fileRef.current?.click()} disabled={subiendo}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50">
             {subiendo ? 'Subiendo…' : '⬆ Subir compras (CSV)'}
           </button>
           <p className="text-xs text-gray-400">Podés elegir varios archivos.{ultimaCarga ? ` · Última carga: ${formatDate(ultimaCarga)}` : ''}</p>
         </div>
 
         {/* Filtros + buscar en una fila */}
-        <div className="flex flex-wrap items-end gap-3 border-t border-gray-100 pt-3">
+        <div className="flex flex-wrap items-end gap-3 border-t border-gray-300 pt-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Buscar</label>
             <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Razón social o RUT" className="border border-gray-300 rounded px-2 py-1.5 text-sm w-44" />
@@ -193,9 +193,9 @@ export default function FacturasSiiTab() {
         </p>
       )}
       {sel.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
-          <span className="text-sm text-indigo-800 font-medium">{sel.size} seleccionada(s)</span>
-          <button onClick={() => setBulk(true)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700">Asignar a una partida</button>
+        <div className="flex flex-wrap items-center gap-3 bg-brand/10 border border-brand/30 rounded-lg px-4 py-2.5">
+          <span className="text-sm text-brand font-medium">{sel.size} seleccionada(s)</span>
+          <button onClick={() => setBulk(true)} className="bg-brand text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-brand-dark">Asignar a una partida</button>
           <button onClick={() => setSel(new Set())} className="text-sm text-gray-500 hover:text-gray-700">Limpiar selección</button>
         </div>
       )}
@@ -203,11 +203,11 @@ export default function FacturasSiiTab() {
       {loading ? (
         <div className="text-gray-500 text-sm">Cargando…</div>
       ) : items.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
+        <div className="bg-white rounded-xl border border-gray-300 p-8 text-center text-gray-400 text-sm">
           No hay compras {(desde || hasta || estado || tipoFiltro || partidaFiltro || buscar) ? 'con esos filtros' : 'cargadas todavía'}. Usá «Subir compras».
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <div className="bg-white rounded-xl border border-gray-300 overflow-x-auto">
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500 uppercase">
               <tr>
@@ -226,7 +226,7 @@ export default function FacturasSiiTab() {
                 {th('otro', 'Otro', 'right')}
                 {th('comentario', 'Comentario')}
                 {th('partida', 'Partida')}
-                <th className="px-2 py-2 sticky right-0 bg-gray-50 border-l border-gray-100"></th>
+                <th className="px-2 py-2 sticky right-0 bg-gray-50 border-l border-gray-300"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -252,7 +252,7 @@ export default function FacturasSiiTab() {
                       defaultValue={f.comentario}
                       onBlur={e => { if (e.target.value !== f.comentario) fetch('/api/eerr/gastos-sii', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: f.id, comentario: e.target.value }) }).then(cargar) }}
                       placeholder="—"
-                      className="w-20 border border-transparent hover:border-gray-200 focus:border-indigo-400 rounded px-1 py-1 text-xs"
+                      className="w-20 border border-transparent hover:border-gray-300 focus:border-brand rounded px-1 py-1 text-xs"
                     />
                   </td>
                   <td className="px-2 py-1.5 max-w-[130px] truncate" title={f.partida_id ? `${TIPO_LABEL[f.tipo_asignacion] || ''} · ${partidaNombre(f.partida_id)}` : 'Sin asignar'}>
@@ -260,12 +260,12 @@ export default function FacturasSiiTab() {
                       ? <span><span className="text-gray-400">{TIPO_LABEL[f.tipo_asignacion] || ''}</span> · {partidaNombre(f.partida_id)}</span>
                       : <span className="text-amber-600 font-medium">Sin asignar</span>}
                   </td>
-                  <td className={`px-2 py-1.5 text-right sticky right-0 border-l border-gray-100 ${!f.fecha_documento ? 'bg-red-50' : f.contabilizado === 'TRUE' ? 'bg-white' : 'bg-amber-50'}`}>
+                  <td className={`px-2 py-1.5 text-right sticky right-0 border-l border-gray-300 ${!f.fecha_documento ? 'bg-red-50' : f.contabilizado === 'TRUE' ? 'bg-white' : 'bg-amber-50'}`}>
                     {!f.fecha_documento
                       ? <span className="text-red-600 font-medium whitespace-nowrap" title="Completá la fecha de emisión (volvé a subir el CSV) para poder asignarla.">⚠ Falta fecha</span>
                       : f.partida_id
-                        ? <button onClick={() => setAsig(f)} className="border border-gray-200 text-gray-600 hover:bg-gray-50 px-2 py-1 rounded-lg font-medium whitespace-nowrap">Editar</button>
-                        : <button onClick={() => setAsig(f)} className="bg-indigo-600 text-white hover:bg-indigo-700 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap">Asignar</button>}
+                        ? <button onClick={() => setAsig(f)} className="border border-gray-300 text-gray-600 hover:bg-gray-50 px-2 py-1 rounded-lg font-medium whitespace-nowrap">Editar</button>
+                        : <button onClick={() => setAsig(f)} className="bg-brand text-white hover:bg-brand-dark px-2.5 py-1 rounded-lg font-medium whitespace-nowrap">Asignar</button>}
                   </td>
                 </tr>
               ))}
@@ -324,7 +324,7 @@ function AsignarModal({ factura, partidas, netoLabel, onClose, onSaved }: {
         <div className="flex gap-2 mb-4">
           {(['costo', 'gasto', 'impuesto'] as const).map(t => (
             <button key={t} onClick={() => { setTipo(t); setPartida('') }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tipo === t ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tipo === t ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600'}`}>
               {TIPO_LABEL[t]}
             </button>
           ))}
@@ -345,7 +345,7 @@ function AsignarModal({ factura, partidas, netoLabel, onClose, onSaved }: {
         {err && <p className="text-sm text-red-700 mb-3">{err}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="text-sm text-gray-500 px-3 py-2">Cancelar</button>
-          <button onClick={guardar} disabled={saving} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
+          <button onClick={guardar} disabled={saving} className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
         </div>
       </div>
     </div>
@@ -380,7 +380,7 @@ function BulkAsignarModal({ ids, partidas, onClose, onSaved }: {
         <div className="flex gap-2 mb-4">
           {(['costo', 'gasto', 'impuesto'] as const).map(t => (
             <button key={t} onClick={() => { setTipo(t); setPartida('') }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tipo === t ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tipo === t ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600'}`}>
               {TIPO_LABEL[t]}
             </button>
           ))}
@@ -396,7 +396,7 @@ function BulkAsignarModal({ ids, partidas, onClose, onSaved }: {
         {err && <p className="text-sm text-red-700 mb-3">{err}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="text-sm text-gray-500 px-3 py-2">Cancelar</button>
-          <button onClick={guardar} disabled={saving} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Guardando…' : 'Asignar'}</button>
+          <button onClick={guardar} disabled={saving} className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50">{saving ? 'Guardando…' : 'Asignar'}</button>
         </div>
       </div>
     </div>

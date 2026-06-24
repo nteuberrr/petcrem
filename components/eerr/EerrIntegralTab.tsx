@@ -39,7 +39,7 @@ export default function EerrIntegralTab() {
         <div className="flex gap-2 flex-wrap">
           {([['meses12', 'Últimos 12 meses'], ['mes', 'Mes'], ['anio', 'Año']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setModo(k)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${modo === k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${modo === k ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
               {label}
             </button>
           ))}
@@ -77,7 +77,7 @@ export default function EerrIntegralTab() {
         const SIZE = 'text-[13px]'
         const CFG: Record<Kind, { bg: string; text: string; weight: string; num: string; upper: string; top: string; indent: string }> = {
           section: { bg: 'bg-gray-100', text: 'text-gray-900', weight: 'font-bold', num: 'font-bold', upper: 'uppercase tracking-wide', top: 'border-t-2 border-t-gray-400', indent: 'pl-3' },
-          accent: { bg: 'bg-indigo-50', text: 'text-indigo-900', weight: 'font-bold', num: 'font-bold', upper: '', top: 'border-t-2 border-t-indigo-200', indent: 'pl-3' },
+          accent: { bg: 'bg-brand/10', text: 'text-brand', weight: 'font-bold', num: 'font-bold', upper: '', top: 'border-t-2 border-t-brand/30', indent: 'pl-3' },
           result: { bg: 'bg-gray-900', text: 'text-white', weight: 'font-bold', num: 'font-bold', upper: 'uppercase tracking-wide', top: 'border-t-2 border-t-gray-700', indent: 'pl-3' },
           sgHead: { bg: 'bg-white', text: 'text-gray-700', weight: 'font-semibold', num: 'font-semibold', upper: '', top: 'border-t border-t-gray-200', indent: 'pl-6' },
           item: { bg: 'bg-white', text: 'text-gray-500', weight: 'font-normal', num: 'font-normal', upper: '', top: '', indent: 'pl-10' },
@@ -85,7 +85,7 @@ export default function EerrIntegralTab() {
         }
         const row = (key: string, label: string, vals: number[], kind: Kind, partidaId?: string) => {
           const c = CFG[kind]
-          const base = `border border-gray-200 px-2 py-1.5 ${SIZE} ${c.bg} ${c.text} ${c.top}`
+          const base = `border border-gray-300 px-2 py-1.5 ${SIZE} ${c.bg} ${c.text} ${c.top}`
           const neg = (v: number) => v < 0 && (kind === 'accent' || kind === 'result')
           const drillable = !!partidaId && (kind === 'item' || kind === 'loose')
           return (
@@ -98,7 +98,7 @@ export default function EerrIntegralTab() {
                   <td key={i}
                     onClick={click ? () => setDrill({ partida_id: partidaId!, nombre: label, periodo: data.periodos[i].key, label: data.periodos[i].label }) : undefined}
                     title={click ? 'Ver detalle de la cuenta' : undefined}
-                    className={`${base} ${c.num} text-center tabular-nums whitespace-nowrap ${neg(v) ? (kind === 'result' ? 'text-red-300' : 'text-red-600') : ''} ${click ? 'cursor-pointer hover:bg-indigo-50 hover:text-indigo-700 hover:underline' : ''}`}>
+                    className={`${base} ${c.num} text-center tabular-nums whitespace-nowrap ${neg(v) ? (kind === 'result' ? 'text-red-300' : 'text-red-600') : ''} ${click ? 'cursor-pointer hover:bg-brand/10 hover:text-brand hover:underline' : ''}`}>
                     {n === 0 ? <span className={kind === 'result' ? 'text-gray-600' : 'text-gray-300'}>—</span> : (enMiles ? fmtNumero(n) : fmtPrecio(n))}
                   </td>
                 )
@@ -131,7 +131,7 @@ export default function EerrIntegralTab() {
         return (
           <div>
             {enMiles && <p className="text-xs font-medium text-gray-500 mb-2">Cifras en <strong className="text-gray-700">miles de $</strong> (CLP). Filtrá un mes o un año para ver pesos exactos.</p>}
-            <div className="bg-white rounded-xl border border-gray-300 overflow-x-auto shadow-sm">
+            <div className="bg-white rounded-xl border border-gray-300 overflow-x-auto shadow-md">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-gray-800 text-gray-100 text-xs uppercase">
@@ -166,7 +166,7 @@ export default function EerrIntegralTab() {
 
 interface Mov { fecha: string; fuente: string; descripcion: string; proveedor: string; documento: string; monto: number }
 const FUENTE_CLS: Record<string, string> = {
-  'Factura SII': 'bg-indigo-100 text-indigo-700', 'Manual': 'bg-amber-100 text-amber-700',
+  'Factura SII': 'bg-brand/10 text-brand', 'Manual': 'bg-amber-100 text-amber-700',
   'Rendición': 'bg-sky-100 text-sky-700', 'Ficha': 'bg-emerald-100 text-emerald-700',
 }
 
@@ -211,7 +211,7 @@ function MovimientosPanel({ drill, onClose }: { drill: Drill; onClose: () => voi
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex justify-end" onClick={onClose}>
       <div className="bg-white w-full max-w-2xl h-full flex flex-col shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="border-b border-gray-200 px-5 py-4">
+        <div className="border-b border-gray-300 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="font-bold text-gray-900">{drill.nombre}</h3>

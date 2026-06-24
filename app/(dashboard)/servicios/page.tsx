@@ -51,7 +51,7 @@ const COLUMNAS_COTI: ColumnaConfig[] = [
     key: 'enviadas',
     titulo: 'Enviadas',
     descripcion: 'Esperando que un veterinario acepte',
-    header: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+    header: 'bg-brand/10 text-brand border-brand/30',
     matches: c => c.estado === 'creada' || c.estado === 'enviada',
   },
   {
@@ -701,14 +701,14 @@ export default function ServiciosEutanasiasPage() {
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
       <header className="mb-4 pl-14 md:pl-0">
         <p className="text-xs uppercase tracking-wider text-gray-400">Servicios</p>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">Eutanasias</h1>
+        <h1 className="text-xl sm:text-2xl font-extrabold text-brand tracking-tight mt-1">Eutanasias</h1>
         <p className="text-gray-500 text-xs sm:text-sm mt-1">Convenio de eutanasias a domicilio: cotizaciones, veterinarios participantes y precios.</p>
       </header>
 
       {/* Selector de sub-módulo (por ahora único, preparado para más en el futuro). */}
       <div className="flex gap-2 mb-5">
         <button
-          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-indigo-600 text-white cursor-default"
+          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-brand text-white cursor-default"
           disabled
         >
           Eutanasias
@@ -721,7 +721,7 @@ export default function ServiciosEutanasiasPage() {
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === t ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              tab === t ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
           >
             {t}
@@ -737,20 +737,20 @@ export default function ServiciosEutanasiasPage() {
             </div>
             <button
               onClick={abrirNuevaCotizacion}
-              className="w-full md:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm"
+              className="w-full md:w-auto px-4 py-2 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg shadow-md"
             >
               + Nueva cotización
             </button>
           </div>
 
           {loadingCotis && cotis.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-500">Cargando…</div>
+            <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center text-gray-500">Cargando…</div>
           ) : (
             <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
               {COLUMNAS_COTI.map(col => {
                 const items = cotisPorColumna[col.key]
                 return (
-                  <div key={col.key} className="bg-gray-50/80 rounded-xl border border-gray-200/70 flex flex-col min-h-[200px]">
+                  <div key={col.key} className="bg-gray-50/80 rounded-xl border border-gray-300/70 flex flex-col min-h-[200px]">
                     <div className={`px-4 py-3 rounded-t-xl border-b ${col.header}`}>
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold leading-tight">{col.titulo}</h3>
@@ -803,13 +803,13 @@ export default function ServiciosEutanasiasPage() {
             </div>
             <button
               onClick={abrirNuevoVet}
-              className="w-full md:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
+              className="w-full md:w-auto px-4 py-2 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg"
             >
               + Agregar veterinario
             </button>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
             {loadingVets ? (
               <div className="p-8 text-center text-gray-500">Cargando…</div>
             ) : vetsFiltrados.length === 0 ? (
@@ -854,7 +854,7 @@ export default function ServiciosEutanasiasPage() {
                                 if (!h || (!h.am && !h.pm)) return null
                                 const tag = (h.am && h.pm) ? d.label : `${d.label} ${h.am ? 'AM' : 'PM'}`
                                 return (
-                                  <span key={d.key} className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">
+                                  <span key={d.key} className="text-[10px] bg-brand/10 text-brand px-1.5 py-0.5 rounded">
                                     {tag}
                                   </span>
                                 )
@@ -870,7 +870,7 @@ export default function ServiciosEutanasiasPage() {
                           <td className="px-3 py-2 text-right whitespace-nowrap">
                             <button
                               onClick={() => abrirEditarVet(v)}
-                              className="text-indigo-600 hover:text-indigo-800 text-xs font-medium mr-2"
+                              className="text-brand hover:text-brand text-xs font-medium mr-2"
                             >
                               Editar
                             </button>
@@ -890,7 +890,7 @@ export default function ServiciosEutanasiasPage() {
             )}
           </div>
           <p className="text-xs text-gray-500 mt-3">
-            Total: {vetsFiltrados.length} de {vets.length} · Link público de inscripción: <a className="text-indigo-600 hover:underline" href="/convenio-eutanasias" target="_blank">/convenio-eutanasias</a>
+            Total: {vetsFiltrados.length} de {vets.length} · Link público de inscripción: <a className="text-brand hover:underline" href="/convenio-eutanasias" target="_blank">/convenio-eutanasias</a>
           </p>
         </section>
       )}
@@ -898,7 +898,7 @@ export default function ServiciosEutanasiasPage() {
       {tab === 'Precios' && (
         <section>
           {/* Cargo fijo al cliente */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 mb-5 max-w-2xl">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-4 sm:p-5 mb-5 max-w-2xl">
             <h3 className="text-sm font-semibold text-gray-900">Cargo fijo al cliente</h3>
             <p className="text-xs text-gray-500 mt-1">
               Se <strong>suma</strong> al precio del tramo (lo que se paga al vet) para dar el precio que se le cobra al cliente final.
@@ -919,7 +919,7 @@ export default function ServiciosEutanasiasPage() {
               <button
                 onClick={guardarFijo}
                 disabled={savingFijo}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-sm font-medium rounded-lg"
+                className="px-4 py-2 bg-brand hover:bg-brand-dark disabled:bg-brand/40 text-white text-sm font-medium rounded-lg"
               >
                 {savingFijo ? 'Guardando…' : 'Guardar'}
               </button>
@@ -934,13 +934,13 @@ export default function ServiciosEutanasiasPage() {
             </div>
             <button
               onClick={abrirNuevoTramo}
-              className="w-full md:w-auto md:shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
+              className="w-full md:w-auto md:shrink-0 px-4 py-2 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg"
             >
               + Agregar tramo
             </button>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-2xl">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden max-w-2xl">
             {tramos.length === 0 ? (
               <div className="p-8 text-center text-gray-500">No hay tramos de precio definidos.</div>
             ) : (
@@ -965,11 +965,11 @@ export default function ServiciosEutanasiasPage() {
                       <td className="px-4 py-3 text-right font-medium text-gray-900">
                         {fmtPrecio(precioVet)}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-indigo-700">
+                      <td className="px-4 py-3 text-right font-semibold text-brand">
                         {fmtPrecio(precioVet + fijo)}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <button onClick={() => abrirEditarTramo(t)} className="text-indigo-600 hover:text-indigo-800 text-xs font-medium mr-3">
+                        <button onClick={() => abrirEditarTramo(t)} className="text-brand hover:text-brand text-xs font-medium mr-3">
                           Editar
                         </button>
                         <button onClick={() => eliminarTramo(t.id)} className="text-red-600 hover:text-red-800 text-xs font-medium">
@@ -1058,7 +1058,7 @@ export default function ServiciosEutanasiasPage() {
           </Field>
 
           {/* Asignar vet manualmente (opcional) */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
             <label className="block text-xs font-medium text-gray-700 mb-1.5">
               Asignar veterinario manualmente <span className="text-gray-400">(opcional)</span>
             </label>
@@ -1082,7 +1082,7 @@ export default function ServiciosEutanasiasPage() {
           {cotiError && <p className="text-sm text-red-600">{cotiError}</p>}
           <div className="flex gap-2 justify-end pt-2">
             <button type="button" onClick={() => setShowCotiModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
-            <button type="submit" disabled={savingCoti} className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg">
+            <button type="submit" disabled={savingCoti} className="px-4 py-2 text-sm bg-brand hover:bg-brand-dark disabled:bg-brand/40 text-white font-medium rounded-lg">
               {savingCoti ? 'Creando…' : (vetManualId ? 'Crear y asignar' : 'Crear y buscar vets')}
             </button>
           </div>
@@ -1133,7 +1133,7 @@ export default function ServiciosEutanasiasPage() {
               <textarea value={editForm.notas} onChange={e => setEditForm({ ...editForm, notas: e.target.value })} rows={2} className={inputCls} />
             </Field>
 
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Veterinario asignado</label>
               <select value={editVetManualId} onChange={e => setEditVetManualId(e.target.value)} className={inputCls}>
                 <option value="">— Ninguno (esperando que un vet acepte) —</option>
@@ -1152,7 +1152,7 @@ export default function ServiciosEutanasiasPage() {
             {editError && <p className="text-sm text-red-600">{editError}</p>}
             <div className="flex gap-2 justify-end pt-2">
               <button type="button" onClick={() => setEditCoti(null)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
-              <button type="submit" disabled={savingEdit} className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg">
+              <button type="submit" disabled={savingEdit} className="px-4 py-2 text-sm bg-brand hover:bg-brand-dark disabled:bg-brand/40 text-white font-medium rounded-lg">
                 {savingEdit ? 'Guardando…' : 'Guardar cambios'}
               </button>
             </div>
@@ -1186,7 +1186,7 @@ export default function ServiciosEutanasiasPage() {
                 <a
                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${detalleCoti.direccion}, ${detalleCoti.comuna}, Chile`)}`}
                   target="_blank" rel="noreferrer"
-                  className="text-indigo-600 hover:underline"
+                  className="text-brand hover:underline"
                 >
                   {detalleCoti.direccion}, {detalleCoti.comuna}
                 </a>
@@ -1199,11 +1199,11 @@ export default function ServiciosEutanasiasPage() {
             <FichaBloque titulo="Cliente">
               <FichaRow label="Nombre" value={detalleCoti.cliente_nombre} />
               <FichaRow label="Teléfono" value={
-                <a href={`tel:+56${detalleCoti.cliente_telefono}`} className="text-indigo-600 hover:underline">+56 {detalleCoti.cliente_telefono}</a>
+                <a href={`tel:+56${detalleCoti.cliente_telefono}`} className="text-brand hover:underline">+56 {detalleCoti.cliente_telefono}</a>
               } />
               {detalleCoti.cliente_email && (
                 <FichaRow label="Email" value={
-                  <a href={`mailto:${detalleCoti.cliente_email}`} className="text-indigo-600 hover:underline break-all">{detalleCoti.cliente_email}</a>
+                  <a href={`mailto:${detalleCoti.cliente_email}`} className="text-brand hover:underline break-all">{detalleCoti.cliente_email}</a>
                 } />
               )}
             </FichaBloque>
@@ -1213,7 +1213,7 @@ export default function ServiciosEutanasiasPage() {
               <FichaBloque titulo="Veterinario asignado">
                 <FichaRow label="Nombre" value={detalleCoti.vet_nombre_asignado} />
                 <FichaRow label="Email" value={
-                  <a href={`mailto:${detalleCoti.vet_email_asignado}`} className="text-indigo-600 hover:underline break-all">{detalleCoti.vet_email_asignado}</a>
+                  <a href={`mailto:${detalleCoti.vet_email_asignado}`} className="text-brand hover:underline break-all">{detalleCoti.vet_email_asignado}</a>
                 } />
                 {detalleCoti.estado === 'aceptada' && <p className="text-xs text-amber-700 mt-1">⏳ Esperando que llame al cliente y confirme.</p>}
                 {detalleCoti.estado === 'confirmada' && <p className="text-xs text-blue-700 mt-1">📅 Cita coordinada con la familia. Esperando que marque el servicio como realizado.</p>}
@@ -1272,7 +1272,7 @@ export default function ServiciosEutanasiasPage() {
                       )}
                     </div>
                     {matchingExcluidos.length > 0 && (
-                      <details className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs">
+                      <details className="bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-xs">
                         <summary className="cursor-pointer font-medium text-gray-700">
                           Por qué se excluyeron los {matchingExcluidos.length} veterinario{matchingExcluidos.length === 1 ? '' : 's'}
                         </summary>
@@ -1292,11 +1292,11 @@ export default function ServiciosEutanasiasPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="border border-gray-200 rounded-lg divide-y max-h-60 overflow-y-auto">
+                    <div className="border border-gray-300 rounded-lg divide-y max-h-60 overflow-y-auto">
                       {matchingVets.map(v => {
                         const sel = vetsSeleccionados.has(v.id)
                         return (
-                          <label key={v.id} className={`flex items-center gap-3 p-2.5 cursor-pointer hover:bg-gray-50 ${sel ? 'bg-indigo-50' : ''}`}>
+                          <label key={v.id} className={`flex items-center gap-3 p-2.5 cursor-pointer hover:bg-gray-50 ${sel ? 'bg-brand/10' : ''}`}>
                             <input type="checkbox" checked={sel} onChange={() => toggleVetSeleccionado(v.id)} className="w-4 h-4 shrink-0" />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-gray-900 truncate">{`${v.nombre} ${v.apellido}`.trim()}</p>
@@ -1318,7 +1318,7 @@ export default function ServiciosEutanasiasPage() {
                       <button
                         onClick={enviarCotizacionAVets}
                         disabled={enviando || vetsSeleccionados.size === 0}
-                        className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg"
+                        className="px-4 py-2 text-sm bg-brand hover:bg-brand-dark disabled:bg-brand/40 text-white font-medium rounded-lg"
                       >
                         {enviando ? 'Enviando…' : `Enviar a ${vetsSeleccionados.size}`}
                       </button>
@@ -1329,7 +1329,7 @@ export default function ServiciosEutanasiasPage() {
             )}
 
             {/* Acciones administrativas */}
-            <div className="flex flex-wrap gap-2 justify-end pt-2 border-t border-gray-100">
+            <div className="flex flex-wrap gap-2 justify-end pt-2 border-t border-gray-300">
               <button onClick={() => { abrirEditarCotizacion(detalleCoti); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">
                 Editar
               </button>
@@ -1385,13 +1385,13 @@ export default function ServiciosEutanasiasPage() {
               <button
                 type="button"
                 onClick={() => setVetForm(f => ({ ...f, horarios: horariosTodos() }))}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                className="text-xs text-brand hover:text-brand font-medium"
               >
                 Marcar toda la semana
               </button>
             </div>
             <div className="overflow-x-auto">
-              <table className="text-xs border border-gray-200 rounded-lg w-full">
+              <table className="text-xs border border-gray-300 rounded-lg w-full">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-2 py-1.5 text-left text-gray-600">Día</th>
@@ -1432,7 +1432,7 @@ export default function ServiciosEutanasiasPage() {
 
           <div className="flex gap-2 justify-end pt-2">
             <button type="button" onClick={() => setShowVetModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
-            <button type="submit" disabled={savingVet} className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg">
+            <button type="submit" disabled={savingVet} className="px-4 py-2 text-sm bg-brand hover:bg-brand-dark disabled:bg-brand/40 text-white font-medium rounded-lg">
               {savingVet ? 'Guardando…' : (editingVet ? 'Guardar cambios' : 'Crear veterinario')}
             </button>
           </div>
@@ -1456,7 +1456,7 @@ export default function ServiciosEutanasiasPage() {
           {tramoError && <p className="text-sm text-red-600">{tramoError}</p>}
           <div className="flex gap-2 justify-end pt-2">
             <button type="button" onClick={() => setShowTramoModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
-            <button type="submit" disabled={savingTramo} className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg">
+            <button type="submit" disabled={savingTramo} className="px-4 py-2 text-sm bg-brand hover:bg-brand-dark disabled:bg-brand/40 text-white font-medium rounded-lg">
               {savingTramo ? 'Guardando…' : (editingTramo ? 'Guardar cambios' : 'Crear tramo')}
             </button>
           </div>
@@ -1466,12 +1466,12 @@ export default function ServiciosEutanasiasPage() {
   )
 }
 
-const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none'
+const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand focus:border-brand outline-none'
 
 /** Sección agrupada dentro de la ficha completa de cotización. */
 function FichaBloque({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
-    <div className="bg-gray-50/70 border border-gray-200 rounded-xl p-3">
+    <div className="bg-gray-50/70 border border-gray-300 rounded-xl p-3">
       <h3 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">{titulo}</h3>
       <div className="space-y-1.5">{children}</div>
     </div>
@@ -1506,8 +1506,8 @@ function CotizacionCard({
   return (
     <div
       onClick={onOpen}
-      className={`bg-white rounded-lg border shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer p-3 ${
-        cancelada ? 'border-gray-200 opacity-70' : 'border-gray-200'
+      className={`bg-white rounded-lg border shadow-md hover:shadow-md hover:border-brand/40 transition-all cursor-pointer p-3 ${
+        cancelada ? 'border-gray-300 opacity-70' : 'border-gray-300'
       }`}
     >
       {/* Header: mascota + N° */}
@@ -1545,7 +1545,7 @@ function CotizacionCard({
 
       {/* Footer: estado de pago (solo histórico) */}
       {showPago && c.estado === 'realizada' && (
-        <div className="mt-2 pt-2 border-t border-gray-100">
+        <div className="mt-2 pt-2 border-t border-gray-300">
           {c.estado_pago === 'pago_confirmado' ? (
             <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-1 rounded bg-emerald-100 text-emerald-700">
               ✓ Pago confirmado
@@ -1561,7 +1561,7 @@ function CotizacionCard({
         </div>
       )}
       {showPago && c.estado === 'cancelada' && (
-        <div className="mt-2 pt-2 border-t border-gray-100">
+        <div className="mt-2 pt-2 border-t border-gray-300">
           <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-1 rounded bg-red-50 text-red-600">
             Cancelada
           </span>

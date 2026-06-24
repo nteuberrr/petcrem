@@ -88,6 +88,35 @@ async function getPageToken(): Promise<string> {
   return pt
 }
 
+/** Lee los campos del perfil de la Página de Facebook (para auditar/optimizar). */
+export async function leerPerfilFacebook(): Promise<Record<string, unknown> | null> {
+  if (!isFacebookConfigurado()) return null
+  const pt = await getPageToken()
+  const fields = 'name,about,description,category,phone,emails,website,link,fan_count,followers_count'
+  return graph(pageId(), { fields, access_token: pt })
+}
+
+/** Lee los campos del perfil de Instagram (null si el IG aún no está conectado). */
+export async function leerPerfilInstagram(): Promise<Record<string, unknown> | null> {
+  if (!isInstagramConfigurado()) return null
+  const pt = await getPageToken()
+  const fields = 'username,name,biography,website,followers_count,follows_count,media_count,profile_picture_url'
+  return graph(igUserId(), { fields, access_token: pt })
+}
+
+/**
+ * Actualiza campos de TEXTO de la Página de Facebook (la API de IG no permite
+ * editar el perfil; la de Páginas sí estos campos). Requiere pages_manage_metadata.
+ */
+export async function actualizarPerfilFacebook(campos: Record<string, string>): Promise<void> {
+  if (!isFacebookConfigurado()) throw new Error('Facebook no configurado')
+  const permitidos = ['about', 'description', 'phone', 'website', 'emails']
+  const params: Record<string, string> = { access_token: await getPageToken() }
+  for (const [k, v] of Object.entries(campos)) if (permitidos.includes(k)) params[k] = v
+  if (Object.keys(params).length <= 1) throw new Error('No hay campos válidos para actualizar')
+  await graph(pageId(), params, 'POST')
+}
+
 /**
  * Publica en la Página de Facebook. Si hay imagen, sube una foto con caption;
  * si no, un post de texto (con link opcional).

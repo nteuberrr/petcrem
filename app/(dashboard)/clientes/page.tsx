@@ -452,12 +452,12 @@ export default function ClientesPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
+          <h1 className="text-2xl font-extrabold text-brand tracking-tight">Clientes</h1>
           <p className="text-gray-600 text-sm mt-0.5">Fichas de mascotas</p>
         </div>
         <button
           onClick={() => { setForm({ ...FORM_DEFAULT, fecha_retiro: todayISO() }); setShowModal(true) }}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors"
+          className="bg-brand hover:bg-brand-dark text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors"
         >
           + Nueva ficha
         </button>
@@ -469,31 +469,31 @@ export default function ClientesPage() {
         <div className="mb-5 flex flex-wrap items-center gap-2">
           {nBorradores > 0 && (
             <button onClick={() => setFiltro('borrador')}
-              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-red-300 bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-bold text-red-800 shadow-sm transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-red-300 bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-bold text-red-800 shadow-md transition-colors">
               🔔 {nBorradores} nueva{nBorradores === 1 ? '' : 's'} reserva{nBorradores === 1 ? '' : 's'} del agente
             </button>
           )}
           {alertas.pagoPendiente > 0 && (
             <button onClick={() => setFiltro('pago_pendiente')}
-              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 shadow-sm transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 shadow-md transition-colors">
               ⚠ {alertas.pagoPendiente} con pago pendiente
             </button>
           )}
           {alertas.enCamara > 0 && (
             <button onClick={() => setFiltro('pendiente')}
-              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-sky-300 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-800 shadow-sm transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-sky-300 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-800 shadow-md transition-colors">
               📥 {alertas.enCamara} en cámara por cremar
             </button>
           )}
           {alertas.porDespachar > 0 && (
             <button onClick={() => setFiltro('cremado')}
-              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-800 shadow-sm transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-800 shadow-md transition-colors">
               📦 {alertas.porDespachar} cremado{alertas.porDespachar === 1 ? '' : 's'} por despachar
             </button>
           )}
           {alertas.datosPendientes > 0 && (
             <button onClick={() => setFiltro('datos_pendientes')}
-              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-orange-300 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-800 shadow-sm transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-orange-300 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-800 shadow-md transition-colors">
               📝 {alertas.datosPendientes} con datos pendientes
             </button>
           )}
@@ -508,13 +508,13 @@ export default function ClientesPage() {
       </div>
 
       {/* Buscador + filtros */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-4 mb-6">
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 mb-6">
         <input
           type="text"
           placeholder="🔍 Buscar por nombre, tutor, código, email o teléfono..."
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
-          className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand"
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-gray-600 mr-1">Filtrar:</span>
@@ -537,10 +537,10 @@ export default function ClientesPage() {
                 onClick={() => setFiltro(opt.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
                   active
-                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
+                    ? 'bg-brand border-brand text-white shadow-md'
                     : esBorr && nBorradores > 0
                       ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
-                      : 'bg-white border-gray-300 text-gray-700 hover:border-indigo-400 hover:bg-indigo-50'
+                      : 'bg-white border-gray-300 text-gray-700 hover:border-brand hover:bg-brand/10'
                 }`}
               >
                 {opt.label}{esBorr && nBorradores > 0 ? ` (${nBorradores})` : ''}
@@ -555,22 +555,22 @@ export default function ClientesPage() {
 
       {/* Cards de resultados */}
       {loading ? (
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-12 text-center text-gray-500 text-sm">Cargando...</div>
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-12 text-center text-gray-500 text-sm">Cargando...</div>
       ) : resultados.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-12 text-center text-gray-500 text-sm">
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-12 text-center text-gray-500 text-sm">
           Sin resultados para tu búsqueda o filtro.
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-4 max-h-[640px] overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 max-h-[640px] overflow-y-auto">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pr-1">
           {resultados.map(c => (
             <button
               key={c.id}
               onClick={() => setSelected(c)}
-              className="text-left bg-white rounded-xl shadow-md border-2 border-gray-200 hover:border-indigo-400 hover:shadow-lg p-4 transition-all"
+              className="text-left bg-white rounded-xl shadow-md border-2 border-gray-300 hover:border-brand hover:shadow-lg p-4 transition-all"
             >
               <div className="flex items-start justify-between mb-2">
-                <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${c.codigo ? 'text-indigo-700 bg-indigo-50' : 'text-gray-400 bg-gray-100'}`}>{c.codigo || 'sin código'}</span>
+                <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${c.codigo ? 'text-brand bg-brand/10' : 'text-gray-400 bg-gray-100'}`}>{c.codigo || 'sin código'}</span>
                 <Badge variant={c.estado === 'cremado' ? 'green' : c.estado === 'despachado' ? 'blue' : 'yellow'}>{c.estado === 'borrador' ? 'Por ingresar' : c.estado && c.estado !== 'pendiente' ? c.estado : 'retirado'}</Badge>
               </div>
               <p className="font-bold text-gray-900 text-base">{c.nombre_mascota || <span className="text-gray-400 italic">Sin nombre</span>}</p>
@@ -603,7 +603,7 @@ export default function ClientesPage() {
         {selected && (
           <div className="space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-xs text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded">{selected.codigo}</span>
+              <span className="font-mono text-xs text-brand font-bold bg-brand/10 px-2 py-0.5 rounded">{selected.codigo}</span>
               <Badge variant={selected.estado === 'cremado' ? 'green' : selected.estado === 'despachado' ? 'blue' : 'yellow'}>{selected.estado && selected.estado !== 'pendiente' ? selected.estado : 'retirado'}</Badge>
               {selected.estado_pago === 'pagado' ? (
                 <Badge variant="green">Pagado</Badge>
@@ -641,10 +641,10 @@ export default function ClientesPage() {
               const productos = items.filter(a => a.tipo === 'producto')
               const servicios = items.filter(a => a.tipo === 'servicio')
               return (
-                <div className="border-t-2 border-gray-100 pt-3">
+                <div className="border-t-2 border-gray-300 pt-3">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Adicionales</p>
-                    <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                    <span className="bg-brand/10 text-brand text-xs font-semibold px-2 py-0.5 rounded-full">
                       {items.length} ítem(s) · {fmtPrecio(total)}
                     </span>
                   </div>
@@ -691,7 +691,7 @@ export default function ClientesPage() {
               </button>
               <Link
                 href={`/clientes/${selected.id}`}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold text-center shadow-md transition-colors"
+                className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold text-center shadow-md transition-colors"
               >
                 Abrir ficha completa
               </Link>
@@ -722,7 +722,7 @@ export default function ClientesPage() {
           <div className="flex items-center gap-2">
             <input type="checkbox" id="misma" checked={form.misma_direccion}
               onChange={e => setForm(f => ({ ...f, misma_direccion: e.target.checked, direccion_despacho: e.target.checked ? f.direccion_retiro : '' }))}
-              className="w-4 h-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500" />
+              className="w-4 h-4 rounded border-gray-400 text-brand focus:ring-brand" />
             <label htmlFor="misma" className="text-xs font-medium text-gray-700">Misma dirección para despacho</label>
           </div>
 
@@ -744,7 +744,7 @@ export default function ClientesPage() {
               <select required value={form.especie} onChange={e => {
                 const esp = especies.find(es => es.nombre === e.target.value)
                 setForm(f => ({ ...f, especie: e.target.value, letra_especie: esp?.letra ?? '' }))
-              }} className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${!form.especie ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}>
+              }} className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${!form.especie ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}>
                 <option value="">Seleccionar...</option>
                 {especies.map(e => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
               </select>
@@ -770,18 +770,18 @@ export default function ClientesPage() {
                 misma_direccion: esSinDev ? true : f.misma_direccion,
                 direccion_despacho: esSinDev ? f.direccion_retiro : f.direccion_despacho,
               }))
-            }} className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            }} className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               {SERVICIOS.map(s => <option key={s.codigo} value={s.codigo}>{s.nombre} ({s.codigo})</option>)}
             </select>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t-2 border-gray-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t-2 border-gray-300">
             <div>
               <label className="text-xs font-semibold text-gray-700">
                 Tipo de pago <span className="text-red-500">*</span>
               </label>
               <select required value={form.tipo_pago} onChange={e => setForm(f => ({ ...f, tipo_pago: e.target.value }))}
-                className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${!form.tipo_pago ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}>
+                className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${!form.tipo_pago ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}>
                 <option value="">Seleccionar...</option>
                 <option value="transferencia">Transferencia</option>
                 <option value="pos">POS</option>
@@ -794,7 +794,7 @@ export default function ClientesPage() {
                 Estado de pago <span className="text-red-500">*</span>
               </label>
               <select required value={form.estado_pago} onChange={e => setForm(f => ({ ...f, estado_pago: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                 <option value="pendiente">Pendiente de pago</option>
                 <option value="pagado">Pagado</option>
               </select>
@@ -802,7 +802,7 @@ export default function ClientesPage() {
           </div>
 
           {/* Veterinaria derivante (lógica invertida) */}
-          <div className="border-t-2 border-gray-200 pt-4">
+          <div className="border-t-2 border-gray-300 pt-4">
             <label className="flex items-center gap-2 cursor-pointer select-none mb-2">
               <input
                 type="checkbox"
@@ -811,13 +811,13 @@ export default function ClientesPage() {
                   setEsClienteVet(e.target.checked)
                   if (!e.target.checked) setForm(f => ({ ...f, veterinaria_id: '' }))
                 }}
-                className="w-4 h-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
+                className="w-4 h-4 rounded border-gray-400 text-brand focus:ring-brand"
               />
               <span className="text-xs font-semibold text-gray-700">Cliente de veterinaria</span>
             </label>
             {esClienteVet && (
               <select value={form.veterinaria_id} onChange={e => setForm(f => ({ ...f, veterinaria_id: e.target.value }))}
-                className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                 <option value="">Seleccionar veterinaria...</option>
                 {veterinarias.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
               </select>
@@ -826,7 +826,7 @@ export default function ClientesPage() {
 
           {/* Adicionales */}
           {(productosDisp.length > 0 || otrosServicios.length > 0) && (
-            <div className="border-t-2 border-gray-200">
+            <div className="border-t-2 border-gray-300">
               <button
                 type="button"
                 onClick={() => setShowAdicionales(v => !v)}
@@ -835,7 +835,7 @@ export default function ClientesPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-gray-700">Adicionales</span>
                   {adicionales.length > 0 && (
-                    <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                    <span className="bg-brand/10 text-brand text-xs font-semibold px-2 py-0.5 rounded-full">
                       {adicionales.length} ítem(s) · {fmtPrecio(totalAdicionales)}
                     </span>
                   )}
@@ -865,7 +865,7 @@ export default function ClientesPage() {
                         <div className="space-y-3">
                           {orden.map(cat => (
                             <div key={cat}>
-                              <p className="text-[11px] font-bold text-indigo-700 uppercase tracking-wide mb-1.5 border-b border-indigo-100 pb-1">{cat}</p>
+                              <p className="text-[11px] font-bold text-brand uppercase tracking-wide mb-1.5 border-b border-brand/20 pb-1">{cat}</p>
                               <div className="space-y-1.5 pl-1">
                                 {grupos.get(cat)!.map(p => {
                                   const item = adicionales.find(a => a.tipo === 'producto' && a.id === p.id)
@@ -875,13 +875,13 @@ export default function ClientesPage() {
                                     <div key={p.id} className={`flex items-center gap-2 ${sinStock ? 'opacity-50' : ''}`}>
                                       <input type="checkbox" checked={!!item} disabled={sinStock && !item}
                                         onChange={() => toggleAdicional('producto', p)}
-                                        className="w-3.5 h-3.5 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed" />
+                                        className="w-3.5 h-3.5 rounded border-gray-400 text-brand focus:ring-brand disabled:cursor-not-allowed" />
                                       <span className={`flex-1 text-sm ${sinStock ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{p.nombre}</span>
                                       <span className={`text-xs ${sinStock ? 'text-gray-400 line-through' : 'text-gray-500'}`}>{fmtPrecio(p.precio)}</span>
                                       {sinStock && <span className="text-[10px] text-red-600 font-semibold">sin stock</span>}
                                       {item && !sinStock && (
                                         <input type="number" min={1} value={item.qty} onChange={e => updateQty('producto', p.id, parseInt(e.target.value) || 1)}
-                                          className="w-14 border-2 border-gray-300 rounded px-1.5 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                                          className="w-14 border-2 border-gray-300 rounded px-1.5 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-brand" />
                                       )}
                                     </div>
                                   )
@@ -902,7 +902,7 @@ export default function ClientesPage() {
                           const item = adicionales.find(a => a.tipo === 'servicio' && a.id === s.id)
                           return (
                             <div key={s.id} className="flex items-center gap-2">
-                              <input type="checkbox" checked={!!item} onChange={() => toggleAdicional('servicio', s)} className="w-3.5 h-3.5 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500" />
+                              <input type="checkbox" checked={!!item} onChange={() => toggleAdicional('servicio', s)} className="w-3.5 h-3.5 rounded border-gray-400 text-brand focus:ring-brand" />
                               <span className="flex-1 text-sm text-gray-800">{s.nombre}</span>
                               <span className="text-xs text-gray-500">{fmtPrecio(s.precio)}</span>
                             </div>
@@ -917,12 +917,12 @@ export default function ClientesPage() {
           )}
 
           {/* Resumen del servicio en vivo: se actualiza con peso, servicio, veterinaria y adicionales */}
-          <div className="border-t-2 border-gray-200 pt-4">
+          <div className="border-t-2 border-gray-300 pt-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-bold text-gray-900">Resumen del servicio</p>
               <span className="text-[11px] text-gray-400">{tablaNombre}</span>
             </div>
-            <div className="bg-gray-50 rounded-lg border border-gray-200 p-3 space-y-2">
+            <div className="bg-gray-50 rounded-lg border border-gray-300 p-3 space-y-2">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-900">
@@ -945,7 +945,7 @@ export default function ClientesPage() {
               </div>
 
               {adicionales.length > 0 && (
-                <div className="border-t border-gray-200 pt-2 space-y-1">
+                <div className="border-t border-gray-300 pt-2 space-y-1">
                   <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Adicionales</p>
                   {adicionales.map(a => (
                     <div key={`${a.tipo}-${a.id}`} className="flex items-center justify-between text-sm">
@@ -955,14 +955,14 @@ export default function ClientesPage() {
                       <span className="text-gray-700">{fmtPrecio(a.precio * a.qty)}</span>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between pt-1 border-t border-gray-200">
+                  <div className="flex items-center justify-between pt-1 border-t border-gray-300">
                     <span className="text-xs text-gray-500">Subtotal adicionales</span>
                     <span className="text-sm font-medium text-gray-700">{fmtPrecio(totalAdicionales)}</span>
                   </div>
                 </div>
               )}
 
-              <div className="border-t border-gray-200 pt-2">
+              <div className="border-t border-gray-300 pt-2">
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -971,7 +971,7 @@ export default function ClientesPage() {
                       setAplicarDescuento(e.target.checked)
                       if (!e.target.checked) setDescuentoId('')
                     }}
-                    className="w-4 h-4 rounded border-gray-400 text-indigo-600 focus:ring-indigo-500"
+                    className="w-4 h-4 rounded border-gray-400 text-brand focus:ring-brand"
                   />
                   <span className="text-sm font-medium text-gray-700">Aplicar descuento</span>
                 </label>
@@ -980,7 +980,7 @@ export default function ClientesPage() {
                     <select
                       value={descuentoId}
                       onChange={e => setDescuentoId(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                     >
                       <option value="">— Seleccionar descuento —</option>
                       {descuentosDisp.map(d => {
@@ -1009,7 +1009,7 @@ export default function ClientesPage() {
 
               <div className="flex items-center justify-between border-t-2 border-gray-300 pt-2 mt-1">
                 <span className="text-base font-bold text-gray-900">Total</span>
-                <span className="text-lg font-bold text-indigo-700">{fmtPrecio(totalServicio)}</span>
+                <span className="text-lg font-bold text-brand">{fmtPrecio(totalServicio)}</span>
               </div>
             </div>
           </div>
@@ -1018,7 +1018,7 @@ export default function ClientesPage() {
             <button type="button" onClick={() => { setShowModal(false); setAdicionales([]); setShowAdicionales(false); setAplicarDescuento(false); setDescuentoId(''); setFormError('') }} className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors">
               Cancelar
             </button>
-            <button type="submit" disabled={saving} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+            <button type="submit" disabled={saving} className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
               {saving ? 'Guardando...' : 'Guardar ficha'}
             </button>
           </div>
@@ -1040,7 +1040,7 @@ export default function ClientesPage() {
                 <p className="text-sm font-bold text-gray-900">Resumen del servicio</p>
                 <span className="text-[11px] text-gray-400">{fichaCreada.tabla_nombre}</span>
               </div>
-              <div className="bg-gray-50 rounded-lg border border-gray-200 p-3 space-y-2">
+              <div className="bg-gray-50 rounded-lg border border-gray-300 p-3 space-y-2">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-900">
@@ -1058,7 +1058,7 @@ export default function ClientesPage() {
                 </div>
 
                 {fichaCreada.adicionales.length > 0 && (
-                  <div className="border-t border-gray-200 pt-2 space-y-1">
+                  <div className="border-t border-gray-300 pt-2 space-y-1">
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Adicionales</p>
                     {fichaCreada.adicionales.map(a => (
                       <div key={`${a.tipo}-${a.id}`} className="flex items-center justify-between text-sm">
@@ -1068,7 +1068,7 @@ export default function ClientesPage() {
                         <span className="text-gray-700">{fmtPrecio(a.precio * a.qty)}</span>
                       </div>
                     ))}
-                    <div className="flex items-center justify-between pt-1 border-t border-gray-200">
+                    <div className="flex items-center justify-between pt-1 border-t border-gray-300">
                       <span className="text-xs text-gray-500">Subtotal adicionales</span>
                       <span className="text-sm font-medium text-gray-700">{fmtPrecio(fichaCreada.total_adicionales)}</span>
                     </div>
@@ -1076,7 +1076,7 @@ export default function ClientesPage() {
                 )}
 
                 {fichaCreada.descuento_monto > 0 && (
-                  <div className="flex items-center justify-between border-t border-gray-200 pt-2 text-sm">
+                  <div className="flex items-center justify-between border-t border-gray-300 pt-2 text-sm">
                     <span className="text-gray-700">
                       {fichaCreada.descuento_nombre}
                       <span className="text-gray-400 ml-1">({fichaCreada.descuento_etiqueta})</span>
@@ -1087,14 +1087,14 @@ export default function ClientesPage() {
 
                 <div className="flex items-center justify-between border-t-2 border-gray-300 pt-2 mt-1">
                   <span className="text-base font-bold text-gray-900">Total a cobrar</span>
-                  <span className="text-xl font-bold text-indigo-700">{fmtPrecio(fichaCreada.total)}</span>
+                  <span className="text-xl font-bold text-brand">{fmtPrecio(fichaCreada.total)}</span>
                 </div>
               </div>
             </div>
 
             <button
               onClick={() => setFichaCreada(null)}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2.5 text-sm font-semibold shadow-md transition-colors"
+              className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2.5 text-sm font-semibold shadow-md transition-colors"
             >
               Listo
             </button>
@@ -1107,13 +1107,13 @@ export default function ClientesPage() {
 
 function KpiCard({ icon, color, value, label, hint }: { icon: string; color: string; value: string; label: string; hint?: string }) {
   const colorMap: Record<string, string> = {
-    indigo: 'bg-indigo-100 text-indigo-600',
+    indigo: 'bg-brand/10 text-brand',
     emerald: 'bg-emerald-100 text-emerald-600',
     blue: 'bg-blue-100 text-blue-600',
     purple: 'bg-purple-100 text-purple-600',
   }
   return (
-    <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-5 flex items-center gap-4">
+    <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-5 flex items-center gap-4">
       <div className={`shrink-0 inline-flex w-12 h-12 rounded-xl items-center justify-center text-2xl ${colorMap[color] ?? 'bg-gray-100'}`}>
         {icon}
       </div>
@@ -1153,7 +1153,7 @@ function ModalField({ label, value, onChange, type = 'text', step, min, required
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+        className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${
           faltante ? 'border-red-300 bg-red-50' : 'border-gray-300'
         }`}
       />
@@ -1177,7 +1177,7 @@ function ModalAddressField({ label, value, onChange, required, placeholder }: {
           onChange={onChange}
           required={required}
           placeholder={placeholder ?? 'Empieza a escribir la dirección…'}
-          className={`w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+          className={`w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${
             faltante ? 'border-red-300 bg-red-50' : 'border-gray-300'
           }`}
         />

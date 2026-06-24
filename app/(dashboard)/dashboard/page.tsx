@@ -31,7 +31,7 @@ type Data = {
   por_especie: Array<{ especie: string; count: number }>
 }
 
-const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6']
+const COLORS = ['#143C64', '#F2B84B', '#2A6DB0', '#10b981', '#ec4899', '#f59e0b', '#8b5cf6', '#14b8a6']
 
 export default function DashboardPage() {
   const { data: session } = useSession()
@@ -54,12 +54,12 @@ export default function DashboardPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Cargando…</p>
+          <h1 className="text-2xl font-extrabold text-brand">Dashboard</h1>
+          <p className="text-gray-600 text-sm mt-0.5">Cargando…</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-100 p-5 animate-pulse h-28" />
+            <div key={i} className="bg-white rounded-xl border border-gray-300 p-5 animate-pulse h-28" />
           ))}
         </div>
       </div>
@@ -68,18 +68,18 @@ export default function DashboardPage() {
 
   // KPIs operativos (todos los usuarios)
   const kpisOperativos = [
-    { label: `Mascotas ${mesActual}`, value: fmtNumero(data.kpis.mascotas_mes), icon: '🐾', color: 'text-indigo-700 bg-indigo-50' },
-    { label: 'Cremaciones del mes', value: fmtNumero(data.kpis.cremaciones_mes), icon: '🔥', color: 'text-rose-700 bg-rose-50' },
-    { label: 'Ciclos del mes', value: fmtNumero(data.kpis.ciclos_mes), icon: '♻️', color: 'text-orange-700 bg-orange-50' },
-    { label: 'Stock petróleo', value: fmtLitros(data.kpis.stock_petroleo), icon: '⛽', color: data.kpis.stock_bajo ? 'text-red-700 bg-red-50' : 'text-blue-700 bg-blue-50', alert: data.kpis.stock_bajo },
-    { label: 'Litros del mes', value: fmtLitros(data.kpis.litros_mes), icon: '🛢️', color: 'text-sky-700 bg-sky-50' },
+    { label: `Mascotas ${mesActual}`, value: fmtNumero(data.kpis.mascotas_mes), icon: '🐾', color: 'text-brand bg-brand/15' },
+    { label: 'Cremaciones del mes', value: fmtNumero(data.kpis.cremaciones_mes), icon: '🔥', color: 'text-rose-800 bg-rose-100' },
+    { label: 'Ciclos del mes', value: fmtNumero(data.kpis.ciclos_mes), icon: '♻️', color: 'text-orange-800 bg-orange-100' },
+    { label: 'Stock petróleo', value: fmtLitros(data.kpis.stock_petroleo), icon: '⛽', color: data.kpis.stock_bajo ? 'text-red-800 bg-red-100' : 'text-blue-800 bg-blue-100', alert: data.kpis.stock_bajo },
+    { label: 'Litros del mes', value: fmtLitros(data.kpis.litros_mes), icon: '🛢️', color: 'text-sky-800 bg-sky-100' },
   ]
 
   // KPIs financieros (solo admin)
   const kpisFinancieros = [
-    { label: 'Ingresos del mes', value: fmtPrecio(data.kpis.ingresos_mes), icon: '💰', color: 'text-emerald-700 bg-emerald-50' },
-    { label: 'Pagos pendientes', value: fmtNumero(data.kpis.pendientes_pago), icon: '💳', color: 'text-rose-700 bg-rose-50' },
-    { label: 'Monto por cobrar', value: fmtPrecio(data.kpis.monto_pendiente), icon: '📋', color: 'text-amber-700 bg-amber-50' },
+    { label: 'Ingresos del mes', value: fmtPrecio(data.kpis.ingresos_mes), icon: '💰', color: 'text-emerald-800 bg-emerald-100' },
+    { label: 'Pagos pendientes', value: fmtNumero(data.kpis.pendientes_pago), icon: '💳', color: 'text-rose-800 bg-rose-100' },
+    { label: 'Monto por cobrar', value: fmtPrecio(data.kpis.monto_pendiente), icon: '📋', color: 'text-amber-800 bg-amber-100' },
   ]
 
   const fmtDuracion = (mins: number): string => {
@@ -99,15 +99,15 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Resumen operativo — {mesActual} {new Date().getFullYear()}</p>
+        <h1 className="text-xl sm:text-2xl font-extrabold text-brand">Dashboard</h1>
+        <p className="text-gray-600 text-xs sm:text-sm mt-0.5">Resumen operativo — {mesActual} {new Date().getFullYear()}</p>
       </div>
 
       {/* Alerta: nuevas reservas confirmadas por el agente de WhatsApp (fichas borrador) */}
       {(data.kpis.fichas_por_ingresar ?? 0) > 0 && (
         <Link
           href="/clientes?filtro=borrador"
-          className="flex items-center gap-3 rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 shadow-sm hover:bg-red-100 transition-colors"
+          className="flex items-center gap-3 rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 shadow-md hover:bg-red-100 transition-colors"
         >
           <span className="shrink-0 inline-flex w-9 h-9 rounded-lg bg-red-200 items-center justify-center text-lg">🔔</span>
           <span className="flex-1 text-sm font-bold text-red-900">
@@ -124,13 +124,13 @@ export default function DashboardPage() {
       {/* KPIs operativos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
         {kpisOperativos.map(k => (
-          <div key={k.label} className={`bg-white rounded-xl shadow-md border-2 p-4 sm:p-5 flex items-center gap-3 sm:gap-4 ${k.alert ? 'border-red-300' : 'border-gray-200'}`}>
+          <div key={k.label} className={`bg-white rounded-2xl shadow-md border p-4 sm:p-5 flex items-center gap-3 sm:gap-4 ${k.alert ? 'border-red-300' : 'border-gray-300'}`}>
             <div className={`shrink-0 inline-flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl text-xl sm:text-2xl ${k.color}`}>
               {k.icon}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-lg sm:text-xl font-bold text-gray-900 truncate">{k.value}</p>
-              <p className="text-xs text-gray-500 mt-0.5 truncate">{k.label}</p>
+              <p className="text-xs text-gray-600 mt-0.5 truncate">{k.label}</p>
               {k.alert && <p className="text-xs text-red-600 mt-0.5 font-medium">⚠ Stock bajo</p>}
             </div>
           </div>
@@ -140,16 +140,16 @@ export default function DashboardPage() {
       {/* KPIs financieros (solo admin) — antes de los ratios para tenerlos a la vista */}
       {isAdmin && (
         <div>
-          <h2 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Indicadores financieros</h2>
+          <h2 className="text-xs sm:text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Indicadores financieros</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             {kpisFinancieros.map(k => (
-              <div key={k.label} className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-4 sm:p-5 flex items-center gap-3 sm:gap-4">
+              <div key={k.label} className="bg-white rounded-2xl shadow-md border border-gray-300 p-4 sm:p-5 flex items-center gap-3 sm:gap-4">
                 <div className={`shrink-0 inline-flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl text-xl sm:text-2xl ${k.color}`}>
                   {k.icon}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-lg sm:text-xl font-bold text-gray-900 truncate">{k.value}</p>
-                  <p className="text-xs text-gray-500 mt-0.5 truncate">{k.label}</p>
+                  <p className="text-xs text-gray-600 mt-0.5 truncate">{k.label}</p>
                 </div>
               </div>
             ))}
@@ -159,17 +159,17 @@ export default function DashboardPage() {
 
       {/* Ratios */}
       <div>
-        <h2 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Ratios de eficiencia</h2>
+        <h2 className="text-xs sm:text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Ratios de eficiencia</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {ratiosArr.map(r => (
             <button key={r.key} type="button" onClick={() => setRatioOpen(r.key)}
-              className="text-left bg-white rounded-xl shadow-md border-2 border-gray-200 hover:border-indigo-400 hover:shadow-lg p-4 sm:p-5 transition-all">
+              className="text-left bg-white rounded-2xl shadow-md border border-gray-300 hover:border-gold hover:shadow-md p-4 sm:p-5 transition-all">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-gray-600">{r.label}</p>
-                <span className="text-xs text-indigo-500">📈</span>
+                <span className="text-xs text-brand-soft">📈</span>
               </div>
               <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{r.value}</p>
-              <p className="text-xs text-gray-500 mt-1 leading-tight">{r.sub}</p>
+              <p className="text-xs text-gray-600 mt-1 leading-tight">{r.sub}</p>
             </button>
           ))}
         </div>
@@ -300,7 +300,7 @@ export default function DashboardPage() {
           : ''}>
         {ratioOpen && (
           <div>
-            <p className="text-xs text-gray-500 mb-3">
+            <p className="text-xs text-gray-600 mb-3">
               {ratioOpen === 'costo_vehiculo_por_mascota' ? 'Promedio mensual en pesos. '
                 : ratioOpen === 'duracion_promedio_ciclo_min' ? 'Promedio mensual en minutos. '
                 : 'Promedio mensual. '}
@@ -325,7 +325,7 @@ export default function DashboardPage() {
                     : ratioOpen === 'duracion_promedio_ciclo_min'
                     ? fmtDuracion(v as number)
                     : `${(v as number).toFixed(2)}${ratioOpen?.startsWith('litros') ? ' L' : ''}`} />
-                  <Line type="monotone" dataKey={ratioOpen} stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey={ratioOpen} stroke="#143C64" strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -338,8 +338,8 @@ export default function DashboardPage() {
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5">
-      <h3 className="text-sm font-semibold text-gray-700 mb-4">{title}</h3>
+    <div className="bg-white rounded-2xl shadow-md border border-gray-300 p-4 sm:p-5">
+      <h3 className="text-sm font-semibold text-brand mb-4">{title}</h3>
       {children}
     </div>
   )

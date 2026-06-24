@@ -5,6 +5,7 @@ import { getMarketingConfig } from './marketing-config'
 import { listarCalendario, crearItems, type NuevoItem } from './marketing-calendario'
 import { listarImagenes, type ImagenBanco } from './mailing-images'
 import { generarPieza } from './marketing-pieza'
+import { leerPerfilFacebook, leerPerfilInstagram } from './meta-publish'
 
 /**
  * AGENTE DE MARKETING / CEO del Crematorio Alma Animal. Un solo agente Claude con
@@ -35,6 +36,7 @@ const BASE = `Eres el **estratega de marketing y contenido** del **Crematorio Al
 
 TU TRABAJO
 - Ayudar a planificar y mantener un CALENDARIO DE CAMPAÑAS multicanal y a producir las piezas.
+- AUDITAR Y OPTIMIZAR los perfiles de Facebook e Instagram: con "auditar_perfil" leés el estado actual (bio/descripción, datos de contacto, sitio, seguidores) y recomendás mejoras concretas (bio optimizada, datos a completar, estructura de destacados, idea de foto de perfil/portada, primeras piezas). OJO: el perfil de INSTAGRAM se edita SOLO a mano (la API no permite cambiarlo) → entregás los textos/imágenes listos para que el equipo los aplique. En FACEBOOK varios campos de texto (descripción, teléfono, sitio, correos) SÍ se pueden aplicar por sistema, pero eso lo confirma y ejecuta el equipo, no vos automáticamente.
 - Pensar como dueño: qué publicar, en qué canal, cuándo y con qué objetivo, sin saturar ni improvisar.
 - Eres claro y concreto. Propones, explicas el porqué brevemente, y dejas que el dueño apruebe.
 
@@ -82,9 +84,12 @@ FLUJO DE TRABAJO (síguelo)
 2. GENERAR (más caro): solo cuando el dueño lo pida explícitamente sobre ítems concretos ("generá la pieza de la #5", "escribí el post del lunes"), usa "generar_pieza" con el id. No generes piezas por iniciativa propia ni en lote sin que te lo pidan.
 3. Si te piden ideas de imágenes, mira el banco con "consultar_banco_imagenes" y prioriza reutilizar lo que ya existe.
 
-FORMATO DE RESPUESTA
-- Responde en texto natural, claro y conversacional, como un asesor. Usa listas cuando ayude.
-- Cuando propongas campañas, hazlo con la herramienta "proponer_campanas" (no escribas el calendario como tabla a mano) y luego resume al dueño qué propusiste y por qué.`
+FORMATO DE RESPUESTA (legible y al grano — tus mensajes se muestran con formato, no en crudo)
+- Escribí CONCISO y escaneable. Frases cortas, una idea por bloque. Nada de muros de texto.
+- Podés usar markdown con MESURA: **negritas** para lo clave y listas cortas con "-". Como mucho un título corto. EVITÁ las tablas largas y los bloques de cita (>) extensos: cansan al leer; preferí una lista breve.
+- MOSTRÁ, no solo describas: cuando tengas una imagen relevante (una pieza ya generada, una opción del banco), inclúyela en el mensaje con la sintaxis ![](URL) para que el dueño la VEA, en vez de explicarla con palabras.
+- Tono de asesor cercano y claro, en español neutro.
+- Cuando propongas campañas, usá la herramienta "proponer_campanas" (no escribas el calendario a mano) y después resumí en 1-2 frases qué propusiste y por qué.`
 
 async function bloqueTarifas(): Promise<string> {
   try {
@@ -185,6 +190,12 @@ const TOOL_GENERAR: Anthropic.Tool = {
   },
 }
 
+const TOOL_AUDITAR: Anthropic.Tool = {
+  name: 'auditar_perfil',
+  description: 'Lee el estado actual de los perfiles de Facebook (Página) e Instagram (bio/descripción, datos de contacto, sitio web, seguidores, etc.) para poder auditarlos y recomendar mejoras. Úsala cuando el dueño pida revisar, completar u optimizar el perfil.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+}
+
 export interface RespuestaMarketing {
   mensaje: string
   acciones: string[]
@@ -236,7 +247,7 @@ export async function generarRespuestaMarketing(
   system.push({ type: 'text', text: bloqueFechaChile() })
   system.push({ type: 'text', text: bloqueBanco(banco) })
 
-  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR]
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR]
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
   let cambios = false
@@ -300,15 +311,30 @@ export async function generarRespuestaMarketing(
           const lista = banco.filter(b => !grupo || b.grupo === grupo).slice(0, 40)
           resultText = lista.length === 0
             ? 'No hay imágenes en el banco con ese filtro.'
-            : lista.map(b => `#${b.id} [${b.grupo || 'otro'}] ${b.descripcion || b.alt || '(sin descripción)'}`).join('\n')
+            : lista.map(b => `#${b.id} [${b.grupo || 'otro'}] ${b.descripcion || b.alt || '(sin descripción)'} — ${b.url}`).join('\n')
+              + '\n\nSi le mostrás alguna al dueño, inclúyela con ![](URL).'
         } else if (tu.name === 'generar_pieza') {
           const id = String((tu.input as { id?: string }).id || '')
           const r = await generarPieza(id, opts.creadoPor)
           cambios = true
-          const prev = r.item.canal === 'email'
-            ? `Email generado. Asunto: "${r.item.titulo}".`
-            : `Post generado para ${r.item.canal}. Copy: "${(r.item.cuerpo || '').slice(0, 180)}${r.item.cuerpo.length > 180 ? '…' : ''}"${r.item.imagen_url ? ' (con imagen)' : ''}.`
-          resultText = `${prev}${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}`
+          let prev: string
+          if (r.item.canal === 'email') {
+            prev = `Correo generado (asunto: "${r.item.titulo}"). Quedó como borrador en Mailing para revisar y enviar. No pegues el HTML; resumí en una frase de qué trata.`
+          } else {
+            prev = `Post generado para ${r.item.canal}.\n\nCOPY:\n${r.item.cuerpo}`
+              + (r.item.imagen_url ? `\n\nMostrale al dueño este copy y la imagen incluyéndola con ![](${r.item.imagen_url}).` : '\n\n(sin imagen)')
+          }
+          resultText = `${prev}${r.avisos.length ? '\n\nAvisos: ' + r.avisos.join('; ') : ''}`
+        } else if (tu.name === 'auditar_perfil') {
+          const [fb, ig] = await Promise.all([
+            leerPerfilFacebook().catch(() => null),
+            leerPerfilInstagram().catch(() => null),
+          ])
+          const partes: string[] = []
+          partes.push(fb ? `FACEBOOK (Página) — estado actual:\n${JSON.stringify(fb, null, 2)}` : 'FACEBOOK: no configurado o sin datos.')
+          partes.push(ig ? `INSTAGRAM — estado actual:\n${JSON.stringify(ig, null, 2)}` : 'INSTAGRAM: todavía no conectado (se conecta el 30/06); aún no hay datos para leer.')
+          partes.push('Recordá: el perfil de Instagram se edita SOLO a mano; en Facebook los campos de texto se pueden aplicar (lo hace el equipo). Entregá recomendaciones concretas y accionables (bio, datos a completar, destacados, foto/portada, primeras piezas).')
+          resultText = partes.join('\n\n')
         } else {
           resultText = 'Herramienta no disponible.'
         }

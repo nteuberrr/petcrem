@@ -52,7 +52,7 @@ export default function Sidebar() {
       <button
         aria-label="Abrir menú"
         onClick={() => setOpen(true)}
-        className="md:hidden fixed top-3 left-3 z-30 w-10 h-10 rounded-lg bg-gray-900 text-white flex items-center justify-center shadow-lg"
+        className="md:hidden fixed top-3 left-3 z-30 w-10 h-10 rounded-lg bg-brand text-white flex items-center justify-center shadow-lg"
       >
         <span className="text-xl leading-none">☰</span>
       </button>
@@ -67,21 +67,21 @@ export default function Sidebar() {
       )}
 
       <aside
-        className={`w-60 bg-gray-900 text-white flex flex-col min-h-screen fixed left-0 top-0 z-40 transition-transform duration-200 ${
+        className={`w-60 bg-gradient-to-b from-[#15436F] to-[#0B2845] text-white flex flex-col min-h-screen fixed left-0 top-0 z-40 transition-transform duration-200 shadow-xl ${
           open ? 'translate-x-0' : '-translate-x-full'
         } md:translate-x-0`}
       >
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-800">
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-white/10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/logo-alma-animal.png" alt="Alma Animal" className="h-12 w-auto shrink-0" />
           <Link href="/dashboard" className="block flex-1 hover:opacity-80 transition-opacity">
             <h1 className="text-lg font-bold tracking-tight">Alma Animal</h1>
-            <p className="text-gray-400 text-xs mt-0.5">Gestión crematorio</p>
+            <p className="text-white/90 text-xs mt-0.5">Gestión crematorio</p>
           </Link>
           <button
             aria-label="Cerrar menú"
             onClick={() => setOpen(false)}
-            className="md:hidden w-8 h-8 rounded-md hover:bg-gray-800 text-gray-400 text-xl leading-none"
+            className="md:hidden w-8 h-8 rounded-md hover:bg-white/15 text-white/90 text-xl leading-none"
           >
             ×
           </button>
@@ -93,33 +93,33 @@ export default function Sidebar() {
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                   active
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                    ? 'bg-gold text-brand font-semibold shadow-sm'
+                    : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <span className="text-base">{icon}</span>
+                <span className="text-lg">{icon}</span>
                 {label}
               </Link>
             )
           })}
         </nav>
-        <div className="p-3 border-t border-gray-800">
+        <div className="p-3 border-t border-white/10">
           {userName && (
             <div className="flex items-center gap-3 px-3 py-2 mb-1">
-              <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
+              <div className="w-7 h-7 rounded-full bg-gold flex items-center justify-center text-xs font-bold text-brand shrink-0">
                 {initials}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs text-gray-300 truncate">{userName}</div>
-                <div className="text-[10px] text-gray-500 uppercase tracking-wide">{role}</div>
+                <div className="text-xs text-white/90 truncate">{userName}</div>
+                <div className="text-[10px] text-white/50 uppercase tracking-wide">{role}</div>
               </div>
             </div>
           )}
           <button
             onClick={() => signOut({ callbackUrl: '/login' })}
-            className="w-full text-left text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
+            className="w-full text-left text-sm text-white/90 hover:text-white px-3 py-2 rounded-lg hover:bg-white/15 transition-colors flex items-center gap-2"
           >
             <span className="text-sm">↩</span>
             Cerrar sesión

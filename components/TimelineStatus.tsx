@@ -62,7 +62,7 @@ export default function TimelineStatus() {
           placeholder="Buscar en todas las columnas..."
           value={buscar}
           onChange={e => setBuscar(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64"
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand w-64"
         />
       </div>
 
@@ -143,7 +143,7 @@ function Columna({ title, count, accent, items, renderCard }: {
     : 'bg-emerald-50 border-emerald-200 text-emerald-900'
   const badge = accent === 'amber' ? 'bg-amber-500' : 'bg-emerald-500'
   return (
-    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden flex flex-col">
+    <div className="bg-white rounded-xl border border-gray-300 overflow-hidden flex flex-col">
       <div className={`px-4 py-3 border-b ${accentHeader} flex items-center justify-between`}>
         <h3 className="text-sm font-semibold">{title}</h3>
         <span className={`${badge} text-white text-xs font-bold px-2 py-0.5 rounded-full`}>{count}</span>
@@ -161,7 +161,7 @@ function Card({ onClick, children }: { onClick: () => void; children: React.Reac
   return (
     <button
       onClick={onClick}
-      className="w-full text-left bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-lg p-3 transition-colors"
+      className="w-full text-left bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded-lg p-3 transition-colors"
     >
       {children}
     </button>
@@ -170,7 +170,7 @@ function Card({ onClick, children }: { onClick: () => void; children: React.Reac
 
 function FichaRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex justify-between border-b border-gray-100 pb-1.5">
+    <div className="flex justify-between border-b border-gray-300 pb-1.5">
       <span className="text-xs text-gray-500">{label}</span>
       <span className="text-sm text-gray-900 font-medium">{value}</span>
     </div>

@@ -336,7 +336,7 @@ export default function OperacionesPage() {
   return (
     <div className="max-w-5xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Operaciones</h1>
+        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Operaciones</h1>
         <p className="text-gray-500 text-sm mt-0.5">Ciclos de cremación y control de petróleo</p>
       </div>
 
@@ -344,7 +344,7 @@ export default function OperacionesPage() {
       <div className="flex gap-2 flex-wrap">
         {(['ciclos', 'petroleo', 'vehiculo', 'despachos'] as const).map(t => (
           <button key={t} onClick={() => setOperTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${operTab === t ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${operTab === t ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
             {t === 'ciclos' ? '🔥 Ciclos de cremación'
               : t === 'petroleo' ? '⛽ Carga de Petróleo'
               : t === 'vehiculo' ? '🚐 Vehículo'
@@ -356,14 +356,14 @@ export default function OperacionesPage() {
       {operTab === 'ciclos' && (
         <>
       {/* Formulario nuevo ciclo */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-5">Nuevo ciclo</h2>
         <form onSubmit={guardarCiclo} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="text-xs font-medium text-gray-700">Fecha</label>
               <input type="date" required value={fecha} onChange={e => setFecha(e.target.value)}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-700">
@@ -382,7 +382,7 @@ export default function OperacionesPage() {
             <div>
               <label className="text-xs font-medium text-gray-700">Litros fin</label>
               <input type="number" step="0.1" required value={litrosFin} onChange={e => setLitrosFin(e.target.value)}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
           </div>
 
@@ -391,23 +391,23 @@ export default function OperacionesPage() {
             <div>
               <label className="text-xs font-medium text-gray-700">Hora inicio</label>
               <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-700">Hora término</label>
               <input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-700">Duración</label>
-              <div className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 font-medium">
+              <div className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 font-medium">
                 {minutos !== null ? `${minutos} minutos` : '—'}
               </div>
             </div>
             <div>
               <label className="text-xs font-medium text-gray-700">Temperatura cámara (°C)</label>
               <input type="number" step="1" value={temperaturaCamara} onChange={e => setTemperaturaCamara(e.target.value)}
-                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
           </div>
 
@@ -420,13 +420,13 @@ export default function OperacionesPage() {
                 placeholder="Buscar por nombre, código o tutor..."
                 value={buscarMascota}
                 onChange={e => setBuscarMascota(e.target.value)}
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
               />
               <button
                 type="button"
                 onClick={abrirModal}
                 title="Ver todas las mascotas pendientes"
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+                className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
               >
                 🔍 <span className="text-xs">Todas</span>
               </button>
@@ -443,12 +443,12 @@ export default function OperacionesPage() {
 
           {/* Lista seleccionadas */}
           {seleccionadas.length > 0 && (
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="border border-gray-300 rounded-xl overflow-hidden">
               <div className="divide-y divide-gray-100">
                 {seleccionadas.map(c => (
                   <div key={c.id} className="flex items-center justify-between px-4 py-3">
                     <div>
-                      <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
+                      <span className="font-mono text-xs text-brand font-semibold">{c.codigo}</span>
                       <span className="ml-2 text-sm text-gray-900 font-medium">{c.nombre_mascota}</span>
                       <span className="ml-2 text-xs text-gray-500">· {c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || "0")}</span>
                     </div>
@@ -457,7 +457,7 @@ export default function OperacionesPage() {
                   </div>
                 ))}
               </div>
-              <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-600">
+              <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-300 flex items-center justify-between text-xs text-gray-600">
                 <span className="font-medium">{seleccionadas.length} mascota(s)</span>
                 <span className="font-semibold text-gray-800">Peso total: {pesoTotal.toFixed(1)} kg</span>
               </div>
@@ -467,19 +467,19 @@ export default function OperacionesPage() {
           <div>
             <label className="text-xs font-medium text-gray-700">Comentarios</label>
             <textarea value={comentarios} onChange={e => setComentarios(e.target.value)} rows={2}
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
 
           <button type="submit" disabled={saving}
-            className="bg-indigo-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+            className="bg-brand text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50 transition-colors">
             {saving ? 'Guardando...' : 'Guardar ciclo'}
           </button>
         </form>
       </div>
 
       {/* Historial */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-300">
           <h2 className="text-base font-semibold text-gray-900">Historial de ciclos</h2>
         </div>
         {ciclos.length === 0 ? (
@@ -530,13 +530,13 @@ export default function OperacionesPage() {
                       </tr>
                       {expandido === ciclo.id && (
                         <tr>
-                          <td colSpan={11} className="px-6 py-4 bg-gray-50 border-b border-gray-100">
+                          <td colSpan={11} className="px-6 py-4 bg-gray-50 border-b border-gray-300">
                             <div className="divide-y divide-gray-100">
                               {ciclo.mascotas_ids.map(mid => {
                                 const m = clientesMap[mid]
                                 return m ? (
                                   <div key={mid} className="py-2 flex gap-4 text-sm">
-                                    <span className="font-mono text-xs text-indigo-700 font-semibold">{m.codigo}</span>
+                                    <span className="font-mono text-xs text-brand font-semibold">{m.codigo}</span>
                                     <span className="text-gray-900">{m.nombre_mascota}</span>
                                     <span className="text-gray-500">{m.especie} · {fmtKg(m.peso_ingreso || m.peso_declarado || "0")}</span>
                                   </div>
@@ -546,7 +546,7 @@ export default function OperacionesPage() {
                               })}
                             </div>
                             {ciclo.hora_inicio && ciclo.hora_fin && (
-                              <p className="text-xs text-indigo-600 mt-3">
+                              <p className="text-xs text-brand mt-3">
                                 Horario: {formatHora(ciclo.hora_inicio)}–{formatHora(ciclo.hora_fin)}
                                 {calcMinutos(ciclo.hora_inicio, ciclo.hora_fin) !== null ? ` (${calcMinutos(ciclo.hora_inicio, ciclo.hora_fin)} min)` : ''}
                               </p>
@@ -575,44 +575,44 @@ export default function OperacionesPage() {
               <label className="text-xs font-semibold text-gray-700">Fecha</label>
               <input type="date" required value={editCicloForm.fecha}
                 onChange={e => setEditCicloForm(f => ({ ...f, fecha: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Hora inicio</label>
               <input type="time" value={editCicloForm.hora_inicio}
                 onChange={e => setEditCicloForm(f => ({ ...f, hora_inicio: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Hora fin</label>
               <input type="time" value={editCicloForm.hora_fin}
                 onChange={e => setEditCicloForm(f => ({ ...f, hora_fin: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Litros inicio</label>
               <input type="number" step="0.1" required value={editCicloForm.litros_inicio}
                 onChange={e => setEditCicloForm(f => ({ ...f, litros_inicio: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Litros fin</label>
               <input type="number" step="0.1" required value={editCicloForm.litros_fin}
                 onChange={e => setEditCicloForm(f => ({ ...f, litros_fin: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Temp. cámara (°C)</label>
               <input type="number" value={editCicloForm.temperatura_camara}
                 onChange={e => setEditCicloForm(f => ({ ...f, temperatura_camara: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
           </div>
           <div>
             <label className="text-xs font-semibold text-gray-700">Comentarios</label>
             <input value={editCicloForm.comentarios}
               onChange={e => setEditCicloForm(f => ({ ...f, comentarios: e.target.value }))}
-              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setEditCicloId(null)}
@@ -620,7 +620,7 @@ export default function OperacionesPage() {
               Cancelar
             </button>
             <button type="submit" disabled={savingEditCiclo}
-              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+              className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
               {savingEditCiclo ? 'Guardando...' : 'Guardar cambios'}
             </button>
           </div>
@@ -634,17 +634,17 @@ export default function OperacionesPage() {
         <>
           {/* KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Stock actual</p>
               <p className={`text-2xl font-bold mt-1 ${resumenPet.stock_actual < 100 ? 'text-red-600' : 'text-gray-900'}`}>{fmtLitros(resumenPet.stock_actual)}</p>
               {resumenPet.stock_actual < 100 && <p className="text-xs text-red-500 mt-1">⚠ Stock bajo</p>}
             </div>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total cargado</p>
               <p className="text-2xl font-bold text-emerald-600 mt-1">{fmtLitros(resumenPet.total_cargado)}</p>
               <p className="text-xs text-gray-400 mt-1">{cargas.length} carga(s)</p>
             </div>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total consumido</p>
               <p className="text-2xl font-bold text-amber-600 mt-1">{fmtLitros(resumenPet.total_consumido)}</p>
               <p className="text-xs text-gray-400 mt-1">{resumenPet.ciclos_count} ciclo(s)</p>
@@ -654,53 +654,53 @@ export default function OperacionesPage() {
               onClick={() => setShowCostoModal(true)}
               disabled={costoEvolutivo.length === 0}
               title={costoEvolutivo.length === 0 ? 'Aún no hay cargas para graficar' : 'Ver evolución'}
-              className="text-left bg-white rounded-xl shadow-sm border border-gray-100 hover:border-indigo-400 hover:shadow-md p-5 transition-all disabled:cursor-not-allowed"
+              className="text-left bg-white rounded-xl shadow-md border border-gray-300 hover:border-brand hover:shadow-md p-5 transition-all disabled:cursor-not-allowed"
             >
               <div className="flex items-center justify-between">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Costo prom. / L (histórico)</p>
-                <span className="text-xs text-indigo-500">📈</span>
+                <span className="text-xs text-brand-soft">📈</span>
               </div>
-              <p className="text-2xl font-bold text-indigo-600 mt-1">{fmtPrecio(resumenPet.costo_promedio_litro ?? 0)}</p>
+              <p className="text-2xl font-bold text-brand mt-1">{fmtPrecio(resumenPet.costo_promedio_litro ?? 0)}</p>
               <p className="text-xs text-gray-400 mt-1">total: {fmtPrecio(resumenPet.total_costo ?? 0)}</p>
             </button>
           </div>
 
           {/* Formulario nueva carga */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-5">Registrar carga de petróleo</h2>
             <form onSubmit={guardarCarga} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-medium text-gray-700">Fecha</label>
                   <input type="date" required value={petForm.fecha} onChange={e => setPetForm(f => ({ ...f, fecha: e.target.value }))}
-                    className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-700">Litros cargados</label>
                   <input type="number" step="0.1" required value={petForm.litros} onChange={e => setPetForm(f => ({ ...f, litros: e.target.value }))}
-                    className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-700">Costo total (CLP)</label>
                 <input type="number" min="0" required value={petForm.total_bruto} onChange={e => setPetForm(f => ({ ...f, total_bruto: e.target.value }))}
-                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Total de la boleta" />
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" placeholder="Total de la boleta" />
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-700">Notas</label>
                 <input value={petForm.notas} onChange={e => setPetForm(f => ({ ...f, notas: e.target.value }))}
-                  className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <button type="submit" disabled={savingPet}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+                className="bg-brand hover:bg-brand-dark text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
                 {savingPet ? 'Guardando...' : 'Registrar carga'}
               </button>
             </form>
           </div>
 
           {/* Historial cargas */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-300">
               <h2 className="text-base font-semibold text-gray-900">Historial de cargas</h2>
             </div>
             {cargas.length === 0 ? (
@@ -757,23 +757,23 @@ export default function OperacionesPage() {
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Fecha</label>
                   <input type="date" required value={editPetForm.fecha} onChange={e => setEditPetForm(f => ({ ...f, fecha: e.target.value }))}
-                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Litros</label>
                   <input type="number" step="0.1" required value={editPetForm.litros} onChange={e => setEditPetForm(f => ({ ...f, litros: e.target.value }))}
-                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Costo total (CLP)</label>
                 <input type="number" min="0" required value={editPetForm.total_bruto} onChange={e => setEditPetForm(f => ({ ...f, total_bruto: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Notas</label>
                 <textarea rows={2} value={editPetForm.notas} onChange={e => setEditPetForm(f => ({ ...f, notas: e.target.value }))}
-                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                  className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setEditPetId(null)}
@@ -781,7 +781,7 @@ export default function OperacionesPage() {
                   Cancelar
                 </button>
                 <button type="submit" disabled={savingEditPet}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+                  className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
                   {savingEditPet ? 'Guardando...' : 'Guardar cambios'}
                 </button>
               </div>
@@ -829,26 +829,26 @@ export default function OperacionesPage() {
             placeholder="Filtrar por nombre, código o tutor..."
             value={buscarModal}
             onChange={e => setBuscarModal(e.target.value)}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {loadingPendientes ? (
             <p className="text-sm text-gray-400 text-center py-4">Cargando...</p>
           ) : pendientesFiltrados.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-4">Sin mascotas pendientes</p>
           ) : (
-            <div className="max-h-80 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-lg">
+            <div className="max-h-80 overflow-y-auto divide-y divide-gray-100 border border-gray-300 rounded-lg">
               {pendientesFiltrados.map(c => {
                 const isSelected = seleccionadas.some(s => s.id === c.id)
                 return (
-                  <label key={c.id} className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${isSelected ? 'bg-indigo-50' : ''}`}>
+                  <label key={c.id} className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${isSelected ? 'bg-brand/10' : ''}`}>
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => togglePendiente(c)}
-                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      className="w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand"
                     />
                     <div className="flex-1 min-w-0">
-                      <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
+                      <span className="font-mono text-xs text-brand font-semibold">{c.codigo}</span>
                       <span className="ml-2 text-sm text-gray-900 font-medium">{c.nombre_mascota}</span>
                       <span className="ml-1 text-xs text-gray-500">({c.nombre_tutor})</span>
                     </div>
@@ -858,11 +858,11 @@ export default function OperacionesPage() {
               })}
             </div>
           )}
-          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+          <div className="flex items-center justify-between pt-2 border-t border-gray-300">
             <span className="text-xs text-gray-500">{seleccionadas.length} seleccionada(s)</span>
             <button
               onClick={() => setShowModal(false)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
               Confirmar selección
             </button>
@@ -889,11 +889,11 @@ function InlineSearch({ buscar, excluir, onSelect }: { buscar: string; excluir: 
   if (results.length === 0) return null
 
   return (
-    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 divide-y divide-gray-50 left-0 top-full">
+    <div className="absolute z-10 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 divide-y divide-gray-50 left-0 top-full">
       {results.slice(0, 6).map(c => (
         <button key={c.id} type="button" onClick={() => onSelect(c)}
-          className="w-full text-left px-4 py-3 hover:bg-indigo-50 transition-colors">
-          <span className="font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</span>
+          className="w-full text-left px-4 py-3 hover:bg-brand/10 transition-colors">
+          <span className="font-mono text-xs text-brand font-semibold">{c.codigo}</span>
           <span className="ml-2 text-sm text-gray-900">{c.nombre_mascota}</span>
           <span className="ml-2 text-xs text-gray-500">({c.nombre_tutor})</span>
           <span className="ml-2 text-xs text-gray-400">{c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || "0")}</span>

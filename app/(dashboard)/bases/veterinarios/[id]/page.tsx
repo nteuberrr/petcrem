@@ -163,7 +163,7 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-600">←</button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">{vet.nombre}</h1>
+          <h1 className="text-2xl font-extrabold text-brand tracking-tight">{vet.nombre}</h1>
           <div className="flex items-center gap-2 mt-1">
             <Badge variant={vet.tipo_precios === 'precios_especiales' ? 'purple' : 'blue'}>
               {vet.tipo_precios === 'precios_especiales' ? 'Convenio especial' : 'Convenio estándar'}
@@ -174,7 +174,7 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={copiarEmail} className="border border-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
+          <button onClick={copiarEmail} className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
             📋 Copiar email
           </button>
         </div>
@@ -182,29 +182,29 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
 
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center">
-          <p className="text-3xl font-bold text-indigo-700">{vet.clientes.length}</p>
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5 text-center">
+          <p className="text-3xl font-bold text-brand">{vet.clientes.length}</p>
           <p className="text-xs text-gray-500 mt-1">Total mascotas</p>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5 text-center">
           <p className="text-3xl font-bold text-amber-600">{retiradas}</p>
           <p className="text-xs text-gray-500 mt-1">Retiradas</p>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5 text-center">
           <p className="text-3xl font-bold text-emerald-600">{cremadas}</p>
           <p className="text-xs text-gray-500 mt-1">Cremadas</p>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5 text-center">
           <p className="text-3xl font-bold text-blue-600">{despachadas}</p>
           <p className="text-xs text-gray-500 mt-1">Despachadas</p>
         </div>
       </div>
 
       {/* Informes de facturación */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 overflow-hidden">
-        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-3 border-b border-indigo-100 flex items-center gap-2">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 mb-6 overflow-hidden">
+        <div className="bg-gradient-to-r from-brand/10 to-purple-50 px-6 py-3 border-b border-brand/20 flex items-center gap-2">
           <span className="text-lg">📊</span>
-          <h2 className="text-sm font-bold text-indigo-900 uppercase tracking-wide">Informes de facturación</h2>
+          <h2 className="text-sm font-bold text-brand uppercase tracking-wide">Informes de facturación</h2>
         </div>
         <div className="p-6">
           <p className="text-xs text-gray-600 mb-4 leading-relaxed">
@@ -232,14 +232,14 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
               onClick={enviarUltimoInforme}
               disabled={enviando || !ultimoInforme || !vet.correo}
               title={!vet.correo ? 'La veterinaria no tiene email' : !ultimoInforme ? 'Generá un informe primero' : `Enviar a ${vet.correo}`}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {enviando ? '⌛ Enviando…' : '📧 Enviar último al correo'}
             </button>
             <button
               onClick={() => setVerHistorico(v => !v)}
               disabled={informesEmitidos.length === 0}
-              className="inline-flex items-center gap-2 border-2 border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 border-2 border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {verHistorico ? '▲ Ocultar informes anteriores' : `▼ Ver informes anteriores${informesEmitidos.length > 0 ? ` (${informesEmitidos.length})` : ''}`}
             </button>
@@ -256,22 +256,22 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
 
           {verHistorico && (
             informesEmitidos.length > 0 ? (
-              <div className="border border-gray-100 rounded-lg overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2.5 border-b border-gray-100">
+              <div className="border border-gray-300 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-4 py-2.5 border-b border-gray-300">
                   <p className="text-xs font-semibold text-gray-600">Histórico de informes emitidos para esta veterinaria</p>
                 </div>
                 <table className="w-full text-sm">
                   <thead className="bg-white">
                     <tr>
                       {['Versión', 'Formato', 'Emitido', 'Período hasta', 'Fichas', 'Por', ''].map(h => (
-                        <th key={h} className="text-left px-4 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">{h}</th>
+                        <th key={h} className="text-left px-4 py-2 text-xs font-semibold text-gray-500 border-b border-gray-300">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {informesEmitidos.map(inf => (
                       <tr key={inf.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 font-mono text-xs font-bold text-indigo-700">v{inf.version}</td>
+                        <td className="px-4 py-2 font-mono text-xs font-bold text-brand">v{inf.version}</td>
                         <td className="px-4 py-2 text-gray-700">
                           <Badge variant={inf.formato === 'pdf' ? 'red' : 'green'}>{inf.formato.toUpperCase()}</Badge>
                         </td>
@@ -285,7 +285,7 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
                         <td className="px-4 py-2">
                           {inf.archivo_url ? (
                             <a href={inf.archivo_url} target="_blank" rel="noopener noreferrer"
-                              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-md text-xs font-semibold">
+                              className="bg-brand hover:bg-brand-dark text-white px-3 py-1 rounded-md text-xs font-semibold">
                               Descargar
                             </a>
                           ) : <span className="text-xs text-gray-400">—</span>}
@@ -304,7 +304,7 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
 
       {/* Datos */}
       <div className="grid grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6">
           <h2 className="font-semibold text-gray-900 mb-4">Datos generales</h2>
           <div className="space-y-3 text-sm">
             {[
@@ -321,7 +321,7 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
             ) : null)}
           </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6">
           <h2 className="font-semibold text-gray-900 mb-4">Contacto</h2>
           <div className="space-y-3 text-sm">
             {[
@@ -341,8 +341,8 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
 
       {/* Precios especiales */}
       {vet.tramos_especiales.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-gray-100">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden mb-6">
+          <div className="px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Tramos de precio especial</h2>
           </div>
           <table className="w-full text-sm">
@@ -363,8 +363,8 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
       )}
 
       {/* Lista de mascotas */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-300">
           <h2 className="font-semibold text-gray-900">Mascotas ingresadas</h2>
         </div>
         {vet.clientes.length === 0 ? (
@@ -377,7 +377,7 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
             <tbody className="divide-y divide-gray-50">
               {vet.clientes.map(c => (
                 <tr key={c.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-xs text-indigo-700 font-semibold">{c.codigo}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-brand font-semibold">{c.codigo}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{c.nombre_mascota}</td>
                   <td className="px-4 py-3 text-gray-600">{c.nombre_tutor}</td>
                   <td className="px-4 py-3 text-gray-600">{c.especie}</td>

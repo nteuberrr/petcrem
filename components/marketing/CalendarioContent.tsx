@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { formatDate } from '@/lib/dates'
+import { Markdown } from '@/components/marketing/Markdown'
+import { CanalIcon, AgenteIcon } from '@/components/marketing/BrandIcons'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 type Item = {
@@ -35,7 +37,7 @@ const CANALES = [
   { key: 'facebook', label: 'Facebook', icon: '👍' },
 ] as const
 const CANAL_MAP: Record<string, { label: string; icon: string; cls: string; chip: string }> = {
-  email: { label: 'Email', icon: '✉️', cls: 'bg-indigo-100 text-indigo-700', chip: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+  email: { label: 'Email', icon: '✉️', cls: 'bg-brand/10 text-brand', chip: 'bg-brand/10 text-brand border-brand/30' },
   instagram: { label: 'Instagram', icon: '📸', cls: 'bg-pink-100 text-pink-700', chip: 'bg-pink-100 text-pink-800 border-pink-200' },
   facebook: { label: 'Facebook', icon: '👍', cls: 'bg-blue-100 text-blue-700', chip: 'bg-blue-100 text-blue-800 border-blue-200' },
 }
@@ -235,15 +237,18 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          {onBack && <button onClick={onBack} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold">← Campañas</button>}
-          <h1 className="text-2xl font-bold text-gray-900 mt-1">Calendario y Agente de Marketing</h1>
-          <p className="text-sm text-gray-500">El agente propone el plan; vos apruebas, generas y publicas. Nada se publica solo.</p>
+      <div className="flex items-center justify-between gap-3 flex-wrap rounded-2xl border border-gray-300 bg-white px-5 py-4 shadow-md">
+        <div className="flex items-center gap-3">
+          <AgenteIcon className="w-11 h-11 shrink-0" />
+          <div>
+            {onBack && <button onClick={onBack} className="text-xs text-[#2a6db0] hover:underline font-semibold">← Campañas</button>}
+            <h2 className="text-lg font-extrabold text-[#143C64] leading-tight">Calendario y Agente de Marketing</h2>
+            <p className="text-sm text-gray-500">El agente propone el plan; vos aprobás, generás y publicás. Nada se publica solo.</p>
+          </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setConfigOpen(true)} className="text-sm px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50">⚙️ Playbook</button>
-          <button onClick={() => setNuevoFecha('')} className="text-sm px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">+ Manual</button>
+          <button onClick={() => setConfigOpen(true)} className="text-sm px-3.5 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium">⚙️ Playbook</button>
+          <button onClick={() => setNuevoFecha('')} className="text-sm px-3.5 py-2 rounded-xl bg-[#143C64] text-white hover:bg-[#0f2e4d] font-medium shadow-md">+ Campaña</button>
         </div>
       </div>
 
@@ -252,15 +257,20 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
         <div className="lg:col-span-2 space-y-3">
           {/* Controles: toggle + filtros */}
           <div className="flex gap-2 flex-wrap items-center text-sm">
-            <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden">
-              <button onClick={() => setVista('calendario')} className={`px-3 py-1.5 ${vista === 'calendario' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>📅 Calendario</button>
-              <button onClick={() => setVista('lista')} className={`px-3 py-1.5 ${vista === 'lista' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>📋 Lista</button>
+            <div className="inline-flex rounded-xl border border-gray-300 bg-white overflow-hidden shadow-md">
+              <button onClick={() => setVista('calendario')} className={`px-3 py-1.5 font-medium ${vista === 'calendario' ? 'bg-[#143C64] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>📅 Calendario</button>
+              <button onClick={() => setVista('lista')} className={`px-3 py-1.5 font-medium ${vista === 'lista' ? 'bg-[#143C64] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>📋 Lista</button>
             </div>
-            <select value={filtroCanal} onChange={e => setFiltroCanal(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5">
-              <option value="todos">Todos los canales</option>
-              {CANALES.map(c => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
-            </select>
-            <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5">
+            <div className="inline-flex rounded-xl border border-gray-300 bg-white overflow-hidden shadow-md">
+              <button onClick={() => setFiltroCanal('todos')} className={`px-3 py-1.5 font-medium ${filtroCanal === 'todos' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Todos</button>
+              {CANALES.map(c => (
+                <button key={c.key} onClick={() => setFiltroCanal(c.key)} title={c.label}
+                  className={`px-2.5 py-1.5 flex items-center gap-1.5 ${filtroCanal === c.key ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+                  <CanalIcon canal={c.key} className="w-4 h-4" /><span className="hidden sm:inline">{c.label}</span>
+                </button>
+              ))}
+            </div>
+            <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} className="text-sm border border-gray-300 rounded-xl px-3 py-1.5 bg-white shadow-md">
               <option value="todos">Todos los estados</option>
               {Object.entries(ESTADO_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
@@ -269,23 +279,23 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
           {cargando ? (
             <div className="text-center text-gray-400 py-10">Cargando…</div>
           ) : vista === 'calendario' ? (
-            <div className="bg-white rounded-2xl border border-gray-200 p-3">
+            <div className="bg-white rounded-2xl border border-gray-300 p-4 shadow-md">
               {/* Navegación de mes */}
-              <div className="flex items-center justify-between mb-3">
-                <button onClick={() => cambiarMes(-1)} className="w-8 h-8 rounded-lg border border-gray-200 hover:bg-gray-50">‹</button>
+              <div className="flex items-center justify-between mb-4">
+                <button onClick={() => cambiarMes(-1)} className="w-9 h-9 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-600">‹</button>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-gray-900 capitalize">{tituloMes}</h2>
-                  <button onClick={() => setMes({ y: new Date().getFullYear(), m: new Date().getMonth() })} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50">Hoy</button>
+                  <h3 className="text-base font-bold text-[#143C64] capitalize">{tituloMes}</h3>
+                  <button onClick={() => setMes({ y: new Date().getFullYear(), m: new Date().getMonth() })} className="text-xs px-2.5 py-1 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50">Hoy</button>
                 </div>
-                <button onClick={() => cambiarMes(1)} className="w-8 h-8 rounded-lg border border-gray-200 hover:bg-gray-50">›</button>
+                <button onClick={() => cambiarMes(1)} className="w-9 h-9 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-600">›</button>
               </div>
               {/* Grilla */}
               <div className="overflow-x-auto">
-                <div className="min-w-[640px]">
-                  <div className="grid grid-cols-7 gap-px text-center text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-px">
+                <div className="min-w-[680px]">
+                  <div className="grid grid-cols-7 gap-1.5 text-center text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
                     {DIAS.map(d => <div key={d} className="py-1">{d}</div>)}
                   </div>
-                  <div className="grid grid-cols-7 gap-px bg-gray-100 rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-7 gap-1.5">
                     {buildGrid().map(({ iso, dia, inMonth }) => {
                       const its = itemsDe(iso)
                       const esHoy = iso === hoy
@@ -293,24 +303,24 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
                         <button
                           key={iso}
                           onClick={() => setDiaSel(iso)}
-                          className={`min-h-[96px] text-left p-1.5 align-top transition-colors ${inMonth ? 'bg-white hover:bg-indigo-50/50' : 'bg-gray-50 hover:bg-gray-100'}`}
+                          className={`min-h-[104px] text-left p-1.5 rounded-xl border align-top transition-all ${esHoy ? 'border-brand ring-1 ring-brand/30' : 'border-gray-300'} ${inMonth ? 'bg-white hover:border-gold hover:shadow-md' : 'bg-slate-100'}`}
                         >
-                          <div className={`text-xs mb-1 inline-flex items-center justify-center w-6 h-6 rounded-full ${esHoy ? 'bg-indigo-600 text-white font-bold' : inMonth ? 'text-gray-700' : 'text-gray-300'}`}>{dia}</div>
-                          <div className="space-y-0.5">
+                          <div className={`text-xs mb-1 inline-flex items-center justify-center w-6 h-6 rounded-full ${esHoy ? 'bg-[#143C64] text-white font-bold' : inMonth ? 'text-gray-700' : 'text-gray-300'}`}>{dia}</div>
+                          <div className="space-y-1">
                             {its.slice(0, 3).map(it => {
-                              const cm = CANAL_MAP[it.canal] || { icon: '•', chip: 'bg-gray-100 text-gray-700 border-gray-200' }
+                              const cm = CANAL_MAP[it.canal] || { chip: 'bg-gray-100 text-gray-700 border-gray-300' }
                               const dot = ESTADO_MAP[it.estado]?.dot || 'bg-gray-300'
                               const tachado = it.estado === 'descartada'
                               return (
                                 <div key={it.id} title={`${CANAL_MAP[it.canal]?.label || it.canal} · ${ESTADO_MAP[it.estado]?.label || it.estado}`}
-                                  className={`flex items-center gap-1 px-1 py-0.5 rounded border text-[10px] leading-tight truncate ${cm.chip} ${tachado ? 'opacity-50 line-through' : ''}`}>
+                                  className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border text-[10px] leading-tight ${cm.chip} ${tachado ? 'opacity-50 line-through' : ''}`}>
                                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
-                                  <span className="shrink-0">{cm.icon}</span>
+                                  <CanalIcon canal={it.canal} className="w-3.5 h-3.5 shrink-0" />
                                   <span className="truncate">{it.titulo || it.idea || '—'}</span>
                                 </div>
                               )
                             })}
-                            {its.length > 3 && <div className="text-[10px] text-gray-400 pl-1">+{its.length - 3} más</div>}
+                            {its.length > 3 && <div className="text-[10px] font-medium text-[#2a6db0] pl-1">+{its.length - 3} más</div>}
                           </div>
                         </button>
                       )
@@ -319,18 +329,18 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
                 </div>
               </div>
               {/* Leyenda */}
-              <div className="flex flex-wrap gap-3 mt-3 text-[11px] text-gray-500">
-                {CANALES.map(c => <span key={c.key} className="inline-flex items-center gap-1"><span className={`w-2.5 h-2.5 rounded ${CANAL_MAP[c.key].chip.split(' ')[0]}`} />{c.label}</span>)}
+              <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-4 pt-3 border-t border-gray-300 text-[11px] text-gray-500">
+                {CANALES.map(c => <span key={c.key} className="inline-flex items-center gap-1"><CanalIcon canal={c.key} className="w-3.5 h-3.5" />{c.label}</span>)}
                 <span className="mx-1 text-gray-300">|</span>
                 {Object.entries(ESTADO_MAP).map(([k, v]) => <span key={k} className="inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${v.dot}`} />{v.label}</span>)}
               </div>
             </div>
           ) : visibles.length === 0 ? (
-            <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
+            <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-8 text-center text-sm text-gray-500">
               No hay campañas todavía. Pedile al agente un plan o creá una manual.
             </div>
           ) : (
-            <div className="overflow-x-auto bg-white rounded-2xl border border-gray-200">
+            <div className="overflow-x-auto bg-white rounded-2xl border border-gray-300 shadow-md">
               <table className="w-full min-w-[640px] text-sm">
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
                   <tr>
@@ -349,7 +359,7 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
                       <Fragment key={it.id}>
                         <tr className="hover:bg-gray-50 align-top">
                           <td className="px-3 py-2 whitespace-nowrap text-gray-700">{it.fecha ? formatDate(it.fecha) : '—'}</td>
-                          <td className="px-3 py-2"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cm.cls}`}>{cm.icon} {cm.label}</span></td>
+                          <td className="px-3 py-2"><span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cm.cls}`}><CanalIcon canal={it.canal} className="w-3.5 h-3.5" /> {cm.label}</span></td>
                           <td className="px-3 py-2 max-w-[280px]">
                             <div className="font-medium text-gray-900">
                               {it.titulo || it.idea || '(sin título)'}
@@ -375,36 +385,44 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
 
         {/* Agente */}
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-2xl border border-gray-200 flex flex-col h-[70vh] sticky top-4">
-            <div className="px-4 py-3 border-b flex items-center gap-2">
-              <span className="text-lg">🧠</span>
+          <div className="bg-white rounded-2xl border border-gray-300 flex flex-col h-[72vh] sticky top-4 shadow-md overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2.5 bg-brand">
+              <AgenteIcon className="w-9 h-9 shrink-0" />
               <div>
-                <div className="font-semibold text-gray-900 text-sm">Agente de Marketing</div>
-                <div className="text-[11px] text-gray-400">Planifica, redacta y propone</div>
+                <div className="font-bold text-white text-sm">Agente de Marketing</div>
+                <div className="text-[11px] text-white/70">Planifica, redacta y propone</div>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50">
               {msgs.length === 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs text-gray-500">Probá con:</p>
+                  <p className="text-xs text-gray-500 px-1">Probá con:</p>
                   {QUICK.map((q, i) => (
-                    <button key={i} onClick={() => enviar(q)} className="block w-full text-left text-xs px-3 py-2 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 text-gray-700">{q}</button>
+                    <button key={i} onClick={() => enviar(q)} className="block w-full text-left text-xs px-3 py-2.5 rounded-xl border border-gray-300 bg-white hover:border-[#F2B84B] hover:shadow-md text-gray-700 transition-all">{q}</button>
                   ))}
                 </div>
               )}
               {msgs.map((m, i) => (
-                <div key={i} className={`text-sm whitespace-pre-wrap rounded-2xl px-3 py-2 ${m.rol === 'usuario' ? 'bg-indigo-600 text-white ml-6' : 'bg-gray-100 text-gray-800 mr-6'}`}>{m.texto}</div>
+                m.rol === 'usuario'
+                  ? <div key={i} className="text-sm whitespace-pre-wrap rounded-2xl rounded-br-sm px-3.5 py-2 bg-[#143C64] text-white ml-8 shadow-md">{m.texto}</div>
+                  : <div key={i} className="rounded-2xl rounded-bl-sm px-3.5 py-2.5 bg-white border border-gray-300 mr-3 shadow-md"><Markdown>{m.texto}</Markdown></div>
               ))}
-              {pensando && <div className="text-sm bg-gray-100 text-gray-500 rounded-2xl px-3 py-2 mr-6">Pensando…</div>}
+              {pensando && (
+                <div className="rounded-2xl rounded-bl-sm px-3.5 py-3 bg-white border border-gray-300 mr-8 shadow-md inline-flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#F2B84B] animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#F2B84B] animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#F2B84B] animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              )}
               <div ref={chatEnd} />
             </div>
-            <div className="p-3 border-t">
+            <div className="p-3 border-t border-gray-300 bg-white">
               <div className="flex gap-2">
                 <textarea value={input} onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(input) } }}
                   rows={2} placeholder="Escribile al agente…"
-                  className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-200" />
-                <button disabled={pensando || !input.trim()} onClick={() => enviar(input)} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50 self-end">Enviar</button>
+                  className="flex-1 text-sm border border-gray-300 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#143C64]/20 focus:border-[#143C64]" />
+                <button disabled={pensando || !input.trim()} onClick={() => enviar(input)} className="px-4 py-2 rounded-xl bg-[#143C64] text-white text-sm font-medium hover:bg-[#0f2e4d] disabled:opacity-50 self-end shadow-md">Enviar</button>
               </div>
             </div>
           </div>
@@ -420,9 +438,9 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
               const cm = CANAL_MAP[it.canal] || { label: it.canal, icon: '•', cls: 'bg-gray-100 text-gray-600' }
               const em = ESTADO_MAP[it.estado] || { label: it.estado, cls: 'bg-gray-100 text-gray-600' }
               return (
-                <div key={it.id} className="border border-gray-200 rounded-xl p-3">
+                <div key={it.id} className="border border-gray-300 rounded-xl p-3">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cm.cls}`}>{cm.icon} {cm.label}</span>
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cm.cls}`}><CanalIcon canal={it.canal} className="w-3.5 h-3.5" /> {cm.label}</span>
                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${em.cls}`}>{em.label}</span>
                     {it.objetivo && <span className="text-[11px] text-gray-400">{OBJETIVO_LABEL[it.objetivo] || it.objetivo}</span>}
                   </div>
@@ -435,7 +453,7 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
                 </div>
               )
             })}
-            <button onClick={() => { const f = diaSel; setDiaSel(null); setNuevoFecha(f) }} className="w-full text-sm px-3 py-2 rounded-lg border border-dashed border-indigo-300 text-indigo-600 hover:bg-indigo-50">+ Nueva campaña este día</button>
+            <button onClick={() => { const f = diaSel; setDiaSel(null); setNuevoFecha(f) }} className="w-full text-sm px-3 py-2 rounded-xl border border-dashed border-[#143C64]/30 text-[#143C64] hover:bg-[#143C64]/5 font-medium">+ Nueva campaña este día</button>
           </div>
         </Modal>
       )}
@@ -521,7 +539,7 @@ function ItemForm({ item, fechaInicial, onClose, onSaved }: { item?: Item; fecha
         )}
         <div className="flex justify-end gap-2 pt-2">
           <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50">Cancelar</button>
-          <button disabled={guardando} onClick={guardar} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50">{guardando ? 'Guardando…' : 'Guardar'}</button>
+          <button disabled={guardando} onClick={guardar} className="px-4 py-2 rounded-lg bg-brand text-white text-sm hover:bg-brand-dark disabled:opacity-50">{guardando ? 'Guardando…' : 'Guardar'}</button>
         </div>
       </div>
     </Modal>
@@ -547,8 +565,8 @@ function PreviewModal({ item, onClose }: { item: Item; onClose: () => void }) {
         {esEmail ? (
           <>
             {item.titulo && <div className="text-sm"><span className="text-gray-500">Asunto:</span> <span className="font-medium">{item.titulo}</span></div>}
-            <iframe title="preview" srcDoc={item.cuerpo} className="w-full h-[60vh] border border-gray-200 rounded-lg bg-white" />
-            <div className="text-xs rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 px-3 py-2">
+            <iframe title="preview" srcDoc={item.cuerpo} className="w-full h-[60vh] border border-gray-300 rounded-lg bg-white" />
+            <div className="text-xs rounded-lg bg-brand/10 border border-brand/30 text-brand px-3 py-2">
               ✉️ Este correo quedó como <b>borrador en Mail</b> (Campañas → Mail → Campañas). Desde ahí lo editás, elegís la segmentación y lo enviás por lotes con seguimiento.
             </div>
           </>
@@ -566,17 +584,17 @@ function PreviewModal({ item, onClose }: { item: Item; onClose: () => void }) {
                   {imgs.map((im, i) => (
                     <div key={i} className="relative shrink-0 w-48 snap-start">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={im.url} alt={im.alt || ''} className="w-48 h-48 object-cover rounded-lg border border-gray-200 bg-gray-50" />
+                      <img src={im.url} alt={im.alt || ''} className="w-48 h-48 object-cover rounded-lg border border-gray-300 bg-gray-50" />
                       <span className="absolute top-1 left-1 text-[10px] font-bold bg-black/60 text-white rounded px-1.5 py-0.5">{i + 1}/{imgs.length}</span>
                     </div>
                   ))}
                 </div>
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={imgs[0].url} alt={imgs[0].alt || ''} className="w-full max-h-[40vh] object-contain rounded-lg border border-gray-200 bg-gray-50" />
+                <img src={imgs[0].url} alt={imgs[0].alt || ''} className="w-full max-h-[40vh] object-contain rounded-lg border border-gray-300 bg-gray-50" />
               )
             ) : null}
-            <div className="text-sm whitespace-pre-wrap text-gray-800 bg-gray-50 rounded-lg p-3 border border-gray-200">{item.cuerpo || '(sin copy)'}</div>
+            <div className="text-sm whitespace-pre-wrap text-gray-800 bg-gray-50 rounded-lg p-3 border border-gray-300">{item.cuerpo || '(sin copy)'}</div>
           </>
         )}
         {item.post_url && <a href={item.post_url} target="_blank" rel="noreferrer" className="text-sm text-emerald-700 hover:underline">Ver publicación ↗</a>}
@@ -618,7 +636,7 @@ function ConfigModal({ onClose }: { onClose: () => void }) {
             <textarea value={calibracion} onChange={e => setCalibracion(e.target.value)} rows={4} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" /></label>
           <div className="flex justify-end gap-2">
             <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50">Cancelar</button>
-            <button disabled={guardando} onClick={guardar} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50">{guardando ? 'Guardando…' : 'Guardar'}</button>
+            <button disabled={guardando} onClick={guardar} className="px-4 py-2 rounded-lg bg-brand text-white text-sm hover:bg-brand-dark disabled:opacity-50">{guardando ? 'Guardando…' : 'Guardar'}</button>
           </div>
         </div>
       )}

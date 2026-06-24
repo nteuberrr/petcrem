@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { formatDate, formatDateTime, formatHoraDia } from '@/lib/dates'
 import CalendarioContent from '@/components/marketing/CalendarioContent'
+import { GmailIcon, FacebookIcon, InstagramIcon, AgenteIcon } from '@/components/marketing/BrandIcons'
 
 type Vet = {
   id: string
@@ -146,7 +147,7 @@ type Red = 'mail' | 'instagram' | 'facebook' | 'tiktok'
 const REDES: { key: Red; label: string; icon: string; desc: string; activa: boolean; cardClass: string; iconClass: string }[] = [
   {
     key: 'mail', label: 'Mail', icon: '✉️', desc: 'Campañas de correo a la base de veterinarios.', activa: true,
-    cardClass: 'border-indigo-200 hover:border-indigo-400 hover:shadow-md', iconClass: 'bg-indigo-100',
+    cardClass: 'border-brand/30 hover:border-brand hover:shadow-md', iconClass: 'bg-brand/10',
   },
   {
     key: 'instagram', label: 'Instagram', icon: '📸', desc: 'Planifica y publica posts orgánicos.', activa: true,
@@ -164,36 +165,49 @@ const REDES: { key: Red; label: string; icon: string; desc: string; activa: bool
 
 type Vista = Red | 'calendario' | 'imagenes'
 
-// Barra de accesos fija arriba: el Calendario + Agente es la vista de inicio, y los
-// canales + el banco de Imágenes quedan al mismo nivel (Imágenes salió de Mailing).
-const NAV: { key: Vista; label: string; icon: string }[] = [
-  { key: 'calendario', label: 'Calendario', icon: '🧠' },
-  { key: 'mail', label: 'Mailing', icon: '✉️' },
-  { key: 'instagram', label: 'Instagram', icon: '📸' },
-  { key: 'facebook', label: 'Facebook', icon: '👍' },
-  { key: 'tiktok', label: 'TikTok', icon: '🎵' },
-  { key: 'imagenes', label: 'Imágenes', icon: '🖼️' },
+// Barra de accesos fija arriba: el Agente (calendario + IA) es la vista de inicio,
+// y los canales + el banco de Imágenes quedan al mismo nivel.
+const NAV: { key: Vista; label: string }[] = [
+  { key: 'calendario', label: 'Agente' },
+  { key: 'mail', label: 'Mailing' },
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'facebook', label: 'Facebook' },
+  { key: 'tiktok', label: 'TikTok' },
+  { key: 'imagenes', label: 'Imágenes' },
 ]
+
+function NavIcon({ k, className = 'w-6 h-6' }: { k: Vista; className?: string }) {
+  if (k === 'calendario') return <AgenteIcon className={className} />
+  if (k === 'mail') return <GmailIcon className={className} />
+  if (k === 'instagram') return <InstagramIcon className={className} />
+  if (k === 'facebook') return <FacebookIcon className={className} />
+  if (k === 'tiktok') return <span className="text-xl leading-none">🎵</span>
+  return <span className="text-xl leading-none">🖼️</span>
+}
 
 export default function CampanasPage() {
   const [vista, setVista] = useState<Vista>('calendario')
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Campañas</h1>
+        <h1 className="text-2xl font-extrabold text-[#143C64] tracking-tight">Campañas</h1>
         <p className="text-sm text-gray-500">Planificá con el agente, gestioná cada red y el banco de imágenes desde un solo lugar.</p>
-        <div className="inline-flex gap-1 bg-gray-100 border border-gray-200 rounded-2xl p-1.5 shadow-sm overflow-x-auto mt-3 max-w-full">
-          {NAV.map(n => (
-            <button
-              key={n.key}
-              onClick={() => setVista(n.key)}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                vista === n.key ? 'bg-indigo-600 text-white shadow-md ring-1 ring-indigo-700/10' : 'text-gray-600 hover:bg-white hover:text-gray-900'
-              }`}
-            >
-              <span aria-hidden>{n.icon}</span>{n.label}
-            </button>
-          ))}
+        <div className="flex gap-1.5 bg-white border border-gray-300 rounded-2xl p-2 shadow-md overflow-x-auto mt-3">
+          {NAV.map(n => {
+            const active = vista === n.key
+            return (
+              <button
+                key={n.key}
+                onClick={() => setVista(n.key)}
+                className={`px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 ${
+                  active ? 'bg-[#143C64] text-white shadow-md' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <NavIcon k={n.key} className="w-6 h-6" />
+                {n.label}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -210,10 +224,10 @@ export default function CampanasPage() {
 function ProximamentePlaceholder({ red, onBack }: { red: { label: string; icon: string; iconClass: string }; onBack?: () => void }) {
   return (
     <div className="space-y-4">
-      {onBack && <button onClick={onBack} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold">← Campañas</button>}
-      <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-10 text-center">
+      {onBack && <button onClick={onBack} className="text-sm text-brand hover:text-brand font-semibold">← Campañas</button>}
+      <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-10 text-center">
         <div className={`w-16 h-16 rounded-2xl grid place-items-center text-3xl mx-auto ${red.iconClass}`}>{red.icon}</div>
-        <h1 className="text-2xl font-bold text-gray-900 mt-4">{red.label}</h1>
+        <h1 className="text-2xl font-extrabold text-brand tracking-tight mt-4">{red.label}</h1>
         <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
           Las campañas de {red.label} todavía están en construcción. Pronto vas a poder crearlas y revisarlas desde acá.
         </p>
@@ -251,9 +265,9 @@ function MailContent({ onBack }: { onBack?: () => void }) {
   return (
     <div className="space-y-4">
       <div>
-        {onBack && <button onClick={onBack} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold mb-1">← Campañas</button>}
+        {onBack && <button onClick={onBack} className="text-sm text-brand hover:text-brand font-semibold mb-1">← Campañas</button>}
         <div className="flex items-center gap-2">
-          <span className="w-9 h-9 rounded-lg bg-indigo-100 grid place-items-center text-xl">✉️</span>
+          <span className="w-9 h-9 rounded-lg bg-brand/10 grid place-items-center text-xl">✉️</span>
           <h2 className="text-xl font-bold text-gray-900">Mailing</h2>
         </div>
         <p className="text-sm text-gray-500 mt-0.5">Campañas de email a la base de veterinarios.</p>
@@ -261,14 +275,14 @@ function MailContent({ onBack }: { onBack?: () => void }) {
 
       {diag && <DiagBanner d={diag} />}
 
-      <div className="inline-flex gap-1 bg-gray-100 border border-gray-200 rounded-2xl p-1.5 shadow-sm overflow-x-auto">
+      <div className="inline-flex gap-1 bg-gray-100 border border-gray-300 rounded-2xl p-1.5 shadow-md overflow-x-auto">
         {TABS.map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
               tab === t
-                ? 'bg-indigo-600 text-white shadow-md ring-1 ring-indigo-700/10'
+                ? 'bg-brand text-white shadow-md ring-1 ring-brand/10'
                 : 'text-gray-600 hover:bg-white hover:text-gray-900'
             }`}
           >
@@ -519,19 +533,19 @@ function BasePanel() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 overflow-hidden">
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-100">
+      <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-300">
           <input
             type="text"
             value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
             placeholder="Buscar por nombre, email, clínica…"
-            className="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+            className="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
           />
           <select
             value={filtroCategoria}
             onChange={e => setFiltroCategoria(e.target.value)}
-            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:border-brand focus:outline-none"
           >
             <option value="todos">Todas las categorías</option>
             {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
@@ -539,7 +553,7 @@ function BasePanel() {
           <select
             value={filtroSuscrito}
             onChange={e => setFiltroSuscrito(e.target.value as 'todos' | 'TRUE' | 'FALSE')}
-            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:border-brand focus:outline-none"
           >
             <option value="todos">Suscripción: todos</option>
             <option value="TRUE">Solo suscritos</option>
@@ -547,21 +561,21 @@ function BasePanel() {
           </select>
           <button
             onClick={abrirNuevo}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg px-4 py-1.5 text-sm shadow-sm transition-colors"
+            className="bg-brand hover:bg-brand-dark text-white font-semibold rounded-lg px-4 py-1.5 text-sm shadow-md transition-colors"
           >
             + Agregar
           </button>
         </div>
 
         {selectedIds.size > 0 && (
-          <div className="bg-indigo-50 border-b border-indigo-200 px-4 py-2.5 flex flex-wrap items-center gap-3">
-            <span className="text-sm font-semibold text-indigo-900">
+          <div className="bg-brand/10 border-b border-brand/30 px-4 py-2.5 flex flex-wrap items-center gap-3">
+            <span className="text-sm font-semibold text-brand">
               {selectedIds.size} seleccionado{selectedIds.size === 1 ? '' : 's'}
             </span>
             <select
               value={bulkAction}
               onChange={e => { setBulkAction(e.target.value as typeof bulkAction); setBulkValue('') }}
-              className="border border-indigo-300 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="border border-brand/40 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"
             >
               <option value="">— Acción masiva —</option>
               <option value="set_categoria">Cambiar categoría</option>
@@ -570,14 +584,14 @@ function BasePanel() {
             </select>
             {bulkAction === 'set_categoria' && (
               <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
-                className="border border-indigo-300 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="border border-brand/40 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand">
                 <option value="">— a qué categoría —</option>
                 {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             )}
             {bulkAction === 'set_suscrito' && (
               <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
-                className="border border-indigo-300 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="border border-brand/40 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand">
                 <option value="">— suscribir o desuscribir —</option>
                 <option value="TRUE">Suscribir</option>
                 <option value="FALSE">Desuscribir</option>
@@ -586,13 +600,13 @@ function BasePanel() {
             <button
               onClick={ejecutarBulk}
               disabled={bulkExecuting || !bulkAction || (bulkAction !== 'delete' && !bulkValue)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg px-3 py-1 text-sm disabled:opacity-50"
+              className="bg-brand hover:bg-brand-dark text-white font-semibold rounded-lg px-3 py-1 text-sm disabled:opacity-50"
             >
               {bulkExecuting ? 'Aplicando…' : 'Aplicar'}
             </button>
             <button
               onClick={clearSelection}
-              className="text-xs text-indigo-700 hover:underline ml-auto"
+              className="text-xs text-brand hover:underline ml-auto"
             >
               Limpiar selección
             </button>
@@ -618,7 +632,7 @@ function BasePanel() {
                         if (e.target.checked) setSelectedIds(prev => { const n = new Set(prev); filtrados.forEach(v => n.add(v.id)); return n })
                         else setSelectedIds(prev => { const n = new Set(prev); filtrados.forEach(v => n.delete(v.id)); return n })
                       }}
-                      className="w-4 h-4 rounded text-indigo-600"
+                      className="w-4 h-4 rounded text-brand"
                       title="Seleccionar todos los visibles"
                     />
                   </th>
@@ -635,10 +649,10 @@ function BasePanel() {
                 {filtrados.map(v => {
                   const isSel = selectedIds.has(v.id)
                   return (
-                    <tr key={v.id} className={isSel ? 'bg-indigo-50' : 'hover:bg-gray-50'}>
+                    <tr key={v.id} className={isSel ? 'bg-brand/10' : 'hover:bg-gray-50'}>
                       <td className="px-2 py-2">
                         <input type="checkbox" checked={isSel} onChange={() => toggleSelectVet(v.id)}
-                          className="w-4 h-4 rounded text-indigo-600" />
+                          className="w-4 h-4 rounded text-brand" />
                       </td>
                       <td className="px-3 py-2 text-gray-900 font-medium">{v.nombre}</td>
                       <td className="px-3 py-2 text-gray-700">{v.email}</td>
@@ -647,7 +661,7 @@ function BasePanel() {
                       <td className="px-3 py-2">
                         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${
                           v.categoria === 'cliente' ? 'bg-emerald-100 text-emerald-800' :
-                          v.categoria === 'prospecto' ? 'bg-indigo-100 text-indigo-800' :
+                          v.categoria === 'prospecto' ? 'bg-brand/10 text-brand' :
                           v.categoria === 'inactivo' ? 'bg-gray-200 text-gray-700' :
                           'bg-yellow-100 text-yellow-800'
                         }`}>{v.categoria || '—'}</span>
@@ -688,7 +702,7 @@ function BasePanel() {
               <label className="text-xs font-semibold text-gray-700">Categoría</label>
               <select value={form.categoria}
                 onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
-                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                 {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -696,7 +710,7 @@ function BasePanel() {
           <div className="flex items-center gap-2">
             <input type="checkbox" id="suscrito" checked={form.suscrito === 'TRUE'}
               onChange={e => setForm(f => ({ ...f, suscrito: e.target.checked ? 'TRUE' : 'FALSE' }))}
-              className="w-4 h-4 rounded border-gray-400 text-indigo-600" />
+              className="w-4 h-4 rounded border-gray-400 text-brand" />
             <label htmlFor="suscrito" className="text-xs font-medium text-gray-700">Suscrito a campañas (si está desmarcado, no recibe mails)</label>
           </div>
           <div>
@@ -704,14 +718,14 @@ function BasePanel() {
             <textarea value={form.notas}
               onChange={e => setForm(f => ({ ...f, notas: e.target.value }))}
               rows={2}
-              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           {error && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{error}</div>}
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setModalOpen(false)} className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors">
               Cancelar
             </button>
-            <button type="submit" disabled={saving} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
+            <button type="submit" disabled={saving} className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
               {saving ? 'Guardando…' : (editando ? 'Guardar cambios' : 'Agregar')}
             </button>
           </div>
@@ -723,16 +737,16 @@ function BasePanel() {
 
 function StatBox({ label, value, accent, icon }: { label: string; value: number; accent?: 'green' | 'indigo' | 'emerald' | 'gray'; icon?: string }) {
   const color = accent === 'green' ? 'text-green-700' :
-                accent === 'indigo' ? 'text-indigo-700' :
+                accent === 'indigo' ? 'text-brand' :
                 accent === 'emerald' ? 'text-emerald-700' :
                 accent === 'gray' ? 'text-gray-600' :
                 'text-gray-900'
   const tint = accent === 'green' ? 'bg-green-100' :
-               accent === 'indigo' ? 'bg-indigo-100' :
+               accent === 'indigo' ? 'bg-brand/10' :
                accent === 'emerald' ? 'bg-emerald-100' :
                'bg-gray-100'
   return (
-    <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 px-4 py-3 flex items-center gap-3">
+    <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 px-4 py-3 flex items-center gap-3">
       {icon && <div className={`w-10 h-10 rounded-xl grid place-items-center text-xl shrink-0 ${tint}`}>{icon}</div>}
       <div className="min-w-0">
         <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">{label}</div>
@@ -743,7 +757,7 @@ function StatBox({ label, value, accent, icon }: { label: string; value: number;
 }
 
 const BAR_COLORS: Record<string, { bar: string; text: string }> = {
-  indigo:   { bar: 'bg-indigo-500',   text: 'text-indigo-700' },
+  indigo:   { bar: 'bg-brand',   text: 'text-brand' },
   emerald:  { bar: 'bg-emerald-500',  text: 'text-emerald-700' },
   green:    { bar: 'bg-green-500',    text: 'text-green-700' },
   gray:     { bar: 'bg-gray-400',     text: 'text-gray-600' },
@@ -767,7 +781,7 @@ function DistribucionPanel({ title, data, total, colorMap, maxRows }: {
   const otrosCount = restantes.reduce((sum, [, n]) => sum + n, 0)
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-4">
+    <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-4">
       <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">{title}</h3>
       {data.length === 0 ? (
         <p className="text-xs text-gray-400">Sin datos</p>
@@ -813,7 +827,7 @@ function Field({ label, value, onChange, type = 'text', required }: {
     <div>
       <label className="text-xs font-semibold text-gray-700">{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} required={required}
-        className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
     </div>
   )
 }
@@ -956,7 +970,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-sm text-gray-400">Cargando…</div>
         ) : campanasEnviadas.length === 0 ? (
@@ -978,7 +992,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                 <col className="w-[52px]" />{/* Hora */}
                 <col className="w-[120px]" />{/* Acciones */}
               </colgroup>
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50 border-b border-gray-300">
                 <tr className="text-[11px] text-gray-500 uppercase tracking-wider">
                   <th className="px-4 py-3 text-left font-semibold">Asunto</th>
                   <th className="px-2 py-3 text-center font-semibold">Estado</th>
@@ -1002,7 +1016,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                   const tasaClick = total > 0 ? Math.round(100 * clicks / total) : 0
                   const tasaRebote = total > 0 ? Math.round(100 * rebotes / total) : 0
                   return (
-                    <tr key={c.id} className="hover:bg-indigo-50/40 cursor-pointer transition-colors" onClick={() => abrirDetalle(c)}>
+                    <tr key={c.id} className="hover:bg-brand/10/40 cursor-pointer transition-colors" onClick={() => abrirDetalle(c)}>
                       <td className="px-4 py-2.5 text-gray-900 font-medium truncate">{c.asunto}</td>
                       <td className="px-2 py-2.5 text-center"><EstadoBadge estado={c.estado} /></td>
                       <td className="px-2 py-2.5 text-right text-gray-700 tabular-nums">{c.total_destinatarios || '0'}</td>
@@ -1025,21 +1039,21 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                         <div className="flex gap-1 justify-center">
                           {c.estado === 'enviando' && (
                             <>
-                              <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Reanudar envío a los que faltan">↻</button>
-                              <button onClick={() => cancelar(c)} className="bg-amber-600 hover:bg-amber-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Cancelar envío">✕</button>
+                              <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Reanudar envío a los que faltan">↻</button>
+                              <button onClick={() => cancelar(c)} className="bg-amber-600 hover:bg-amber-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Cancelar envío">✕</button>
                             </>
                           )}
                           {(c.estado === 'enviado' || c.estado === 'fallido' || c.estado === 'cancelado') && (
-                            <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Reanudar / reintentar fallidos">↻</button>
+                            <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Reanudar / reintentar fallidos">↻</button>
                           )}
                           {(c.estado === 'enviado' || c.estado === 'fallido' || c.estado === 'cancelado') && (
-                            <button onClick={() => duplicar(c)} className="bg-indigo-600 hover:bg-indigo-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Duplicar campaña">⧉</button>
+                            <button onClick={() => duplicar(c)} className="bg-brand hover:bg-brand-dark text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Duplicar campaña">⧉</button>
                           )}
                           {(c.estado === 'enviado' || c.estado === 'fallido') && (
-                            <button onClick={() => abrirDebug(c)} className="bg-gray-700 hover:bg-gray-800 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Ver diagnóstico de tracking">🔍</button>
+                            <button onClick={() => abrirDebug(c)} className="bg-gray-700 hover:bg-gray-800 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Ver diagnóstico de tracking">🔍</button>
                           )}
                           {c.estado !== 'enviando' && (
-                            <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-sm" title="Eliminar campaña">🗑</button>
+                            <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Eliminar campaña">🗑</button>
                           )}
                         </div>
                       </td>
@@ -1065,7 +1079,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
             {debugData.env && (
               <section>
                 <h3 className="text-sm font-bold text-gray-900 mb-2">Variables de entorno</h3>
-                <ul className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1 font-mono">
+                <ul className="bg-gray-50 border border-gray-300 rounded-lg p-3 space-y-1 font-mono">
                   <li>MAILING_DISABLE_OWN_TRACKING: <b className={debugData.env.own_tracking_disabled ? 'text-emerald-700' : 'text-amber-700'}>{String(debugData.env.own_tracking_disabled)}</b></li>
                   <li>MAILING_WEBHOOK_PERMISSIVE: <b className={debugData.env.webhook_permissive ? 'text-emerald-700' : 'text-amber-700'}>{String(debugData.env.webhook_permissive ?? false)}</b></li>
                   <li>PUBLIC_APP_URL: {debugData.env.public_app_url ?? '(vacío)'}</li>
@@ -1095,7 +1109,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
             {debugData.contadores_planilla && (
               <section>
                 <h3 className="text-sm font-bold text-gray-600 mb-2">Contadores en planilla (cacheados)</h3>
-                <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-x-auto text-gray-600">
+                <pre className="bg-gray-50 border border-gray-300 rounded-lg p-3 overflow-x-auto text-gray-600">
                   {JSON.stringify(debugData.contadores_planilla, null, 2)}
                 </pre>
                 <p className="text-[11px] text-gray-500 mt-1 italic">Los reales (verde) son la fuente de verdad. Estos pueden estar atrasados.</p>
@@ -1104,7 +1118,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
             {debugData.distribucion_logs && Object.keys(debugData.distribucion_logs).length > 0 && (
               <section>
                 <h3 className="text-sm font-bold text-gray-900 mb-2">Distribución de estados en logs</h3>
-                <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-x-auto">
+                <pre className="bg-gray-50 border border-gray-300 rounded-lg p-3 overflow-x-auto">
                   {JSON.stringify(debugData.distribucion_logs, null, 2)}
                 </pre>
               </section>
@@ -1112,7 +1126,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
             {debugData.interpretacion && debugData.interpretacion.length > 0 && (
               <section>
                 <h3 className="text-sm font-bold text-gray-900 mb-2">Interpretación</h3>
-                <ul className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 space-y-1">
+                <ul className="bg-brand/10 border border-brand/30 rounded-lg p-3 space-y-1">
                   {debugData.interpretacion.map((l, i) => (
                     <li key={i} className={l.startsWith('⚠') ? 'text-amber-800 font-semibold' : 'text-gray-700'}>{l}</li>
                   ))}
@@ -1145,7 +1159,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                   )
                 })()}
                 <h3 className="text-sm font-bold text-gray-900 mb-2">Logs ({debugData.logs.length})</h3>
-                <div className="border border-gray-200 rounded-lg overflow-hidden max-h-96 overflow-y-auto">
+                <div className="border border-gray-300 rounded-lg overflow-hidden max-h-96 overflow-y-auto">
                   <table className="w-full text-[11px]">
                     <thead className="bg-gray-100 sticky top-0">
                       <tr>
@@ -1181,7 +1195,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
           <div className="space-y-3">
             <MetricasCampana detalle={detalle} />
 
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div className="border border-gray-300 rounded-lg overflow-hidden">
               <div className="bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700">Preview HTML</div>
               {loadingDetalle ? (
                 <div className="p-8 text-center text-sm text-gray-400">Cargando…</div>
@@ -1190,7 +1204,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
               )}
             </div>
 
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div className="border border-gray-300 rounded-lg overflow-hidden">
               <div className="bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700">Destinatarios ({detalleLogs.length})</div>
               {loadingDetalle ? (
                 <div className="p-4 text-center text-sm text-gray-400">Cargando…</div>
@@ -1228,7 +1242,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
 
             <div className="flex gap-2">
               {(detalle.estado === 'enviado' || detalle.estado === 'fallido') && (
-                <button type="button" onClick={() => duplicar(detalle)} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold">
+                <button type="button" onClick={() => duplicar(detalle)} className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold">
                   Duplicar para nueva campaña
                 </button>
               )}
@@ -1291,7 +1305,7 @@ function MetricasCampana({ detalle }: { detalle: Campana }) {
     <div className="space-y-3">
       {/* Resumen alcance */}
       <div className="grid grid-cols-3 gap-2 text-xs">
-        <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+        <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-300">
           <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Alcance</div>
           <div className="text-2xl font-bold text-gray-900">{enviados}<span className="text-sm text-gray-400 font-normal"> / {total}</span></div>
           <div className="text-[10px] text-gray-500">enviados de {total} seleccionados</div>
@@ -1301,7 +1315,7 @@ function MetricasCampana({ detalle }: { detalle: Campana }) {
           <div className="text-2xl font-bold text-emerald-900">{aperturas}<span className="text-sm text-emerald-600 font-normal"> · {tasaApertura ?? '—'}%</span></div>
           <div className="text-[10px] text-emerald-700">aperturas (al menos una)</div>
         </div>
-        <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+        <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-300">
           <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">No leídos</div>
           <div className="text-2xl font-bold text-gray-700">{noLeidos}</div>
           <div className="text-[10px] text-gray-500">entregados sin apertura</div>
@@ -1309,7 +1323,7 @@ function MetricasCampana({ detalle }: { detalle: Campana }) {
       </div>
 
       {/* Barras de tasas */}
-      <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 space-y-2">
+      <div className="bg-white border border-gray-300 rounded-lg px-4 py-3 space-y-2">
         <MetricBar label="Entregados" count={entregados} total={enviados} pct={tasaEntrega} color="cyan" />
         <MetricBar label="Aperturas (leídos)" count={aperturas} total={enviados} pct={tasaApertura} color="emerald" />
         <MetricBar label="Clicks" count={clicks} total={enviados} pct={tasaClick} color="violet" />
@@ -1351,7 +1365,7 @@ function MetricBar({ label, count, total, pct, color }: {
 
 function DetMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-gray-50 rounded-lg px-2 py-1.5 border border-gray-200">
+    <div className="bg-gray-50 rounded-lg px-2 py-1.5 border border-gray-300">
       <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">{label}</div>
       <div className="text-base font-bold text-gray-900">{value}</div>
     </div>
@@ -1704,17 +1718,17 @@ function NuevaCampanaPanel({ initial, onCreada }: {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-9 gap-4">
-      <div className="lg:col-span-5 bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-5 space-y-4">
+      <div className="lg:col-span-5 bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-base font-bold text-gray-900">{draftId ? `Editando borrador N° ${draftId}` : 'Nueva campaña'}</h2>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setGenerarOpen(true)}
-              className="inline-flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white text-xs font-semibold rounded-lg px-3 py-1.5 shadow-sm transition-colors">
+              className="inline-flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-brand-dark hover:from-violet-700 hover:to-brand-dark text-white text-xs font-semibold rounded-lg px-3 py-1.5 shadow-md transition-colors">
               <span>✨</span> Generar con IA
             </button>
             {draftId && (
               <button type="button" onClick={nuevaCampana}
-                className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg px-3 py-1.5 shadow-sm transition-colors">
+                className="inline-flex items-center gap-1 bg-brand hover:bg-brand-dark text-white text-xs font-semibold rounded-lg px-3 py-1.5 shadow-md transition-colors">
                 <span>+</span> Empezar campaña nueva
               </button>
             )}
@@ -1729,12 +1743,12 @@ function NuevaCampanaPanel({ initial, onCreada }: {
           <label className="text-xs font-semibold text-gray-700">Destinatarios</label>
           <div className="mt-1 flex items-center gap-3">
             <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
-              className="border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="todos">Todas las categorías</option>
               {CATEGORIAS.map(c => <option key={c} value={c}>Solo {c}s</option>)}
             </select>
             <span className="text-sm text-gray-600">
-              <span className="font-semibold text-indigo-700">{destinatariosCount}</span> destinatario{destinatariosCount === 1 ? '' : 's'} suscrito{destinatariosCount === 1 ? '' : 's'} matchea{destinatariosCount === 1 ? '' : 'n'} este filtro.
+              <span className="font-semibold text-brand">{destinatariosCount}</span> destinatario{destinatariosCount === 1 ? '' : 's'} suscrito{destinatariosCount === 1 ? '' : 's'} matchea{destinatariosCount === 1 ? '' : 'n'} este filtro.
             </span>
           </div>
         </div>
@@ -1748,7 +1762,7 @@ function NuevaCampanaPanel({ initial, onCreada }: {
                 🖼 Insertar imagen del banco
               </button>
               <button type="button" onClick={() => fileRef.current?.click()}
-                className="inline-flex items-center gap-1 border-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors">
+                className="inline-flex items-center gap-1 border-2 border-brand/30 bg-brand/10 text-brand hover:bg-brand/10 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors">
                 📁 Cargar desde archivo (.html)
               </button>
             </div>
@@ -1757,7 +1771,7 @@ function NuevaCampanaPanel({ initial, onCreada }: {
           <textarea ref={htmlRef} value={form.html} onChange={e => setForm(f => ({ ...f, html: e.target.value }))}
             rows={14}
             placeholder="<html><body>Hola {{primer_nombre}}, …</body></html>"
-            className="w-full font-mono text-xs border-2 border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="w-full font-mono text-xs border-2 border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand" />
           <p className="text-[11px] text-gray-500 mt-1">
             Variables disponibles: {VARIABLES.map(v => <code key={v.key} className="text-[10px] bg-gray-100 px-1 py-0.5 rounded mr-1">{`{{${v.key}}}`}</code>)}
           </p>
@@ -1776,20 +1790,20 @@ function NuevaCampanaPanel({ initial, onCreada }: {
             Enviar test
           </button>
           <button type="button" onClick={enviarCampana} disabled={enviando || destinatariosCount === 0 || !form.asunto.trim() || !form.html.trim()}
-            className="ml-auto bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">
+            className="ml-auto bg-brand hover:bg-brand-dark text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">
             {enviando ? `Enviando…` : `Enviar a ${destinatariosCount}`}
           </button>
         </div>
       </div>
 
-      <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-3 flex flex-col">
+      <div className="lg:col-span-4 bg-white rounded-2xl shadow-md border-2 border-gray-300 p-3 flex flex-col">
         <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center justify-between">
           <span>Preview (con vet de muestra)</span>
           <span className="text-[10px] font-normal text-gray-400">así lo va a ver el destinatario</span>
         </div>
         <iframe
           srcDoc={previewHtml ? proxyImgs(previewHtml) : '<p style="font-family:sans-serif;color:#999;padding:1rem">Escribe HTML para ver el preview.</p>'}
-          className="w-full h-[660px] border border-gray-200 rounded bg-white"
+          className="w-full h-[660px] border border-gray-300 rounded bg-white"
           sandbox="allow-same-origin"
           referrerPolicy="no-referrer"
         />
@@ -1807,7 +1821,7 @@ function NuevaCampanaPanel({ initial, onCreada }: {
             type="button"
             onClick={editarConIA}
             disabled={iaEditando || !iaComentario.trim() || !form.html.trim()}
-            className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-lg py-1.5 text-xs font-semibold shadow-sm disabled:opacity-50"
+            className="w-full bg-gradient-to-r from-violet-600 to-brand-dark hover:from-violet-700 hover:to-brand-dark text-white rounded-lg py-1.5 text-xs font-semibold shadow-md disabled:opacity-50"
           >
             {iaEditando ? 'Aplicando cambios… (puede tardar)' : 'Aplicar cambios al correo'}
           </button>
@@ -1815,8 +1829,8 @@ function NuevaCampanaPanel({ initial, onCreada }: {
       </div>
 
       {borradores.length > 0 && (
-        <div className="lg:col-span-9 bg-white rounded-2xl shadow-sm border-2 border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+        <div className="lg:col-span-9 bg-white rounded-2xl shadow-md border-2 border-gray-300 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-300 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-900">Borradores guardados ({borradores.length})</h3>
             <span className="text-xs text-gray-500">Click en una fila para cargar y editar</span>
           </div>
@@ -1826,12 +1840,12 @@ function NuevaCampanaPanel({ initial, onCreada }: {
               return (
                 <li key={b.id}
                   onClick={() => !isActive && cargarBorrador(b)}
-                  className={`px-4 py-2.5 flex items-center gap-3 ${isActive ? 'bg-indigo-50' : 'hover:bg-gray-50 cursor-pointer'}`}>
+                  className={`px-4 py-2.5 flex items-center gap-3 ${isActive ? 'bg-brand/10' : 'hover:bg-gray-50 cursor-pointer'}`}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm text-gray-900 truncate">{b.asunto || '(sin asunto)'}</span>
                       <span className="text-[10px] uppercase font-bold bg-gray-100 text-gray-700 rounded px-1.5 py-0.5">N° {b.id}</span>
-                      {isActive && <span className="text-[10px] uppercase font-bold bg-indigo-600 text-white rounded px-1.5 py-0.5">Editando</span>}
+                      {isActive && <span className="text-[10px] uppercase font-bold bg-brand text-white rounded px-1.5 py-0.5">Editando</span>}
                     </div>
                     {b.preview_text && <div className="text-xs text-gray-500 truncate mt-0.5">{b.preview_text}</div>}
                     <div className="text-[10px] text-gray-400 mt-0.5">
@@ -1845,7 +1859,7 @@ function NuevaCampanaPanel({ initial, onCreada }: {
                         type="button"
                         onClick={e => { e.stopPropagation(); cargarBorrador(b) }}
                         disabled={loadingBorrador === b.id}
-                        className="bg-indigo-500 hover:bg-indigo-600 text-white px-2.5 py-1 rounded text-xs font-medium disabled:opacity-50"
+                        className="bg-brand hover:bg-brand-dark text-white px-2.5 py-1 rounded text-xs font-medium disabled:opacity-50"
                       >
                         {loadingBorrador === b.id ? 'Cargando…' : 'Cargar'}
                       </button>
@@ -1887,7 +1901,7 @@ function NuevaCampanaPanel({ initial, onCreada }: {
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => setTestOpen(false)} className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50">Cancelar</button>
             <button type="button" onClick={confirmarTest} disabled={testSending}
-              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50">
+              className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50">
               {testSending ? 'Enviando…' : 'Enviar test'}
             </button>
           </div>
@@ -1998,14 +2012,14 @@ function GenerarCampanaModal({ open, onClose, categoriaInicial, onUsar }: {
           <label className="text-xs font-semibold text-gray-700">¿De qué se trata la campaña? *</label>
           <textarea value={instruccion} onChange={e => setInstruccion(e.target.value)} rows={4}
             placeholder="Ej: invitar a las clínicas de la zona oriente a sumarse al convenio, destacando la entrega en 4 días hábiles, el retiro desde la clínica y la trazabilidad total. Cerrar con un botón para coordinar una reunión."
-            className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-xs font-semibold text-gray-700">Grupo destinatario</label>
             <select value={categoria} onChange={e => setCategoria(e.target.value)}
-              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="todos">Todas las categorías</option>
               {CATEGORIAS.map(c => <option key={c} value={c}>Solo {c}s</option>)}
             </select>
@@ -2013,14 +2027,14 @@ function GenerarCampanaModal({ open, onClose, categoriaInicial, onUsar }: {
           <div>
             <label className="text-xs font-semibold text-gray-700">Formato</label>
             <select value={formato} onChange={e => setFormato(e.target.value)}
-              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               {FORMATOS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
             </select>
           </div>
           <div>
             <label className="text-xs font-semibold text-gray-700">Tono</label>
             <select value={tono} onChange={e => setTono(e.target.value)}
-              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               {TONOS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
@@ -2030,13 +2044,13 @@ function GenerarCampanaModal({ open, onClose, categoriaInicial, onUsar }: {
 
         {!result && (
           <button type="button" onClick={generarNueva} disabled={loading || !instruccion.trim()}
-            className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-lg py-2.5 text-sm font-semibold shadow-sm disabled:opacity-50">
+            className="w-full bg-gradient-to-r from-violet-600 to-brand-dark hover:from-violet-700 hover:to-brand-dark text-white rounded-lg py-2.5 text-sm font-semibold shadow-md disabled:opacity-50">
             {loading ? 'Generando… (las imágenes pueden tardar hasta ~1 min)' : '✨ Generar campaña'}
           </button>
         )}
 
         {result && (
-          <div className="space-y-3 border-t border-gray-200 pt-3">
+          <div className="space-y-3 border-t border-gray-300 pt-3">
             <div className="text-sm space-y-0.5">
               <div className="text-gray-900"><span className="font-semibold">Asunto:</span> {result.asunto}</div>
               <div className="text-gray-600"><span className="font-semibold">Preview:</span> {result.preview_text}</div>
@@ -2055,26 +2069,26 @@ function GenerarCampanaModal({ open, onClose, categoriaInicial, onUsar }: {
               </div>
             )}
 
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div className="border border-gray-300 rounded-lg overflow-hidden">
               <div className="bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 flex items-center justify-between">
                 <span>Vista previa (con vet de muestra)</span>
-                {loading && <span className="text-[11px] font-normal text-indigo-600">{accion === 'ajustar' ? 'Ajustando…' : 'Generando otra versión…'}</span>}
+                {loading && <span className="text-[11px] font-normal text-brand">{accion === 'ajustar' ? 'Ajustando…' : 'Generando otra versión…'}</span>}
               </div>
               <iframe srcDoc={proxyImgs(previewHtml)} className="w-full h-[420px] bg-white" sandbox="allow-same-origin" referrerPolicy="no-referrer" />
             </div>
 
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+            <div className="bg-gray-50 border border-gray-300 rounded-lg p-3 space-y-2">
               <label className="text-xs font-semibold text-gray-700">¿Quieres ajustar algo? Escribe un comentario</label>
               <textarea value={comentario} onChange={e => setComentario(e.target.value)} rows={2}
                 placeholder="Ej: hazlo más corto, agrega un botón para agendar reunión, tono más formal, cambia la foto principal por una de un gato…"
-                className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               <div className="flex gap-2 flex-wrap">
                 <button type="button" onClick={ajustar} disabled={loading || !comentario.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50">
+                  className="bg-brand hover:bg-brand-dark text-white rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50">
                   {loading && accion === 'ajustar' ? 'Ajustando…' : 'Ajustar con comentario'}
                 </button>
                 <button type="button" onClick={variar} disabled={loading}
-                  className="border-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50">
+                  className="border-2 border-brand/30 bg-brand/10 text-brand hover:bg-brand/10 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50">
                   {loading && accion === 'variar' ? 'Generando…' : '↻ Generar otra versión'}
                 </button>
                 <button type="button" onClick={reiniciar} disabled={loading}
@@ -2089,7 +2103,7 @@ function GenerarCampanaModal({ open, onClose, categoriaInicial, onUsar }: {
                 Cancelar
               </button>
               <button type="button" onClick={() => onUsar(result, categoria)} disabled={loading}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md disabled:opacity-50">
+                className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold shadow-md disabled:opacity-50">
                 Usar esta campaña
               </button>
             </div>
@@ -2148,8 +2162,8 @@ function ImagenPickerModal({ open, onClose, onPick }: {
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar por descripción o tag…"
-            className="flex-1 border-2 border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          <button type="button" onClick={cargar} className="text-xs text-indigo-600 hover:underline">Actualizar</button>
+            className="flex-1 border-2 border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+          <button type="button" onClick={cargar} className="text-xs text-brand hover:underline">Actualizar</button>
         </div>
         {loading ? (
           <p className="text-sm text-gray-400 text-center py-6">Cargando…</p>
@@ -2161,7 +2175,7 @@ function ImagenPickerModal({ open, onClose, onPick }: {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
             {filtrados.map(img => (
               <button key={img.id} type="button" onClick={() => onPick(img)}
-                className="group text-left border border-gray-200 rounded-lg overflow-hidden hover:ring-2 hover:ring-indigo-500 transition">
+                className="group text-left border border-gray-300 rounded-lg overflow-hidden hover:ring-2 hover:ring-brand transition">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={img.url} alt={img.alt} className="w-full h-28 object-cover bg-gray-100" />
                 <div className="px-2 py-1.5">
@@ -2204,7 +2218,7 @@ function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete }: {
 
   const esGenerada = img.origen !== 'upload'
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden flex flex-col bg-white">
+    <div className="border border-gray-300 rounded-lg overflow-hidden flex flex-col bg-white">
       {/* Foto completa (sin recortar) sobre fondo neutro + badge de origen. */}
       <div className="relative h-28 bg-gray-50 flex items-center justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2222,11 +2236,11 @@ function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete }: {
                 else if (e.key === 'Escape') { setTexto(img.descripcion || img.alt || ''); setEditando(false) }
               }}
               placeholder="Ej: Ánfora estándar"
-              className="w-full text-[11px] border border-indigo-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+              className="w-full text-[11px] border border-brand/40 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-brand" />
           ) : (
             <button type="button" title="Clic para editar el nombre"
               onClick={() => { setTexto(img.descripcion || img.alt || ''); setEditando(true) }}
-              className="text-left text-[11px] text-gray-700 line-clamp-2 hover:text-indigo-600 w-full flex items-start gap-1">
+              className="text-left text-[11px] text-gray-700 line-clamp-2 hover:text-brand w-full flex items-start gap-1">
               <span className="line-clamp-2">{img.descripcion || img.alt || '(sin nombre — clic para editar)'}</span>
               <span className="text-gray-300 shrink-0">✏️</span>
             </button>
@@ -2235,7 +2249,7 @@ function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete }: {
         <div className="flex items-center flex-wrap gap-1.5 gap-y-1">
           <select value={(GRUPOS as readonly string[]).includes(img.grupo) ? img.grupo : ''}
             onChange={e => onGrupo(img, e.target.value)} title="Grupo (etiqueta)"
-            className="text-[10px] border border-gray-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            className="text-[10px] border border-gray-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand">
             <option value="">sin grupo</option>
             {GRUPOS.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
@@ -2248,7 +2262,7 @@ function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete }: {
             WhatsApp
           </label>
           <div className="ml-auto flex items-center gap-1">
-            <button type="button" onClick={() => onCopy(img.url)} title="Copiar URL" className="text-gray-500 hover:text-indigo-600 text-xs">⧉</button>
+            <button type="button" onClick={() => onCopy(img.url)} title="Copiar URL" className="text-gray-500 hover:text-brand text-xs">⧉</button>
             <button type="button" onClick={() => onDelete(img)} title="Eliminar" className="text-gray-500 hover:text-red-600 text-xs">🗑</button>
           </div>
         </div>
@@ -2386,7 +2400,7 @@ function ImagenesPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-5 space-y-4">
+      <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
         <div>
           <h2 className="text-base font-bold text-gray-900">Banco de imágenes</h2>
           <p className="text-sm text-gray-500">Imágenes fotorrealistas reutilizables. El generador de campañas las recicla automáticamente cuando calzan con el contexto. Asigna un grupo a cada una para organizarlas.</p>
@@ -2397,18 +2411,18 @@ function ImagenesPanel() {
           <label className="text-xs font-semibold text-gray-700">Generar una imagen nueva (Nano Banana Pro)</label>
           <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2}
             placeholder="Ej: una mujer acariciando a su perro mayor en un living luminoso, luz natural, momento cálido y sereno."
-            className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <select value={aspect} onChange={e => setAspect(e.target.value)} title="Relación de aspecto"
-              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               {ASPECTOS.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
             <select value={genGrupo} onChange={e => setGenGrupo(e.target.value)} title="Grupo"
-              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               {GRUPOS_GEN.map(g => <option key={g} value={g}>{g}</option>)}
             </select>
             <button type="button" onClick={generar} disabled={generando || !prompt.trim()}
-              className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-lg px-4 py-1.5 text-sm font-semibold shadow-sm disabled:opacity-50">
+              className="bg-gradient-to-r from-violet-600 to-brand-dark hover:from-violet-700 hover:to-brand-dark text-white rounded-lg px-4 py-1.5 text-sm font-semibold shadow-md disabled:opacity-50">
               {generando ? 'Generando… (puede tardar)' : '✨ Generar imagen'}
             </button>
           </div>
@@ -2416,12 +2430,12 @@ function ImagenesPanel() {
         </div>
 
         {/* Subir propia */}
-        <div className="border-t border-gray-100 pt-3">
+        <div className="border-t border-gray-300 pt-3">
           <label className="text-xs font-semibold text-gray-700">Subir una imagen propia (ej. fotos reales de las instalaciones)</label>
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <span className="text-xs text-gray-500">Grupo:</span>
             <select value={upGrupo} onChange={e => setUpGrupo(e.target.value)} title="Grupo de la imagen a subir"
-              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               {GRUPOS.map(g => <option key={g} value={g}>{g}</option>)}
             </select>
             <button type="button" onClick={() => fileRef.current?.click()} disabled={subiendo}
@@ -2438,17 +2452,17 @@ function ImagenesPanel() {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-8 text-center text-sm text-gray-400">Cargando…</div>
+        <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-8 text-center text-sm text-gray-400">Cargando…</div>
       ) : imgs.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 p-8 text-center text-sm text-gray-400">Sin imágenes todavía. Genera la primera arriba o sube una propia.</div>
+        <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-8 text-center text-sm text-gray-400">Sin imágenes todavía. Genera la primera arriba o sube una propia.</div>
       ) : (
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <p className="text-xs text-gray-400">{imgs.length} imagen{imgs.length === 1 ? '' : 'es'} · agrupadas por etiqueta</p>
-            <button type="button" onClick={cargar} className="text-xs text-indigo-600 hover:underline">Actualizar</button>
+            <button type="button" onClick={cargar} className="text-xs text-brand hover:underline">Actualizar</button>
           </div>
           {grupos.map(g => (
-            <details key={g.key} open className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 group">
+            <details key={g.key} open className="bg-white rounded-2xl shadow-md border-2 border-gray-300 group">
               <summary className="cursor-pointer select-none px-4 py-3 flex items-center gap-2 list-none [&::-webkit-details-marker]:hidden">
                 <span className="text-gray-400 text-xs transition-transform group-open:rotate-90">▶</span>
                 <span className="text-sm font-semibold text-gray-900">{g.label}</span>

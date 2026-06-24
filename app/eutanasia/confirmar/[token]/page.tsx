@@ -51,7 +51,7 @@ export default function ConfirmarPage() {
           <p className="text-[11px] uppercase tracking-widest opacity-80">Alma Animal · Convenio Eutanasias</p>
           <h1 className="text-xl font-bold mt-1">Confirmación del servicio</h1>
         </div>
-        <div className="bg-white border border-gray-200 rounded-b-2xl p-6 shadow-sm text-center">
+        <div className="bg-white border border-gray-300 rounded-b-2xl p-6 shadow-md text-center">
           {!token && (
             <>
               <p className="text-5xl mb-3">⚠</p>

@@ -186,14 +186,14 @@ export default function MensajesView() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-4 h-[calc(100vh-180px)]">
       {/* Lista — en móvil se oculta cuando hay una conversación abierta */}
-      <div className={`bg-white rounded-xl border border-gray-100 shadow-sm flex-col overflow-hidden ${sel !== null ? 'hidden md:flex' : 'flex'}`}>
-        <div className="p-3 border-b border-gray-100 space-y-2">
+      <div className={`bg-white rounded-xl border border-gray-300 shadow-md flex-col overflow-hidden ${sel !== null ? 'hidden md:flex' : 'flex'}`}>
+        <div className="p-3 border-b border-gray-300 space-y-2">
           <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar por nombre o teléfono…"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           <div className="flex gap-1 text-xs">
             {(['abierta', 'cerrada', ''] as const).map(s => (
               <button key={s || 'todas'} onClick={() => setEstado(s)}
-                className={`px-2.5 py-1 rounded-md font-medium ${estado === s ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                className={`px-2.5 py-1 rounded-md font-medium ${estado === s ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
                 {s === '' ? 'Todas' : s === 'abierta' ? 'Abiertas' : 'Cerradas'}
               </button>
             ))}
@@ -205,7 +205,7 @@ export default function MensajesView() {
             : convs.length === 0 ? <p className="p-4 text-sm text-gray-400">Sin conversaciones</p>
             : convs.map(c => (
               <button key={c.id} onClick={() => abrir(c.id)}
-                className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 ${sel === c.id ? 'bg-indigo-50' : ''}`}>
+                className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 ${sel === c.id ? 'bg-brand/10' : ''}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-sm text-gray-900 truncate">{c.contacto?.nombre || c.contacto?.telefono || 'Contacto'}</span>
                   <span className={`text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${CANAL_CLS[c.canal]}`}>{CANAL_LABEL[c.canal]}</span>
@@ -225,12 +225,12 @@ export default function MensajesView() {
       </div>
 
       {/* Conversación — en móvil ocupa toda la pantalla; en desktop, panel derecho */}
-      <div className={`bg-white rounded-xl border border-gray-100 shadow-sm flex-col overflow-hidden ${sel !== null ? 'flex' : 'hidden md:flex'}`}>
+      <div className={`bg-white rounded-xl border border-gray-300 shadow-md flex-col overflow-hidden ${sel !== null ? 'flex' : 'hidden md:flex'}`}>
         {!conv ? (
           <div className="flex-1 flex items-center justify-center text-sm text-gray-400">Selecciona una conversación</div>
         ) : (
           <>
-            <div className="p-3 border-b border-gray-100">
+            <div className="p-3 border-b border-gray-300">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <button onClick={() => { setSel(null); setConv(null); setMsgs([]) }}
@@ -268,7 +268,7 @@ export default function MensajesView() {
             <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50">
               {msgs.map(m => (
                 <div key={m.id} className={`flex ${m.direccion === 'saliente' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direccion === 'saliente' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-800'}`}>
+                  <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direccion === 'saliente' ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-800'}`}>
                     {m.media_url ? (
                       m.tipo === 'imagen' ? (
                         <a href={m.media_url} target="_blank" rel="noreferrer">
@@ -284,7 +284,7 @@ export default function MensajesView() {
                       )
                     ) : (m.tipo !== 'texto' && <span className="text-[10px] opacity-70 italic">[{m.tipo}]</span>)}
                     {m.cuerpo ? <div className={m.media_url ? 'mt-1' : ''}>{m.cuerpo}</div> : null}
-                    <div className={`text-[9px] mt-0.5 ${m.direccion === 'saliente' ? 'text-indigo-200' : 'text-gray-400'}`}>{fecha(m.ts)}{m.enviado_por === 'agente' ? ' · 🤖' : ''}{m.estado ? ` · ${m.estado}` : ''}</div>
+                    <div className={`text-[9px] mt-0.5 ${m.direccion === 'saliente' ? 'text-white/60' : 'text-gray-400'}`}>{fecha(m.ts)}{m.enviado_por === 'agente' ? ' · 🤖' : ''}{m.estado ? ` · ${m.estado}` : ''}</div>
                   </div>
                 </div>
               ))}
@@ -292,21 +292,21 @@ export default function MensajesView() {
               <div ref={bottomRef} />
             </div>
 
-            <div className="p-3 border-t border-gray-100">
+            <div className="p-3 border-t border-gray-300">
               <div className="flex gap-2 items-center">
                 <input ref={fileRef} type="file" className="hidden"
                   accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
                   onChange={e => { const f = e.target.files?.[0]; if (f) enviarArchivo(f); e.target.value = '' }} />
                 <button onClick={() => fileRef.current?.click()} disabled={subiendo || enviando}
                   title="Adjuntar foto, video o documento (máx ~4 MB)"
-                  className="shrink-0 w-9 h-9 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center text-2xl leading-none font-light">
+                  className="shrink-0 w-9 h-9 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center text-2xl leading-none font-light">
                   {subiendo ? '…' : '+'}
                 </button>
                 <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }}
                   placeholder="Escribe un mensaje…"
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 <button onClick={enviar} disabled={enviando || subiendo || !texto.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                  className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
                   {enviando ? '…' : 'Enviar'}
                 </button>
               </div>

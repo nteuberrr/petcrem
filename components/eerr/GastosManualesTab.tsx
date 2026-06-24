@@ -136,7 +136,7 @@ export default function GastosManualesTab() {
   return (
     <div className="space-y-4">
       {/* Alta manual */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="bg-white rounded-xl border border-gray-300 p-4">
         <h3 className="font-semibold text-gray-800 mb-3 text-sm">Nuevo gasto manual <span className="text-gray-400 font-normal">(monto neto, sin IVA)</span></h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <select value={form.tipo_asignacion} onChange={e => setForm(f => ({ ...f, tipo_asignacion: e.target.value, partida_id: '' }))} className="border border-gray-300 rounded px-2 py-2 text-sm">
@@ -151,13 +151,13 @@ export default function GastosManualesTab() {
           <input value={form.monto} onChange={e => setForm(f => ({ ...f, monto: e.target.value.replace(/[^\d]/g, '') }))} inputMode="numeric" placeholder="Monto neto" className="border border-gray-300 rounded px-2 py-2 text-sm" />
           <div className="flex gap-2">
             <input type="date" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} className="border border-gray-300 rounded px-2 py-2 text-sm flex-1" />
-            <button onClick={agregar} className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 shrink-0">Agregar</button>
+            <button onClick={agregar} className="bg-brand text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark shrink-0">Agregar</button>
           </div>
         </div>
       </div>
 
       {/* Filtros + buscar */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="bg-white rounded-xl border border-gray-300 p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Buscar</label>
@@ -205,15 +205,15 @@ export default function GastosManualesTab() {
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</p>}
 
       {sel.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
-          <span className="text-sm text-indigo-800 font-medium">{sel.size} seleccionado(s)</span>
-          <button onClick={() => setBulk(true)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700">Asignar a una partida</button>
+        <div className="flex flex-wrap items-center gap-3 bg-brand/10 border border-brand/30 rounded-lg px-4 py-2.5">
+          <span className="text-sm text-brand font-medium">{sel.size} seleccionado(s)</span>
+          <button onClick={() => setBulk(true)} className="bg-brand text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-brand-dark">Asignar a una partida</button>
           <button onClick={() => setSel(new Set())} className="text-sm text-gray-500 hover:text-gray-700">Limpiar selección</button>
         </div>
       )}
 
       {/* Tabla unificada */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+      <div className="bg-white rounded-xl border border-gray-300 overflow-x-auto">
         <table className="w-full text-sm min-w-[760px]">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
@@ -244,7 +244,7 @@ export default function GastosManualesTab() {
                 </td>
                 <td className="px-3 py-2 text-right text-gray-800 tabular-nums whitespace-nowrap">{fmtPrecio(r.monto)}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
-                  <button onClick={() => setEdit(r)} className="border border-gray-200 text-gray-600 hover:bg-gray-50 px-2 py-1 rounded-lg text-xs font-medium">{r.partida_id ? 'Editar' : 'Asignar'}</button>
+                  <button onClick={() => setEdit(r)} className="border border-gray-300 text-gray-600 hover:bg-gray-50 px-2 py-1 rounded-lg text-xs font-medium">{r.partida_id ? 'Editar' : 'Asignar'}</button>
                   {r.origen === 'manual' && <button onClick={() => eliminar(r.id)} className="ml-1 text-xs text-gray-300 hover:text-red-600 px-1">Eliminar</button>}
                 </td>
               </tr>
@@ -253,7 +253,7 @@ export default function GastosManualesTab() {
           </tbody>
           {sorted.length > 0 && (
             <tfoot>
-              <tr className="border-t border-gray-200 bg-gray-50 font-medium text-gray-700">
+              <tr className="border-t border-gray-300 bg-gray-50 font-medium text-gray-700">
                 <td colSpan={6} className="px-3 py-2 text-right text-xs uppercase text-gray-500">Total ({sorted.length})</td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmtPrecio(totalFiltrado)}</td>
                 <td></td>
@@ -299,7 +299,7 @@ function EditarModal({ row, partidas, onClose, onSaved }: { row: URow; partidas:
         <label className="block text-xs text-gray-500 mb-1">¿Costo o gasto?</label>
         <div className="flex gap-2 mb-4">
           {(['costo', 'gasto'] as const).map(t => (
-            <button key={t} onClick={() => { setTipo(t); setPartida('') }} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tipo === t ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>{TIPO_LABEL[t]}</button>
+            <button key={t} onClick={() => { setTipo(t); setPartida('') }} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tipo === t ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600'}`}>{TIPO_LABEL[t]}</button>
           ))}
         </div>
 
@@ -312,7 +312,7 @@ function EditarModal({ row, partidas, onClose, onSaved }: { row: URow; partidas:
         {err && <p className="text-sm text-red-700 mb-3">{err}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="text-sm text-gray-500 px-3 py-2">Cancelar</button>
-          <button onClick={guardar} disabled={saving} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
+          <button onClick={guardar} disabled={saving} className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button>
         </div>
       </div>
     </div>
@@ -353,7 +353,7 @@ function BulkModal({ rows, partidas, onClose, onSaved }: { rows: URow[]; partida
         <label className="block text-xs text-gray-500 mb-1">¿Costo o gasto?</label>
         <div className="flex gap-2 mb-4">
           {(['costo', 'gasto'] as const).map(t => (
-            <button key={t} onClick={() => { setTipo(t); setPartida('') }} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tipo === t ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>{TIPO_LABEL[t]}</button>
+            <button key={t} onClick={() => { setTipo(t); setPartida('') }} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tipo === t ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600'}`}>{TIPO_LABEL[t]}</button>
           ))}
         </div>
 
@@ -366,7 +366,7 @@ function BulkModal({ rows, partidas, onClose, onSaved }: { rows: URow[]; partida
         {err && <p className="text-sm text-red-700 mb-3">{err}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="text-sm text-gray-500 px-3 py-2">Cancelar</button>
-          <button onClick={guardar} disabled={saving} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Guardando…' : 'Asignar'}</button>
+          <button onClick={guardar} disabled={saving} className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50">{saving ? 'Guardando…' : 'Asignar'}</button>
         </div>
       </div>
     </div>

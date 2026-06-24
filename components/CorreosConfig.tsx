@@ -243,7 +243,7 @@ export default function CorreosConfig() {
           <button
             onClick={enviarTodos}
             disabled={enviandoTodos || !seguimiento || correos.length === 0}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-sm font-semibold shadow-sm"
+            className="bg-brand hover:bg-brand-dark disabled:opacity-50 text-white px-3 py-2 rounded-lg text-sm font-semibold shadow-md"
             title={!seguimiento ? 'Configura el correo de seguimiento primero' : `Enviar una copia de los ${correos.length} correos a ${seguimiento}`}
           >
             {enviandoTodos ? '⌛ Enviando…' : `📨 Enviar todos (${correos.length})`}
@@ -255,8 +255,8 @@ export default function CorreosConfig() {
         {/* Lista agrupada por módulo */}
         <div className="space-y-4">
           {grupos.map(([modulo, items]) => (
-            <div key={modulo} className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
-              <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
+            <div key={modulo} className="bg-white rounded-xl border-2 border-gray-300 overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50 border-b border-gray-300">
                 <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">{modulo}</p>
               </div>
               <div className="divide-y divide-gray-100">
@@ -267,10 +267,10 @@ export default function CorreosConfig() {
                     <button
                       key={c.key}
                       onClick={() => setSel(c.key)}
-                      className={`w-full text-left px-3 py-2.5 transition-colors ${activo ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
+                      className={`w-full text-left px-3 py-2.5 transition-colors ${activo ? 'bg-brand/10' : 'hover:bg-gray-50'}`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`text-sm font-medium ${activo ? 'text-indigo-800' : 'text-gray-800'}`}>{c.titulo}</span>
+                        <span className={`text-sm font-medium ${activo ? 'text-brand' : 'text-gray-800'}`}>{c.titulo}</span>
                         <span className="flex items-center gap-1.5 shrink-0">
                           <span
                             title={copia ? 'Recibes copia de este correo' : 'No recibes copia de este correo'}
@@ -289,8 +289,8 @@ export default function CorreosConfig() {
         </div>
 
         {/* Panel de previsualización */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden flex flex-col min-h-[520px]">
-          <div className="px-4 py-3 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
+        <div className="bg-white rounded-xl border-2 border-gray-300 overflow-hidden flex flex-col min-h-[520px]">
+          <div className="px-4 py-3 border-b border-gray-300 flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-gray-900 truncate">{seleccionado?.titulo ?? 'Selecciona un correo'}</p>
               {subject && <p className="text-xs text-gray-500 truncate">Asunto: {subject}</p>}
@@ -306,7 +306,7 @@ export default function CorreosConfig() {
                     checked={copiaSel}
                     onChange={() => toggleSeguimiento(sel)}
                     disabled={savingSeg}
-                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand"
                   />
                   Recibir copia
                 </label>
@@ -314,7 +314,7 @@ export default function CorreosConfig() {
               <button
                 onClick={enviarPrueba}
                 disabled={enviando || !sel || !seguimiento}
-                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm"
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md"
                 title={!seguimiento ? 'Configura el correo de seguimiento primero' : `Enviar prueba a ${seguimiento}`}
               >
                 {enviando ? '⌛ Enviando…' : '📧 Enviar prueba'}
@@ -341,7 +341,7 @@ export default function CorreosConfig() {
               <iframe
                 title="preview-correo"
                 srcDoc={html}
-                className="w-full h-full min-h-[440px] rounded-lg border border-gray-200 bg-white"
+                className="w-full h-full min-h-[440px] rounded-lg border border-gray-300 bg-white"
               />
             ) : (
               <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sin vista previa.</div>
@@ -380,7 +380,7 @@ export default function CorreosConfig() {
             />
           </div>
           <button onClick={buscarLog} disabled={logLoading}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm">
+            className="bg-brand hover:bg-brand-dark disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md">
             {logLoading ? '⌛' : '🔍'} Buscar
           </button>
           {(logDesde || logHasta || logQ) && (
@@ -392,11 +392,11 @@ export default function CorreosConfig() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border-2 border-gray-300 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-sm">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <tr className="bg-gray-50 border-b border-gray-300 text-left text-[11px] uppercase tracking-wide text-gray-500">
                   <th className="px-3 py-2 font-semibold">Fecha</th>
                   <th className="px-3 py-2 font-semibold">Correo</th>
                   <th className="px-3 py-2 font-semibold">Destinatario</th>
@@ -423,7 +423,7 @@ export default function CorreosConfig() {
                       <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${estadoBadge(row.estado)}`}>{row.estado || 'enviado'}</span>
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <button onClick={() => ver(row)} className="text-indigo-600 hover:text-indigo-800 font-semibold text-xs">Ver</button>
+                      <button onClick={() => ver(row)} className="text-brand hover:text-brand font-semibold text-xs">Ver</button>
                     </td>
                   </tr>
                 ))}
@@ -431,7 +431,7 @@ export default function CorreosConfig() {
             </table>
           </div>
 
-          <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-gray-200 bg-gray-50 text-xs text-gray-600">
+          <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-gray-300 bg-gray-50 text-xs text-gray-600">
             <span>{logTotal} correo{logTotal === 1 ? '' : 's'} en total</span>
             <div className="flex items-center gap-2">
               <button onClick={() => irPagina(logPage - 1)} disabled={logLoading || logPage <= 1}
@@ -448,7 +448,7 @@ export default function CorreosConfig() {
       {verMeta && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setVerMeta(null)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="px-4 py-3 border-b border-gray-200 flex items-start justify-between gap-3">
+            <div className="px-4 py-3 border-b border-gray-300 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 truncate">{verMeta.asunto || '(sin asunto)'}</p>
                 <p className="text-[11px] text-gray-500 mt-0.5">
@@ -462,7 +462,7 @@ export default function CorreosConfig() {
               {verLoading ? (
                 <div className="h-[420px] flex items-center justify-center text-gray-400 text-sm">Cargando…</div>
               ) : verHtml ? (
-                <iframe title="correo-enviado" srcDoc={verHtml} className="w-full h-[60vh] min-h-[420px] rounded-lg border border-gray-200 bg-white" />
+                <iframe title="correo-enviado" srcDoc={verHtml} className="w-full h-[60vh] min-h-[420px] rounded-lg border border-gray-300 bg-white" />
               ) : (
                 <div className="h-[420px] flex items-center justify-center text-gray-400 text-sm">Este correo no guardó cuerpo (o no se pudo cargar).</div>
               )}

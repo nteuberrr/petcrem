@@ -310,7 +310,7 @@ export default function ReportesPage() {
   return (
     <div className="max-w-5xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Reportes</h1>
+        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Reportes</h1>
         <p className="text-gray-500 text-sm mt-0.5">Análisis y exportación de datos</p>
       </div>
 
@@ -325,16 +325,16 @@ export default function ReportesPage() {
 
       {/* Selector período — compartido para Mensual, Veterinarios y Asistencia (Ingresos tiene su propio rango) */}
       {(tab === 'Mensual' || tab === 'Veterinarios' || tab === 'Asistencia') && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-4">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 p-4 flex items-center gap-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Mes</label>
-            <select value={mes} onChange={e => setMes(parseInt(e.target.value))} className="mt-1 block border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <select value={mes} onChange={e => setMes(parseInt(e.target.value))} className="mt-1 block border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
             </select>
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Año</label>
-            <select value={anio} onChange={e => setAnio(parseInt(e.target.value))} className="mt-1 block border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <select value={anio} onChange={e => setAnio(parseInt(e.target.value))} className="mt-1 block border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               {[2024, 2025, 2026, 2027].map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
@@ -347,7 +347,7 @@ export default function ReportesPage() {
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {[
-              { label: 'Mascotas ingresadas', value: data.kpis.ingresos_clientes_mes, color: 'text-indigo-700' },
+              { label: 'Mascotas ingresadas', value: data.kpis.ingresos_clientes_mes, color: 'text-brand' },
               { label: 'Cremaciones', value: data.kpis.total_cremaciones_mes, color: 'text-rose-700' },
               { label: 'En cámara', value: data.kpis.pendientes, color: 'text-yellow-700' },
               { label: 'Ciclos', value: data.kpis.ciclos_mes, color: 'text-blue-700' },
@@ -359,7 +359,7 @@ export default function ReportesPage() {
               { label: 'Pagos pendientes', value: data.kpis.pendientes_pago, color: 'text-amber-700' },
               { label: 'Monto por cobrar', value: fmt(data.kpis.monto_pendiente), color: 'text-rose-700' },
             ].map(k => (
-              <div key={k.label} className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-4 text-center">
+              <div key={k.label} className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 text-center">
                 <p className={`text-xl font-bold ${k.color}`}>{k.value}</p>
                 <p className="text-xs text-gray-500 mt-1">{k.label}</p>
               </div>
@@ -373,17 +373,17 @@ export default function ReportesPage() {
               { label: 'Litros / ciclo', value: `${data.ratios.litros_por_ciclo.toFixed(1)} L` },
               { label: 'Costo vehículo / mascota', value: fmt(data.ratios.costo_vehiculo_por_mascota) },
             ].map(r => (
-              <div key={r.label} className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-4">
+              <div key={r.label} className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4">
                 <p className="text-xs font-semibold text-gray-600">{r.label}</p>
                 <p className="text-xl font-bold text-gray-900 mt-1">{r.value}</p>
               </div>
             ))}
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-900">Cremaciones del período</h2>
-              <button onClick={() => descargarExcel('cremaciones')} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">↓ Excel</button>
+              <button onClick={() => descargarExcel('cremaciones')} className="text-sm text-brand hover:text-brand font-medium">↓ Excel</button>
             </div>
             <div className="grid grid-cols-2 gap-6">
               <div>
@@ -413,17 +413,17 @@ export default function ReportesPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-900">Operacional — Ciclos del período</h2>
-              <button onClick={() => descargarExcel('operacional')} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">↓ Excel</button>
+              <button onClick={() => descargarExcel('operacional')} className="text-sm text-brand hover:text-brand font-medium">↓ Excel</button>
             </div>
             {data.ciclos.length === 0 ? (
               <p className="text-sm text-gray-400">Sin ciclos en el período</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[640px]">
-                  <thead><tr className="border-b border-gray-100">{['Ciclo', 'Fecha', 'Mascotas', 'Peso total', 'Litros', 'Lt/kg'].map(h => <th key={h} className="text-left pb-2 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
+                  <thead><tr className="border-b border-gray-300">{['Ciclo', 'Fecha', 'Mascotas', 'Peso total', 'Litros', 'Lt/kg'].map(h => <th key={h} className="text-left pb-2 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
                   <tbody className="divide-y divide-gray-50">
                     {data.ciclos.map(c => (
                       <tr key={c.id}>
@@ -441,12 +441,12 @@ export default function ReportesPage() {
             )}
           </div>
 
-          <div className="bg-indigo-50 rounded-xl border border-indigo-100 p-6 flex items-center justify-between">
+          <div className="bg-brand/10 rounded-xl border border-brand/20 p-6 flex items-center justify-between">
             <div>
-              <h2 className="font-semibold text-indigo-900">Informe ejecutivo completo</h2>
-              <p className="text-xs text-indigo-600 mt-0.5">Excel con resumen, cremaciones y operacional del período</p>
+              <h2 className="font-semibold text-brand">Informe ejecutivo completo</h2>
+              <p className="text-xs text-brand mt-0.5">Excel con resumen, cremaciones y operacional del período</p>
             </div>
-            <button onClick={() => descargarExcel('ejecutivo')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+            <button onClick={() => descargarExcel('ejecutivo')} className="bg-brand hover:bg-brand-dark text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
               ↓ Descargar Excel
             </button>
           </div>
@@ -488,11 +488,11 @@ export default function ReportesPage() {
           )}
 
           {/* Resumen por operador */}
-          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b-2 border-gray-200 flex items-center justify-between">
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 overflow-hidden">
+            <div className="px-6 py-4 border-b-2 border-gray-300 flex items-center justify-between">
               <h2 className="font-semibold text-gray-900">Resumen por operador — {MESES[mes - 1]} {anio}</h2>
               <button onClick={() => descargarExcel('asistencia')}
-                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">↓ Excel</button>
+                className="text-sm text-brand hover:text-brand font-medium">↓ Excel</button>
             </div>
             {resumenAsistencia.length === 0 ? (
               <div className="p-8 text-center text-gray-400 text-sm">Sin registros en el período</div>
@@ -524,8 +524,8 @@ export default function ReportesPage() {
           </div>
 
           {/* Pendientes de aprobación */}
-          <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b-2 border-gray-200">
+          <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 overflow-hidden">
+            <div className="px-6 py-4 border-b-2 border-gray-300">
               <h2 className="font-semibold text-gray-900">Horas extra pendientes de aprobación</h2>
             </div>
             {(() => {
@@ -645,19 +645,19 @@ function RetirosTab({
   return (
     <div className="space-y-6">
       {/* Filtros */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-wrap items-end gap-4">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 p-4 flex flex-wrap items-end gap-4">
         <div>
           <label className="text-xs font-medium text-gray-700">Desde</label>
           <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
-            className="mt-1 block border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="mt-1 block border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <div>
           <label className="text-xs font-medium text-gray-700">Hasta</label>
           <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
-            className="mt-1 block border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="mt-1 block border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <button onClick={onAplicar}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
           Aplicar
         </button>
         {(desde || hasta) && (
@@ -668,7 +668,7 @@ function RetirosTab({
         )}
         <div className="ml-auto">
           <button onClick={descargarExcel} disabled={retiros.length === 0}
-            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-40">
+            className="text-sm text-brand hover:text-brand font-medium disabled:opacity-40">
             ↓ Excel
           </button>
         </div>
@@ -677,15 +677,15 @@ function RetirosTab({
 
       {/* KPIs totales */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-5 text-center">
-          <p className="text-2xl font-bold text-indigo-700">{fmtNum(total)}</p>
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-5 text-center">
+          <p className="text-2xl font-bold text-brand">{fmtNum(total)}</p>
           <p className="text-xs text-gray-500 mt-1">Retiros en el período</p>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-5 text-center">
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-5 text-center">
           <p className="text-2xl font-bold text-amber-700">{fmtPrecio(precio)}</p>
           <p className="text-xs text-gray-500 mt-1">Pago por retiro</p>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-5 text-center">
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-5 text-center">
           <p className="text-2xl font-bold text-emerald-700">{fmtPrecio(totalPago)}</p>
           <p className="text-xs text-gray-500 mt-1">Total a pagar</p>
         </div>
@@ -693,8 +693,8 @@ function RetirosTab({
 
       {/* Resumen por operador */}
       {resumenPorOperador.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Pago por chofer</h2>
           </div>
           <table className="w-full text-sm">
@@ -715,8 +715,8 @@ function RetirosTab({
       )}
 
       {/* Detalle de retiros */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-300">
           <h2 className="font-semibold text-gray-900">Detalle de retiros</h2>
         </div>
         {retiros.length === 0 ? (
@@ -757,22 +757,22 @@ function ConfiguracionesTab({ data, fmt }: { data: ConfigData; fmt: (n: number |
     <div className="space-y-6">
       {/* Resumen vets */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center">
-          <p className="text-3xl font-bold text-indigo-700">{data.resumen.total_vets}</p>
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5 text-center">
+          <p className="text-3xl font-bold text-brand">{data.resumen.total_vets}</p>
           <p className="text-xs text-gray-500 mt-1">Veterinarias activas</p>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5 text-center">
           <p className="text-3xl font-bold text-blue-700">{data.resumen.por_tipo['precios_convenio'] ?? 0}</p>
           <p className="text-xs text-gray-500 mt-1">Con convenio estándar</p>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5 text-center">
           <p className="text-3xl font-bold text-purple-700">{data.resumen.por_tipo['precios_especiales'] ?? 0}</p>
           <p className="text-xs text-gray-500 mt-1">Con convenio especial</p>
         </div>
       </div>
 
       {/* Gráfico comparativo de precios CI */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6">
         <h2 className="font-semibold text-gray-900 mb-4">Comparativa CI — General vs Convenio por tramo</h2>
         <div className="space-y-3">
           {data.precios_generales.map((tg, i) => {
@@ -786,7 +786,7 @@ function ConfiguracionesTab({ data, fmt }: { data: ConfigData; fmt: (n: number |
                 <p className="text-gray-500 mb-1">{fmtNumero(tg.peso_min)}–{fmtNumero(tg.peso_max)} kg</p>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-16 text-right text-gray-400">General</span>
-                  <div className="h-5 bg-indigo-400 rounded" style={{ width: widthG }} />
+                  <div className="h-5 bg-brand-soft rounded" style={{ width: widthG }} />
                   <span className="font-semibold text-gray-700">{fmt(pG)}</span>
                 </div>
                 {pC > 0 && (
@@ -801,7 +801,7 @@ function ConfiguracionesTab({ data, fmt }: { data: ConfigData; fmt: (n: number |
           })}
         </div>
         <div className="flex gap-4 mt-4 text-xs text-gray-500">
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-indigo-400 inline-block" /> General</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-brand-soft inline-block" /> General</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-400 inline-block" /> Convenio</span>
         </div>
       </div>
@@ -814,8 +814,8 @@ function ConfiguracionesTab({ data, fmt }: { data: ConfigData; fmt: (n: number |
 
       {/* Veterinarias con precios especiales */}
       {data.vets_especiales.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
+        <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Veterinarias con precios especiales</h2>
           </div>
           <div className="divide-y divide-gray-50">
@@ -834,8 +834,8 @@ function ConfiguracionesTab({ data, fmt }: { data: ConfigData; fmt: (n: number |
       )}
 
       {/* Productos / ánforas */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-300">
           <h2 className="font-semibold text-gray-900">Productos y ánforas disponibles</h2>
         </div>
         <table className="w-full text-sm">
@@ -868,8 +868,8 @@ function ConfiguracionesTab({ data, fmt }: { data: ConfigData; fmt: (n: number |
 
 function TramosTable({ title, tramos, fmt, compact = false }: { title: string; tramos: Tramo[]; fmt: (n: number | string) => string; compact?: boolean }) {
   return (
-    <div className={compact ? '' : 'bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden'}>
-      {title && <div className="px-6 py-4 border-b border-gray-100"><h2 className="font-semibold text-gray-900">{title}</h2></div>}
+    <div className={compact ? '' : 'bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden'}>
+      {title && <div className="px-6 py-4 border-b border-gray-300"><h2 className="font-semibold text-gray-900">{title}</h2></div>}
       <table className="w-full text-sm">
         <thead className="bg-gray-50">
           <tr>{['Peso mín', 'Peso máx', 'CI', 'CP', 'SD'].map(h => <th key={h} className="text-left px-4 py-2 text-xs font-semibold text-gray-500">{h}</th>)}</tr>
@@ -898,13 +898,13 @@ function VeterinariosTab({ data, mes, anio, meses, onExcel }: {
   return (
     <div className="space-y-6">
       {/* Ranking mensual */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
           <div>
             <h2 className="font-semibold text-gray-900">Ranking veterinarias — {meses[mes - 1]} {anio}</h2>
             <p className="text-xs text-gray-500 mt-0.5">{data.total_del_mes} ingresos totales · {data.sin_veterinaria} sin veterinaria asignada</p>
           </div>
-          <button onClick={onExcel} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">↓ Excel</button>
+          <button onClick={onExcel} className="text-sm text-brand hover:text-brand font-medium">↓ Excel</button>
         </div>
         {data.ranking.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">Sin servicios por veterinaria este mes</div>
@@ -918,10 +918,10 @@ function VeterinariosTab({ data, mes, anio, meses, onExcel }: {
                   {v.correo && <p className="text-xs text-gray-400">{v.correo}</p>}
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="h-3 bg-indigo-200 rounded-full overflow-hidden" style={{ width: 120 }}>
-                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${(v.count / maxCount) * 100}%` }} />
+                  <div className="h-3 bg-brand/20 rounded-full overflow-hidden" style={{ width: 120 }}>
+                    <div className="h-full bg-brand rounded-full" style={{ width: `${(v.count / maxCount) * 100}%` }} />
                   </div>
-                  <span className="text-sm font-bold text-indigo-700 w-8 text-right">{v.count}</span>
+                  <span className="text-sm font-bold text-brand w-8 text-right">{v.count}</span>
                 </div>
               </div>
             ))}
@@ -930,8 +930,8 @@ function VeterinariosTab({ data, mes, anio, meses, onExcel }: {
       </div>
 
       {/* Ranking histórico */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-300">
           <h2 className="font-semibold text-gray-900">Total histórico por veterinaria</h2>
         </div>
         {data.totales_historicos.length === 0 ? (
@@ -1017,19 +1017,19 @@ function IngresosTab({
   return (
     <div className="space-y-6">
       {/* Filtros de período */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-wrap items-end gap-4">
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 p-4 flex flex-wrap items-end gap-4">
         <div>
           <label className="text-xs font-medium text-gray-700">Desde</label>
           <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
-            className="mt-1 block border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="mt-1 block border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <div>
           <label className="text-xs font-medium text-gray-700">Hasta</label>
           <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
-            className="mt-1 block border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="mt-1 block border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <button onClick={onAplicar}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
           Aplicar
         </button>
         {(desde || hasta) && (
@@ -1040,7 +1040,7 @@ function IngresosTab({
         )}
         <div className="ml-auto">
           <button onClick={descargarExcel} disabled={!data}
-            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-40">
+            className="text-sm text-brand hover:text-brand font-medium disabled:opacity-40">
             ↓ Excel
           </button>
         </div>
@@ -1056,7 +1056,7 @@ function IngresosTab({
           {/* KPIs resumen */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <KpiBox label="Total ingresos" value={fmtPrecio(data.resumen.total)} color="text-emerald-700" />
-            <KpiBox label="Mascotas" value={fmtNumero(data.resumen.cantidad)} color="text-indigo-700" />
+            <KpiBox label="Mascotas" value={fmtNumero(data.resumen.cantidad)} color="text-brand" />
             <KpiBox label="Ticket promedio" value={fmtPrecio(data.resumen.ticket_promedio)} color="text-amber-700" />
           </div>
 
@@ -1155,7 +1155,7 @@ function IngresosTab({
             <ChartBox title="Ingresos por tipo de precio">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {porTipoPrecio.map(p => (
-                  <div key={p.tipo} className="border border-gray-100 rounded-lg p-4">
+                  <div key={p.tipo} className="border border-gray-300 rounded-lg p-4">
                     <p className="text-xs text-gray-500 uppercase tracking-wide">{p.tipo}</p>
                     <p className="text-xl font-bold text-gray-900 mt-1">{fmtPrecio(p.ingresos)}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{fmtNumero(p.cantidad)} mascotas</p>
@@ -1166,7 +1166,7 @@ function IngresosTab({
           )}
 
           {/* Tabla detalle por tramo */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6">
             <h2 className="font-semibold text-gray-900 mb-4">Detalle por tramo</h2>
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
@@ -1197,7 +1197,7 @@ function IngresosTab({
 
 function KpiBox({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-5 text-center">
+    <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-5 text-center">
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
       <p className="text-xs text-gray-500 mt-1">{label}</p>
     </div>
@@ -1206,7 +1206,7 @@ function KpiBox({ label, value, color }: { label: string; value: string; color: 
 
 function ChartBox({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+    <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6">
       <h3 className="text-sm font-semibold text-gray-700 mb-4">{title}</h3>
       {children}
     </div>

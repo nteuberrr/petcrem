@@ -114,8 +114,8 @@ export default function ParametrosTab() {
 
   const flechas = (canUp: boolean, canDown: boolean, up: () => void, down: () => void) => (
     <div className="flex flex-col leading-none -my-0.5 shrink-0">
-      <button onClick={up} disabled={!canUp} title="Subir" className="text-gray-300 hover:text-indigo-600 disabled:opacity-20 disabled:hover:text-gray-300 text-[10px] leading-tight">▲</button>
-      <button onClick={down} disabled={!canDown} title="Bajar" className="text-gray-300 hover:text-indigo-600 disabled:opacity-20 disabled:hover:text-gray-300 text-[10px] leading-tight">▼</button>
+      <button onClick={up} disabled={!canUp} title="Subir" className="text-gray-300 hover:text-brand disabled:opacity-20 disabled:hover:text-gray-300 text-[10px] leading-tight">▲</button>
+      <button onClick={down} disabled={!canDown} title="Bajar" className="text-gray-300 hover:text-brand disabled:opacity-20 disabled:hover:text-gray-300 text-[10px] leading-tight">▼</button>
     </div>
   )
 
@@ -124,7 +124,7 @@ export default function ParametrosTab() {
       {editId === p.id ? (
         <>
           <input value={editNombre} onChange={e => setEditNombre(e.target.value)} className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm" />
-          <button onClick={() => guardarEdicion(p.id)} className="text-xs text-indigo-600 font-medium">Guardar</button>
+          <button onClick={() => guardarEdicion(p.id)} className="text-xs text-brand font-medium">Guardar</button>
           <button onClick={() => setEditId(null)} className="text-xs text-gray-400">Cancelar</button>
         </>
       ) : (
@@ -132,12 +132,12 @@ export default function ParametrosTab() {
           {flechas(idx > 0, idx < lista.length - 1, () => mover(lista, idx, -1), () => mover(lista, idx, 1))}
           <span className={`flex-1 text-sm ${p.activo === 'TRUE' ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{p.nombre}</span>
           <select value={idsSg.has(p.subgrupo_id || '') ? p.subgrupo_id : ''} onChange={e => reasignar(p, e.target.value)}
-            title="Subgrupo" className="text-xs border border-gray-200 rounded px-1 py-0.5 text-gray-500 max-w-[130px]">
+            title="Subgrupo" className="text-xs border border-gray-300 rounded px-1 py-0.5 text-gray-500 max-w-[130px]">
             <option value="">Sin subgrupo</option>
             {sgs.map(sg => <option key={sg.id} value={sg.id}>{sg.nombre}</option>)}
           </select>
           <button onClick={() => toggleActivo(p)} className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${p.activo === 'TRUE' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{p.activo === 'TRUE' ? 'Activa' : 'Inactiva'}</button>
-          <button onClick={() => { setEditId(p.id); setEditNombre(p.nombre) }} className="text-xs text-gray-400 hover:text-indigo-600 shrink-0">Editar</button>
+          <button onClick={() => { setEditId(p.id); setEditNombre(p.nombre) }} className="text-xs text-gray-400 hover:text-brand shrink-0">Editar</button>
           <button onClick={() => eliminar(p)} className="text-xs text-gray-300 hover:text-red-600 shrink-0">Eliminar</button>
         </>
       )}
@@ -155,23 +155,23 @@ export default function ParametrosTab() {
         const sueltas = sueltasDe(t.key)
         const total = items.filter(i => i.tipo === t.key).length
         return (
-          <div key={t.key} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-3">
+          <div key={t.key} className="bg-white rounded-xl border border-gray-300 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-300 flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-semibold text-gray-800">{t.label} <span className="text-gray-400 text-sm font-normal">({total})</span></h3>
                 {t.nota && <p className="text-xs text-gray-400 mt-0.5">{t.nota}</p>}
               </div>
-              <button onClick={() => agregarSubgrupo(t.key)} className="text-xs text-indigo-600 font-medium whitespace-nowrap hover:text-indigo-800">+ Subgrupo</button>
+              <button onClick={() => agregarSubgrupo(t.key)} className="text-xs text-brand font-medium whitespace-nowrap hover:text-brand">+ Subgrupo</button>
             </div>
 
             {sgs.map((sg, sgIdx) => {
               const ps = partidasDe(t.key, sg.id)
               return (
-                <div key={sg.id} className="border-b border-gray-100">
+                <div key={sg.id} className="border-b border-gray-300">
                   <div className="px-4 py-1.5 bg-gray-50 flex items-center gap-2">
                     {flechas(sgIdx > 0, sgIdx < sgs.length - 1, () => moverSubgrupo(sgs, sgIdx, -1), () => moverSubgrupo(sgs, sgIdx, 1))}
                     <span className="flex-1 text-xs font-semibold text-gray-600 uppercase tracking-wide">▸ {sg.nombre}</span>
-                    <button onClick={() => renombrarSubgrupo(sg)} className="text-xs text-gray-400 hover:text-indigo-600">Renombrar</button>
+                    <button onClick={() => renombrarSubgrupo(sg)} className="text-xs text-gray-400 hover:text-brand">Renombrar</button>
                     <button onClick={() => eliminarSubgrupo(sg)} className="text-xs text-gray-300 hover:text-red-600">Eliminar</button>
                   </div>
                   <div className="divide-y divide-gray-50 pl-4">
@@ -189,7 +189,7 @@ export default function ParametrosTab() {
               </div>
             )}
 
-            <div className="px-4 py-2.5 bg-gray-50 flex flex-wrap items-center gap-2 border-t border-gray-100">
+            <div className="px-4 py-2.5 bg-gray-50 flex flex-wrap items-center gap-2 border-t border-gray-300">
               <input
                 value={nuevo[t.key] || ''}
                 onChange={e => setNuevo(n => ({ ...n, [t.key]: e.target.value }))}
@@ -203,7 +203,7 @@ export default function ParametrosTab() {
                   {sgs.map(sg => <option key={sg.id} value={sg.id}>{sg.nombre}</option>)}
                 </select>
               )}
-              <button onClick={() => agregarPartida(t.key)} className="text-sm bg-indigo-600 text-white px-3 py-1 rounded-lg hover:bg-indigo-700">Agregar</button>
+              <button onClick={() => agregarPartida(t.key)} className="text-sm bg-brand text-white px-3 py-1 rounded-lg hover:bg-brand-dark">Agregar</button>
             </div>
           </div>
         )
