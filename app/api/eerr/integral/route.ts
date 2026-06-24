@@ -169,7 +169,7 @@ export async function GET(req: NextRequest) {
         ? (ingresoPorClave[p.clave] ? [...ingresoPorClave[p.clave]] : zeros())
         : (porPartida.get(p.id) ?? zeros())
       const sg = sgById.get(p.subgrupo_id || '')
-      return { nombre: p.nombre, valores, subgrupo: sg?.nombre || '', sgOrden: sg ? sg.orden : SUELTA }
+      return { nombre: p.nombre, valores, subgrupo: sg?.nombre || '', sgOrden: sg ? sg.orden : SUELTA, partida_id: p.id, tipo: p.tipo, clave: p.clave || '' }
     }
     const activas = (partidas as Cli[]).filter(p => p.activo !== 'FALSE')
     // Orden dentro de un tipo: primero los subgrupos (por su orden), luego las
