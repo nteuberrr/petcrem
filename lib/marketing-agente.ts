@@ -6,7 +6,8 @@ import { listarCalendario, crearItems, type NuevoItem } from './marketing-calend
 import { listarImagenes, generarYGuardarImagen, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { generarPieza } from './marketing-pieza'
-import { leerPerfilFacebook, leerPerfilInstagram } from './meta-publish'
+import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
+import { publicarItem } from './marketing-publicar'
 
 /**
  * AGENTE DE MARKETING / CEO del Crematorio Alma Animal. Un solo agente Claude con
@@ -69,7 +70,7 @@ SOBRE EL NEGOCIO Y EL SERVICIO (úsalo para que los ángulos y el copy sean conc
 REGLAS DURAS
 - NUNCA inventes precios: cuando hables de valores usa SOLO la sección TARIFAS VIGENTES de abajo (son de cremación; la eutanasia tiene precio aparte). Si no la tienes, dilo y no inventes.
 - NUNCA inventes promociones, plazos ni datos que el dueño no haya confirmado.
-- Nada se publica automáticamente. Tú PROPONES (estado "propuesta") y, cuando te lo pidan, GENERAS la pieza; el dueño aprueba y publica.
+- Nada se publica ni se cambia el perfil por iniciativa propia. Vos PROPONÉS y GENERÁS; PUBLICAR (publicar_pieza) y EDITAR EL PERFIL de Facebook (actualizar_perfil_facebook) son acciones que ejecutás SOLO cuando el dueño te lo pide EXPLÍCITAMENTE. Publicar es público e irreversible: si hay ambigüedad, confirmá antes.
 
 CADENCIA RECOMENDADA (para no saturar; ajustable por el equipo en las instrucciones)
 - Email a la base de veterinarios (B2B): máximo 1–2 por mes. Es lo más sensible (saturar genera bajas y rebotes).
@@ -85,6 +86,7 @@ FLUJO DE TRABAJO (síguelo)
 2. GENERAR (más caro): solo cuando el dueño lo pida explícitamente sobre ítems concretos ("generá la pieza de la #5", "escribí el post del lunes"), usa "generar_pieza" con el id. No generes piezas por iniciativa propia ni en lote sin que te lo pidan.
 3. Si te piden ideas de imágenes, mira el banco con "consultar_banco_imagenes" y prioriza reutilizar lo que ya existe.
 4. CREAR/EDITAR IMÁGENES sueltas (a pedido): si el dueño pide una imagen puntual (no una pieza del calendario), o adjunta una imagen en el chat para que hagas algo con ella, usá "generar_imagen". Para CREAR alcanza con un prompt fotográfico detallado. Para EDITAR/VARIAR a partir de una imagen del banco (por ej. incorporar el LOGO de marca, grupo "marca"), pasá su referencia_url; para basarte en lo que el dueño adjuntó, usá usar_adjunto:true. Cuando el dueño adjunta imágenes las VES en su mensaje (podés comentarlas). Después mostrá el resultado con ![](URL).
+5. PUBLICAR / PERFIL (SOLO si te lo piden explícito): para publicar una pieza ya aprobada/generada en su red usá "publicar_pieza" con su id (Instagram requiere imagen; el email no se publica acá). Para aplicar cambios al perfil de FACEBOOK usá "actualizar_perfil_facebook" (antes leé el estado con "auditar_perfil" y mostrá qué vas a cambiar). El perfil de INSTAGRAM no se edita por API: entregá los textos para aplicarlos a mano.
 
 FORMATO DE RESPUESTA (legible y al grano — tus mensajes se muestran con formato, no en crudo)
 - Escribí CONCISO y escaneable. Frases cortas, una idea por bloque. Nada de muros de texto.
@@ -217,6 +219,32 @@ const TOOL_GENERAR_IMG: Anthropic.Tool = {
   },
 }
 
+const TOOL_PUBLICAR: Anthropic.Tool = {
+  name: 'publicar_pieza',
+  description: 'PUBLICA EN VIVO en la red social (Instagram o Facebook) una pieza del calendario por su id. Acción PÚBLICA e IRREVERSIBLE: úsala SOLO cuando el dueño lo pida explícitamente ("publicá la #5", "subila ahora"). La pieza debe estar aprobada/generada y tener copy (e imagen para Instagram). El email NO se publica acá.',
+  input_schema: {
+    type: 'object',
+    properties: { id: { type: 'string', description: 'Id del ítem del calendario a publicar.' } },
+    required: ['id'],
+  },
+}
+
+const TOOL_PERFIL_FB: Anthropic.Tool = {
+  name: 'actualizar_perfil_facebook',
+  description: 'Aplica cambios de TEXTO al perfil de la Página de FACEBOOK (campos: about, description, phone, website, emails). Solo Facebook — el perfil de Instagram se edita a mano. Úsala SOLO cuando el dueño apruebe los cambios explícitamente; antes conviene leer el estado actual con auditar_perfil y mostrar qué se va a cambiar.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      about: { type: 'string', description: 'Descripción corta (about).' },
+      description: { type: 'string', description: 'Descripción larga de la Página.' },
+      phone: { type: 'string', description: 'Teléfono de contacto.' },
+      website: { type: 'string', description: 'Sitio web (URL).' },
+      emails: { type: 'string', description: 'Correo(s) de contacto.' },
+    },
+    required: [],
+  },
+}
+
 export interface RespuestaMarketing {
   mensaje: string
   acciones: string[]
@@ -278,7 +306,7 @@ export async function generarRespuestaMarketing(
   system.push({ type: 'text', text: bloqueFechaChile() })
   system.push({ type: 'text', text: bloqueBanco(banco) })
 
-  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG]
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_PUBLICAR, TOOL_PERFIL_FB]
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
   let cambios = false
@@ -392,6 +420,22 @@ export async function generarRespuestaMarketing(
             })
             cambios = true
             resultText = `Imagen ${refs.length ? 'editada/variada' : 'creada'} y guardada en el banco (grupo ${grupoImg}). Muéstrasela al dueño incluyéndola con ![](${g.imagen.url}).`
+          }
+        } else if (tu.name === 'publicar_pieza') {
+          const id = String((tu.input as { id?: string }).id || '')
+          const r = await publicarItem(id)
+          cambios = true
+          resultText = r.yaPublicado
+            ? `Esa pieza ya estaba publicada${r.post?.url ? ` (${r.post.url})` : ''}.`
+            : `✅ Publicado en ${r.item?.canal || 'la red'}${r.post?.url ? `: ${r.post.url}` : ''}. Pasale el link al dueño.`
+        } else if (tu.name === 'actualizar_perfil_facebook') {
+          if (!isFacebookConfigurado()) {
+            resultText = 'Facebook no está configurado (faltan META_GRAPH_TOKEN / META_PAGE_ID).'
+          } else {
+            const campos = tu.input as Record<string, string>
+            await actualizarPerfilFacebook(campos)
+            const aplicados = Object.keys(campos).filter(k => ['about', 'description', 'phone', 'website', 'emails'].includes(k))
+            resultText = `Perfil de Facebook actualizado (${aplicados.join(', ') || 'sin cambios'}). Confirmale al dueño qué se cambió.`
           }
         } else {
           resultText = 'Herramienta no disponible.'
