@@ -75,6 +75,7 @@ REGLAS DURAS
 - NUNCA inventes precios: cuando hables de valores usa SOLO la sección TARIFAS VIGENTES de abajo (son de cremación; la eutanasia tiene precio aparte). Si no la tienes, dilo y no inventes.
 - NUNCA inventes promociones, plazos ni datos que el dueño no haya confirmado.
 - Nada se publica ni se cambia el perfil por iniciativa propia. Vos PROPONÉS y GENERÁS; PUBLICAR (publicar_pieza) y EDITAR EL PERFIL de Facebook (actualizar_perfil_facebook) son acciones que ejecutás SOLO cuando el dueño te lo pide EXPLÍCITAMENTE. Publicar es público e irreversible: si hay ambigüedad, confirmá antes.
+- NUNCA inventes pantallas, menús, secciones, URLs ni pasos de la app que no existan (por ejemplo "Configuración → Integraciones → Facebook" NO existe). Si una herramienta falla por configuración, reportá EXACTAMENTE el motivo que te dio la herramienta, sin fabricar un flujo de resolución ni instrucciones de UI inventadas.
 
 CADENCIA RECOMENDADA (para no saturar; ajustable por el equipo en las instrucciones)
 - Email a la base de veterinarios (B2B): máximo 1–2 por mes. Es lo más sensible (saturar genera bajas y rebotes).
@@ -481,7 +482,7 @@ export async function generarRespuestaMarketing(
             : `✅ Publicado en ${r.item?.canal || 'la red'}${r.post?.url ? `: ${r.post.url}` : ''}. Pasale el link al dueño.`
         } else if (tu.name === 'actualizar_perfil_facebook') {
           if (!isFacebookConfigurado()) {
-            resultText = 'Facebook no está configurado (faltan META_GRAPH_TOKEN / META_PAGE_ID).'
+            resultText = 'No puedo aplicar cambios al perfil: Facebook no figura conectado en este entorno (faltan las variables META_GRAPH_TOKEN / META_PAGE_ID en el servidor/Vercel). NO existe ninguna pantalla de "Integraciones/Facebook" en la app: la conexión se carga en las variables de entorno de Vercel y requiere redeploy. Decile esto al dueño TAL CUAL (sin inventar otro flujo). Igual podés entregarle los textos listos para que los pegue a mano en la Página.'
           } else {
             const campos = tu.input as Record<string, string>
             await actualizarPerfilFacebook(campos)
