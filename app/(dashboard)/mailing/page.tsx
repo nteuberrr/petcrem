@@ -173,7 +173,7 @@ const REDES: { key: Red; label: string; icon: string; desc: string; activa: bool
   },
 ]
 
-type Vista = Red | 'calendario' | 'imagenes'
+type Vista = Red | 'calendario' | 'imagenes' | 'metricas'
 
 // Barra de accesos fija arriba: el Agente (calendario + IA) es la vista de inicio,
 // y los canales + el banco de Imágenes quedan al mismo nivel.
@@ -184,6 +184,7 @@ const NAV: { key: Vista; label: string }[] = [
   { key: 'facebook', label: 'Facebook' },
   { key: 'tiktok', label: 'TikTok' },
   { key: 'imagenes', label: 'Imágenes' },
+  { key: 'metricas', label: 'Métricas' },
 ]
 
 function NavIcon({ k, className = 'w-6 h-6' }: { k: Vista; className?: string }) {
@@ -192,6 +193,7 @@ function NavIcon({ k, className = 'w-6 h-6' }: { k: Vista; className?: string })
   if (k === 'instagram') return <InstagramIcon className={className} />
   if (k === 'facebook') return <FacebookIcon className={className} />
   if (k === 'tiktok') return <span className="text-xl leading-none">🎵</span>
+  if (k === 'metricas') return <span className="text-xl leading-none">📊</span>
   return <span className="text-xl leading-none">🖼️</span>
 }
 
@@ -227,6 +229,158 @@ export default function CampanasPage() {
       {vista === 'facebook' && <CalendarioContent key="fb" canalInicial="facebook" />}
       {vista === 'tiktok' && <ProximamentePlaceholder red={REDES.find(x => x.key === 'tiktok')!} />}
       {vista === 'imagenes' && <ImagenesPanel />}
+      {vista === 'metricas' && <MetricasPanel />}
+    </div>
+  )
+}
+
+// ── Pestaña «Métricas»: Ads pagados + posts orgánicos (en vivo desde Meta) ──
+type MetCampana = { nombre: string; spend: number; impresiones: number; alcance: number; clicks: number; ctr: number; cpc: number; acciones: { tipo: string; valor: number }[] }
+type MetResumenAds = { moneda: string; periodo: string; cuenta: Omit<MetCampana, 'nombre'>; campanas: MetCampana[] }
+type MetPost = { fecha: string; mensaje: string; impresiones: number; reacciones: number; comentarios: number; compartidos: number; url: string }
+type MetResumenOrg = { seguidores: number; posts: MetPost[] }
+type MetResp = { ads?: MetResumenAds; ads_error?: string; organico?: MetResumenOrg; organico_error?: string }
+
+const PERIODOS: { key: string; label: string }[] = [
+  { key: 'last_7d', label: 'Últimos 7 días' },
+  { key: 'last_14d', label: 'Últimos 14 días' },
+  { key: 'last_30d', label: 'Últimos 30 días' },
+  { key: 'last_90d', label: 'Últimos 90 días' },
+  { key: 'this_month', label: 'Este mes' },
+  { key: 'last_month', label: 'Mes pasado' },
+]
+
+function MetricasPanel() {
+  const [periodo, setPeriodo] = useState('last_30d')
+  const [data, setData] = useState<MetResp | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+
+  const cargar = useCallback(async () => {
+    setLoading(true); setErr('')
+    try {
+      const r = await fetch(`/api/mailing/metricas?que=ambos&periodo=${periodo}`, { cache: 'no-store' })
+      const d = await r.json()
+      if (!r.ok) { setErr(d.error || 'Error'); setData(null) } else setData(d)
+    } catch { setErr('Error de red'); setData(null) }
+    setLoading(false)
+  }, [periodo])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargar()
+  }, [cargar])
+
+  const fmt = (n: number) => Math.round(n || 0).toLocaleString('es-CL')
+  const ads = data?.ads
+  const org = data?.organico
+  const money = (n: number) => `$${fmt(n)}${ads && ads.moneda !== 'CLP' ? ' ' + ads.moneda : ''}`
+
+  const KPIS = ads ? [
+    { l: 'Gasto', v: money(ads.cuenta.spend) },
+    { l: 'Alcance', v: fmt(ads.cuenta.alcance) },
+    { l: 'Impresiones', v: fmt(ads.cuenta.impresiones) },
+    { l: 'Clics', v: fmt(ads.cuenta.clicks) },
+    { l: 'CTR', v: `${ads.cuenta.ctr.toFixed(2)}%` },
+    { l: 'CPC', v: money(ads.cuenta.cpc) },
+  ] : []
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">📊 Métricas</h2>
+            <p className="text-sm text-gray-500">Datos en vivo de Meta: anuncios pagados y posts orgánicos. El período aplica a los Ads.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={periodo} onChange={e => setPeriodo(e.target.value)} className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+              {PERIODOS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+            </select>
+            <button onClick={cargar} className="text-sm border-2 border-gray-300 rounded-lg px-3 py-1.5 font-semibold hover:bg-gray-50">Actualizar</button>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-8 text-center text-sm text-gray-400">Cargando…</div>
+      ) : err ? (
+        <div className="bg-red-50 border-2 border-red-200 text-red-800 rounded-2xl px-4 py-3 text-sm">{err}</div>
+      ) : (
+        <>
+          <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
+            <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Anuncios pagados (Meta Ads)</h3>
+            {data?.ads_error ? (
+              <p className="text-sm text-gray-500">No se pudieron leer los Ads: {data.ads_error}</p>
+            ) : ads ? (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {KPIS.map(k => (
+                    <div key={k.l} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                      <div className="text-[11px] text-gray-500">{k.l}</div>
+                      <div className="text-lg font-bold text-gray-900">{k.v}</div>
+                    </div>
+                  ))}
+                </div>
+                {ads.cuenta.acciones.length > 0 && (
+                  <p className="text-xs text-gray-500">Resultados: {ads.cuenta.acciones.map(a => `${a.tipo} (${fmt(a.valor)})`).join(' · ')}</p>
+                )}
+                {ads.campanas.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-gray-200">
+                    <table className="w-full min-w-[640px] text-sm">
+                      <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                        <tr><th className="text-left px-3 py-2">Campaña</th><th className="text-right px-3 py-2">Gasto</th><th className="text-right px-3 py-2">Alcance</th><th className="text-right px-3 py-2">Clics</th><th className="text-right px-3 py-2">CTR</th><th className="text-right px-3 py-2">CPC</th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {ads.campanas.map((c, i) => (
+                          <tr key={i} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-gray-800 max-w-[260px] truncate">{c.nombre}</td>
+                            <td className="px-3 py-2 text-right">{money(c.spend)}</td>
+                            <td className="px-3 py-2 text-right">{fmt(c.alcance)}</td>
+                            <td className="px-3 py-2 text-right">{fmt(c.clicks)}</td>
+                            <td className="px-3 py-2 text-right">{c.ctr.toFixed(2)}%</td>
+                            <td className="px-3 py-2 text-right">{money(c.cpc)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <p className="text-sm text-gray-400">Sin campañas con datos en este período.</p>}
+              </>
+            ) : <p className="text-sm text-gray-400">Sin datos de Ads.</p>}
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-3">
+            <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Orgánico (Facebook)</h3>
+            {data?.organico_error ? (
+              <p className="text-sm text-gray-500">No se pudo leer lo orgánico: {data.organico_error}</p>
+            ) : org ? (
+              <>
+                <p className="text-sm text-gray-700"><b>{fmt(org.seguidores)}</b> seguidores</p>
+                {org.posts.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-gray-200">
+                    <table className="w-full min-w-[640px] text-sm">
+                      <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                        <tr><th className="text-left px-3 py-2">Fecha</th><th className="text-left px-3 py-2">Post</th><th className="text-right px-3 py-2">Impresiones</th><th className="text-right px-3 py-2">Interacciones</th><th className="px-3 py-2"></th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {org.posts.map((p, i) => (
+                          <tr key={i} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 whitespace-nowrap text-gray-600">{(p.fecha || '').slice(0, 10)}</td>
+                            <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate">{p.mensaje || '(sin texto)'}</td>
+                            <td className="px-3 py-2 text-right">{fmt(p.impresiones)}</td>
+                            <td className="px-3 py-2 text-right">{fmt(p.reacciones + p.comentarios + p.compartidos)}</td>
+                            <td className="px-3 py-2 text-right">{p.url && <a href={p.url} target="_blank" rel="noreferrer" className="text-brand hover:underline text-xs">ver ↗</a>}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <p className="text-sm text-gray-400">Sin posts recientes con datos.</p>}
+              </>
+            ) : <p className="text-sm text-gray-400">Sin datos orgánicos.</p>}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -2209,7 +2363,7 @@ const GRUPO_LABEL: Record<string, string> = {
 }
 
 /** Tarjeta de una imagen del banco con nombre editable, grupo, WhatsApp, copiar y eliminar. */
-function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete, onAnimar }: {
+function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete, onAnimar, onZoom }: {
   img: ImagenBanco
   onGrupo: (img: ImagenBanco, grupo: string) => void
   onWhatsapp: (img: ImagenBanco, on: boolean) => void
@@ -2217,6 +2371,7 @@ function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete, onAn
   onCopy: (url: string) => void
   onDelete: (img: ImagenBanco) => void
   onAnimar: (img: ImagenBanco) => void
+  onZoom: (url: string) => void
 }) {
   const [editando, setEditando] = useState(false)
   const [texto, setTexto] = useState(img.descripcion || img.alt || '')
@@ -2233,7 +2388,7 @@ function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete, onAn
       {/* Foto completa (sin recortar) sobre fondo neutro + badge de origen. */}
       <div className="relative h-28 bg-gray-50 flex items-center justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={img.url} alt={img.alt} className="max-h-28 max-w-full object-contain" />
+        <img src={img.url} alt={img.alt} onClick={() => onZoom(img.url)} title="Clic para ampliar" className="max-h-28 max-w-full object-contain cursor-zoom-in" />
         <span className={`absolute top-1 left-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${esGenerada ? 'bg-violet-100 text-violet-700' : 'bg-sky-100 text-sky-700'}`}>
           {esGenerada ? 'Generada' : 'Subida'}
         </span>
@@ -2307,6 +2462,7 @@ function ImagenesPanel() {
   const [vAspect, setVAspect] = useState('16:9')
   const [vFase, setVFase] = useState<'' | 'lanzando' | 'generando' | 'guardando'>('')
   const [vError, setVError] = useState('')
+  const [verImg, setVerImg] = useState<string | null>(null)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -2545,7 +2701,7 @@ function ImagenesPanel() {
             <button type="button" onClick={cargar} className="text-xs text-brand hover:underline">Actualizar</button>
           </div>
           {grupos.map(g => (
-            <details key={g.key} open className="bg-white rounded-2xl shadow-md border-2 border-gray-300 group">
+            <details key={g.key} className="bg-white rounded-2xl shadow-md border-2 border-gray-300 group">
               <summary className="cursor-pointer select-none px-4 py-3 flex items-center gap-2 list-none [&::-webkit-details-marker]:hidden">
                 <span className="text-gray-400 text-xs transition-transform group-open:rotate-90">▶</span>
                 <span className="text-sm font-semibold text-gray-900">{g.label}</span>
@@ -2554,7 +2710,7 @@ function ImagenesPanel() {
               <div className="px-4 pb-4">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                   {g.imgs.map(img => (
-                    <ImagenCard key={img.id} img={img} onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onRename={renombrar} onCopy={copiarUrl} onDelete={eliminar} onAnimar={abrirAnimar} />
+                    <ImagenCard key={img.id} img={img} onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onRename={renombrar} onCopy={copiarUrl} onDelete={eliminar} onAnimar={abrirAnimar} onZoom={setVerImg} />
                   ))}
                 </div>
               </div>
@@ -2619,6 +2775,12 @@ function ImagenesPanel() {
             {vError && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{vError}</div>}
             {vFase === 'generando' && <p className="text-xs text-gray-500">Veo está renderizando el clip… esto puede tardar 1-3 minutos.</p>}
           </div>
+        </Modal>
+      )}
+      {verImg && (
+        <Modal open onClose={() => setVerImg(null)} title="Vista de la imagen" size="2xl">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={verImg} alt="" className="w-full max-h-[75vh] object-contain rounded-lg" />
         </Modal>
       )}
     </div>

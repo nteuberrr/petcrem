@@ -74,7 +74,7 @@ async function graph(path: string, params: Record<string, string>, method: 'GET'
 // El token de System User no siempre sirve directo para /{page}/feed; lo más
 // robusto es derivar el Page Access Token de la Página y usar ese. Cacheado.
 let pageTokenCache: { id: string; token: string } | null = null
-async function getPageToken(): Promise<string> {
+export async function getPageToken(): Promise<string> {
   const pid = pageId()
   if (pageTokenCache && pageTokenCache.id === pid) return pageTokenCache.token
   const data = await graph(pid, { fields: 'access_token', access_token: token() })

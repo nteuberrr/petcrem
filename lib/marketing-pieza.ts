@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { BRAND, getContacto } from './email-layout'
+import { BRAND, getContacto, LOGO_URL } from './email-layout'
 import { listarImagenes, generarYGuardarImagen, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { generarCampana } from './mailing-generator'
@@ -241,8 +241,9 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
       nuevasUsadas++
       try {
         const r = await generarYGuardarImagen({
-          prompt: sp.prompt, alt: sp.alt, descripcion: sp.descripcion || sp.alt,
-          tags: sp.tags, grupo: sp.grupo || 'otro',
+          prompt: sp.prompt, alt: sp.alt,
+          descripcion: `C-${item.id}.${resueltas.length + 1}`,
+          tags: [sp.tags, sp.descripcion || sp.alt].filter(Boolean).join(', '), grupo: sp.grupo || 'otro',
           subgrupo: (item.titulo || item.idea || '').slice(0, 60),
           aspect: aspectoForzado || sp.aspect || '1:1',
           referencias: refImagen ? [refImagen] : undefined,
@@ -322,5 +323,60 @@ export async function generarPieza(id: string, creadoPor?: string): Promise<Piez
     estado: item.estado === 'propuesta' ? 'generada' : item.estado,
     generado_por: 'ia',
   })
+  return { item: item2, avisos }
+}
+
+async function refDesdeUrl(url: string): Promise<{ data: Buffer; mime: string } | null> {
+  try {
+    const r = await fetch(url)
+    if (!r.ok) return null
+    return { data: Buffer.from(await r.arrayBuffer()), mime: r.headers.get('content-type') || 'image/jpeg' }
+  } catch { return null }
+}
+
+/**
+ * Edita/regenera una imagen (o todas) de una pieza social YA generada, usando la
+ * imagen actual como base (image-to-image). Si la instrucción menciona el logo/marca,
+ * suma el logo como referencia. `indice` = posición 1-based; si se omite, aplica a TODAS.
+ */
+export async function editarImagenPieza(id: string, instruccion: string, indice?: number, creadoPor?: string): Promise<PiezaGenerada> {
+  if (!instruccion?.trim()) throw new Error('Falta la instrucción de qué ajustar.')
+  if (!isNanoBananaConfigurado()) throw new Error('Generación de imágenes no disponible (falta GEMINI_API_KEY).')
+  const item = await obtenerItem(id)
+  if (!item) throw new Error(`ítem ${id} no encontrado`)
+  if (item.canal === 'email') throw new Error('Esto aplica a piezas de imagen (Instagram/Facebook), no a email.')
+
+  let imgs: { url: string; alt?: string }[] = []
+  try { const a = item.imagenes_json ? JSON.parse(item.imagenes_json) : []; if (Array.isArray(a)) imgs = a.filter((x: { url?: string }) => x?.url) } catch { /* fallback abajo */ }
+  if (imgs.length === 0 && item.imagen_url) imgs = [{ url: item.imagen_url }]
+  if (imgs.length === 0) throw new Error('La pieza no tiene imágenes para editar. Generala primero.')
+
+  const avisos: string[] = []
+  const conLogo = /\blogo\b|\bmarca\b|sello|timbre/i.test(instruccion)
+  const logoRef = conLogo ? await refDesdeUrl(LOGO_URL) : null
+  if (conLogo && !logoRef) avisos.push('No se pudo cargar el logo como referencia.')
+  const targets = (indice && indice >= 1 && indice <= imgs.length) ? [indice - 1] : imgs.map((_, i) => i)
+
+  for (const ti of targets) {
+    const baseRef = await refDesdeUrl(imgs[ti].url)
+    const referencias = [baseRef, logoRef].filter(Boolean) as { data: Buffer; mime: string }[]
+    if (referencias.length === 0) { avisos.push(`No se pudo leer la imagen ${ti + 1} como referencia.`); continue }
+    try {
+      const r = await generarYGuardarImagen({
+        prompt: instruccion.trim(),
+        descripcion: `C-${id}.${ti + 1}`,
+        tags: 'edicion',
+        grupo: 'otro',
+        subgrupo: (item.titulo || item.idea || '').slice(0, 60),
+        aspect: '1:1',
+        referencias,
+        creadoPor,
+      })
+      imgs[ti] = { url: r.imagen.url, alt: imgs[ti].alt || '' }
+    } catch (e) { avisos.push(`No se pudo regenerar la imagen ${ti + 1}: ${e instanceof Error ? e.message : 'error'}`) }
+  }
+
+  const imagenesJson = imgs.length > 1 ? JSON.stringify(imgs.map(x => ({ url: x.url, alt: x.alt || '' }))) : ''
+  const item2 = await actualizarItem(id, { imagen_url: imgs[0]?.url || '', imagen_id: '', imagenes_json: imagenesJson })
   return { item: item2, avisos }
 }

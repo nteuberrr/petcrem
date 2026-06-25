@@ -218,7 +218,7 @@ export const SHEETS: Record<string, string[]> = {
   // generada → programada → publicada | descartada. El email aprobado puede
   // materializarse en mailing_campanas; el social se publica vía Meta Graph API.
   campaign_calendar: [
-    'id', 'fecha', 'canal', 'estado', 'activa',
+    'id', 'fecha', 'hora', 'canal', 'estado', 'activa', 'favorita',
     'objetivo', 'audiencia', 'idea', 'titulo', 'cuerpo',
     'imagen_id', 'imagen_url', 'imagenes_json',
     'campana_id', 'post_externo_id', 'post_url',

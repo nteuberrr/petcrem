@@ -5,9 +5,10 @@ import { getMarketingConfig } from './marketing-config'
 import { listarCalendario, crearItems, type NuevoItem } from './marketing-calendario'
 import { listarImagenes, generarYGuardarImagen, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
-import { generarPieza } from './marketing-pieza'
+import { generarPieza, editarImagenPieza } from './marketing-pieza'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
 import { publicarItem } from './marketing-publicar'
+import { resumenAds, resumenOrganico, isInsightsConfigurado } from './meta-insights'
 
 /**
  * AGENTE DE MARKETING / CEO del Crematorio Alma Animal. Un solo agente Claude con
@@ -39,6 +40,7 @@ const BASE = `Eres el **estratega de marketing y contenido** del **Crematorio Al
 TU TRABAJO
 - Ayudar a planificar y mantener un CALENDARIO DE CAMPAÑAS multicanal y a producir las piezas.
 - AUDITAR Y OPTIMIZAR los perfiles de Facebook e Instagram: con "auditar_perfil" leés el estado actual (bio/descripción, datos de contacto, sitio, seguidores) y recomendás mejoras concretas (bio optimizada, datos a completar, estructura de destacados, idea de foto de perfil/portada, primeras piezas). OJO: el perfil de INSTAGRAM se edita SOLO a mano (la API no permite cambiarlo) → entregás los textos/imágenes listos para que el equipo los aplique. En FACEBOOK varios campos de texto (descripción, teléfono, sitio, correos) SÍ se pueden aplicar por sistema, pero eso lo confirma y ejecuta el equipo, no vos automáticamente.
+- REPORTAR RESULTADOS: con "reporte_metricas" traés números REALES de Meta (Ads pagados y posts orgánicos) y das recomendaciones accionables cuando el dueño pregunte cómo van las redes / los anuncios.
 - Pensar como dueño: qué publicar, en qué canal, cuándo y con qué objetivo, sin saturar ni improvisar.
 - Eres claro y concreto. Propones, explicas el porqué brevemente, y dejas que el dueño apruebe.
 
@@ -113,6 +115,22 @@ async function bloqueTarifas(): Promise<string> {
   }
 }
 
+/** Datos de la empresa/contacto (Configuración → empresa_config), leídos EN VIVO
+ *  para que el agente use el contacto vigente en correos/piezas y vea los cambios
+ *  apenas el dueño actualiza sus datos. */
+async function bloqueEmpresa(): Promise<string> {
+  try {
+    const rows = await getSheetData('empresa_config')
+    const row = rows.find(r => String(r.id) === '1') || rows[0]
+    if (!row) return ''
+    const lineas = Object.entries(row)
+      .filter(([k, v]) => k !== 'id' && String(v ?? '').trim())
+      .map(([k, v]) => `- ${k}: ${v}`)
+    if (lineas.length === 0) return ''
+    return `DATOS DE LA EMPRESA Y CONTACTO (de Configuración → Datos Personales; son la FUENTE DE VERDAD: usá estos datos de contacto en correos/piezas y respetá cualquier actualización que veas acá):\n${lineas.join('\n')}`
+  } catch { return '' }
+}
+
 function bloqueFechaChile(): string {
   const TZ = 'America/Santiago'
   const fecha = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, weekday: 'long', year: 'numeric', month: 'long', day: '2-digit' }).format(new Date())
@@ -156,6 +174,7 @@ const TOOL_PROPONER: Anthropic.Tool = {
           type: 'object',
           properties: {
             fecha: { type: 'string', description: 'Fecha planificada YYYY-MM-DD.' },
+            hora: { type: 'string', description: 'Hora sugerida HH:MM (24h), opcional.' },
             canal: { type: 'string', enum: ['email', 'instagram', 'facebook'] },
             audiencia: { type: 'string', enum: ['tutores', 'veterinarios', 'ambos'] },
             objetivo: { type: 'string', enum: ['captacion_vets', 'recordacion', 'educacion_tutores', 'postventa', 'promocion'] },
@@ -247,6 +266,33 @@ const TOOL_PERFIL_FB: Anthropic.Tool = {
   },
 }
 
+const TOOL_METRICAS: Anthropic.Tool = {
+  name: 'reporte_metricas',
+  description: 'Trae métricas REALES de Meta para reportar: "ads" (campañas pagadas de Meta Ads: gasto, alcance, clics, CTR, CPC, resultados), "organico" (seguidores + rendimiento de los posts publicados) o "ambos". Úsala cuando el dueño pregunte cómo van los anuncios / posts / redes. Después resumí los números de forma clara y dá 2-3 recomendaciones; NUNCA inventes métricas que no vengan de la herramienta.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      que: { type: 'string', enum: ['ads', 'organico', 'ambos'], description: 'Qué reportar (default ambos).' },
+      periodo: { type: 'string', enum: ['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month'], description: 'Período para Ads (default last_30d).' },
+    },
+    required: [],
+  },
+}
+
+const TOOL_EDITAR_IMG: Anthropic.Tool = {
+  name: 'editar_imagen_pieza',
+  description: 'Ajusta/regenera la(s) imagen(es) de una pieza del calendario YA generada, usando la imagen actual como base (image-to-image). Ej: "arreglá la imagen 5 de la #123 que se ve mal" (indice=5), o "poné el logo en todas las imágenes de la #123" (sin indice → todas; si la instrucción menciona el logo/marca, lo incorpora como referencia). Úsalo cuando el dueño pida corregir o uniformar imágenes de una pieza concreta.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Id de la pieza del calendario.' },
+      instruccion: { type: 'string', description: 'Qué ajustar (ej. "corregí las manos", "incorporá el logo arriba a la derecha").' },
+      indice: { type: 'number', description: 'Posición de la imagen a editar (1 = primera). Omitir para aplicar a TODAS las del carrusel.' },
+    },
+    required: ['id', 'instruccion'],
+  },
+}
+
 export interface RespuestaMarketing {
   mensaje: string
   acciones: string[]
@@ -268,7 +314,7 @@ function construirMensajes(historial: TurnoMarketing[]): Anthropic.MessageParam[
   return out
 }
 
-interface ProponerInput { items?: Array<{ fecha?: string; canal?: string; audiencia?: string; objetivo?: string; idea?: string; titulo?: string }> }
+interface ProponerInput { items?: Array<{ fecha?: string; hora?: string; canal?: string; audiencia?: string; objetivo?: string; idea?: string; titulo?: string }> }
 
 /**
  * Genera la respuesta del agente de marketing con tool-use: planifica el
@@ -291,10 +337,11 @@ export async function generarRespuestaMarketing(
     }
   }
 
-  const [tarifas, cfg, banco] = await Promise.all([
+  const [tarifas, cfg, banco, empresa] = await Promise.all([
     bloqueTarifas(),
     getMarketingConfig().catch(() => null),
     listarImagenes().catch(() => [] as ImagenBanco[]),
+    bloqueEmpresa(),
   ])
 
   const system: Anthropic.TextBlockParam[] = [
@@ -305,10 +352,11 @@ export async function generarRespuestaMarketing(
     cfg?.calibracion?.trim() && `GUÍA DE ESTILO / LÍNEA EDITORIAL:\n${cfg.calibracion.trim()}`,
   ].filter(Boolean).join('\n\n')
   if (ajustes) system.push({ type: 'text', text: ajustes })
+  if (empresa) system.push({ type: 'text', text: empresa })
   system.push({ type: 'text', text: bloqueFechaChile() })
   system.push({ type: 'text', text: bloqueBanco(banco) })
 
-  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_PUBLICAR, TOOL_PERFIL_FB]
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG]
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
   let cambios = false
@@ -349,6 +397,7 @@ export async function generarRespuestaMarketing(
             .filter(i => i?.idea && i?.fecha && i?.canal)
             .map(i => ({
               fecha: String(i.fecha),
+              hora: i.hora ? String(i.hora) : '',
               canal: String(i.canal),
               audiencia: i.audiencia || 'ambos',
               objetivo: i.objetivo || '',
@@ -439,6 +488,40 @@ export async function generarRespuestaMarketing(
             const aplicados = Object.keys(campos).filter(k => ['about', 'description', 'phone', 'website', 'emails'].includes(k))
             resultText = `Perfil de Facebook actualizado (${aplicados.join(', ') || 'sin cambios'}). Confirmale al dueño qué se cambió.`
           }
+        } else if (tu.name === 'reporte_metricas') {
+          if (!isInsightsConfigurado()) {
+            resultText = 'No hay credenciales de Meta para leer métricas.'
+          } else {
+            const inp = tu.input as { que?: string; periodo?: string }
+            const que = inp.que || 'ambos'
+            const partes: string[] = []
+            if (que === 'ads' || que === 'ambos') {
+              try {
+                const a = await resumenAds({ datePreset: inp.periodo })
+                const c = a.cuenta
+                const accs = c.acciones.map(x => `${x.tipo}=${x.valor}`).join(', ') || 'sin resultados registrados'
+                const top = a.campanas.slice(0, 8).map(k =>
+                  `  - ${k.nombre}: ${fmtPrecio(k.spend)} · alcance ${k.alcance} · clics ${k.clicks} · CTR ${k.ctr.toFixed(2)}% · CPC ${fmtPrecio(k.cpc)}`
+                ).join('\n') || '  (sin campañas con datos en el período)'
+                partes.push(`ADS PAGADOS (${a.periodo}, ${a.moneda}):\nCUENTA: gasto ${fmtPrecio(c.spend)} · alcance ${c.alcance} · impresiones ${c.impresiones} · clics ${c.clicks} · CTR ${c.ctr.toFixed(2)}% · CPC ${fmtPrecio(c.cpc)} · resultados: ${accs}\nPOR CAMPAÑA:\n${top}`)
+              } catch (e) { partes.push(`ADS: no disponible (${e instanceof Error ? e.message : 'error'}).`) }
+            }
+            if (que === 'organico' || que === 'ambos') {
+              try {
+                const o = await resumenOrganico()
+                const posts = o.posts.slice(0, 6).map(p =>
+                  `  - ${(p.fecha || '').slice(0, 10)} — ${p.mensaje || '(sin texto)'} → ${p.impresiones} impresiones, ${p.reacciones + p.comentarios + p.compartidos} interacciones`
+                ).join('\n') || '  (sin posts recientes)'
+                partes.push(`ORGÁNICO (Facebook):\nSeguidores: ${o.seguidores}\nÚltimos posts:\n${posts}`)
+              } catch (e) { partes.push(`ORGÁNICO: no disponible (${e instanceof Error ? e.message : 'error'}).`) }
+            }
+            resultText = partes.join('\n\n') + '\n\nResumí estos números para el dueño de forma clara y dale 2-3 recomendaciones concretas (NO inventes métricas que no estén acá).'
+          }
+        } else if (tu.name === 'editar_imagen_pieza') {
+          const inp = tu.input as { id?: string; instruccion?: string; indice?: number }
+          const r = await editarImagenPieza(String(inp.id || ''), String(inp.instruccion || ''), inp.indice, opts.creadoPor)
+          cambios = true
+          resultText = `Imagen(es) ajustada(s) en la pieza #${r.item.id}.${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}${r.item.imagen_url ? ` Mostrale el resultado al dueño con ![](${r.item.imagen_url}).` : ''}`
         } else {
           resultText = 'Herramienta no disponible.'
         }

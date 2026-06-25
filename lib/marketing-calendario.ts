@@ -16,10 +16,13 @@ export type EstadoCampana = 'propuesta' | 'aprobada' | 'generada' | 'programada'
 export interface ItemCalendario {
   id: string
   fecha: string
+  hora: string
   canal: string
   estado: string
   /** 'TRUE' (activa) | 'FALSE' (inactiva/repositorio). Eje independiente del estado. */
   activa: string
+  /** 'TRUE' si el dueño la marcó como favorita (para reutilizarla a futuro). */
+  favorita: string
   objetivo: string
   audiencia: string
   idea: string
@@ -44,8 +47,9 @@ export interface ItemCalendario {
 
 function toItem(r: Record<string, string>): ItemCalendario {
   return {
-    id: r.id || '', fecha: r.fecha || '', canal: r.canal || '', estado: r.estado || '',
+    id: r.id || '', fecha: r.fecha || '', hora: r.hora || '', canal: r.canal || '', estado: r.estado || '',
     activa: r.activa || 'TRUE',
+    favorita: r.favorita || 'FALSE',
     objetivo: r.objetivo || '', audiencia: r.audiencia || '', idea: r.idea || '',
     titulo: r.titulo || '', cuerpo: r.cuerpo || '',
     imagen_id: r.imagen_id || '', imagen_url: r.imagen_url || '', imagenes_json: r.imagenes_json || '',
@@ -85,6 +89,7 @@ export async function obtenerItem(id: string): Promise<ItemCalendario | null> {
 
 export interface NuevoItem {
   fecha: string
+  hora?: string
   canal: string
   objetivo?: string
   audiencia?: string
@@ -101,9 +106,11 @@ function filaDesde(n: NuevoItem, id: string): Record<string, string> {
   return {
     id,
     fecha: (n.fecha || '').trim(),
+    hora: (n.hora || '').trim(),
     canal: (n.canal || '').trim(),
     estado: (n.estado || 'propuesta').trim(),
     activa: 'TRUE',
+    favorita: 'FALSE',
     objetivo: (n.objetivo || '').trim(),
     audiencia: (n.audiencia || '').trim(),
     idea: (n.idea || '').trim(),

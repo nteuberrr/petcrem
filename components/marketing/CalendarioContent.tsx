@@ -9,9 +9,11 @@ import { CanalIcon, AgenteIcon } from '@/components/marketing/BrandIcons'
 type Item = {
   id: string
   fecha: string
+  hora: string
   canal: string
   estado: string
   activa: string
+  favorita: string
   objetivo: string
   audiencia: string
   idea: string
@@ -86,6 +88,14 @@ function nImgs(it: { imagenes_json: string; imagen_url: string }): number {
   } catch { /* ignore */ }
   return it.imagen_url ? 1 : 0
 }
+/** Tipo de pieza para mostrar/identificar (derivado del canal + nº de imágenes). */
+function tipoDe(it: { canal: string; imagenes_json: string; imagen_url: string }): string {
+  if (it.canal === 'email') return 'Email'
+  const n = nImgs(it)
+  if (n > 1) return 'Carrusel'
+  if (n === 1) return 'Imagen'
+  return 'Texto'
+}
 /** Lee un File como data URL base64 (para adjuntar imágenes de referencia al agente). */
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -101,7 +111,9 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
   const [cargando, setCargando] = useState(true)
   const [vista, setVista] = useState<'calendario' | 'lista'>('calendario')
   const [filtroCanal, setFiltroCanal] = useState<string>(canalInicial || 'todos')
-  const [filtroEstado, setFiltroEstado] = useState<string>('todos')
+  const [filtrosEstado, setFiltrosEstado] = useState<string[]>([])
+  const [soloFav, setSoloFav] = useState(false)
+  const [perf, setPerf] = useState<Record<string, number>>({})
   const [busy, setBusy] = useState<string>('')
 
   // mes mostrado en la vista calendario
@@ -131,7 +143,16 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
     try {
       const r = await fetch('/api/mailing/calendario')
       const d = await r.json()
-      if (r.ok) setItems(d.items || [])
+      if (r.ok) {
+        const its: Item[] = d.items || []
+        setItems(its)
+        // Performance de los posts publicados → para destacar (🔥) los que rinden bien.
+        const pubIds = its.filter(x => x.post_externo_id).map(x => x.post_externo_id)
+        if (pubIds.length) {
+          fetch('/api/mailing/calendario/performance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: pubIds }) })
+            .then(r2 => (r2.ok ? r2.json() : {})).then(p => setPerf(p || {})).catch(() => { /* ignore */ })
+        }
+      }
     } finally { setCargando(false) }
   }, [])
 
@@ -151,10 +172,15 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
     try { localStorage.removeItem(chatKey) } catch { /* ignore */ }
   }
 
+  // inactiva = archivada a mano. El calendario y la lista principal la excluyen (va al archivo).
+  const inactiva = (it: Item) => it.activa === 'FALSE'
   const visibles = items.filter(it =>
     (filtroCanal === 'todos' || it.canal === filtroCanal) &&
-    (filtroEstado === 'todos' || it.estado === filtroEstado)
+    (filtrosEstado.length === 0 || filtrosEstado.includes(it.estado)) &&
+    (!soloFav || it.favorita === 'TRUE')
   )
+  const activos = visibles.filter(it => !inactiva(it))
+  const archivados = items.filter(it => (filtroCanal === 'todos' || it.canal === filtroCanal) && inactiva(it))
 
   async function patch(id: string, cambios: Record<string, string>, accion = 'patch') {
     setBusy(`${id}:${accion}`)
@@ -230,7 +256,10 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
     const enCurso = busy.startsWith(it.id + ':')
     return (
       <div className="flex flex-wrap gap-1 justify-end">
-        {it.activa !== 'FALSE' && (it.estado === 'propuesta' || it.estado === 'generada') && !ocurrida(it) && (
+        <button disabled={enCurso} onClick={() => patch(it.id, { favorita: it.favorita === 'TRUE' ? 'FALSE' : 'TRUE' }, 'fav')}
+          title={it.favorita === 'TRUE' ? 'Quitar de favoritas' : 'Marcar como favorita'}
+          className={`text-xs px-2 py-1 rounded border ${it.favorita === 'TRUE' ? 'border-amber-300 text-amber-500 bg-amber-50' : 'border-gray-300 text-gray-400 hover:bg-gray-50'}`}>{it.favorita === 'TRUE' ? '★' : '☆'}</button>
+        {it.activa !== 'FALSE' && (it.estado === 'propuesta' || it.estado === 'generada') && (
           <button disabled={enCurso} onClick={() => patch(it.id, { estado: 'aprobada' }, 'ap')} className="text-xs px-2 py-1 rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50">Aprobar</button>
         )}
         {it.activa !== 'FALSE' && (it.estado === 'aprobada' || it.estado === 'generada' || it.estado === 'propuesta') && (
@@ -267,6 +296,7 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
             <tr>
               <th className="text-left px-3 py-2">Fecha</th>
               <th className="text-left px-3 py-2">Canal</th>
+              <th className="text-left px-3 py-2">Tipo</th>
               <th className="text-left px-3 py-2">Campaña</th>
               <th className="text-left px-3 py-2">Estado</th>
               <th className="text-right px-3 py-2">Acciones</th>
@@ -279,12 +309,15 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
               return (
                 <Fragment key={it.id}>
                   <tr className="hover:bg-gray-50 align-top">
-                    <td className="px-3 py-2 whitespace-nowrap text-gray-700">{it.fecha ? formatDate(it.fecha) : '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-700">{it.fecha ? formatDate(it.fecha) : '—'}{it.hora ? ` · ${it.hora}` : ''}</td>
                     <td className="px-3 py-2"><span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cm.cls}`}><CanalIcon canal={it.canal} className="w-3.5 h-3.5" /> {cm.label}</span></td>
+                    <td className="px-3 py-2"><span className="text-xs text-gray-600 whitespace-nowrap">{tipoDe(it)}</span></td>
                     <td className="px-3 py-2 max-w-[280px]">
                       <div className="font-medium text-gray-900">
-                        {it.titulo || it.idea || '(sin título)'}
+                        {it.favorita === 'TRUE' && <span className="text-amber-500 mr-1" title="Favorita">★</span>}
+                        <span className="text-gray-400 font-normal mr-1">#{it.id}</span>{it.titulo || it.idea || '(sin título)'}
                         {nImgs(it) > 1 && <span className="ml-1 text-[10px] font-semibold text-pink-600">🎠 {nImgs(it)}</span>}
+                        {destacada(it) && <span className="ml-1 text-[10px]" title={`Buen rendimiento (${perf[it.post_externo_id] ?? 0} interacciones)`}>🔥</span>}
                       </div>
                       {it.titulo && it.idea && <div className="text-xs text-gray-500 line-clamp-2">{it.idea}</div>}
                       <div className="text-[11px] text-gray-400 mt-0.5">{it.audiencia && `${it.audiencia}`}{it.objetivo && ` · ${OBJETIVO_LABEL[it.objetivo] || it.objetivo}`}</div>
@@ -303,19 +336,6 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
       </div>
     )
   }
-  // Sección de la Lista: título + descripción + tabla del grupo.
-  function SeccionLista({ titulo, desc, its }: { titulo: string; desc: string; its: Item[] }) {
-    return (
-      <div>
-        <div className="px-1 mb-1.5">
-          <span className="font-bold text-[#143C64]">{titulo}</span> <span className="text-gray-400 text-sm">({its.length})</span>
-          <p className="text-xs text-gray-500">{desc}</p>
-        </div>
-        {its.length === 0 ? <p className="text-sm text-gray-400 px-1 pb-2">Vacío.</p> : <TablaItems its={its} />}
-      </div>
-    )
-  }
-
   // ── Vista calendario: matriz de 6 semanas ────────────────────────────────────
   function buildGrid(): { iso: string; dia: number; inMonth: boolean }[] {
     const primero = new Date(mes.y, mes.m, 1)
@@ -328,7 +348,7 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
     return celdas
   }
   function itemsDe(iso: string): Item[] {
-    return visibles.filter(it => it.fecha === iso && grupoDe(it) === 'calendario')
+    return activos.filter(it => it.fecha === iso)
   }
   function cambiarMes(delta: number) {
     setMes(p => {
@@ -338,20 +358,12 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
   }
   const tituloMes = new Intl.DateTimeFormat('es-CL', { month: 'long', year: 'numeric' }).format(new Date(mes.y, mes.m, 1))
   const hoy = hoyISO()
-  // Ciclo de vida derivado: una campaña "ocurrió" si se publicó o su fecha ya pasó.
-  function ocurrida(it: Item): boolean {
-    return it.estado === 'publicada' || (!!it.fecha && it.fecha < hoy)
-  }
-  function grupoDe(it: Item): 'calendario' | 'activa_fuera' | 'inactiva' {
-    if (it.activa === 'FALSE' || it.estado === 'descartada') return 'inactiva'
-    if (ocurrida(it)) return 'inactiva'
-    if (it.estado === 'aprobada' || it.estado === 'programada') return 'calendario'
-    return 'activa_fuera'
-  }
-  const grupos = {
-    calendario: visibles.filter(it => grupoDe(it) === 'calendario'),
-    activa_fuera: visibles.filter(it => grupoDe(it) === 'activa_fuera'),
-    inactiva: visibles.filter(it => grupoDe(it) === 'inactiva'),
+  // Destacados por rendimiento: por encima del promedio de interacciones de lo publicado.
+  const perfVals = Object.values(perf).filter(v => v > 0)
+  const perfAvg = perfVals.length ? perfVals.reduce((a, b) => a + b, 0) / perfVals.length : 0
+  function destacada(it: Item): boolean {
+    const v = it.post_externo_id ? perf[it.post_externo_id] : 0
+    return !!v && v >= Math.max(1, perfAvg)
   }
 
   return (
@@ -389,10 +401,20 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
                 </button>
               ))}
             </div>
-            <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} className="text-sm border border-gray-300 rounded-xl px-3 py-1.5 bg-white shadow-md">
-              <option value="todos">Todos los estados</option>
-              {Object.entries(ESTADO_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
+            <div className="inline-flex gap-1 flex-wrap items-center">
+              {Object.entries(ESTADO_MAP).map(([k, v]) => {
+                const on = filtrosEstado.includes(k)
+                return (
+                  <button key={k} onClick={() => setFiltrosEstado(s => on ? s.filter(x => x !== k) : [...s, k])}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border ${on ? `${v.cls} border-transparent` : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'}`}>
+                    {v.label}
+                  </button>
+                )
+              })}
+              {filtrosEstado.length > 0 && <button onClick={() => setFiltrosEstado([])} className="text-xs text-gray-400 underline ml-1">limpiar</button>}
+            </div>
+            <button onClick={() => setSoloFav(v => !v)} title="Mostrar solo favoritas"
+              className={`px-3 py-1.5 rounded-xl text-sm font-medium border shadow-md ${soloFav ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}`}>★ Favoritas</button>
           </div>
 
           {cargando ? (
@@ -435,6 +457,7 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
                                   className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border text-[10px] leading-tight ${cm.chip} ${tachado ? 'opacity-50 line-through' : ''}`}>
                                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
                                   <CanalIcon canal={it.canal} className="w-3.5 h-3.5 shrink-0" />
+                                  {it.hora && <span className="font-semibold shrink-0">{it.hora}</span>}
                                   <span className="truncate">{it.titulo || it.idea || '—'}</span>
                                 </div>
                               )
@@ -454,25 +477,23 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
                 {Object.entries(ESTADO_MAP).map(([k, v]) => <span key={k} className="inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${v.dot}`} />{v.label}</span>)}
               </div>
             </div>
-          ) : visibles.length === 0 ? (
+          ) : activos.length === 0 && archivados.length === 0 ? (
             <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-8 text-center text-sm text-gray-500">
               No hay campañas todavía. Pedile al agente un plan o creá una manual.
             </div>
           ) : (
             <div className="space-y-4">
-              <SeccionLista titulo="📅 En Calendario" desc="Aprobadas y por venir — son las que aparecen en el calendario." its={grupos.calendario} />
-              <SeccionLista titulo="✏️ Activas (fuera de calendario)" desc="Activas pero sin aprobar. Generá y revisá; aprobá para mandarlas al calendario." its={grupos.activa_fuera} />
-              <div>
-                <button onClick={() => setVerInactivas(v => !v)} className="text-sm font-bold text-[#143C64] inline-flex items-center gap-1 px-1 py-1.5">
-                  <span className="text-gray-400">{verInactivas ? '▾' : '▸'}</span> 🗄️ Inactivas (repositorio) <span className="text-gray-400 font-medium">({grupos.inactiva.length})</span>
-                </button>
-                {verInactivas && (
-                  <div className="mt-1">
-                    <p className="text-xs text-gray-500 px-1 mb-1.5">Inactivadas a mano o que ya ocurrieron. Quedan como repositorio.</p>
-                    {grupos.inactiva.length === 0 ? <p className="text-sm text-gray-400 px-1">Vacío.</p> : <TablaItems its={grupos.inactiva} />}
-                  </div>
-                )}
-              </div>
+              {activos.length === 0
+                ? <p className="text-sm text-gray-400 px-1">No hay campañas activas con estos filtros.</p>
+                : <TablaItems its={activos} />}
+              {archivados.length > 0 && (
+                <div>
+                  <button onClick={() => setVerInactivas(v => !v)} className="text-sm font-bold text-[#143C64] inline-flex items-center gap-1 px-1 py-1.5">
+                    <span className="text-gray-400">{verInactivas ? '▾' : '▸'}</span> 🗄️ Inactivas (archivo) <span className="text-gray-400 font-medium">({archivados.length})</span>
+                  </button>
+                  {verInactivas && <div className="mt-1"><TablaItems its={archivados} /></div>}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -557,10 +578,11 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cm.cls}`}><CanalIcon canal={it.canal} className="w-3.5 h-3.5" /> {cm.label}</span>
                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${em.cls}`}>{em.label}</span>
+                    {it.hora && <span className="text-[11px] font-semibold text-gray-600">🕐 {it.hora}</span>}
                     {it.objetivo && <span className="text-[11px] text-gray-400">{OBJETIVO_LABEL[it.objetivo] || it.objetivo}</span>}
                   </div>
                   <div className="font-medium text-gray-900 text-sm">
-                    {it.titulo || it.idea || '(sin título)'}
+                    <span className="text-gray-400 font-normal mr-1">#{it.id}</span>{it.titulo || it.idea || '(sin título)'}
                     {nImgs(it) > 1 && <span className="ml-1 text-[10px] font-semibold text-pink-600">🎠 {nImgs(it)}</span>}
                   </div>
                   {it.titulo && it.idea && <div className="text-xs text-gray-500">{it.idea}</div>}
@@ -575,7 +597,7 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
 
       {nuevoFecha !== null && <ItemForm fechaInicial={nuevoFecha} onClose={() => setNuevoFecha(null)} onSaved={(it) => { setItems(p => [...p, it]); setNuevoFecha(null) }} />}
       {editItem && <ItemForm item={editItem} onClose={() => setEditItem(null)} onSaved={(it) => { setItems(p => p.map(x => x.id === it.id ? it : x)); setEditItem(null) }} />}
-      {preview && <PreviewModal item={preview} onClose={() => setPreview(null)} />}
+      {preview && <PreviewModal item={preview} onClose={() => setPreview(null)} onUpdated={(it) => { setItems(p => p.map(x => x.id === it.id ? it : x)); setPreview(it) }} />}
       {configOpen && <ConfigModal onClose={() => setConfigOpen(false)} />}
     </div>
   )
@@ -584,6 +606,7 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
 // ── Modal: crear/editar ítem ──────────────────────────────────────────────────
 function ItemForm({ item, fechaInicial, onClose, onSaved }: { item?: Item; fechaInicial?: string; onClose: () => void; onSaved: (it: Item) => void }) {
   const [fecha, setFecha] = useState(item?.fecha || fechaInicial || '')
+  const [hora, setHora] = useState(item?.hora || '')
   const [canal, setCanal] = useState(item?.canal || 'instagram')
   const [audiencia, setAudiencia] = useState(item?.audiencia || 'tutores')
   const [objetivo, setObjetivo] = useState(item?.objetivo || 'recordacion')
@@ -598,7 +621,7 @@ function ItemForm({ item, fechaInicial, onClose, onSaved }: { item?: Item; fecha
     if (!fecha || !canal || !idea.trim()) { alert('Fecha, canal e idea son obligatorios.'); return }
     setGuardando(true)
     try {
-      const payload: Record<string, string> = { fecha, canal, audiencia, objetivo, idea, titulo }
+      const payload: Record<string, string> = { fecha, hora, canal, audiencia, objetivo, idea, titulo }
       if (item) {
         payload.cuerpo = cuerpo
         // No tocar las imágenes de un carrusel desde acá (se editan con Regenerar).
@@ -621,6 +644,8 @@ function ItemForm({ item, fechaInicial, onClose, onSaved }: { item?: Item; fecha
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block text-sm"><span className="text-gray-600">Fecha</span>
             <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2" /></label>
+          <label className="block text-sm"><span className="text-gray-600">Hora (opcional)</span>
+            <input type="time" value={hora} onChange={e => setHora(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2" /></label>
           <label className="block text-sm"><span className="text-gray-600">Canal</span>
             <select value={canal} onChange={e => setCanal(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2">
               {CANALES.map(c => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
@@ -662,7 +687,7 @@ function ItemForm({ item, fechaInicial, onClose, onSaved }: { item?: Item; fecha
 }
 
 // ── Modal: preview de la pieza ────────────────────────────────────────────────
-function PreviewModal({ item, onClose }: { item: Item; onClose: () => void }) {
+function PreviewModal({ item, onClose, onUpdated }: { item: Item; onClose: () => void; onUpdated?: (it: Item) => void }) {
   const esEmail = item.canal === 'email'
   // Imágenes del post (carrusel) → desde imagenes_json; si no, la principal.
   let imgs: { url: string; alt?: string }[] = []
@@ -674,6 +699,19 @@ function PreviewModal({ item, onClose }: { item: Item; onClose: () => void }) {
     if (imgs.length === 0 && item.imagen_url) imgs = [{ url: item.imagen_url }]
   }
   const esCarrusel = imgs.length > 1
+  const [editando, setEditando] = useState<number | null>(null)
+  async function regenerar(indice: number) {
+    const instruccion = window.prompt('¿Qué querés ajustar de esta imagen? (ej. "corregí las manos", "poné el logo arriba a la derecha")')
+    if (!instruccion?.trim()) return
+    setEditando(indice)
+    try {
+      const r = await fetch(`/api/mailing/calendario/${item.id}/editar-imagen`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ indice, instruccion }) })
+      const d = await r.json()
+      if (!r.ok) { alert(d.error || 'Error'); return }
+      if (d.avisos?.length) alert('Listo con avisos:\n' + d.avisos.join('\n'))
+      onUpdated?.(d.item)
+    } catch { alert('Error de red') } finally { setEditando(null) }
+  }
   return (
     <Modal open onClose={onClose} title={`Vista previa · ${CANAL_MAP[item.canal]?.label || item.canal}`} size="2xl">
       <div className="space-y-3">
@@ -701,12 +739,16 @@ function PreviewModal({ item, onClose }: { item: Item; onClose: () => void }) {
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={im.url} alt={im.alt || ''} className="w-48 h-48 object-cover rounded-lg border border-gray-300 bg-gray-50" />
                       <span className="absolute top-1 left-1 text-[10px] font-bold bg-black/60 text-white rounded px-1.5 py-0.5">{i + 1}/{imgs.length}</span>
+                      <button onClick={() => regenerar(i + 1)} disabled={editando !== null} className="absolute bottom-1 right-1 text-[10px] bg-white/90 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-white disabled:opacity-50">{editando === i + 1 ? '…' : '✏️ Editar'}</button>
                     </div>
                   ))}
                 </div>
               ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={imgs[0].url} alt={imgs[0].alt || ''} className="w-full max-h-[40vh] object-contain rounded-lg border border-gray-300 bg-gray-50" />
+                <div className="relative inline-block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={imgs[0].url} alt={imgs[0].alt || ''} className="w-full max-h-[40vh] object-contain rounded-lg border border-gray-300 bg-gray-50" />
+                  <button onClick={() => regenerar(1)} disabled={editando !== null} className="absolute bottom-2 right-2 text-xs bg-white/90 border border-gray-300 rounded px-2 py-1 hover:bg-white disabled:opacity-50">{editando === 1 ? '…' : '✏️ Editar imagen'}</button>
+                </div>
               )
             ) : null}
             <div className="text-sm whitespace-pre-wrap text-gray-800 bg-gray-50 rounded-lg p-3 border border-gray-300">{item.cuerpo || '(sin copy)'}</div>

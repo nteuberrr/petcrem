@@ -11,7 +11,7 @@ import { actualizarItem, eliminarItem, obtenerItem, type ItemCalendario } from '
  */
 
 const EDITABLES: (keyof ItemCalendario)[] = [
-  'fecha', 'canal', 'estado', 'activa', 'objetivo', 'audiencia', 'idea', 'titulo', 'cuerpo',
+  'fecha', 'hora', 'canal', 'estado', 'activa', 'favorita', 'objetivo', 'audiencia', 'idea', 'titulo', 'cuerpo',
   'imagen_id', 'imagen_url', 'imagenes_json', 'notas',
 ]
 
