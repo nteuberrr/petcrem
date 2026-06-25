@@ -3,7 +3,8 @@ import { getSheetData } from './datastore'
 import { fmtPrecio } from './format'
 import { getMarketingConfig } from './marketing-config'
 import { listarCalendario, crearItems, type NuevoItem } from './marketing-calendario'
-import { listarImagenes, type ImagenBanco } from './mailing-images'
+import { listarImagenes, generarYGuardarImagen, type ImagenBanco } from './mailing-images'
+import { isNanoBananaConfigurado } from './nano-banana'
 import { generarPieza } from './marketing-pieza'
 import { leerPerfilFacebook, leerPerfilInstagram } from './meta-publish'
 
@@ -83,6 +84,7 @@ FLUJO DE TRABAJO (síguelo)
 1. PLANIFICAR (barato): cuando te pidan un plan ("armá el plan de julio", "ideas para esta semana"), primero usa "listar_calendario" para ver qué ya hay (no duplicar ni saturar un canal), y luego propón con "proponer_campanas" un conjunto de ítems repartidos por canal/fecha/objetivo. En el plan da SOLO idea + fecha + canal + audiencia + objetivo (y un título/gancho corto opcional). NO generes las piezas todavía.
 2. GENERAR (más caro): solo cuando el dueño lo pida explícitamente sobre ítems concretos ("generá la pieza de la #5", "escribí el post del lunes"), usa "generar_pieza" con el id. No generes piezas por iniciativa propia ni en lote sin que te lo pidan.
 3. Si te piden ideas de imágenes, mira el banco con "consultar_banco_imagenes" y prioriza reutilizar lo que ya existe.
+4. CREAR/EDITAR IMÁGENES sueltas (a pedido): si el dueño pide una imagen puntual (no una pieza del calendario), o adjunta una imagen en el chat para que hagas algo con ella, usá "generar_imagen". Para CREAR alcanza con un prompt fotográfico detallado. Para EDITAR/VARIAR a partir de una imagen del banco (por ej. incorporar el LOGO de marca, grupo "marca"), pasá su referencia_url; para basarte en lo que el dueño adjuntó, usá usar_adjunto:true. Cuando el dueño adjunta imágenes las VES en su mensaje (podés comentarlas). Después mostrá el resultado con ![](URL).
 
 FORMATO DE RESPUESTA (legible y al grano — tus mensajes se muestran con formato, no en crudo)
 - Escribí CONCISO y escaneable. Frases cortas, una idea por bloque. Nada de muros de texto.
@@ -196,6 +198,25 @@ const TOOL_AUDITAR: Anthropic.Tool = {
   input_schema: { type: 'object', properties: {}, required: [] },
 }
 
+const TOOL_GENERAR_IMG: Anthropic.Tool = {
+  name: 'generar_imagen',
+  description: 'Crea o EDITA una imagen suelta a pedido del dueño y la guarda en el banco. CREAR: pasa un prompt fotográfico detallado. EDITAR/VARIAR: además una referencia — usar_adjunto:true para basarte en la imagen que el dueño adjuntó en este turno, o referencia_url con la URL EXACTA de una imagen del banco (ej. el LOGO de marca) para incorporarla/variarla. Devuelve la URL; muéstrasela al dueño con ![](URL). NO uses esto para piezas del calendario (para eso es generar_pieza).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      prompt: { type: 'string', description: 'Descripción fotográfica detallada de la imagen a crear/editar (fotorrealista; NUNCA instalaciones del crematorio).' },
+      aspect: { type: 'string', description: 'Relación de aspecto, ej. "1:1", "16:9", "4:5" (opcional).' },
+      descripcion: { type: 'string', description: 'Descripción de 1 línea para el banco (opcional).' },
+      tags: { type: 'string', description: 'Palabras clave separadas por coma (opcional).' },
+      grupo: { type: 'string', enum: ['mascotas', 'personas', 'productos', 'otro'], description: 'Grupo del banco (opcional, default otro).' },
+      subgrupo: { type: 'string', description: 'Etiqueta/campaña para ordenar en el banco (opcional).' },
+      usar_adjunto: { type: 'boolean', description: 'true para usar como referencia la(s) imagen(es) que el dueño adjuntó en este turno.' },
+      referencia_url: { type: 'string', description: 'URL exacta de una imagen del banco para usar como referencia (ej. el logo de marca).' },
+    },
+    required: ['prompt'],
+  },
+}
+
 export interface RespuestaMarketing {
   mensaje: string
   acciones: string[]
@@ -225,10 +246,20 @@ interface ProponerInput { items?: Array<{ fecha?: string; canal?: string; audien
  */
 export async function generarRespuestaMarketing(
   historial: TurnoMarketing[],
-  opts: { creadoPor?: string } = {},
+  opts: { creadoPor?: string; adjuntos?: { mime: string; data: Buffer }[] } = {},
 ): Promise<RespuestaMarketing> {
   const base = construirMensajes(historial.slice(-20))
   if (base.length === 0) return { mensaje: '', acciones: [], cambios: false }
+  // Adjuntos del turno actual → se agregan como imágenes (visión) al último mensaje del usuario.
+  if (opts.adjuntos?.length) {
+    const last = base[base.length - 1]
+    if (last && last.role === 'user' && typeof last.content === 'string') {
+      const imgs: Anthropic.ImageBlockParam[] = opts.adjuntos.map(a => ({
+        type: 'image', source: { type: 'base64', media_type: a.mime as 'image/png', data: a.data.toString('base64') },
+      }))
+      last.content = [...imgs, { type: 'text', text: last.content }]
+    }
+  }
 
   const [tarifas, cfg, banco] = await Promise.all([
     bloqueTarifas(),
@@ -247,7 +278,7 @@ export async function generarRespuestaMarketing(
   system.push({ type: 'text', text: bloqueFechaChile() })
   system.push({ type: 'text', text: bloqueBanco(banco) })
 
-  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR]
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG]
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
   let cambios = false
@@ -335,6 +366,33 @@ export async function generarRespuestaMarketing(
           partes.push(ig ? `INSTAGRAM — estado actual:\n${JSON.stringify(ig, null, 2)}` : 'INSTAGRAM: todavía no conectado (se conecta el 30/06); aún no hay datos para leer.')
           partes.push('Recordá: el perfil de Instagram se edita SOLO a mano; en Facebook los campos de texto se pueden aplicar (lo hace el equipo). Entregá recomendaciones concretas y accionables (bio, datos a completar, destacados, foto/portada, primeras piezas).')
           resultText = partes.join('\n\n')
+        } else if (tu.name === 'generar_imagen') {
+          if (!isNanoBananaConfigurado()) {
+            resultText = 'No puedo generar imágenes ahora (falta GEMINI_API_KEY).'
+          } else {
+            const inp = tu.input as { prompt?: string; aspect?: string; descripcion?: string; tags?: string; grupo?: string; subgrupo?: string; usar_adjunto?: boolean; referencia_url?: string }
+            const refs: { data: Buffer; mime: string }[] = []
+            if (inp.usar_adjunto && opts.adjuntos?.length) refs.push(...opts.adjuntos)
+            if (inp.referencia_url) {
+              try {
+                const rr = await fetch(inp.referencia_url)
+                if (rr.ok) refs.push({ data: Buffer.from(await rr.arrayBuffer()), mime: rr.headers.get('content-type') || 'image/png' })
+              } catch { /* referencia no accesible: seguimos sin ella */ }
+            }
+            const grupoImg = ['mascotas', 'personas', 'productos', 'otro'].includes(String(inp.grupo)) ? String(inp.grupo) : 'otro'
+            const g = await generarYGuardarImagen({
+              prompt: String(inp.prompt || ''),
+              aspect: inp.aspect,
+              descripcion: inp.descripcion,
+              tags: inp.tags,
+              grupo: grupoImg,
+              subgrupo: inp.subgrupo,
+              referencias: refs.length ? refs : undefined,
+              creadoPor: opts.creadoPor,
+            })
+            cambios = true
+            resultText = `Imagen ${refs.length ? 'editada/variada' : 'creada'} y guardada en el banco (grupo ${grupoImg}). Muéstrasela al dueño incluyéndola con ![](${g.imagen.url}).`
+          }
         } else {
           resultText = 'Herramienta no disponible.'
         }

@@ -108,11 +108,21 @@ type ImagenBanco = {
   tags: string
   alt: string
   grupo: string
+  subgrupo: string
   whatsapp: boolean
   aspect: string
   origen: string
   modelo: string
   creado_por: string
+  fecha_creacion: string
+}
+type VideoBanco = {
+  id: string
+  url: string
+  descripcion: string
+  prompt: string
+  aspect: string
+  duracion: string
   fecha_creacion: string
 }
 
@@ -2190,22 +2200,23 @@ function ImagenPickerModal({ open, onClose, onPick }: {
   )
 }
 
-const GRUPOS = ['mascotas', 'personas', 'productos', 'instalaciones', 'otro'] as const
-// La IA NUNCA genera instalaciones → al generar solo se ofrecen estos grupos.
+const GRUPOS = ['marca', 'mascotas', 'personas', 'productos', 'instalaciones', 'otro'] as const
+// La IA NUNCA genera instalaciones ni imágenes de marca → al generar solo se ofrecen estos grupos.
 const GRUPOS_GEN = ['mascotas', 'personas', 'productos', 'otro'] as const
 const GRUPO_LABEL: Record<string, string> = {
-  mascotas: 'Mascotas', personas: 'Personas', productos: 'Productos',
+  marca: 'Imagen de marca', mascotas: 'Mascotas', personas: 'Personas', productos: 'Productos',
   instalaciones: 'Instalaciones', otro: 'Otro',
 }
 
 /** Tarjeta de una imagen del banco con nombre editable, grupo, WhatsApp, copiar y eliminar. */
-function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete }: {
+function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete, onAnimar }: {
   img: ImagenBanco
   onGrupo: (img: ImagenBanco, grupo: string) => void
   onWhatsapp: (img: ImagenBanco, on: boolean) => void
   onRename: (img: ImagenBanco, descripcion: string) => void
   onCopy: (url: string) => void
   onDelete: (img: ImagenBanco) => void
+  onAnimar: (img: ImagenBanco) => void
 }) {
   const [editando, setEditando] = useState(false)
   const [texto, setTexto] = useState(img.descripcion || img.alt || '')
@@ -2253,6 +2264,9 @@ function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete }: {
             <option value="">sin grupo</option>
             {GRUPOS.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
+          {img.subgrupo && (
+            <span title="Campaña / subgrupo" className="text-[10px] rounded px-1 py-0.5 bg-brand/10 text-brand border border-brand/20 max-w-[110px] truncate">{img.subgrupo}</span>
+          )}
           {/* Checkbox WhatsApp: si está marcado, el agente puede enviar esta foto al cliente. */}
           <label
             title="El agente de WhatsApp puede enviar esta imagen al cliente cuando la pida"
@@ -2262,6 +2276,7 @@ function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete }: {
             WhatsApp
           </label>
           <div className="ml-auto flex items-center gap-1">
+            <button type="button" onClick={() => onAnimar(img)} title="Animar a video (Veo)" className="text-gray-500 hover:text-brand text-xs">🎬</button>
             <button type="button" onClick={() => onCopy(img.url)} title="Copiar URL" className="text-gray-500 hover:text-brand text-xs">⧉</button>
             <button type="button" onClick={() => onDelete(img)} title="Eliminar" className="text-gray-500 hover:text-red-600 text-xs">🗑</button>
           </div>
@@ -2284,6 +2299,14 @@ function ImagenesPanel() {
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  // Videos (Veo): banco + flujo de "Animar a video".
+  const [videos, setVideos] = useState<VideoBanco[]>([])
+  const [animarImg, setAnimarImg] = useState<ImagenBanco | null>(null)
+  const [vPrompt, setVPrompt] = useState('')
+  const [vDur, setVDur] = useState('8')
+  const [vAspect, setVAspect] = useState('16:9')
+  const [vFase, setVFase] = useState<'' | 'lanzando' | 'generando' | 'guardando'>('')
+  const [vError, setVError] = useState('')
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -2295,10 +2318,19 @@ function ImagenesPanel() {
     setLoading(false)
   }, [])
 
+  const cargarVideos = useCallback(async () => {
+    try {
+      const r = await fetch('/api/mailing/videos', { cache: 'no-store' })
+      const d = await r.json()
+      setVideos(Array.isArray(d) ? d : [])
+    } catch { /* ignore */ }
+  }, [])
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     cargar()
-  }, [cargar])
+    cargarVideos()
+  }, [cargar, cargarVideos])
 
   async function generar() {
     if (!prompt.trim()) { setError('Describe la imagen que quieres generar.'); return }
@@ -2388,6 +2420,57 @@ function ImagenesPanel() {
     try { await navigator.clipboard.writeText(url); setInfo('URL copiada al portapapeles.') } catch { /* ignore */ }
   }
 
+  function abrirAnimar(img: ImagenBanco) {
+    setAnimarImg(img); setVPrompt(''); setVAspect('16:9'); setVDur('8'); setVError(''); setVFase('')
+  }
+
+  async function generarVideo() {
+    if (!animarImg) return
+    if (!vPrompt.trim()) { setVError('Describe el movimiento del video (ej. "cámara lenta acercándose, brisa suave").'); return }
+    setVError(''); setVFase('lanzando')
+    try {
+      const r = await fetch('/api/mailing/videos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'lanzar', prompt: vPrompt.trim(), imagen_url: animarImg.url, aspect: vAspect, resolution: '1080p', duracion: vDur }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || !j.operation) { setVError(j.error || `Error ${r.status}`); setVFase(''); return }
+      setVFase('generando')
+      // Sondeo cada 6s hasta que termine (máx ~7 min). No cerrar la ventana.
+      let uri = ''
+      for (let i = 0; i < 70; i++) {
+        await new Promise(res => setTimeout(res, 6000))
+        const er = await fetch(`/api/mailing/videos/estado?op=${encodeURIComponent(j.operation)}`, { cache: 'no-store' })
+        const ej = await er.json().catch(() => ({}))
+        if (!er.ok) { setVError(ej.error || 'Error consultando el estado'); setVFase(''); return }
+        if (ej.done) {
+          if (ej.error) { setVError(ej.error); setVFase(''); return }
+          uri = ej.uri || ''
+          break
+        }
+      }
+      if (!uri) { setVError('El video tardó demasiado. Probá de nuevo en un rato.'); setVFase(''); return }
+      setVFase('guardando')
+      const gr = await fetch('/api/mailing/videos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'guardar', uri, prompt: vPrompt.trim(), descripcion: animarImg.descripcion || vPrompt.trim(), imagen_origen: animarImg.id, aspect: vAspect, duracion: vDur }),
+      })
+      const gj = await gr.json().catch(() => ({}))
+      if (!gr.ok) { setVError(gj.error || 'Error al guardar el video'); setVFase(''); return }
+      setAnimarImg(null); setVFase(''); setInfo('🎬 Video generado y guardado en el banco.')
+      await cargarVideos()
+    } catch (e) {
+      setVError(e instanceof Error ? e.message : 'Error de red'); setVFase('')
+    }
+  }
+
+  async function eliminarVideo(v: VideoBanco) {
+    if (!confirm('¿Eliminar este video?')) return
+    const r = await fetch(`/api/mailing/videos?id=${encodeURIComponent(v.id)}`, { method: 'DELETE' })
+    if (r.ok) await cargarVideos()
+    else alert('Error al eliminar el video')
+  }
+
   // Agrupadas por etiqueta (grupo), en orden canónico + "sin etiqueta" al final.
   const grupos = useMemo(() => {
     const norm = (g: string) => ((GRUPOS as readonly string[]).includes(g) ? g : '')
@@ -2471,13 +2554,72 @@ function ImagenesPanel() {
               <div className="px-4 pb-4">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                   {g.imgs.map(img => (
-                    <ImagenCard key={img.id} img={img} onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onRename={renombrar} onCopy={copiarUrl} onDelete={eliminar} />
+                    <ImagenCard key={img.id} img={img} onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onRename={renombrar} onCopy={copiarUrl} onDelete={eliminar} onAnimar={abrirAnimar} />
                   ))}
                 </div>
               </div>
             </details>
           ))}
         </div>
+      )}
+
+      {/* Banco de videos (Veo) */}
+      {videos.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-gray-900">🎬 Videos <span className="text-xs font-normal text-gray-400">({videos.length})</span></h2>
+            <span className="text-[11px] text-gray-400">Generados con Veo a partir de una imagen</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {videos.map(v => (
+              <div key={v.id} className="border border-gray-300 rounded-lg overflow-hidden bg-black/5">
+                <video src={v.url} controls className="w-full max-h-48 bg-black" />
+                <div className="p-2 flex items-start gap-1.5">
+                  <p className="flex-1 text-[11px] text-gray-600 line-clamp-2">{v.descripcion || v.prompt || 'Video'}</p>
+                  <button type="button" onClick={() => copiarUrl(v.url)} title="Copiar URL" className="text-gray-500 hover:text-brand text-xs">⧉</button>
+                  <button type="button" onClick={() => eliminarVideo(v)} title="Eliminar" className="text-gray-500 hover:text-red-600 text-xs">🗑</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: animar imagen a video con Veo */}
+      {animarImg && (
+        <Modal open onClose={() => { if (!vFase) setAnimarImg(null) }} title="Animar a video (Veo)" size="lg">
+          <div className="space-y-3">
+            <div className="flex gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={animarImg.url} alt="" className="w-28 h-28 object-cover rounded-lg border border-gray-300 shrink-0" />
+              <div className="flex-1 text-sm text-gray-600">
+                <p>Veo va a <b>animar esta imagen</b> en un clip corto. Describí el movimiento que querés.</p>
+                <p className="text-[11px] text-gray-400 mt-1">Calidad alta (1080p). Tarda 1-3 min y cuesta ~US$2-3. <b>No cierres esta ventana</b> mientras genera.</p>
+              </div>
+            </div>
+            <textarea value={vPrompt} onChange={e => setVPrompt(e.target.value)} rows={3} disabled={!!vFase}
+              placeholder="Ej: cámara acercándose lentamente, brisa suave moviendo el pelaje, luz cálida del atardecer."
+              className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-60" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <select value={vAspect} onChange={e => setVAspect(e.target.value)} disabled={!!vFase} title="Formato"
+                className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+                <option value="16:9">16:9 (horizontal)</option>
+                <option value="9:16">9:16 (vertical / stories)</option>
+              </select>
+              <select value={vDur} onChange={e => setVDur(e.target.value)} disabled={!!vFase} title="Duración">
+                <option value="4">4 seg</option>
+                <option value="6">6 seg</option>
+                <option value="8">8 seg</option>
+              </select>
+              <button type="button" onClick={generarVideo} disabled={!!vFase || !vPrompt.trim()}
+                className="bg-gradient-to-r from-violet-600 to-brand-dark text-white rounded-lg px-4 py-1.5 text-sm font-semibold shadow-md disabled:opacity-50">
+                {vFase === 'lanzando' ? 'Lanzando…' : vFase === 'generando' ? 'Generando… (no cierres)' : vFase === 'guardando' ? 'Guardando…' : '🎬 Generar video'}
+              </button>
+            </div>
+            {vError && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{vError}</div>}
+            {vFase === 'generando' && <p className="text-xs text-gray-500">Veo está renderizando el clip… esto puede tardar 1-3 minutos.</p>}
+          </div>
+        </Modal>
       )}
     </div>
   )

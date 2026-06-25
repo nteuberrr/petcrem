@@ -199,6 +199,8 @@ export const SHEETS: Record<string, string[]> = {
     // | instalaciones | otro). 'instalaciones' SOLO existe en imágenes SUBIDAS por
     // el equipo — la IA nunca genera fotos de instalaciones.
     'grupo',
+    // subgrupo: etiqueta libre opcional (ej. por campaña) para ordenar sin crear grupos.
+    'subgrupo',
     // whatsapp: TRUE si el agente de WhatsApp puede enviar esta imagen al cliente
     // cuando la pida (ej. fotos de ánforas/urnas). El equipo lo marca a mano.
     'whatsapp',
@@ -206,12 +208,17 @@ export const SHEETS: Record<string, string[]> = {
     'origen', 'modelo',
     'creado_por', 'fecha_creacion',
   ],
+  // Banco de VIDEOS de campañas (MP4 generados con Veo). Separado del de imágenes.
+  mailing_videos: [
+    'id', 'url', 'key', 'descripcion', 'prompt', 'imagen_origen',
+    'aspect', 'duracion', 'modelo', 'creado_por', 'fecha_creacion',
+  ],
   // Calendario de campañas multicanal (email | instagram | facebook). Capa de
   // planificación del agente de marketing. estado: propuesta → aprobada →
   // generada → programada → publicada | descartada. El email aprobado puede
   // materializarse en mailing_campanas; el social se publica vía Meta Graph API.
   campaign_calendar: [
-    'id', 'fecha', 'canal', 'estado',
+    'id', 'fecha', 'canal', 'estado', 'activa',
     'objetivo', 'audiencia', 'idea', 'titulo', 'cuerpo',
     'imagen_id', 'imagen_url', 'imagenes_json',
     'campana_id', 'post_externo_id', 'post_url',

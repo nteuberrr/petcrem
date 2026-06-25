@@ -11,6 +11,7 @@ type Item = {
   fecha: string
   canal: string
   estado: string
+  activa: string
   objetivo: string
   audiencia: string
   idea: string
@@ -85,6 +86,15 @@ function nImgs(it: { imagenes_json: string; imagen_url: string }): number {
   } catch { /* ignore */ }
   return it.imagen_url ? 1 : 0
 }
+/** Lee un File como data URL base64 (para adjuntar imágenes de referencia al agente). */
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result))
+    r.onerror = reject
+    r.readAsDataURL(file)
+  })
+}
 
 export default function CalendarioContent({ onBack, canalInicial }: { onBack?: () => void; canalInicial?: string }) {
   const [items, setItems] = useState<Item[]>([])
@@ -98,11 +108,16 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
   const ahora = new Date()
   const [mes, setMes] = useState<{ y: number; m: number }>({ y: ahora.getFullYear(), m: ahora.getMonth() })
 
-  // chat
+  // chat (persistido en localStorage por canal para que sobreviva la navegación)
+  const chatKey = `mkt-chat-${canalInicial || 'general'}`
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [pensando, setPensando] = useState(false)
   const chatEnd = useRef<HTMLDivElement>(null)
+  const chatCargado = useRef(false)
+  const [verInactivas, setVerInactivas] = useState(false)
+  const [adjuntos, setAdjuntos] = useState<string[]>([])
+  const fileRef = useRef<HTMLInputElement>(null)
 
   // modales
   const [editItem, setEditItem] = useState<Item | null>(null)
@@ -122,6 +137,19 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
 
   useEffect(() => { cargar() }, [cargar])
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs, pensando])
+  // Cargar el chat guardado al montar (una vez); después persistir cada cambio.
+  useEffect(() => {
+    try { const s = localStorage.getItem(chatKey); if (s) setMsgs(JSON.parse(s)) } catch { /* ignore */ }
+    chatCargado.current = true
+  }, [chatKey])
+  useEffect(() => {
+    if (!chatCargado.current) return
+    try { localStorage.setItem(chatKey, JSON.stringify(msgs)) } catch { /* ignore */ }
+  }, [msgs, chatKey])
+  function resetearChat() {
+    setMsgs([])
+    try { localStorage.removeItem(chatKey) } catch { /* ignore */ }
+  }
 
   const visibles = items.filter(it =>
     (filtroCanal === 'todos' || it.canal === filtroCanal) &&
@@ -170,17 +198,30 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
   }
   async function enviar(texto: string) {
     const t = texto.trim()
-    if (!t || pensando) return
-    const nuevos = [...msgs, { rol: 'usuario' as const, texto: t }]
-    setMsgs(nuevos); setInput(''); setPensando(true)
+    if ((!t && adjuntos.length === 0) || pensando) return
+    const adj = adjuntos
+    const textoBase = t || '(imagen adjunta)'
+    const textoMostrado = adj.length ? `${textoBase}\n\n📎 ${adj.length} imagen(es) adjunta(s)` : textoBase
+    const nuevos = [...msgs, { rol: 'usuario' as const, texto: textoMostrado }]
+    setMsgs(nuevos); setInput(''); setAdjuntos([]); setPensando(true)
     try {
-      const r = await fetch('/api/mailing/agente', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ historial: nuevos }) })
+      const r = await fetch('/api/mailing/agente', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ historial: nuevos, adjuntos: adj }) })
       const d = await r.json()
       if (!r.ok) { setMsgs(m => [...m, { rol: 'agente', texto: `⚠️ ${d.error || 'Error'}` }]); return }
       setMsgs(m => [...m, { rol: 'agente', texto: d.mensaje || '(sin respuesta)' }])
       if (d.cambios) await cargar()
     } catch { setMsgs(m => [...m, { rol: 'agente', texto: '⚠️ Error de conexión' }]) }
     finally { setPensando(false) }
+  }
+  async function onPickFiles(files: FileList | null) {
+    if (!files?.length) return
+    const nuevas: string[] = []
+    for (const f of Array.from(files).slice(0, 4)) {
+      if (!f.type.startsWith('image/')) continue
+      try { nuevas.push(await fileToDataUrl(f)) } catch { /* ignore */ }
+    }
+    setAdjuntos(prev => [...prev, ...nuevas].slice(0, 4))
+    if (fileRef.current) fileRef.current.value = ''
   }
 
   // Botonera de acciones de un ítem (reusada en lista y en el modal de día).
@@ -189,10 +230,10 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
     const enCurso = busy.startsWith(it.id + ':')
     return (
       <div className="flex flex-wrap gap-1 justify-end">
-        {it.estado === 'propuesta' && (
+        {it.activa !== 'FALSE' && (it.estado === 'propuesta' || it.estado === 'generada') && !ocurrida(it) && (
           <button disabled={enCurso} onClick={() => patch(it.id, { estado: 'aprobada' }, 'ap')} className="text-xs px-2 py-1 rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50">Aprobar</button>
         )}
-        {(it.estado === 'aprobada' || it.estado === 'generada' || it.estado === 'propuesta') && (
+        {it.activa !== 'FALSE' && (it.estado === 'aprobada' || it.estado === 'generada' || it.estado === 'propuesta') && (
           <button disabled={enCurso} onClick={() => generar(it.id)} className="text-xs px-2 py-1 rounded bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50">
             {busy === `${it.id}:gen` ? '…' : it.cuerpo ? 'Regenerar' : 'Generar'}
           </button>
@@ -206,8 +247,71 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
         {it.estado === 'publicada' && it.post_url && (
           <a href={it.post_url} target="_blank" rel="noreferrer" className="text-xs px-2 py-1 rounded border border-emerald-300 text-emerald-700 hover:bg-emerald-50">Ver post ↗</a>
         )}
+        {it.activa !== 'FALSE' ? (
+          <button disabled={enCurso} onClick={() => patch(it.id, { activa: 'FALSE' }, 'inact')} className="text-xs px-2 py-1 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-50">Inactivar</button>
+        ) : (
+          <button disabled={enCurso} onClick={() => patch(it.id, { activa: 'TRUE' }, 'act')} className="text-xs px-2 py-1 rounded border border-emerald-300 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">Activar</button>
+        )}
         <button onClick={() => setEditItem(it)} className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50">Editar</button>
         <button disabled={enCurso} onClick={() => eliminar(it.id)} className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50">✕</button>
+      </div>
+    )
+  }
+
+  // Tabla de ítems (reusada por cada grupo de la Lista).
+  function TablaItems({ its }: { its: Item[] }) {
+    return (
+      <div className="overflow-x-auto bg-white rounded-xl border border-gray-300">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th className="text-left px-3 py-2">Fecha</th>
+              <th className="text-left px-3 py-2">Canal</th>
+              <th className="text-left px-3 py-2">Campaña</th>
+              <th className="text-left px-3 py-2">Estado</th>
+              <th className="text-right px-3 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {its.map(it => {
+              const cm = CANAL_MAP[it.canal] || { label: it.canal, icon: '•', cls: 'bg-gray-100 text-gray-600' }
+              const em = ESTADO_MAP[it.estado] || { label: it.estado, cls: 'bg-gray-100 text-gray-600' }
+              return (
+                <Fragment key={it.id}>
+                  <tr className="hover:bg-gray-50 align-top">
+                    <td className="px-3 py-2 whitespace-nowrap text-gray-700">{it.fecha ? formatDate(it.fecha) : '—'}</td>
+                    <td className="px-3 py-2"><span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cm.cls}`}><CanalIcon canal={it.canal} className="w-3.5 h-3.5" /> {cm.label}</span></td>
+                    <td className="px-3 py-2 max-w-[280px]">
+                      <div className="font-medium text-gray-900">
+                        {it.titulo || it.idea || '(sin título)'}
+                        {nImgs(it) > 1 && <span className="ml-1 text-[10px] font-semibold text-pink-600">🎠 {nImgs(it)}</span>}
+                      </div>
+                      {it.titulo && it.idea && <div className="text-xs text-gray-500 line-clamp-2">{it.idea}</div>}
+                      <div className="text-[11px] text-gray-400 mt-0.5">{it.audiencia && `${it.audiencia}`}{it.objetivo && ` · ${OBJETIVO_LABEL[it.objetivo] || it.objetivo}`}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${em.cls}`}>{em.label}</span>
+                      {it.estado_publicacion === 'error' && <div className="text-[11px] text-red-500 mt-0.5">error al publicar</div>}
+                    </td>
+                    <td className="px-3 py-2"><Acciones it={it} /></td>
+                  </tr>
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+  // Sección de la Lista: título + descripción + tabla del grupo.
+  function SeccionLista({ titulo, desc, its }: { titulo: string; desc: string; its: Item[] }) {
+    return (
+      <div>
+        <div className="px-1 mb-1.5">
+          <span className="font-bold text-[#143C64]">{titulo}</span> <span className="text-gray-400 text-sm">({its.length})</span>
+          <p className="text-xs text-gray-500">{desc}</p>
+        </div>
+        {its.length === 0 ? <p className="text-sm text-gray-400 px-1 pb-2">Vacío.</p> : <TablaItems its={its} />}
       </div>
     )
   }
@@ -224,7 +328,7 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
     return celdas
   }
   function itemsDe(iso: string): Item[] {
-    return visibles.filter(it => it.fecha === iso)
+    return visibles.filter(it => it.fecha === iso && grupoDe(it) === 'calendario')
   }
   function cambiarMes(delta: number) {
     setMes(p => {
@@ -234,6 +338,21 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
   }
   const tituloMes = new Intl.DateTimeFormat('es-CL', { month: 'long', year: 'numeric' }).format(new Date(mes.y, mes.m, 1))
   const hoy = hoyISO()
+  // Ciclo de vida derivado: una campaña "ocurrió" si se publicó o su fecha ya pasó.
+  function ocurrida(it: Item): boolean {
+    return it.estado === 'publicada' || (!!it.fecha && it.fecha < hoy)
+  }
+  function grupoDe(it: Item): 'calendario' | 'activa_fuera' | 'inactiva' {
+    if (it.activa === 'FALSE' || it.estado === 'descartada') return 'inactiva'
+    if (ocurrida(it)) return 'inactiva'
+    if (it.estado === 'aprobada' || it.estado === 'programada') return 'calendario'
+    return 'activa_fuera'
+  }
+  const grupos = {
+    calendario: visibles.filter(it => grupoDe(it) === 'calendario'),
+    activa_fuera: visibles.filter(it => grupoDe(it) === 'activa_fuera'),
+    inactiva: visibles.filter(it => grupoDe(it) === 'inactiva'),
+  }
 
   return (
     <div className="space-y-4">
@@ -340,45 +459,20 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
               No hay campañas todavía. Pedile al agente un plan o creá una manual.
             </div>
           ) : (
-            <div className="overflow-x-auto bg-white rounded-2xl border border-gray-300 shadow-md">
-              <table className="w-full min-w-[640px] text-sm">
-                <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-                  <tr>
-                    <th className="text-left px-3 py-2">Fecha</th>
-                    <th className="text-left px-3 py-2">Canal</th>
-                    <th className="text-left px-3 py-2">Campaña</th>
-                    <th className="text-left px-3 py-2">Estado</th>
-                    <th className="text-right px-3 py-2">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {visibles.map(it => {
-                    const cm = CANAL_MAP[it.canal] || { label: it.canal, icon: '•', cls: 'bg-gray-100 text-gray-600' }
-                    const em = ESTADO_MAP[it.estado] || { label: it.estado, cls: 'bg-gray-100 text-gray-600' }
-                    return (
-                      <Fragment key={it.id}>
-                        <tr className="hover:bg-gray-50 align-top">
-                          <td className="px-3 py-2 whitespace-nowrap text-gray-700">{it.fecha ? formatDate(it.fecha) : '—'}</td>
-                          <td className="px-3 py-2"><span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cm.cls}`}><CanalIcon canal={it.canal} className="w-3.5 h-3.5" /> {cm.label}</span></td>
-                          <td className="px-3 py-2 max-w-[280px]">
-                            <div className="font-medium text-gray-900">
-                              {it.titulo || it.idea || '(sin título)'}
-                              {nImgs(it) > 1 && <span className="ml-1 text-[10px] font-semibold text-pink-600">🎠 {nImgs(it)}</span>}
-                            </div>
-                            {it.titulo && it.idea && <div className="text-xs text-gray-500 line-clamp-2">{it.idea}</div>}
-                            <div className="text-[11px] text-gray-400 mt-0.5">{it.audiencia && `${it.audiencia}`}{it.objetivo && ` · ${OBJETIVO_LABEL[it.objetivo] || it.objetivo}`}</div>
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${em.cls}`}>{em.label}</span>
-                            {it.estado_publicacion === 'error' && <div className="text-[11px] text-red-500 mt-0.5">error al publicar</div>}
-                          </td>
-                          <td className="px-3 py-2"><Acciones it={it} /></td>
-                        </tr>
-                      </Fragment>
-                    )
-                  })}
-                </tbody>
-              </table>
+            <div className="space-y-4">
+              <SeccionLista titulo="📅 En Calendario" desc="Aprobadas y por venir — son las que aparecen en el calendario." its={grupos.calendario} />
+              <SeccionLista titulo="✏️ Activas (fuera de calendario)" desc="Activas pero sin aprobar. Generá y revisá; aprobá para mandarlas al calendario." its={grupos.activa_fuera} />
+              <div>
+                <button onClick={() => setVerInactivas(v => !v)} className="text-sm font-bold text-[#143C64] inline-flex items-center gap-1 px-1 py-1.5">
+                  <span className="text-gray-400">{verInactivas ? '▾' : '▸'}</span> 🗄️ Inactivas (repositorio) <span className="text-gray-400 font-medium">({grupos.inactiva.length})</span>
+                </button>
+                {verInactivas && (
+                  <div className="mt-1">
+                    <p className="text-xs text-gray-500 px-1 mb-1.5">Inactivadas a mano o que ya ocurrieron. Quedan como repositorio.</p>
+                    {grupos.inactiva.length === 0 ? <p className="text-sm text-gray-400 px-1">Vacío.</p> : <TablaItems its={grupos.inactiva} />}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -388,10 +482,14 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
           <div className="bg-white rounded-2xl border border-gray-300 flex flex-col h-[72vh] sticky top-4 shadow-md overflow-hidden">
             <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2.5 bg-brand">
               <AgenteIcon className="w-9 h-9 shrink-0" />
-              <div>
+              <div className="flex-1 min-w-0">
                 <div className="font-bold text-white text-sm">Agente de Marketing</div>
                 <div className="text-[11px] text-white/70">Planifica, redacta y propone</div>
               </div>
+              {msgs.length > 0 && (
+                <button onClick={resetearChat} title="Borrar la conversación y empezar de cero"
+                  className="text-[11px] px-2 py-1 rounded-lg bg-white/15 text-white hover:bg-white/25 shrink-0">Resetear</button>
+              )}
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50">
               {msgs.length === 0 && (
@@ -417,12 +515,29 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
               <div ref={chatEnd} />
             </div>
             <div className="p-3 border-t border-gray-300 bg-white">
-              <div className="flex gap-2">
+              {adjuntos.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {adjuntos.map((src, i) => (
+                    <div key={i} className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt="" className="w-12 h-12 object-cover rounded-lg border border-gray-300" />
+                      <button onClick={() => setAdjuntos(a => a.filter((_, j) => j !== i))}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-gray-700 text-white text-[10px] leading-none flex items-center justify-center">×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2 items-end">
+                <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={e => onPickFiles(e.target.files)} />
+                <button type="button" onClick={() => fileRef.current?.click()} title="Subir imagen de referencia"
+                  className="px-2.5 py-2 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-50 self-end shrink-0">
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                </button>
                 <textarea value={input} onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(input) } }}
                   rows={2} placeholder="Escribile al agente…"
                   className="flex-1 text-sm border border-gray-300 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#143C64]/20 focus:border-[#143C64]" />
-                <button disabled={pensando || !input.trim()} onClick={() => enviar(input)} className="px-4 py-2 rounded-xl bg-[#143C64] text-white text-sm font-medium hover:bg-[#0f2e4d] disabled:opacity-50 self-end shadow-md">Enviar</button>
+                <button disabled={pensando || (!input.trim() && adjuntos.length === 0)} onClick={() => enviar(input)} className="px-4 py-2 rounded-xl bg-[#143C64] text-white text-sm font-medium hover:bg-[#0f2e4d] disabled:opacity-50 self-end shadow-md">Enviar</button>
               </div>
             </div>
           </div>

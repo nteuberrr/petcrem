@@ -89,8 +89,8 @@ const CANAL_HINT: Record<string, string> = {
 }
 
 /** Tope de imágenes por pieza y de imágenes NUEVAS a generar (control de costo). */
-const MAX_IMGS = 8
-const MAX_NUEVAS = 4
+const MAX_IMGS = 10
+const MAX_NUEVAS = 10
 
 interface EspecieImagen {
   modo?: 'reuse' | 'nueva'
@@ -226,8 +226,8 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
       continue
     }
     if (sp.modo === 'nueva' && sp.prompt) {
-      if ((sp.grupo || '').toLowerCase() === 'instalaciones') {
-        avisos.push('Se omitió una imagen de instalaciones (esas solo se reutilizan del banco).')
+      if (['instalaciones', 'marca'].includes((sp.grupo || '').toLowerCase())) {
+        avisos.push('Se omitió una imagen de instalaciones/marca (esas solo se reutilizan del banco).')
         continue
       }
       if (!puedeGenerar) {
@@ -243,6 +243,7 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
         const r = await generarYGuardarImagen({
           prompt: sp.prompt, alt: sp.alt, descripcion: sp.descripcion || sp.alt,
           tags: sp.tags, grupo: sp.grupo || 'otro',
+          subgrupo: (item.titulo || item.idea || '').slice(0, 60),
           aspect: aspectoForzado || sp.aspect || '1:1',
           referencias: refImagen ? [refImagen] : undefined,
           creadoPor,

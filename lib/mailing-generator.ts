@@ -37,7 +37,7 @@ export function isGeneradorConfigurado(): boolean {
 const MODEL = process.env.ANTHROPIC_MAILING_MODEL || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6'
 
 /** Tope de imágenes nuevas por generación (control de costo/latencia). */
-const MAX_NUEVAS = 3
+const MAX_NUEVAS = 5
 /** Cuántas imágenes del banco se le muestran a Claude (más recientes). */
 const BANCO_VISIBLE = 40
 
@@ -70,7 +70,7 @@ function bloqueBanco(banco: ImagenBanco[]): string {
   return `BANCO DE IMÁGENES DISPONIBLES PARA REUTILIZAR (revísalo SIEMPRE primero):
 ${lineas}
 
-Para REUTILIZAR una de estas imágenes, copia su URL EXACTA en el atributo src del <img>. Reutiliza cuando la imagen calce razonablemente con el contexto (no fuerces). Solo pide una imagen NUEVA si ninguna del banco sirve. Las imágenes con grupo "instalaciones" son fotos REALES del equipo: úsalas si el correo se beneficia de mostrar las instalaciones (tú nunca generas fotos de instalaciones).`
+Para REUTILIZAR una de estas imágenes, copia su URL EXACTA en el atributo src del <img>. Reutiliza cuando la imagen calce razonablemente con el contexto (no fuerces). Solo pide una imagen NUEVA si ninguna del banco sirve. Las imágenes con grupo "instalaciones" son fotos REALES del equipo: úsalas si el correo se beneficia de mostrar las instalaciones (tú nunca generas fotos de instalaciones). Las imágenes con grupo "marca" son el LOGO/sello oficial de Alma Animal: reutilízalas como logo/firma del correo cuando corresponda (tampoco las generas tú).`
 }
 
 function systemPrompt(contacto: Contacto, puedeGenerar: boolean): string {
@@ -136,7 +136,7 @@ const TOOL: Anthropic.Tool = {
       html: { type: 'string', description: 'Documento HTML COMPLETO del correo, email-safe. Imágenes nuevas usan src="GEN:slotN"; imágenes reutilizadas usan la URL exacta del banco.' },
       nuevas: {
         type: 'array',
-        description: 'Imágenes nuevas a generar (máx 3). Vacío si solo reutilizas o no hay imágenes.',
+        description: 'Imágenes nuevas a generar (máx 5). Vacío si solo reutilizas o no hay imágenes.',
         items: {
           type: 'object',
           properties: {

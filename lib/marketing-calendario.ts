@@ -18,6 +18,8 @@ export interface ItemCalendario {
   fecha: string
   canal: string
   estado: string
+  /** 'TRUE' (activa) | 'FALSE' (inactiva/repositorio). Eje independiente del estado. */
+  activa: string
   objetivo: string
   audiencia: string
   idea: string
@@ -43,6 +45,7 @@ export interface ItemCalendario {
 function toItem(r: Record<string, string>): ItemCalendario {
   return {
     id: r.id || '', fecha: r.fecha || '', canal: r.canal || '', estado: r.estado || '',
+    activa: r.activa || 'TRUE',
     objetivo: r.objetivo || '', audiencia: r.audiencia || '', idea: r.idea || '',
     titulo: r.titulo || '', cuerpo: r.cuerpo || '',
     imagen_id: r.imagen_id || '', imagen_url: r.imagen_url || '', imagenes_json: r.imagenes_json || '',
@@ -100,6 +103,7 @@ function filaDesde(n: NuevoItem, id: string): Record<string, string> {
     fecha: (n.fecha || '').trim(),
     canal: (n.canal || '').trim(),
     estado: (n.estado || 'propuesta').trim(),
+    activa: 'TRUE',
     objetivo: (n.objetivo || '').trim(),
     audiencia: (n.audiencia || '').trim(),
     idea: (n.idea || '').trim(),

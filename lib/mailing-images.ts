@@ -5,7 +5,7 @@ import { generarImagen, extFromMime } from './nano-banana'
 import { todayISO } from './dates'
 
 /** Grupos válidos para clasificar imágenes del banco. */
-export const GRUPOS_IMAGEN = ['mascotas', 'personas', 'productos', 'instalaciones', 'otro'] as const
+export const GRUPOS_IMAGEN = ['marca', 'mascotas', 'personas', 'productos', 'instalaciones', 'otro'] as const
 export type GrupoImagen = typeof GRUPOS_IMAGEN[number]
 
 /**
@@ -17,7 +17,7 @@ export type GrupoImagen = typeof GRUPOS_IMAGEN[number]
 
 const TABLE = 'mailing_imagenes'
 const COLS = [
-  'id', 'url', 'key', 'descripcion', 'prompt', 'tags', 'alt', 'grupo', 'whatsapp',
+  'id', 'url', 'key', 'descripcion', 'prompt', 'tags', 'alt', 'grupo', 'subgrupo', 'whatsapp',
   'aspect', 'ancho', 'alto', 'origen', 'modelo', 'creado_por', 'fecha_creacion',
 ]
 
@@ -36,6 +36,8 @@ export interface ImagenBanco {
   tags: string
   alt: string
   grupo: string
+  /** Etiqueta libre opcional para ordenar dentro de un grupo (ej. por campaña). */
+  subgrupo: string
   /** El agente de WhatsApp puede enviar esta imagen al cliente cuando la pida. */
   whatsapp: boolean
   aspect: string
@@ -52,6 +54,7 @@ function toImagen(r: Record<string, string>): ImagenBanco {
     id: r.id || '', url: r.url || '', key: r.key || '',
     descripcion: r.descripcion || '', prompt: r.prompt || '', tags: r.tags || '', alt: r.alt || '',
     grupo: r.grupo || '',
+    subgrupo: r.subgrupo || '',
     whatsapp: /^(true|verdadero|1)$/i.test((r.whatsapp || '').trim()),
     aspect: r.aspect || '', ancho: r.ancho || '', alto: r.alto || '',
     origen: r.origen || '', modelo: r.modelo || '',
@@ -80,6 +83,7 @@ export interface RegistrarImagenInput {
   tags?: string
   alt?: string
   grupo?: string
+  subgrupo?: string
   whatsapp?: boolean
   aspect?: string
   ancho?: number | string
@@ -102,6 +106,7 @@ export async function registrarImagen(input: RegistrarImagenInput): Promise<Imag
     tags: (input.tags || '').trim(),
     alt: (input.alt || '').trim(),
     grupo: (input.grupo || '').trim(),
+    subgrupo: (input.subgrupo || '').trim(),
     whatsapp: input.whatsapp ? 'TRUE' : 'FALSE',
     aspect: (input.aspect || '').trim(),
     ancho: input.ancho != null ? String(input.ancho) : '',
@@ -132,6 +137,7 @@ export async function generarYGuardarImagen(args: {
   descripcion?: string
   tags?: string
   grupo?: string
+  subgrupo?: string
   aspect?: string
   creadoPor?: string
   referencias?: { data: Buffer; mime: string }[]
@@ -162,6 +168,7 @@ export async function generarYGuardarImagen(args: {
     tags: args.tags || '',
     alt: args.alt || args.descripcion || '',
     grupo: args.grupo || '',
+    subgrupo: args.subgrupo || '',
     aspect: args.aspect || '',
     origen: 'ai',
     modelo: img.modelo,
@@ -177,7 +184,7 @@ export async function generarYGuardarImagen(args: {
  */
 export async function actualizarImagen(
   id: string,
-  cambios: { grupo?: string; descripcion?: string; tags?: string; whatsapp?: boolean },
+  cambios: { grupo?: string; subgrupo?: string; descripcion?: string; tags?: string; whatsapp?: boolean },
 ): Promise<void> {
   await ensureBanco()
   const rows = await getSheetData(TABLE)
@@ -185,6 +192,7 @@ export async function actualizarImagen(
   if (!row) throw new Error(`imagen ${id} no encontrada`)
   const merged = { ...row }
   if (cambios.grupo !== undefined) merged.grupo = cambios.grupo.trim()
+  if (cambios.subgrupo !== undefined) merged.subgrupo = cambios.subgrupo.trim()
   if (cambios.descripcion !== undefined) merged.descripcion = cambios.descripcion.trim()
   if (cambios.tags !== undefined) merged.tags = cambios.tags.trim()
   if (cambios.whatsapp !== undefined) merged.whatsapp = cambios.whatsapp ? 'TRUE' : 'FALSE'
