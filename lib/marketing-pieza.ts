@@ -1,7 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { BRAND, getContacto } from './email-layout'
-import { MARCA_VISUAL } from './marca-visual'
-import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, type ImagenBanco } from './mailing-images'
+import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
+import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, type ImagenBanco } from './mailing-images'
+import { generarGraficoMarca } from './marketing-grafico'
+import { esLogo } from './marca-logo'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { generarCampana } from './mailing-generator'
 import { obtenerItem, actualizarItem, type ItemCalendario } from './marketing-calendario'
@@ -58,8 +60,10 @@ async function materializarBorradorEmail(args: {
  *
  *  - email   → reutiliza el generador de campañas (Claude + Nano Banana): asunto
  *              + HTML completo. Queda como borrador para refinar/enviar en Mailing.
- *  - social  → Claude redacta el copy (con la voz de la audiencia) y elige una
- *              imagen del banco o pide una nueva (fotorrealista). NUNCA instalaciones.
+ *  - social  → Claude redacta el copy (con la voz de la audiencia) y arma las
+ *              imágenes priorizando PLACAS DE MARCA (texto sobre el diseño, vía satori,
+ *              sin costo) y la reutilización del banco; genera una FOTO nueva solo como
+ *              excepción (momento cálido). NUNCA instalaciones ni stock corporativo.
  */
 
 let client: Anthropic | null = null
@@ -94,7 +98,7 @@ const MAX_IMGS = 10
 const MAX_NUEVAS = 10
 
 interface EspecieImagen {
-  modo?: 'reuse' | 'nueva'
+  modo?: 'reuse' | 'nueva' | 'grafico'
   url?: string
   prompt?: string
   alt?: string
@@ -102,14 +106,40 @@ interface EspecieImagen {
   tags?: string
   grupo?: string
   aspect?: string
+  /** modo=grafico: el HTML de la PLACA de marca (ver MARCA_GRAFICO). */
+  html?: string
+  /** modo=grafico: fotos reales a insertar en la placa (FOTO:slot). */
+  fotos?: { slot?: string; prompt?: string; aspect?: string }[]
 }
 interface SalidaPost {
   caption?: string
   /** Imágenes EN ORDEN. 1 = post simple; 2+ = carrusel (Instagram). */
   imagenes?: EspecieImagen[]
 }
-/** Una imagen ya resuelta (reutilizada o generada). */
-interface ImagenResuelta { url: string; alt: string; id: string }
+/** Una imagen ya resuelta (reutilizada, generada o placa de marca). */
+interface ImagenResuelta { url: string; alt: string; id: string; grafico?: boolean }
+
+/** Relación de aspecto del carrusel → formato del motor de placas (satori). */
+function aspectoAFormato(aspect?: string): string {
+  switch ((aspect || '1:1').trim()) {
+    case '4:5': return 'post_vertical'
+    case '9:16': return 'story'
+    case '16:9': return 'horizontal'
+    default: return 'post' // 1:1
+  }
+}
+
+/** Variantes del logo de marca (grupo "marca") para que el modelo las ponga en las placas. */
+function bloqueLogosPieza(banco: ImagenBanco[]): string {
+  const logos = banco.filter(esLogo)
+  if (logos.length === 0) return ''
+  const lineas = logos.map(l => {
+    const d = `${l.descripcion || l.alt || ''}`.toLowerCase()
+    const hint = /blanc/.test(d) ? ' → sobre fondos OSCUROS/navy' : /azul|navy|oscuro/.test(d) ? ' → sobre fondos CLAROS/crema' : ''
+    return `- ${l.descripcion || `logo #${l.id}`}: ${l.url}${hint}`
+  }).join('\n')
+  return `LOGOS DE MARCA (al diseñar una placa, poné el logo con <img src="URL"> eligiendo la variante que CONTRASTE con el fondo):\n${lineas}`
+}
 
 function bancoBloque(banco: ImagenBanco[]): string {
   if (banco.length === 0) return 'BANCO DE IMÁGENES: (vacío — no hay imágenes para reutilizar).'
@@ -131,18 +161,32 @@ const TOOL_POST: Anthropic.Tool = {
       caption: { type: 'string', description: 'Texto del post listo para publicar (incluye hashtags si corresponde al canal). Si es carrusel, el copy puede invitar a deslizar.' },
       imagenes: {
         type: 'array',
-        description: 'Imágenes del post EN ORDEN. 1 imagen = post simple. Para Instagram puedes hacer un CARRUSEL con 2 a 8 imágenes coherentes entre sí. Para Facebook usa solo 1. Vacío si no hay imagen.',
+        description: 'Imágenes del post EN ORDEN. 1 imagen = post simple. Para Instagram puedes hacer un CARRUSEL con 2 a 8 imágenes coherentes entre sí. Para Facebook usa solo 1. Vacío si no hay imagen. Lo más usado es "grafico" (placa de marca); las fotos nuevas son la excepción.',
         items: {
           type: 'object',
           properties: {
-            modo: { type: 'string', enum: ['reuse', 'nueva'], description: 'reuse = usar una URL del banco; nueva = generar una.' },
+            modo: { type: 'string', enum: ['grafico', 'reuse', 'nueva'], description: 'grafico = PLACA DE MARCA con texto (lo más usado, no cuesta); reuse = usar una foto del banco; nueva = generar una foto fotorrealista NUEVA (excepcional).' },
+            html: { type: 'string', description: 'Si modo=grafico: el HTML de la placa (ver "DISEÑO DE GRÁFICOS CON TEXTO": un solo <div> raíz del tamaño del formato, flexbox, More Sugar solo el título / Inter el resto, hex de marca, el logo con <img>, fotos con <img src="FOTO:slotN">).' },
+            fotos: {
+              type: 'array',
+              description: 'Si modo=grafico y la placa incluye fotos reales: una por cada <img src="FOTO:slotN">. Vacío si la placa es solo texto/diseño.',
+              items: {
+                type: 'object',
+                properties: {
+                  slot: { type: 'string', description: 'ej. "slot1" (debe coincidir con src="FOTO:slot1").' },
+                  prompt: { type: 'string', description: 'Descripción fotográfica (fotorrealista, cálida, on-brand; NUNCA instalaciones).' },
+                  aspect: { type: 'string' },
+                },
+                required: ['slot', 'prompt'],
+              },
+            },
             url: { type: 'string', description: 'Si modo=reuse: URL EXACTA del banco.' },
-            prompt: { type: 'string', description: 'Si modo=nueva: descripción fotográfica detallada (fotorrealista). NUNCA instalaciones del crematorio.' },
+            prompt: { type: 'string', description: 'Si modo=nueva: descripción fotográfica detallada (fotorrealista, CÁLIDA y on-brand: una mascota viva tranquila/feliz o un tutor con su mascota). NUNCA fotos ejecutivas/corporativas/de oficina/financieras; NUNCA instalaciones.' },
             alt: { type: 'string' },
             descripcion: { type: 'string', description: 'Si modo=nueva: 1 línea para el banco.' },
             tags: { type: 'string', description: 'Si modo=nueva: palabras clave separadas por coma.' },
             grupo: { type: 'string', enum: ['mascotas', 'personas', 'productos', 'otro'], description: 'Si modo=nueva. NUNCA "instalaciones".' },
-            aspect: { type: 'string', description: 'Relación de aspecto, ej. "1:1", "4:5". En un carrusel usa el MISMO aspecto en todas (Instagram recorta según la primera).' },
+            aspect: { type: 'string', description: 'Relación de aspecto, ej. "1:1", "4:5". En un carrusel usa el MISMO aspecto en TODAS (Instagram recorta según la primera).' },
           },
           required: ['modo'],
         },
@@ -173,14 +217,18 @@ REGLAS:
 
 ${MARCA_VISUAL}
 
-IMÁGENES (campo "imagenes", EN ORDEN):
-- Post SIMPLE = 1 imagen. CARRUSEL (solo Instagram) = 2 a ${MAX_IMGS} imágenes coherentes entre sí (misma línea visual y MISMO aspecto, porque Instagram recorta todas según la primera). Facebook: 1 sola imagen.
-- Haz un CARRUSEL cuando el contenido lo justifique (varios pasos/consejos, "qué incluye", antes/después, una lista) o cuando te lo pidan explícitamente. Si haces carrusel, que cada imagen aporte algo distinto y el copy acompañe (puede invitar a deslizar). Si NO es carrusel, devuelve UNA sola imagen y no escribas "desliza".
-${puedeGenerar
-    ? '- Para cada imagen: si alguna del banco calza, reutilízala (modo "reuse", URL exacta); si no, genera una NUEVA fotorrealista (modo "nueva") con prompt detallado. PROHIBIDO generar instalaciones/locales/hornos/fachada/vehículos (esas solo se reutilizan del banco). Reutiliza siempre que puedas para no generar de más.'
-    : '- Generación de imágenes nuevas NO disponible: usa solo imágenes del banco (modo "reuse"). Si ninguna sirve, devuelve "imagenes" vacío.'}
-- Para Instagram usa preferentemente cuadrado o vertical (1:1 o 4:5).
+${MARCA_GRAFICO}
 
+IMÁGENES (campo "imagenes", EN ORDEN) — PENSÁ COMO DIRECTOR SENIOR Y SÉ EFICIENTE:
+- NO generes una foto nueva por cada slide: es caro e innecesario. La mayoría de los posts y carruseles se arman con PLACAS DE MARCA (texto sobre nuestro diseño) y, a lo sumo, UNA foto reutilizada del banco.
+- Tres modos por imagen:
+  · "grafico" = PLACA DE MARCA (lo MÁS usado; NO cuesta generarla): una pieza con TEXTO sobre el diseño de Alma Animal (navy/dorado/crema + logo + tipografía de marca). VOS escribís el HTML (ver "DISEÑO DE GRÁFICOS CON TEXTO"). ESTAS SON NUESTRAS PLANTILLAS. Usá placas para TODO lo informativo/comercial: portada del carrusel con el gancho, listas de virtudes/diferenciadores, datos, horario, pasos del proceso, "por qué elegirnos", comparativas, citas, y la placa de cierre con CTA + contacto.
+  · "reuse" = reutilizar una FOTO del banco (URL exacta del banco). Para un momento cálido cuando alguna calza.
+  · "nueva" = generar una FOTO fotorrealista NUEVA. SOLO excepcional: una imagen cálida y emocional (una mascota viva tranquila o feliz, o un tutor con su mascota) cuando NO hay nada en el banco que sirva. NUNCA fotos ejecutivas/corporativas/de oficina/de negocios/financieras; NUNCA instalaciones.
+- B2B (clínicas/veterinarios) y cualquier contenido de virtudes/datos/proceso → PLACAS (grafico), NO fotos. Una clínica quiere ver el profesionalismo de NUESTRA marca (cálida y confiable), no stock de oficina.
+- Post SIMPLE = 1 imagen (placa o foto). CARRUSEL (solo Instagram) = 2 a ${MAX_IMGS} placas/imágenes coherentes entre sí (misma línea visual y MISMO aspecto, porque Instagram recorta todas según la primera). Estructura típica de carrusel: placa-portada con el gancho → una placa por idea/virtud → placa de cierre con CTA + contacto. Facebook = 1 sola imagen.
+- Para Instagram usá cuadrado (1:1) o vertical (4:5); MISMO aspecto en TODAS las del carrusel.
+${puedeGenerar ? '' : '- (Generación de FOTOS nuevas no disponible ahora: armá la pieza con placas (grafico) y reutilización del banco.)\n'}
 Devuelve SIEMPRE con la herramienta "entregar_post".`
 
   const instruccion = [
@@ -197,6 +245,7 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
     system: [
       { type: 'text', text: system },
       { type: 'text', text: bancoBloque(banco) },
+      ...(bloqueLogosPieza(banco) ? [{ type: 'text' as const, text: bloqueLogosPieza(banco) }] : []),
     ],
     tools: [TOOL_POST],
     tool_choice: { type: 'tool', name: 'entregar_post' },
@@ -219,6 +268,9 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
   // imagen generada como REFERENCIA para mantener sujeto/estilo/paleta entre slides.
   const aspectoForzado = esCarrusel ? (specs[0]?.aspect || '1:1') : undefined
   let nuevasUsadas = 0
+  // Toda la pieza comparte UN código de campaña (C-X); cada imagen nueva queda C-X.Y.
+  // Se reserva perezosamente (solo si se genera al menos una imagen nueva).
+  let campania = ''
   let refImagen: { data: Buffer; mime: string } | null = null
   // Secuencial (no Promise.all): para poder encadenar la imagen de referencia.
   const resueltas: ImagenResuelta[] = []
@@ -226,6 +278,26 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
     if (sp.modo === 'reuse' && sp.url) {
       const m = banco.find(b => b.url === sp.url)
       resueltas.push({ url: sp.url, alt: sp.alt || m?.alt || m?.descripcion || '', id: m?.id || '' })
+      continue
+    }
+    // PLACA DE MARCA (satori): no cuesta como una foto IA → es lo más usado en carruseles.
+    if (sp.modo === 'grafico' && (sp.html || '').trim()) {
+      try {
+        if (!campania) campania = await asignarCampania()
+        const fotos = (sp.fotos || []).filter(ff => ff?.slot && ff?.prompt).map(ff => ({ slot: String(ff.slot), prompt: String(ff.prompt), aspect: ff.aspect }))
+        if (fotos.length && !puedeGenerar) avisos.push('Una placa pedía fotos pero la generación no está disponible; va sin ellas.')
+        const g = await generarGraficoMarca({
+          formato: aspectoAFormato(aspectoForzado || sp.aspect),
+          html: String(sp.html),
+          fotos,
+          creadoPor,
+          campania,
+        })
+        resueltas.push({ url: g.url, alt: sp.alt || '', id: '', grafico: true })
+        avisos.push(...g.avisos)
+      } catch (e) {
+        avisos.push(`No se pudo generar una placa: ${e instanceof Error ? e.message : String(e)}`)
+      }
       continue
     }
     if (sp.modo === 'nueva' && sp.prompt) {
@@ -243,14 +315,16 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
       }
       nuevasUsadas++
       try {
+        if (!campania) campania = await asignarCampania()
         const r = await generarYGuardarImagen({
           prompt: sp.prompt, alt: sp.alt,
-          descripcion: `C-${item.id}.${resueltas.length + 1}`,
+          descripcion: sp.descripcion || sp.alt || '',
           tags: [sp.tags, sp.descripcion || sp.alt].filter(Boolean).join(', '), grupo: sp.grupo || 'otro',
           subgrupo: (item.titulo || item.idea || '').slice(0, 60),
           aspect: aspectoForzado || sp.aspect || '1:1',
           referencias: refImagen ? [refImagen] : undefined,
           creadoPor,
+          campania,
         })
         resueltas.push({ url: r.imagen.url, alt: r.imagen.alt || '', id: r.imagen.id })
         // La primera imagen (limpia) queda como referencia visual de las siguientes.
@@ -270,14 +344,16 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
 
   // LOGO DE MARCA (paso de cierre): toda pieza que se publica lleva el logo. En post
   // simple va en la imagen; en carrusel va SOLO en la ÚLTIMA (al final). Se estampa
-  // nítido sobre la imagen final (no lo dibuja la IA).
+  // sobre las FOTOS; las PLACAS ya vienen branded (con su logo), no se re-estampan.
   if (resueltas.length > 0) {
     const idx = resueltas.length === 1 ? 0 : resueltas.length - 1
-    try {
-      const conLogo = await estamparLogoEnUrl(resueltas[idx].url, banco)
-      resueltas[idx] = { ...resueltas[idx], url: conLogo }
-    } catch (e) {
-      avisos.push('No se pudo agregar el logo a la imagen: ' + (e instanceof Error ? e.message : String(e)))
+    if (!resueltas[idx].grafico) {
+      try {
+        const conLogo = await estamparLogoEnUrl(resueltas[idx].url, banco)
+        resueltas[idx] = { ...resueltas[idx], url: conLogo }
+      } catch (e) {
+        avisos.push('No se pudo agregar el logo a la imagen: ' + (e instanceof Error ? e.message : String(e)))
+      }
     }
   }
 
@@ -378,7 +454,7 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
     try {
       const r = await generarYGuardarImagen({
         prompt: instruccion.trim(),
-        descripcion: `C-${id}.${ti + 1}`,
+        descripcion: (item.titulo || item.idea || 'Imagen de pieza').slice(0, 60),
         tags: 'edicion',
         grupo: 'otro',
         subgrupo: (item.titulo || item.idea || '').slice(0, 60),
@@ -387,6 +463,7 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
         editar: true,
         referencias,
         creadoPor,
+        kind: 'publicacion',
       })
       imgs[ti] = { url: r.imagen.url, alt: imgs[ti].alt || '' }
     } catch (e) { avisos.push(`No se pudo regenerar la imagen ${ti + 1}: ${e instanceof Error ? e.message : 'error'}`) }
