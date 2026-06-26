@@ -31,11 +31,20 @@ export async function uploadToR2(
   if (!bucket) throw new Error('R2 no configurado: falta R2_BUCKET_NAME')
   if (!publicBase) throw new Error('R2 no configurado: falta R2_PUBLIC_URL')
 
+  // El firmador del AWS SDK rechaza buffers respaldados por un SharedArrayBuffer
+  // (los devuelven, p.ej., resvg y sharp en Linux/Vercel) al hashear el payload:
+  // «The "input" argument must be ... ArrayBuffer ... SharedArrayBuffer». Si el body
+  // viene así, lo copiamos a un ArrayBuffer normal antes de firmar/subir.
+  const body: Buffer | Uint8Array =
+    (typeof SharedArrayBuffer !== 'undefined' && buffer.buffer instanceof SharedArrayBuffer)
+      ? new Uint8Array(buffer)
+      : buffer
+
   const client = getClient()
   await client.send(new PutObjectCommand({
     Bucket: bucket,
     Key: key,
-    Body: buffer,
+    Body: body,
     ContentType: contentType,
   }))
 
