@@ -68,26 +68,29 @@ export const MARCA_GRAFICO = `DISEÑO DE GRÁFICOS CON TEXTO (herramienta "disen
 Vos escribís el DISEÑO en HTML y el sistema lo rasteriza con las FUENTES y COLORES REALES (no los dibuja la IA). Tenés libertad de composición/jerarquía/información, pero respetá SIEMPRE la marca:
 - COLORES (hex EXACTOS): navy ${BRAND.navy} (bloques/estructura), dorado ${BRAND.amber} (acentos, filetes), crema ${BRAND.cream} y blanco #ffffff (fondos), texto sobre claro ${BRAND.ink}, texto sobre navy #ffffff o #e8eef5. Domina crema/blanco; navy estructura; dorado acento. Podés sumar UN color de acento puntual sin romper la línea.
 - TIPOGRAFÍA: font-family:'More Sugar' SOLO para el título/wordmark grande (es la fuente del logo); font-family:'Inter' para TODO el resto (subtítulos, bullets, datos), con font-weight 400/600/700.
-- LOGO: NO lo pongas; se agrega solo abajo a la derecha. Dejá esa esquina con aire.
-- FOTOS reales: poné <img src="FOTO:slot1" width=".." height=".." style="object-fit:cover" /> donde quieras una foto y pedí esa foto en "fotos" (con su prompt). Las fotos son cálidas y reales (mascotas vivas), nunca instalaciones.
+- REDACCIÓN: NO copies literal lo que te dice el dueño. Redactá los textos en tono PROFESIONAL y pulido de marca, parejo y bien jerarquizado (ej. te dice "retiro a domicilio" → escribí "Retiro a domicilio y desde clínicas"). Títulos cortos; bullets de pocas palabras.
+- LOGO: PONELO VOS en el diseño con <img src="URL"> usando una de las URLs de la sección "LOGOS DE MARCA". Elegí la variante por CONTRASTE: sobre fondo navy/oscuro usá el logo BLANCO; sobre crema/blanco/foto clara usá el logo AZUL. Ubicalo donde quede mejor y donde lo pida el dueño (NO siempre abajo a la derecha; puede ir en una esquina del bloque navy, etc.); chico, prolijo y NUNCA encima de la parte cargada de una foto. SIEMPRE incluí el logo.
+- FOTOS reales: poné <img src="FOTO:slot1" width=".." height=".." style="object-fit:cover" /> donde quieras una foto y pedí esa foto en "fotos" (con su prompt). Cálidas, reales (mascotas vivas), nunca instalaciones.
+- AJUSTES: si el dueño pide cambiar SOLO algo puntual (ej. el texto), mantené TODO lo demás IGUAL — sobre todo la MISMA foto: reusá su URL exacta en el <img src="https://..."> (te la paso tras generar), NO generes una foto nueva. No cambies lo que no te pidieron.
 
 REGLAS TÉCNICAS DEL HTML (obligatorias — el motor es satori):
 - UN solo <div> RAÍZ del tamaño EXACTO del canvas según el formato: portada_fb=1640x624, post=1080x1080, post_vertical=1080x1350, story=1080x1920, horizontal=1200x675.
-- Solo estilos INLINE (style="..."). Layout con FLEXBOX: TODO <div> con 2 o más hijos DEBE llevar display:flex (y flex-direction). Nada de grid, float, position ni tablas.
+- Solo estilos INLINE (style="..."). Layout con FLEXBOX: TODO <div> con 2 o más hijos DEBE llevar display:flex (y flex-direction). Podés usar position:relative en la raíz + position:absolute en el logo para ubicarlo en una esquina. Nada de grid, float ni tablas.
 - El texto va dentro de <span>/<p>. Tamaños y espaciados en px. Imágenes con width/height explícitos.
 
-EJEMPLO (formato portada_fb, 1640x624 — adaptá libremente la composición):
-<div style="display:flex;width:1640px;height:624px;background:${BRAND.cream}">
+EJEMPLO (formato portada_fb, 1640x624 — adaptá libremente la composición y la posición del logo):
+<div style="display:flex;position:relative;width:1640px;height:624px;background:${BRAND.cream}">
   <div style="display:flex;flex-direction:column;justify-content:center;width:940px;height:624px;background:${BRAND.navy};padding:0 88px">
     <span style="font-family:'More Sugar';font-size:84px;color:#ffffff;line-height:1.04">Alma Animal</span>
     <span style="font-family:Inter;font-weight:600;font-size:34px;color:${BRAND.amber};margin-top:14px">Huellas que no se borran</span>
     <div style="display:flex;width:180px;height:7px;background:${BRAND.amber};margin:28px 0"></div>
     <div style="display:flex;flex-direction:column">
       <span style="font-family:Inter;font-size:28px;color:#e8eef5;margin-bottom:8px">Entrega en 4 días hábiles</span>
-      <span style="font-family:Inter;font-size:28px;color:#e8eef5">Retiro a domicilio y clínicas</span>
+      <span style="font-family:Inter;font-size:28px;color:#e8eef5">Retiro a domicilio y desde clínicas</span>
     </div>
   </div>
   <div style="display:flex;width:700px;height:624px"><img src="FOTO:slot1" width="700" height="624" style="object-fit:cover" /></div>
+  <img src="URL_DEL_LOGO_BLANCO" width="150" style="position:absolute;top:40px;left:752px" />
 </div>`
 
 /**

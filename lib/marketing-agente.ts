@@ -6,6 +6,7 @@ import { listarCalendario, crearItems, type NuevoItem } from './marketing-calend
 import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
+import { esLogo } from './marca-logo'
 import { generarPieza, editarImagenPieza } from './marketing-pieza'
 import { generarGraficoMarca, FORMATOS_GRAFICO } from './marketing-grafico'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
@@ -163,6 +164,19 @@ function bloqueBanco(banco: ImagenBanco[]): string {
   for (const b of banco) porGrupo[b.grupo || 'otro'] = (porGrupo[b.grupo || 'otro'] || 0) + 1
   const resumen = Object.entries(porGrupo).map(([g, n]) => `${g}: ${n}`).join(', ')
   return `BANCO DE IMÁGENES (${banco.length} imágenes — ${resumen}). Usa "consultar_banco_imagenes" para ver detalles y prioriza reutilizar.`
+}
+
+/** Variantes del logo (grupo "marca") con su URL, para que el agente las coloque en
+ *  los gráficos (disenar_grafico) eligiendo la que contraste con el fondo. */
+function bloqueLogos(banco: ImagenBanco[]): string {
+  const logos = banco.filter(esLogo)
+  if (logos.length === 0) return ''
+  const lineas = logos.map(l => {
+    const d = `${l.descripcion || l.alt || ''}`.toLowerCase()
+    const hint = /blanc/.test(d) ? ' → sobre fondos OSCUROS/navy' : /azul|navy|oscuro/.test(d) ? ' → sobre fondos CLAROS/crema' : ''
+    return `- ${l.descripcion || `logo #${l.id}`}: ${l.url}${hint}`
+  }).join('\n')
+  return `LOGOS DE MARCA (al diseñar un gráfico con "disenar_grafico", poné el logo con <img src="URL"> usando UNA de estas URLs; elegí la que CONTRASTE con el fondo donde lo ubiques):\n${lineas}`
 }
 
 // ─── Herramientas ─────────────────────────────────────────────────────────────
@@ -403,6 +417,8 @@ export async function generarRespuestaMarketing(
   if (empresa) system.push({ type: 'text', text: empresa })
   system.push({ type: 'text', text: bloqueFechaChile() })
   system.push({ type: 'text', text: bloqueBanco(banco) })
+  const logos = bloqueLogos(banco)
+  if (logos) system.push({ type: 'text', text: logos })
 
   const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG]
   const convo: Anthropic.MessageParam[] = [...base]
@@ -548,7 +564,10 @@ export async function generarRespuestaMarketing(
               creadoPor: opts.creadoPor,
             })
             cambios = true
-            resultText = `Gráfico de marca generado (colores, tipografía y logo exactos). Muéstraselo al dueño con ![](${r.url}).${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}`
+            const fotosTxt = r.fotos.length
+              ? ` Fotos usadas (si después SOLO cambiás texto, REUSÁ esta URL exacta en el <img>, NO generes otra): ${r.fotos.map(f => `${f.slot}=${f.url}`).join(', ')}.`
+              : ''
+            resultText = `Gráfico de marca generado (colores, tipografía y logo exactos). Muéstraselo al dueño con ![](${r.url}).${fotosTxt}${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}`
           }
         } else if (tu.name === 'publicar_pieza') {
           const id = String((tu.input as { id?: string }).id || '')
