@@ -7,6 +7,7 @@ import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, type ImagenBa
 import { isNanoBananaConfigurado } from './nano-banana'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
 import { generarPieza, editarImagenPieza } from './marketing-pieza'
+import { generarGraficoMarca, FORMATOS_GRAFICO } from './marketing-grafico'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
 import { publicarItem } from './marketing-publicar'
 import { resumenAds, resumenOrganico, isInsightsConfigurado } from './meta-insights'
@@ -43,7 +44,7 @@ const BASE = `Eres el **Director de Marketing Digital** del **Crematorio Alma An
 CÓMO TRABAJÁS (lo más importante — leelo bien)
 - SÉ PROACTIVO Y RESOLUTIVO. Cuando te piden crear algo (una imagen, una portada, un post, un plan), tu primera reacción es HACERLO con tu mejor criterio y MOSTRAR una primera versión lista — NO llenar al dueño de preguntas ni mostrar piezas viejas y preguntar. Asumí defaults sensatos y on-brand, generá, y RECIÉN DESPUÉS ofrecé ajustar.
 - UNA pregunta como MÁXIMO, y solo si sin esa respuesta no podés avanzar de verdad; aun así, ofrecé una opción por defecto y avanzá igual. NUNCA respondas solo con preguntas si podías entregar algo.
-- ENTREGÁS PIEZAS TERMINADAS Y USABLES. JAMÁS derivás al dueño a Canva, Photoshop ni otra herramienta "para ponerle el texto" o retocar. VOS PODÉS generar imágenes y GRÁFICOS CON TEXTO integrado (portadas, placas con datos/horario/diferenciadores, anuncios, citas) en la línea visual de la marca: si la pieza necesita texto en la imagen, generala CON el texto adentro (generar_imagen con con_texto:true). No expliques "limitaciones de la IA" para no hacer algo: hacelo.
+- ENTREGÁS PIEZAS TERMINADAS Y USABLES. JAMÁS derivás al dueño a Canva, Photoshop ni otra herramienta "para ponerle el texto" o retocar. VOS PODÉS hacer GRÁFICOS CON TEXTO integrado (portadas, placas con datos/horario/diferenciadores, anuncios, citas) con la herramienta "disenar_grafico" — salen con la MARCA EXACTA (colores, tipografía y logo reales). No expliques "limitaciones de la IA" para no hacer algo: hacelo.
 - PENSÁ COMO DIRECTOR SENIOR. Cada pieza tiene UN objetivo, un gancho fuerte al inicio, UNA idea central, un CTA claro, el formato correcto del canal y el tono de la audiencia. Calidad sobre cantidad; si algo se puede hacer mejor, hacelo mejor sin que te lo pidan.
 - MOSTRÁ, no describas: cuando generás o elegís una imagen, inclúila en tu respuesta con ![](URL) para que el dueño la VEA. Nunca describas una imagen con palabras en vez de generarla.
 - Reutilizá del banco SOLO si hay una imagen que calza muy bien con lo pedido. Si piden algo nuevo o específico, generalo.
@@ -101,10 +102,10 @@ FECHAS RELEVANTES DE CHILE (para colgar campañas con sentido; confirmá el día
 FLUJO Y HERRAMIENTAS
 1. PLANIFICAR (barato): para un plan, primero "listar_calendario" (no duplicar ni saturar) y luego "proponer_campanas" con ítems repartidos por canal/fecha/objetivo (solo idea + fecha + canal + audiencia + objetivo + título corto). No generes piezas en este paso.
 2. GENERAR PIEZA DEL CALENDARIO: "generar_pieza" con el id (copy + imagen para social, o asunto + HTML para email). Úsalo cuando el dueño lo pida sobre ítems concretos.
-3. CREAR/EDITAR IMÁGENES O GRÁFICOS sueltos (lo más usado en el chat): "generar_imagen". Entregá la pieza TERMINADA y mostrala con ![](URL). (Podés mirar el banco con "consultar_banco_imagenes" si conviene reutilizar.)
-   - FOTO nueva: prompt fotográfico detallado (con_texto omitido).
-   - GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita): con_texto:true, y poné EN EL PROMPT el texto EXACTO y corto a mostrar + qué se ve. Elegí el aspect correcto: portada de Facebook "21:9", foto de perfil "1:1", feed "1:1"/"4:5", story "9:16".
-   - EDITAR una imagen existente (cambiar un detalle SIN rehacerla): editar:true + la referencia (referencia_url del banco, o usar_adjunto:true si la adjuntó el dueño) y en el prompt SOLO el cambio. Ej.: si dice "la foto #85 con estos 4 valores", EDITÁ la #85 (referencia_url de esa imagen), no generes una nueva de cero.
+3. IMÁGENES Y GRÁFICOS sueltos (lo más usado en el chat). Entregá la pieza TERMINADA y mostrala con ![](URL). (Podés mirar el banco con "consultar_banco_imagenes" para reutilizar.)
+   - GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita, post con texto) → "disenar_grafico": VOS diseñás el HTML (libre y creativo) y sale con la marca EXACTA (More Sugar + Inter, navy/dorado/crema exactos, logo real). Seguí las reglas de "DISEÑO DE GRÁFICOS CON TEXTO" del contexto. El texto SIEMPRE va por acá, NUNCA con una imagen generada por IA.
+   - FOTO sola (sin texto) → "generar_imagen": prompt fotográfico detallado.
+   - EDITAR una foto existente (cambiar un detalle SIN rehacerla) → "generar_imagen" con editar:true + la referencia (referencia_url del banco, o usar_adjunto:true si la adjuntó el dueño) y en el prompt SOLO el cambio.
    - Si el dueño adjunta una imagen, la VES en su mensaje (podés comentarla y trabajarla).
 4. PUBLICAR / PERFIL (SOLO si lo piden explícito): "publicar_pieza" (IG requiere imagen; el email no se publica acá). Perfil de FACEBOOK: "actualizar_perfil_facebook" (antes "auditar_perfil" y mostrá qué vas a cambiar). El perfil de INSTAGRAM no se edita por API: entregá los textos para pegar a mano.
 5. AUDITAR / REPORTAR: "auditar_perfil" para revisar el estado de FB/IG y recomendar mejoras concretas (bio, datos, destacados, portada, primeras piezas). "reporte_metricas" para números REALES de Meta (Ads + orgánico) con 2-3 recomendaciones accionables; nunca inventes métricas.
@@ -241,14 +242,13 @@ const TOOL_AUDITAR: Anthropic.Tool = {
 
 const TOOL_GENERAR_IMG: Anthropic.Tool = {
   name: 'generar_imagen',
-  description: 'Crea o EDITA una imagen suelta a pedido del dueño y la guarda en el banco. CREAR FOTO: prompt fotográfico detallado. CREAR GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita): con_texto:true y poné el texto EXACTO a mostrar en "prompt" (sale en la línea visual de los correos; entregás la pieza TERMINADA, sin derivar a Canva). EDITAR (cambiar un detalle SIN rehacer la imagen): editar:true + la referencia (usar_adjunto:true para la que adjuntó el dueño, o referencia_url con la URL EXACTA del banco) y en "prompt" SOLO el cambio. El LOGO de marca se agrega AUTOMÁTICAMENTE a TODO lo que generás (crear o editar): elegimos la mejor variante del banco —grupo "marca"— y la pegamos nítida abajo a la derecha; NO pidas dibujar el logo. Elegí el aspect correcto (portada FB "21:9", perfil "1:1", feed "1:1"/"4:5", story "9:16"). Devuelve la URL; muéstrasela con ![](URL). NO uses esto para piezas del calendario (para eso es generar_pieza; para corregir imágenes de una pieza ya generada, editar_imagen_pieza).',
+  description: 'Crea o EDITA una FOTO suelta (fotorrealista) y la guarda en el banco. CREAR: prompt fotográfico detallado. EDITAR (cambiar un detalle SIN rehacer la imagen): editar:true + la referencia (usar_adjunto:true para la que adjuntó el dueño, o referencia_url con la URL EXACTA del banco) y en "prompt" SOLO el cambio. El LOGO de marca se agrega AUTOMÁTICAMENTE a lo que entregás (crear o editar), salvo sin_logo; NO pidas dibujar el logo. ⚠️ Para GRÁFICOS CON TEXTO (portadas, placas con datos/horario/diferenciadores, anuncios, citas) NO uses esto: usá "disenar_grafico" (sale con la marca EXACTA). Devuelve la URL; muéstrasela con ![](URL). NO uses esto para piezas del calendario (para eso, generar_pieza; para corregir imágenes de una pieza, editar_imagen_pieza).',
   input_schema: {
     type: 'object',
     properties: {
-      prompt: { type: 'string', description: 'FOTO: descripción fotográfica detallada (fotorrealista; NUNCA instalaciones del crematorio; NO pidas dibujar el logo). GRÁFICO (con_texto:true): describí el diseño Y poné el TEXTO EXACTO y CORTO a mostrar (un título + a lo sumo 3-4 bullets). EDITAR (editar:true): SOLO el cambio puntual (ej. "cambia el collar a rojo"), no toda la escena.' },
-      con_texto: { type: 'boolean', description: 'true = GRÁFICO con texto integrado (portada, placa con datos, anuncio, cita), en la línea visual de los correos. Poné el texto exacto en "prompt". Default false = foto sin texto.' },
+      prompt: { type: 'string', description: 'CREAR: descripción fotográfica detallada (fotorrealista; NUNCA instalaciones del crematorio; NO pidas dibujar el logo ni texto). EDITAR (editar:true): SOLO el cambio puntual (ej. "cambia el collar a rojo"), no toda la escena.' },
       editar: { type: 'boolean', description: 'true = EDITAR la imagen de referencia preservando todo lo demás y cambiando solo lo que digas en "prompt" (requiere usar_adjunto o referencia_url). false u omitir = crear una imagen nueva.' },
-      aspect: { type: 'string', description: 'Relación de aspecto, ej. "1:1", "16:9", "4:5", "21:9" (portada FB), "9:16" (story). Se ignora al editar (la salida sigue el aspecto de la imagen base).' },
+      aspect: { type: 'string', description: 'Relación de aspecto, ej. "1:1", "16:9", "4:5", "9:16". Se ignora al editar (la salida sigue el aspecto de la imagen base).' },
       descripcion: { type: 'string', description: 'Descripción de 1 línea para el banco (opcional).' },
       tags: { type: 'string', description: 'Palabras clave separadas por coma (opcional).' },
       grupo: { type: 'string', enum: ['mascotas', 'personas', 'productos', 'otro'], description: 'Grupo del banco (opcional, default otro).' },
@@ -259,6 +259,32 @@ const TOOL_GENERAR_IMG: Anthropic.Tool = {
       sin_logo: { type: 'boolean', description: 'true para entregar la imagen SIN el logo de marca (por defecto TODO lo generado/editado lo lleva).' },
     },
     required: ['prompt'],
+  },
+}
+
+const TOOL_DISENAR_GRAFICO: Anthropic.Tool = {
+  name: 'disenar_grafico',
+  description: 'Diseña una PIEZA GRÁFICA CON TEXTO con la MARCA EXACTA (portada de Facebook, placa con datos/horario/diferenciadores, anuncio, cita, post con texto). VOS escribís el diseño en HTML (layout libre y creativo) y el sistema lo rasteriza con las fuentes y colores REALES de Alma Animal (More Sugar + Inter; navy/dorado/crema exactos) y le pone el logo. Para FOTOS reales dentro del diseño usá <img src="FOTO:slot1" .../> y pedí cada foto en "fotos". Esto es lo correcto para CUALQUIER gráfico con texto (NO generar_imagen). Seguí las reglas de "DISEÑO DE GRÁFICOS CON TEXTO" del contexto (flexbox, fuentes y colores de marca, tamaño exacto del canvas). Devuelve la URL; muéstrasela con ![](URL).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      formato: { type: 'string', enum: FORMATOS_GRAFICO, description: 'Tamaño/uso: portada_fb (portada de Facebook 1640x624), post (1080x1080), post_vertical (1080x1350), story (1080x1920), horizontal (1200x675).' },
+      html: { type: 'string', description: 'El diseño en HTML (un solo <div> raíz del tamaño exacto del canvas; estilos inline; flexbox; font-family \'More Sugar\' solo para el título y \'Inter\' para el resto; colores hex de marca; NO dibujes el logo; usá <img src="FOTO:slotN"> para fotos).' },
+      fotos: {
+        type: 'array',
+        description: 'Fotos reales a generar e insertar (una por cada <img src="FOTO:slotN"> del HTML). Vacío si el gráfico no lleva fotos.',
+        items: {
+          type: 'object',
+          properties: {
+            slot: { type: 'string', description: 'Identificador, ej. "slot1" (debe coincidir con src="FOTO:slot1").' },
+            prompt: { type: 'string', description: 'Descripción fotográfica detallada (fotorrealista, cálida, on-brand; NUNCA instalaciones).' },
+            aspect: { type: 'string', description: 'Relación de aspecto de la foto, ej. "4:5", "1:1", "16:9" (acompañá el tamaño del contenedor).' },
+          },
+          required: ['slot', 'prompt'],
+        },
+      },
+    },
+    required: ['formato', 'html'],
   },
 }
 
@@ -378,7 +404,7 @@ export async function generarRespuestaMarketing(
   system.push({ type: 'text', text: bloqueFechaChile() })
   system.push({ type: 'text', text: bloqueBanco(banco) })
 
-  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG]
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG]
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
   let cambios = false
@@ -471,7 +497,7 @@ export async function generarRespuestaMarketing(
           if (!isNanoBananaConfigurado()) {
             resultText = 'No puedo generar imágenes ahora (falta GEMINI_API_KEY).'
           } else {
-            const inp = tu.input as { prompt?: string; con_texto?: boolean; editar?: boolean; aspect?: string; descripcion?: string; tags?: string; grupo?: string; subgrupo?: string; usar_adjunto?: boolean; referencia_url?: string; logo_url?: string; sin_logo?: boolean }
+            const inp = tu.input as { prompt?: string; editar?: boolean; aspect?: string; descripcion?: string; tags?: string; grupo?: string; subgrupo?: string; usar_adjunto?: boolean; referencia_url?: string; logo_url?: string; sin_logo?: boolean }
             const refs: { data: Buffer; mime: string }[] = []
             if (inp.usar_adjunto && opts.adjuntos?.length) refs.push(...opts.adjuntos)
             if (inp.referencia_url) {
@@ -483,7 +509,6 @@ export async function generarRespuestaMarketing(
             // Editar (preservar la base y cambiar solo lo pedido) requiere referencia.
             // Si el dueño adjuntó/eligió una imagen para modificar, asumimos edición.
             const editar = (inp.editar ?? refs.length > 0) && refs.length > 0
-            const conTexto = !!inp.con_texto && !editar
             const grupoImg = ['mascotas', 'personas', 'productos', 'otro'].includes(String(inp.grupo)) ? String(inp.grupo) : 'otro'
             const g = await generarYGuardarImagen({
               prompt: String(inp.prompt || ''),
@@ -494,7 +519,6 @@ export async function generarRespuestaMarketing(
               subgrupo: inp.subgrupo,
               referencias: refs.length ? refs : undefined,
               editar,
-              conTexto,
               creadoPor: opts.creadoPor,
             })
             // Logo de marca (paso de cierre): SIEMPRE en lo que se entrega (crear o
@@ -508,6 +532,23 @@ export async function generarRespuestaMarketing(
             }
             cambios = true
             resultText = `Imagen ${editar ? 'editada' : 'creada'}${conLogoOk ? ' con el logo de marca' : ''} (guardada en el banco, grupo ${grupoImg}). Muéstrasela al dueño incluyéndola con ![](${urlFinal}).`
+          }
+        } else if (tu.name === 'disenar_grafico') {
+          const inp = tu.input as { formato?: string; html?: string; fotos?: { slot?: string; prompt?: string; aspect?: string }[] }
+          if (!inp.html?.trim()) {
+            resultText = 'Falta el HTML del diseño.'
+          } else {
+            const fotos = (inp.fotos || [])
+              .filter(f => f?.slot && f?.prompt)
+              .map(f => ({ slot: String(f.slot), prompt: String(f.prompt), aspect: f.aspect }))
+            const r = await generarGraficoMarca({
+              formato: String(inp.formato || 'post'),
+              html: String(inp.html),
+              fotos,
+              creadoPor: opts.creadoPor,
+            })
+            cambios = true
+            resultText = `Gráfico de marca generado (colores, tipografía y logo exactos). Muéstraselo al dueño con ![](${r.url}).${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}`
           }
         } else if (tu.name === 'publicar_pieza') {
           const id = String((tu.input as { id?: string }).id || '')

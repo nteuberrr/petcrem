@@ -1,0 +1,86 @@
+import sharp from 'sharp'
+import { renderGraficoHTML } from './grafico-render'
+import { generarYGuardarImagen, listarImagenes, registrarImagen } from './mailing-images'
+import { aplicarLogoMarca } from './marca-logo'
+import { uploadToR2 } from './cloudflare-r2'
+import { isNanoBananaConfigurado } from './nano-banana'
+
+/**
+ * Genera una PIEZA GRÁFICA de marca (portada, placa, anuncio) con la marca EXACTA.
+ *
+ * El agente diseña en HTML (libre); acá: 1) generamos las fotos pedidas y las
+ * enchufamos en el HTML, 2) rasterizamos con las fuentes/colores REALES (satori),
+ * 3) pegamos el logo (mejor variante por contraste), 4) subimos a R2 + banco.
+ * Así el diseño es creativo pero la marca (color/tipografía/logo) sale perfecta.
+ */
+
+const DIMS: Record<string, { w: number; h: number }> = {
+  portada_fb: { w: 1640, h: 624 },   // portada de Facebook (~820x312 ×2)
+  post: { w: 1080, h: 1080 },        // feed cuadrado
+  post_vertical: { w: 1080, h: 1350 }, // feed 4:5
+  story: { w: 1080, h: 1920 },       // story / reel 9:16
+  horizontal: { w: 1200, h: 675 },   // 16:9 (web/anuncio)
+}
+export const FORMATOS_GRAFICO = Object.keys(DIMS)
+
+export interface FotoGrafico { slot: string; prompt: string; aspect?: string }
+
+export interface GraficoGenerado { url: string; avisos: string[] }
+
+export async function generarGraficoMarca(args: {
+  formato: string
+  html: string
+  fotos?: FotoGrafico[]
+  creadoPor?: string
+}): Promise<GraficoGenerado> {
+  if (!args.html?.trim()) throw new Error('Falta el HTML del gráfico')
+  const dims = DIMS[args.formato] || DIMS.post
+  const avisos: string[] = []
+  let html = args.html
+
+  // 1) Generar las fotos pedidas (fotorrealistas, on-brand) y enchufarlas (FOTO:slot → URL).
+  const fotos = (args.fotos || []).filter(f => f?.slot && f?.prompt)
+  if (fotos.length && !isNanoBananaConfigurado()) {
+    avisos.push('No se pudieron generar las fotos (falta GEMINI_API_KEY); el gráfico va sin ellas.')
+  } else {
+    for (const f of fotos) {
+      try {
+        const g = await generarYGuardarImagen({
+          prompt: f.prompt, aspect: f.aspect || '4:5', grupo: 'mascotas', subgrupo: 'grafico', creadoPor: args.creadoPor,
+        })
+        html = html.split(`FOTO:${f.slot}`).join(g.imagen.url)
+      } catch (e) {
+        avisos.push(`No se pudo generar la foto ${f.slot}: ${e instanceof Error ? e.message : 'error'}`)
+      }
+    }
+  }
+  // Limpiar placeholders FOTO: que hayan quedado sin resolver (evita src roto).
+  html = html.replace(/<img\b[^>]*\bsrc=["']FOTO:[^"']*["'][^>]*>/gi, '').replace(/FOTO:[\w-]+/g, '')
+
+  // 2) Rasterizar el HTML con las fuentes de marca (More Sugar + Inter), colores exactos.
+  const { buffer: png } = await renderGraficoHTML({ html, width: dims.w, height: dims.h })
+
+  // 3) Logo de marca (mejor variante por contraste) abajo a la derecha.
+  let conLogo = png
+  try {
+    const banco = await listarImagenes()
+    const r = await aplicarLogoMarca(png, banco, { escala: 0.14 })
+    conLogo = r.buffer
+  } catch (e) { avisos.push('No se pudo agregar el logo: ' + (e instanceof Error ? e.message : 'error')) }
+
+  // 4) A JPEG (compatible con IG/FB) + subir a R2 + registrar en el banco.
+  let final = conLogo
+  let mime = 'image/png'
+  let ext = 'png'
+  try {
+    final = await sharp(conLogo).flatten({ background: '#FBF8F3' }).jpeg({ quality: 92 }).toBuffer()
+    mime = 'image/jpeg'; ext = 'jpg'
+  } catch { /* deja PNG */ }
+  const up = await uploadToR2(final, `mailing/ai-images/${Date.now()}-grafico.${ext}`, mime)
+  await registrarImagen({
+    url: up.url, key: up.key, descripcion: 'Gráfico de marca', tags: 'grafico',
+    grupo: 'otro', subgrupo: 'grafico', aspect: `${dims.w}x${dims.h}`, origen: 'ai', modelo: 'satori', creadoPor: args.creadoPor,
+  }).catch(() => { /* registro best-effort */ })
+
+  return { url: up.url, avisos }
+}

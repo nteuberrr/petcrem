@@ -59,16 +59,36 @@ export const ESTILO_MARCA_EN =
   PROHIBIDOS_EN
 
 /**
- * Brief (español) para PIEZAS GRÁFICAS con texto integrado (portadas de Facebook,
- * placas con datos/horario/diferenciadores, anuncios, citas). Sigue la MISMA línea
- * visual que los correos de la marca (ver renderEmailLayout en email-layout.ts).
+ * Sistema para DISEÑAR GRÁFICOS CON TEXTO (herramienta "disenar_grafico"): el
+ * agente escribe el diseño en HTML y el sistema lo rasteriza con las fuentes y
+ * colores REALES de la marca (satori) → marca EXACTA con layout libre. NO es para
+ * que la IA "dibuje" el gráfico.
  */
-export const MARCA_GRAFICO = `DIRECCIÓN PARA GRÁFICOS / PIEZAS CON TEXTO (portadas, placas con datos, anuncios — MISMA línea visual que nuestros correos):
-- Look de marca (como el encabezado de nuestros newsletters): fondo crema/blanco (${BRAND.cream}) que DOMINA, azul navy (${BRAND.navy}) para barras/bloques de estructura, y dorado (${BRAND.amber}) SOLO como acento (un filete dorado fino bajo una barra navy queda muy bien). Mucho aire, jerarquía clara, sobrio y premium — nunca recargado, infantil ni con pinta de stock.
-- El texto va INTEGRADO y CORRECTO: un título y a lo sumo 3-4 bullets MUY cortos; tipografía sans-serif limpia, bien alineada y legible, sin faltas ni letras deformes. Poco texto, bien jerarquizado.
-- Puede llevar UNA foto cálida y real de una mascota tranquila/feliz, integrada con gusto (no obligatoria).
-- El logo se agrega aparte (NO lo dibujes); dejá un espacio limpio en una esquina para él.
-- FORMATOS (elegí el aspect correcto): portada de Facebook ≈ 820×312 px → apaisada, aspect "21:9" (o "16:9"); foto de perfil → "1:1"; post de feed IG/FB → "1:1" o "4:5"; story/reel → "9:16"; banner de correo → "16:9".`
+export const MARCA_GRAFICO = `DISEÑO DE GRÁFICOS CON TEXTO (herramienta "disenar_grafico") — marca EXACTA, layout libre:
+Vos escribís el DISEÑO en HTML y el sistema lo rasteriza con las FUENTES y COLORES REALES (no los dibuja la IA). Tenés libertad de composición/jerarquía/información, pero respetá SIEMPRE la marca:
+- COLORES (hex EXACTOS): navy ${BRAND.navy} (bloques/estructura), dorado ${BRAND.amber} (acentos, filetes), crema ${BRAND.cream} y blanco #ffffff (fondos), texto sobre claro ${BRAND.ink}, texto sobre navy #ffffff o #e8eef5. Domina crema/blanco; navy estructura; dorado acento. Podés sumar UN color de acento puntual sin romper la línea.
+- TIPOGRAFÍA: font-family:'More Sugar' SOLO para el título/wordmark grande (es la fuente del logo); font-family:'Inter' para TODO el resto (subtítulos, bullets, datos), con font-weight 400/600/700.
+- LOGO: NO lo pongas; se agrega solo abajo a la derecha. Dejá esa esquina con aire.
+- FOTOS reales: poné <img src="FOTO:slot1" width=".." height=".." style="object-fit:cover" /> donde quieras una foto y pedí esa foto en "fotos" (con su prompt). Las fotos son cálidas y reales (mascotas vivas), nunca instalaciones.
+
+REGLAS TÉCNICAS DEL HTML (obligatorias — el motor es satori):
+- UN solo <div> RAÍZ del tamaño EXACTO del canvas según el formato: portada_fb=1640x624, post=1080x1080, post_vertical=1080x1350, story=1080x1920, horizontal=1200x675.
+- Solo estilos INLINE (style="..."). Layout con FLEXBOX: TODO <div> con 2 o más hijos DEBE llevar display:flex (y flex-direction). Nada de grid, float, position ni tablas.
+- El texto va dentro de <span>/<p>. Tamaños y espaciados en px. Imágenes con width/height explícitos.
+
+EJEMPLO (formato portada_fb, 1640x624 — adaptá libremente la composición):
+<div style="display:flex;width:1640px;height:624px;background:${BRAND.cream}">
+  <div style="display:flex;flex-direction:column;justify-content:center;width:940px;height:624px;background:${BRAND.navy};padding:0 88px">
+    <span style="font-family:'More Sugar';font-size:84px;color:#ffffff;line-height:1.04">Alma Animal</span>
+    <span style="font-family:Inter;font-weight:600;font-size:34px;color:${BRAND.amber};margin-top:14px">Huellas que no se borran</span>
+    <div style="display:flex;width:180px;height:7px;background:${BRAND.amber};margin:28px 0"></div>
+    <div style="display:flex;flex-direction:column">
+      <span style="font-family:Inter;font-size:28px;color:#e8eef5;margin-bottom:8px">Entrega en 4 días hábiles</span>
+      <span style="font-family:Inter;font-size:28px;color:#e8eef5">Retiro a domicilio y clínicas</span>
+    </div>
+  </div>
+  <div style="display:flex;width:700px;height:624px"><img src="FOTO:slot1" width="700" height="624" style="object-fit:cover" /></div>
+</div>`
 
 /**
  * Sufijo (inglés) para el modo GRÁFICO/DISEÑO del modelo de imagen: permite texto

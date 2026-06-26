@@ -21,12 +21,14 @@ interface LogoSrc { url: string; key?: string }
 // Cache de bytes de cada logo por URL (cambian rara vez).
 const cacheBytes = new Map<string, Buffer>()
 
-/** ¿Esta imagen del banco es el logo/sello de marca? (por grupo o por nombre). */
+/**
+ * ¿Esta imagen del banco es un logo/sello de marca? SOLO por grupo "marca" (señal
+ * fiable). No por nombre: muchas piezas (portadas) mencionan "logo" en su descripción
+ * y se colarían como logo. Si el grupo "marca" estuviera vacío, aplicarLogoMarca cae
+ * al logo OFICIAL (LOGO_URL).
+ */
 export function esLogo(i: ImagenBanco): boolean {
-  if (!i.url) return false
-  if ((i.grupo || '').toLowerCase() === 'marca') return true
-  const txt = `${i.descripcion} ${i.alt} ${i.tags} ${i.subgrupo}`.toLowerCase()
-  return /\blogo\b|\bsello\b|\bisotipo\b|\bmarca\b/.test(txt)
+  return !!i.url && (i.grupo || '').toLowerCase() === 'marca'
 }
 
 async function bytesDe(src: LogoSrc): Promise<Buffer | null> {
@@ -52,9 +54,15 @@ async function lumEsquina(base: Buffer): Promise<number> {
     const W = meta.width || 0, H = meta.height || 0
     if (!W || !H) return 0.5
     const w = Math.max(1, Math.round(W * 0.3)), h = Math.max(1, Math.round(H * 0.22))
-    const st = await sharp(base).extract({ left: Math.max(0, W - w), top: Math.max(0, H - h), width: w, height: h }).stats()
-    const [cr, cg, cb] = st.channels
-    return luminancia(cr.mean, cg.mean, cb.mean)
+    // OJO: sharp .stats() IGNORA el .extract() del pipeline (mide el original). Hay
+    // que materializar el recorte con raw().toBuffer() y promediar a mano.
+    const { data, info } = await sharp(base)
+      .extract({ left: Math.max(0, W - w), top: Math.max(0, H - h), width: w, height: h })
+      .raw().toBuffer({ resolveWithObject: true })
+    const ch = info.channels
+    let sr = 0, sg = 0, sb = 0, n = 0
+    for (let i = 0; i + ch <= data.length; i += ch) { sr += data[i]; sg += data[i + 1]; sb += data[i + 2]; n++ }
+    return n > 0 ? luminancia(sr / n, sg / n, sb / n) : 0.5
   } catch { return 0.5 }
 }
 

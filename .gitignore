@@ -53,3 +53,6 @@ tmp_*.pdf
 next-env.d.ts
 
 .vercel
+
+# Render de prueba de gráficos (no versionar)
+assets/*.png
