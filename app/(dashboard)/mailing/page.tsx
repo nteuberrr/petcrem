@@ -1,8 +1,9 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { formatDate, formatDateTime, formatHoraDia } from '@/lib/dates'
 import CalendarioContent from '@/components/marketing/CalendarioContent'
+import BancoView, { BancoMiniPanel } from '@/components/marketing/BancoView'
 import { GmailIcon, FacebookIcon, InstagramIcon, AgenteIcon } from '@/components/marketing/BrandIcons'
 
 type Vet = {
@@ -103,6 +104,7 @@ type ImagenBanco = {
   id: string
   url: string
   key: string
+  codigo: string
   descripcion: string
   prompt: string
   tags: string
@@ -110,19 +112,11 @@ type ImagenBanco = {
   grupo: string
   subgrupo: string
   whatsapp: boolean
+  favorita: boolean
   aspect: string
   origen: string
   modelo: string
   creado_por: string
-  fecha_creacion: string
-}
-type VideoBanco = {
-  id: string
-  url: string
-  descripcion: string
-  prompt: string
-  aspect: string
-  duracion: string
   fecha_creacion: string
 }
 
@@ -147,43 +141,15 @@ function proxyImgs(html: string): string {
 
 const CATEGORIAS = ['prospecto', 'cliente', 'inactivo'] as const
 
-// ===================== SELECTOR DE REDES =====================
-// La sección "Campañas" arranca pidiendo qué red revisar. Hoy solo "Mail" está
-// desarrollada (todo el módulo histórico); Instagram / Facebook / TikTok quedan
-// como botones "Próximamente" para construir más adelante (en ese orden).
-
 type Red = 'mail' | 'instagram' | 'facebook' | 'tiktok'
-
-const REDES: { key: Red; label: string; icon: string; desc: string; activa: boolean; cardClass: string; iconClass: string }[] = [
-  {
-    key: 'mail', label: 'Mail', icon: '✉️', desc: 'Campañas de correo a la base de veterinarios.', activa: true,
-    cardClass: 'border-brand/30 hover:border-brand hover:shadow-md', iconClass: 'bg-brand/10',
-  },
-  {
-    key: 'instagram', label: 'Instagram', icon: '📸', desc: 'Planifica y publica posts orgánicos.', activa: true,
-    cardClass: 'border-pink-200 hover:border-pink-400 hover:shadow-md', iconClass: 'bg-gradient-to-br from-amber-200 via-pink-200 to-fuchsia-300',
-  },
-  {
-    key: 'facebook', label: 'Facebook', icon: '👍', desc: 'Planifica y publica posts orgánicos.', activa: true,
-    cardClass: 'border-blue-200 hover:border-blue-400 hover:shadow-md', iconClass: 'bg-blue-100',
-  },
-  {
-    key: 'tiktok', label: 'TikTok', icon: '🎵', desc: 'Videos cortos.', activa: false,
-    cardClass: 'border-gray-300 hover:border-gray-500 hover:shadow-md', iconClass: 'bg-gray-900 text-white',
-  },
-]
-
 type Vista = Red | 'calendario' | 'imagenes' | 'metricas'
 
-// Barra de accesos fija arriba: el Agente (calendario + IA) es la vista de inicio,
-// y los canales + el banco de Imágenes quedan al mismo nivel.
+// Barra de accesos fija arriba: el Agente (calendario + IA, con sus propios botones
+// de canal FB/IG dentro), el Mailing, el Banco de imágenes y las Métricas.
 const NAV: { key: Vista; label: string }[] = [
   { key: 'calendario', label: 'Agente' },
   { key: 'mail', label: 'Mailing' },
-  { key: 'instagram', label: 'Instagram' },
-  { key: 'facebook', label: 'Facebook' },
-  { key: 'tiktok', label: 'TikTok' },
-  { key: 'imagenes', label: 'Imágenes' },
+  { key: 'imagenes', label: 'Banco' },
   { key: 'metricas', label: 'Métricas' },
 ]
 
@@ -199,25 +165,38 @@ function NavIcon({ k, className = 'w-6 h-6' }: { k: Vista; className?: string })
 
 export default function CampanasPage() {
   const [vista, setVista] = useState<Vista>('calendario')
+  // Panel lateral del Banco "en paralelo": para ver los códigos de las imágenes sin
+  // salir del chat del agente.
+  const [bancoParalelo, setBancoParalelo] = useState(false)
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-extrabold text-[#143C64] tracking-tight">Campañas</h1>
-        <p className="text-sm text-gray-500">Planificá con el agente, gestioná cada red y el banco de imágenes desde un solo lugar.</p>
+        <p className="text-sm text-gray-500">Planificá con el agente, gestioná el mailing y el banco de imágenes desde un solo lugar.</p>
         <div className="flex gap-1.5 bg-white border border-gray-300 rounded-2xl p-2 shadow-md overflow-x-auto mt-3">
           {NAV.map(n => {
             const active = vista === n.key
             return (
-              <button
-                key={n.key}
-                onClick={() => setVista(n.key)}
-                className={`px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 ${
-                  active ? 'bg-[#143C64] text-white shadow-md' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <NavIcon k={n.key} className="w-6 h-6" />
-                {n.label}
-              </button>
+              <Fragment key={n.key}>
+                <button
+                  onClick={() => setVista(n.key)}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 ${
+                    active ? 'bg-[#143C64] text-white shadow-md' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <NavIcon k={n.key} className="w-6 h-6" />
+                  {n.label}
+                </button>
+                {n.key === 'imagenes' && (
+                  <button
+                    onClick={() => setBancoParalelo(v => !v)}
+                    title="Abrir el Banco en paralelo (ver los códigos de las imágenes sin salir del chat)"
+                    className={`shrink-0 w-9 px-0 rounded-xl text-base transition-all flex items-center justify-center border ${
+                      bancoParalelo ? 'bg-[#143C64] text-white border-[#143C64]' : 'text-gray-500 border-gray-300 hover:bg-gray-50 hover:text-[#143C64]'
+                    }`}
+                  >⧉</button>
+                )}
+              </Fragment>
             )
           })}
         </div>
@@ -225,11 +204,21 @@ export default function CampanasPage() {
 
       {vista === 'calendario' && <CalendarioContent />}
       {vista === 'mail' && <MailContent />}
-      {vista === 'instagram' && <CalendarioContent key="ig" canalInicial="instagram" />}
-      {vista === 'facebook' && <CalendarioContent key="fb" canalInicial="facebook" />}
-      {vista === 'tiktok' && <ProximamentePlaceholder red={REDES.find(x => x.key === 'tiktok')!} />}
-      {vista === 'imagenes' && <ImagenesPanel />}
+      {vista === 'imagenes' && <BancoView />}
       {vista === 'metricas' && <MetricasPanel />}
+
+      {/* Panel lateral "abrir en paralelo": el Banco compacto, sin bloquear el chat. */}
+      {bancoParalelo && (
+        <div className="fixed top-0 right-0 h-full w-full sm:w-[380px] z-40 bg-white border-l border-gray-300 shadow-2xl flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-[#143C64] text-white shrink-0">
+            <span className="font-semibold text-sm">🖼️ Banco en paralelo</span>
+            <button onClick={() => setBancoParalelo(false)} title="Cerrar" className="w-7 h-7 grid place-items-center rounded-lg hover:bg-white/15">✕</button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <BancoMiniPanel />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -385,21 +374,6 @@ function MetricasPanel() {
   )
 }
 
-function ProximamentePlaceholder({ red, onBack }: { red: { label: string; icon: string; iconClass: string }; onBack?: () => void }) {
-  return (
-    <div className="space-y-4">
-      {onBack && <button onClick={onBack} className="text-sm text-brand hover:text-brand font-semibold">← Campañas</button>}
-      <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-10 text-center">
-        <div className={`w-16 h-16 rounded-2xl grid place-items-center text-3xl mx-auto ${red.iconClass}`}>{red.icon}</div>
-        <h1 className="text-2xl font-extrabold text-brand tracking-tight mt-4">{red.label}</h1>
-        <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
-          Las campañas de {red.label} todavía están en construcción. Pronto vas a poder crearlas y revisarlas desde acá.
-        </p>
-        <span className="inline-block mt-4 text-xs font-bold uppercase tracking-wide bg-gray-100 text-gray-500 px-3 py-1 rounded-full">Próximamente</span>
-      </div>
-    </div>
-  )
-}
 
 // ===================== MAIL (módulo histórico completo) =====================
 
@@ -2280,17 +2254,6 @@ function GenerarCampanaModal({ open, onClose, categoriaInicial, onUsar }: {
 
 // ===================== BANCO DE IMÁGENES =====================
 
-const ASPECTOS = ['16:9', '4:3', '1:1', '4:5', '3:2', '9:16'] as const
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader()
-    fr.onload = () => resolve(String(fr.result))
-    fr.onerror = () => reject(new Error('No se pudo leer el archivo'))
-    fr.readAsDataURL(file)
-  })
-}
-
 /** Modal para insertar una imagen del banco en el editor de HTML. */
 function ImagenPickerModal({ open, onClose, onPick }: {
   open: boolean
@@ -2351,444 +2314,6 @@ function ImagenPickerModal({ open, onClose, onPick }: {
         )}
       </div>
     </Modal>
-  )
-}
-
-const GRUPOS = ['marca', 'mascotas', 'personas', 'productos', 'instalaciones', 'otro'] as const
-// La IA NUNCA genera instalaciones ni imágenes de marca → al generar solo se ofrecen estos grupos.
-const GRUPOS_GEN = ['mascotas', 'personas', 'productos', 'otro'] as const
-const GRUPO_LABEL: Record<string, string> = {
-  marca: 'Imagen de marca', mascotas: 'Mascotas', personas: 'Personas', productos: 'Productos',
-  instalaciones: 'Instalaciones', otro: 'Otro',
-}
-
-/** Tarjeta de una imagen del banco con nombre editable, grupo, WhatsApp, copiar y eliminar. */
-function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete, onAnimar, onZoom }: {
-  img: ImagenBanco
-  onGrupo: (img: ImagenBanco, grupo: string) => void
-  onWhatsapp: (img: ImagenBanco, on: boolean) => void
-  onRename: (img: ImagenBanco, descripcion: string) => void
-  onCopy: (url: string) => void
-  onDelete: (img: ImagenBanco) => void
-  onAnimar: (img: ImagenBanco) => void
-  onZoom: (url: string) => void
-}) {
-  const [editando, setEditando] = useState(false)
-  const [texto, setTexto] = useState(img.descripcion || img.alt || '')
-
-  function guardar() {
-    setEditando(false)
-    const t = texto.trim()
-    if (t !== (img.descripcion || '')) onRename(img, t)
-  }
-
-  const esGenerada = img.origen !== 'upload'
-  return (
-    <div className="border border-gray-300 rounded-lg overflow-hidden flex flex-col bg-white">
-      {/* Foto completa (sin recortar) sobre fondo neutro + badge de origen. */}
-      <div className="relative h-28 bg-gray-50 flex items-center justify-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={img.url} alt={img.alt} onClick={() => onZoom(img.url)} title="Clic para ampliar" className="max-h-28 max-w-full object-contain cursor-zoom-in" />
-        <span className={`absolute top-1 left-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${esGenerada ? 'bg-violet-100 text-violet-700' : 'bg-sky-100 text-sky-700'}`}>
-          {esGenerada ? 'Generada' : 'Subida'}
-        </span>
-      </div>
-      <div className="p-2 flex-1 flex flex-col gap-1.5">
-        <div className="flex-1">
-          {editando ? (
-            <input autoFocus value={texto} onChange={e => setTexto(e.target.value)} onBlur={guardar}
-              onKeyDown={e => {
-                if (e.key === 'Enter') { e.preventDefault(); guardar() }
-                else if (e.key === 'Escape') { setTexto(img.descripcion || img.alt || ''); setEditando(false) }
-              }}
-              placeholder="Ej: Ánfora estándar"
-              className="w-full text-[11px] border border-brand/40 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-brand" />
-          ) : (
-            <button type="button" title="Clic para editar el nombre"
-              onClick={() => { setTexto(img.descripcion || img.alt || ''); setEditando(true) }}
-              className="text-left text-[11px] text-gray-700 line-clamp-2 hover:text-brand w-full flex items-start gap-1">
-              <span className="line-clamp-2">{img.descripcion || img.alt || '(sin nombre — clic para editar)'}</span>
-              <span className="text-gray-300 shrink-0">✏️</span>
-            </button>
-          )}
-        </div>
-        <div className="flex items-center flex-wrap gap-1.5 gap-y-1">
-          <select value={(GRUPOS as readonly string[]).includes(img.grupo) ? img.grupo : ''}
-            onChange={e => onGrupo(img, e.target.value)} title="Grupo (etiqueta)"
-            className="text-[10px] border border-gray-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-brand">
-            <option value="">sin grupo</option>
-            {GRUPOS.map(g => <option key={g} value={g}>{g}</option>)}
-          </select>
-          {img.subgrupo && (
-            <span title="Campaña / subgrupo" className="text-[10px] rounded px-1 py-0.5 bg-brand/10 text-brand border border-brand/20 max-w-[110px] truncate">{img.subgrupo}</span>
-          )}
-          {/* Checkbox WhatsApp: si está marcado, el agente puede enviar esta foto al cliente. */}
-          <label
-            title="El agente de WhatsApp puede enviar esta imagen al cliente cuando la pida"
-            className={`flex items-center gap-1 text-[10px] rounded px-1 py-0.5 cursor-pointer border ${img.whatsapp ? 'bg-green-50 border-green-300 text-green-700' : 'border-gray-300 text-gray-500'}`}>
-            <input type="checkbox" checked={img.whatsapp} onChange={e => onWhatsapp(img, e.target.checked)}
-              className="accent-green-600 w-3 h-3" />
-            WhatsApp
-          </label>
-          <div className="ml-auto flex items-center gap-1">
-            <button type="button" onClick={() => onAnimar(img)} title="Animar a video (Veo)" className="text-gray-500 hover:text-brand text-xs">🎬</button>
-            <a href={`/api/mailing/imagenes/descargar?id=${encodeURIComponent(img.id)}`} download title="Descargar imagen" className="text-gray-500 hover:text-brand text-xs">⬇</a>
-            <button type="button" onClick={() => onCopy(img.url)} title="Copiar URL" className="text-gray-500 hover:text-brand text-xs">⧉</button>
-            <button type="button" onClick={() => onDelete(img)} title="Eliminar" className="text-gray-500 hover:text-red-600 text-xs">🗑</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** Pestaña «Imágenes»: banco de imágenes reciclables (generar / subir / agrupar / eliminar). */
-function ImagenesPanel() {
-  const [imgs, setImgs] = useState<ImagenBanco[]>([])
-  const [loading, setLoading] = useState(true)
-  const [prompt, setPrompt] = useState('')
-  const [aspect, setAspect] = useState<string>('16:9')
-  const [genGrupo, setGenGrupo] = useState<string>('mascotas')
-  const [upGrupo, setUpGrupo] = useState<string>('instalaciones')
-  const [generando, setGenerando] = useState(false)
-  const [subiendo, setSubiendo] = useState(false)
-  const [error, setError] = useState('')
-  const [info, setInfo] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
-  // Videos (Veo): banco + flujo de "Animar a video".
-  const [videos, setVideos] = useState<VideoBanco[]>([])
-  const [animarImg, setAnimarImg] = useState<ImagenBanco | null>(null)
-  const [vPrompt, setVPrompt] = useState('')
-  const [vDur, setVDur] = useState('8')
-  const [vAspect, setVAspect] = useState('16:9')
-  const [vFase, setVFase] = useState<'' | 'lanzando' | 'generando' | 'guardando'>('')
-  const [vError, setVError] = useState('')
-  const [verImg, setVerImg] = useState<string | null>(null)
-
-  const cargar = useCallback(async () => {
-    setLoading(true)
-    try {
-      const r = await fetch('/api/mailing/imagenes', { cache: 'no-store' })
-      const d = await r.json()
-      setImgs(Array.isArray(d) ? d : [])
-    } catch { setImgs([]) }
-    setLoading(false)
-  }, [])
-
-  const cargarVideos = useCallback(async () => {
-    try {
-      const r = await fetch('/api/mailing/videos', { cache: 'no-store' })
-      const d = await r.json()
-      setVideos(Array.isArray(d) ? d : [])
-    } catch { /* ignore */ }
-  }, [])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    cargar()
-    cargarVideos()
-  }, [cargar, cargarVideos])
-
-  async function generar() {
-    if (!prompt.trim()) { setError('Describe la imagen que quieres generar.'); return }
-    setGenerando(true); setError(''); setInfo('')
-    try {
-      const r = await fetch('/api/mailing/imagenes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ generar: { prompt, aspect, descripcion: prompt, tags: '', grupo: genGrupo } }),
-      })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) { setError(j.error || `Error ${r.status}`); return }
-      setPrompt(''); setInfo('Imagen generada y guardada en el banco.')
-      await cargar()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error de red')
-    } finally {
-      setGenerando(false)
-    }
-  }
-
-  async function subir(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || [])
-    if (files.length === 0) return
-    if (fileRef.current) fileRef.current.value = ''
-    setSubiendo(true); setError(''); setInfo('')
-    let ok = 0
-    const fallidas: string[] = []
-    try {
-      // Una por una (la API sube de a una): así el banco se va llenando aunque
-      // alguna falle, y no topamos con el límite de tamaño del request.
-      for (const file of files) {
-        try {
-          const dataUrl = await fileToDataUrl(file)
-          const r = await fetch('/api/mailing/imagenes', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data_url: dataUrl, descripcion: file.name.replace(/\.[^.]+$/, ''), grupo: upGrupo }),
-          })
-          if (r.ok) ok++
-          else { const j = await r.json().catch(() => ({})); fallidas.push(`${file.name}: ${j.error || `Error ${r.status}`}`) }
-        } catch (err) {
-          fallidas.push(`${file.name}: ${err instanceof Error ? err.message : 'error'}`)
-        }
-        await cargar()
-      }
-      if (ok > 0) setInfo(`${ok} imagen${ok === 1 ? '' : 'es'} subida${ok === 1 ? '' : 's'} al banco (grupo: ${upGrupo}).`)
-      if (fallidas.length) setError(`No se pudieron subir ${fallidas.length}: ${fallidas.slice(0, 3).join(' · ')}${fallidas.length > 3 ? '…' : ''}`)
-    } finally {
-      setSubiendo(false)
-    }
-  }
-
-  async function cambiarGrupo(img: ImagenBanco, grupo: string) {
-    setImgs(prev => prev.map(i => i.id === img.id ? { ...i, grupo } : i)) // optimista
-    const r = await fetch(`/api/mailing/imagenes?id=${encodeURIComponent(img.id)}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grupo }),
-    })
-    if (!r.ok) { setError('No se pudo cambiar el grupo'); await cargar() }
-  }
-
-  async function cambiarWhatsapp(img: ImagenBanco, on: boolean) {
-    setImgs(prev => prev.map(i => i.id === img.id ? { ...i, whatsapp: on } : i)) // optimista
-    const r = await fetch(`/api/mailing/imagenes?id=${encodeURIComponent(img.id)}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ whatsapp: on }),
-    })
-    if (!r.ok) { setError('No se pudo cambiar la opción de WhatsApp'); await cargar() }
-  }
-
-  async function renombrar(img: ImagenBanco, descripcion: string) {
-    setImgs(prev => prev.map(i => i.id === img.id ? { ...i, descripcion } : i)) // optimista
-    const r = await fetch(`/api/mailing/imagenes?id=${encodeURIComponent(img.id)}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ descripcion }),
-    })
-    if (!r.ok) { setError('No se pudo renombrar la imagen'); await cargar() }
-  }
-
-  async function eliminar(img: ImagenBanco) {
-    if (!confirm('¿Eliminar esta imagen del banco? Si está usada en alguna campaña ya enviada, esa copia no se ve afectada.')) return
-    const r = await fetch(`/api/mailing/imagenes?id=${encodeURIComponent(img.id)}`, { method: 'DELETE' })
-    if (r.ok) await cargar()
-    else alert('Error al eliminar')
-  }
-
-  async function copiarUrl(url: string) {
-    try { await navigator.clipboard.writeText(url); setInfo('URL copiada al portapapeles.') } catch { /* ignore */ }
-  }
-
-  function abrirAnimar(img: ImagenBanco) {
-    setAnimarImg(img); setVPrompt(''); setVAspect('16:9'); setVDur('8'); setVError(''); setVFase('')
-  }
-
-  async function generarVideo() {
-    if (!animarImg) return
-    if (!vPrompt.trim()) { setVError('Describe el movimiento del video (ej. "cámara lenta acercándose, brisa suave").'); return }
-    setVError(''); setVFase('lanzando')
-    try {
-      const r = await fetch('/api/mailing/videos', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'lanzar', prompt: vPrompt.trim(), imagen_url: animarImg.url, aspect: vAspect, resolution: '1080p', duracion: vDur }),
-      })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok || !j.operation) { setVError(j.error || `Error ${r.status}`); setVFase(''); return }
-      setVFase('generando')
-      // Sondeo cada 6s hasta que termine (máx ~7 min). No cerrar la ventana.
-      let uri = ''
-      for (let i = 0; i < 70; i++) {
-        await new Promise(res => setTimeout(res, 6000))
-        const er = await fetch(`/api/mailing/videos/estado?op=${encodeURIComponent(j.operation)}`, { cache: 'no-store' })
-        const ej = await er.json().catch(() => ({}))
-        if (!er.ok) { setVError(ej.error || 'Error consultando el estado'); setVFase(''); return }
-        if (ej.done) {
-          if (ej.error) { setVError(ej.error); setVFase(''); return }
-          uri = ej.uri || ''
-          break
-        }
-      }
-      if (!uri) { setVError('El video tardó demasiado. Probá de nuevo en un rato.'); setVFase(''); return }
-      setVFase('guardando')
-      const gr = await fetch('/api/mailing/videos', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'guardar', uri, prompt: vPrompt.trim(), descripcion: animarImg.descripcion || vPrompt.trim(), imagen_origen: animarImg.id, aspect: vAspect, duracion: vDur }),
-      })
-      const gj = await gr.json().catch(() => ({}))
-      if (!gr.ok) { setVError(gj.error || 'Error al guardar el video'); setVFase(''); return }
-      setAnimarImg(null); setVFase(''); setInfo('🎬 Video generado y guardado en el banco.')
-      await cargarVideos()
-    } catch (e) {
-      setVError(e instanceof Error ? e.message : 'Error de red'); setVFase('')
-    }
-  }
-
-  async function eliminarVideo(v: VideoBanco) {
-    if (!confirm('¿Eliminar este video?')) return
-    const r = await fetch(`/api/mailing/videos?id=${encodeURIComponent(v.id)}`, { method: 'DELETE' })
-    if (r.ok) await cargarVideos()
-    else alert('Error al eliminar el video')
-  }
-
-  // Agrupadas por etiqueta (grupo), en orden canónico + "sin etiqueta" al final.
-  const grupos = useMemo(() => {
-    const norm = (g: string) => ((GRUPOS as readonly string[]).includes(g) ? g : '')
-    return [...GRUPOS, ''].map(key => ({
-      key: key || 'sin',
-      label: key ? GRUPO_LABEL[key] : 'Sin etiqueta',
-      imgs: imgs.filter(i => norm(i.grupo) === key),
-    })).filter(g => g.imgs.length > 0)
-  }, [imgs])
-
-  return (
-    <div className="space-y-4">
-      <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
-        <div>
-          <h2 className="text-base font-bold text-gray-900">Banco de imágenes</h2>
-          <p className="text-sm text-gray-500">Imágenes fotorrealistas reutilizables. El generador de campañas las recicla automáticamente cuando calzan con el contexto. Asigna un grupo a cada una para organizarlas.</p>
-        </div>
-
-        {/* Generar con IA */}
-        <div>
-          <label className="text-xs font-semibold text-gray-700">Generar una imagen nueva (Nano Banana Pro)</label>
-          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2}
-            placeholder="Ej: una mujer acariciando a su perro mayor en un living luminoso, luz natural, momento cálido y sereno."
-            className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-          <div className="mt-2 flex items-center gap-2 flex-wrap">
-            <select value={aspect} onChange={e => setAspect(e.target.value)} title="Relación de aspecto"
-              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
-              {ASPECTOS.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-            <select value={genGrupo} onChange={e => setGenGrupo(e.target.value)} title="Grupo"
-              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
-              {GRUPOS_GEN.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-            <button type="button" onClick={generar} disabled={generando || !prompt.trim()}
-              className="bg-gradient-to-r from-violet-600 to-brand-dark hover:from-violet-700 hover:to-brand-dark text-white rounded-lg px-4 py-1.5 text-sm font-semibold shadow-md disabled:opacity-50">
-              {generando ? 'Generando… (puede tardar)' : '✨ Generar imagen'}
-            </button>
-          </div>
-          <p className="text-[11px] text-gray-400 mt-1">La IA no genera fotos de instalaciones — esas se suben.</p>
-        </div>
-
-        {/* Subir propia */}
-        <div className="border-t border-gray-300 pt-3">
-          <label className="text-xs font-semibold text-gray-700">Subir una imagen propia (ej. fotos reales de las instalaciones)</label>
-          <div className="mt-2 flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-gray-500">Grupo:</span>
-            <select value={upGrupo} onChange={e => setUpGrupo(e.target.value)} title="Grupo de la imagen a subir"
-              className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
-              {GRUPOS.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-            <button type="button" onClick={() => fileRef.current?.click()} disabled={subiendo}
-              className="border-2 border-gray-300 text-gray-700 rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50">
-              {subiendo ? 'Subiendo…' : '📤 Subir imágenes'}
-            </button>
-            <input ref={fileRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={subir} className="hidden" />
-            <span className="text-[11px] text-gray-400">Puedes elegir varias a la vez.</span>
-          </div>
-        </div>
-
-        {error && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{error}</div>}
-        {info && <div className="bg-green-50 border border-green-200 text-green-800 rounded-lg px-3 py-2 text-sm">{info}</div>}
-      </div>
-
-      {loading ? (
-        <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-8 text-center text-sm text-gray-400">Cargando…</div>
-      ) : imgs.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-8 text-center text-sm text-gray-400">Sin imágenes todavía. Genera la primera arriba o sube una propia.</div>
-      ) : (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <p className="text-xs text-gray-400">{imgs.length} imagen{imgs.length === 1 ? '' : 'es'} · agrupadas por etiqueta</p>
-            <div className="flex items-center gap-3">
-              <a href="/api/mailing/imagenes/descargar" download title="Descargar todas las imágenes del banco en un .zip"
-                className="text-xs text-brand hover:underline">⬇ Descargar todas (ZIP)</a>
-              <button type="button" onClick={cargar} className="text-xs text-brand hover:underline">Actualizar</button>
-            </div>
-          </div>
-          {grupos.map(g => (
-            <details key={g.key} className="bg-white rounded-2xl shadow-md border-2 border-gray-300 group">
-              <summary className="cursor-pointer select-none px-4 py-3 flex items-center gap-2 list-none [&::-webkit-details-marker]:hidden">
-                <span className="text-gray-400 text-xs transition-transform group-open:rotate-90">▶</span>
-                <span className="text-sm font-semibold text-gray-900">{g.label}</span>
-                <span className="text-xs text-gray-400">({g.imgs.length})</span>
-              </summary>
-              <div className="px-4 pb-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                  {g.imgs.map(img => (
-                    <ImagenCard key={img.id} img={img} onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onRename={renombrar} onCopy={copiarUrl} onDelete={eliminar} onAnimar={abrirAnimar} onZoom={setVerImg} />
-                  ))}
-                </div>
-              </div>
-            </details>
-          ))}
-        </div>
-      )}
-
-      {/* Banco de videos (Veo) */}
-      {videos.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-gray-900">🎬 Videos <span className="text-xs font-normal text-gray-400">({videos.length})</span></h2>
-            <span className="text-[11px] text-gray-400">Generados con Veo a partir de una imagen</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {videos.map(v => (
-              <div key={v.id} className="border border-gray-300 rounded-lg overflow-hidden bg-black/5">
-                <video src={v.url} controls className="w-full max-h-48 bg-black" />
-                <div className="p-2 flex items-start gap-1.5">
-                  <p className="flex-1 text-[11px] text-gray-600 line-clamp-2">{v.descripcion || v.prompt || 'Video'}</p>
-                  <button type="button" onClick={() => copiarUrl(v.url)} title="Copiar URL" className="text-gray-500 hover:text-brand text-xs">⧉</button>
-                  <button type="button" onClick={() => eliminarVideo(v)} title="Eliminar" className="text-gray-500 hover:text-red-600 text-xs">🗑</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Modal: animar imagen a video con Veo */}
-      {animarImg && (
-        <Modal open onClose={() => { if (!vFase) setAnimarImg(null) }} title="Animar a video (Veo)" size="lg">
-          <div className="space-y-3">
-            <div className="flex gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={animarImg.url} alt="" className="w-28 h-28 object-cover rounded-lg border border-gray-300 shrink-0" />
-              <div className="flex-1 text-sm text-gray-600">
-                <p>Veo va a <b>animar esta imagen</b> en un clip corto. Describí el movimiento que querés.</p>
-                <p className="text-[11px] text-gray-400 mt-1">Calidad alta (1080p). Tarda 1-3 min y cuesta ~US$2-3. <b>No cierres esta ventana</b> mientras genera.</p>
-              </div>
-            </div>
-            <textarea value={vPrompt} onChange={e => setVPrompt(e.target.value)} rows={3} disabled={!!vFase}
-              placeholder="Ej: cámara acercándose lentamente, brisa suave moviendo el pelaje, luz cálida del atardecer."
-              className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-60" />
-            <div className="flex items-center gap-2 flex-wrap">
-              <select value={vAspect} onChange={e => setVAspect(e.target.value)} disabled={!!vFase} title="Formato"
-                className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm">
-                <option value="16:9">16:9 (horizontal)</option>
-                <option value="9:16">9:16 (vertical / stories)</option>
-              </select>
-              <select value={vDur} onChange={e => setVDur(e.target.value)} disabled={!!vFase} title="Duración">
-                <option value="4">4 seg</option>
-                <option value="6">6 seg</option>
-                <option value="8">8 seg</option>
-              </select>
-              <button type="button" onClick={generarVideo} disabled={!!vFase || !vPrompt.trim()}
-                className="bg-gradient-to-r from-violet-600 to-brand-dark text-white rounded-lg px-4 py-1.5 text-sm font-semibold shadow-md disabled:opacity-50">
-                {vFase === 'lanzando' ? 'Lanzando…' : vFase === 'generando' ? 'Generando… (no cierres)' : vFase === 'guardando' ? 'Guardando…' : '🎬 Generar video'}
-              </button>
-            </div>
-            {vError && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{vError}</div>}
-            {vFase === 'generando' && <p className="text-xs text-gray-500">Veo está renderizando el clip… esto puede tardar 1-3 minutos.</p>}
-          </div>
-        </Modal>
-      )}
-      {verImg && (
-        <Modal open onClose={() => setVerImg(null)} title="Vista de la imagen" size="2xl">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={verImg} alt="" className="w-full max-h-[75vh] object-contain rounded-lg" />
-        </Modal>
-      )}
-    </div>
   )
 }
 

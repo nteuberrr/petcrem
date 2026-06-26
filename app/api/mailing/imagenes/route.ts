@@ -106,14 +106,14 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** PATCH ?id=… — reasigna grupo / descripción / tags / flag whatsapp de una imagen. */
+/** PATCH ?id=… — reasigna grupo / descripción / tags / flag whatsapp / favorita de una imagen. */
 export async function PATCH(req: NextRequest) {
   const { denied } = await requireAdmin()
   if (denied) return denied
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Falta id' }, { status: 400 })
   try {
-    const body = await req.json() as { grupo?: string; descripcion?: string; tags?: string; whatsapp?: boolean }
+    const body = await req.json() as { grupo?: string; descripcion?: string; tags?: string; whatsapp?: boolean; favorita?: boolean }
     await actualizarImagen(id, body)
     return NextResponse.json({ ok: true })
   } catch (e) {

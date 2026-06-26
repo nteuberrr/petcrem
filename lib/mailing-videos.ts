@@ -1,6 +1,7 @@
 import { getSheetData, appendRow, getNextId, deleteById } from './datastore'
 import { uploadToR2, deleteFromR2, keyFromPublicUrl } from './cloudflare-r2'
 import { descargarVideo, VEO_MODEL } from './veo'
+import { maxCodigoNum } from './mailing-images'
 import { todayISO } from './dates'
 
 /**
@@ -15,6 +16,8 @@ export interface VideoBanco {
   id: string
   url: string
   key: string
+  /** Código legible: ai-N (animado desde imagen) | v-N (generado sin imagen base). */
+  codigo: string
   descripcion: string
   prompt: string
   /** id de la imagen del banco que se usó como primer frame (si aplica). */
@@ -22,16 +25,19 @@ export interface VideoBanco {
   aspect: string
   duracion: string
   modelo: string
+  favorita: boolean
   creado_por: string
   fecha_creacion: string
 }
 
 function toVideo(r: Record<string, string>): VideoBanco {
   return {
-    id: r.id || '', url: r.url || '', key: r.key || '',
+    id: r.id || '', url: r.url || '', key: r.key || '', codigo: r.codigo || '',
     descripcion: r.descripcion || '', prompt: r.prompt || '',
     imagen_origen: r.imagen_origen || '', aspect: r.aspect || '', duracion: r.duracion || '',
-    modelo: r.modelo || '', creado_por: r.creado_por || '', fecha_creacion: r.fecha_creacion || '',
+    modelo: r.modelo || '',
+    favorita: /^(true|verdadero|1)$/i.test((r.favorita || '').trim()),
+    creado_por: r.creado_por || '', fecha_creacion: r.fecha_creacion || '',
   }
 }
 
@@ -72,16 +78,22 @@ export async function guardarVideo(args: {
   const key = `mailing/videos/${Date.now()}.${ext}`
   const up = await uploadToR2(buffer, key, mime)
   const id = await getNextId(TABLE)
+  // Código: ai-N si se animó desde una imagen del banco; v-N si fue text-to-video.
+  const codigos = (await getSheetData(TABLE)).map(r => r.codigo || '')
+  const prefijo = args.imagenOrigen ? 'ai' : 'v'
+  const codigo = `${prefijo}-${maxCodigoNum(codigos, prefijo) + 1}`
   const row: Record<string, string> = {
     id,
     url: up.url,
     key: up.key,
+    codigo,
     descripcion: (args.descripcion || args.prompt || '').slice(0, 200),
     prompt: args.prompt || '',
     imagen_origen: args.imagenOrigen || '',
     aspect: args.aspect || '',
     duracion: args.duracion || '',
     modelo: VEO_MODEL,
+    favorita: 'FALSE',
     creado_por: args.creadoPor || '',
     fecha_creacion: todayISO(),
   }

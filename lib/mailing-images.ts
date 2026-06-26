@@ -18,7 +18,7 @@ export type GrupoImagen = typeof GRUPOS_IMAGEN[number]
 
 const TABLE = 'mailing_imagenes'
 const COLS = [
-  'id', 'url', 'key', 'descripcion', 'prompt', 'tags', 'alt', 'grupo', 'subgrupo', 'whatsapp',
+  'id', 'url', 'key', 'codigo', 'descripcion', 'prompt', 'tags', 'alt', 'grupo', 'subgrupo', 'whatsapp', 'favorita',
   'aspect', 'ancho', 'alto', 'origen', 'modelo', 'creado_por', 'fecha_creacion',
 ]
 
@@ -32,6 +32,8 @@ export interface ImagenBanco {
   id: string
   url: string
   key: string
+  /** Código legible y estable: i-N (foto suelta/subida) | C-X.Y (pieza de campaña). */
+  codigo: string
   descripcion: string
   prompt: string
   tags: string
@@ -41,6 +43,8 @@ export interface ImagenBanco {
   subgrupo: string
   /** El agente de WhatsApp puede enviar esta imagen al cliente cuando la pida. */
   whatsapp: boolean
+  /** Destacada con la estrella en el banco. */
+  favorita: boolean
   aspect: string
   ancho: string
   alto: string
@@ -52,15 +56,65 @@ export interface ImagenBanco {
 
 function toImagen(r: Record<string, string>): ImagenBanco {
   return {
-    id: r.id || '', url: r.url || '', key: r.key || '',
+    id: r.id || '', url: r.url || '', key: r.key || '', codigo: r.codigo || '',
     descripcion: r.descripcion || '', prompt: r.prompt || '', tags: r.tags || '', alt: r.alt || '',
     grupo: r.grupo || '',
     subgrupo: r.subgrupo || '',
     whatsapp: /^(true|verdadero|1)$/i.test((r.whatsapp || '').trim()),
+    favorita: /^(true|verdadero|1)$/i.test((r.favorita || '').trim()),
     aspect: r.aspect || '', ancho: r.ancho || '', alto: r.alto || '',
     origen: r.origen || '', modelo: r.modelo || '',
     creado_por: r.creado_por || '', fecha_creacion: r.fecha_creacion || '',
   }
+}
+
+// ─── Códigos legibles (i-N / C-X.Y) ──────────────────────────────────────────
+// Se calculan escaneando los códigos ya usados en la tabla. Para inserts en lote
+// (un carrusel = una campaña) hay que llamar a las funciones de forma SECUENCIAL
+// (await uno por uno) para que cada lectura vea el anterior — igual que getNextId.
+
+const reNum = (p: string) => new RegExp(`^${p}-(\\d+)$`)
+
+/** Mayor N usado para un prefijo simple (i, v, ai) entre los códigos dados. */
+export function maxCodigoNum(codigos: string[], prefijo: string): number {
+  const re = reNum(prefijo)
+  let max = 0
+  for (const c of codigos) { const m = re.exec((c || '').trim()); if (m) max = Math.max(max, parseInt(m[1], 10) || 0) }
+  return max
+}
+
+/** Mayor número de campaña (C-X) entre los códigos dados (mira C-X.Y). */
+export function maxCampaniaNum(codigos: string[]): number {
+  let max = 0
+  for (const c of codigos) { const m = /^C-(\d+)\./.exec((c || '').trim()); if (m) max = Math.max(max, parseInt(m[1], 10) || 0) }
+  return max
+}
+
+/** Códigos ya usados en el banco de imágenes. */
+async function codigosImagenes(): Promise<string[]> {
+  return (await getSheetData(TABLE)).map(r => r.codigo || '')
+}
+
+/**
+ * Reserva un código de campaña nuevo (C-X) para agrupar varias imágenes (un
+ * carrusel/collage). El caller registra cada imagen pasándolo como `campania` →
+ * quedan C-X.1, C-X.2, … Llamar UNA vez por campaña, antes del lote.
+ */
+export async function asignarCampania(): Promise<string> {
+  return `C-${maxCampaniaNum(await codigosImagenes()) + 1}`
+}
+
+/** Calcula el código a usar para una imagen nueva según kind/campania. */
+function calcularCodigo(codigos: string[], opts: { kind?: 'foto' | 'publicacion'; campania?: string }): string {
+  if (opts.campania) {
+    // Imagen dentro de una campaña ya reservada → siguiente índice .Y.
+    const re = new RegExp(`^${opts.campania.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.(\\d+)$`)
+    let maxY = 0
+    for (const c of codigos) { const m = re.exec((c || '').trim()); if (m) maxY = Math.max(maxY, parseInt(m[1], 10) || 0) }
+    return `${opts.campania}.${maxY + 1}`
+  }
+  if (opts.kind === 'publicacion') return `C-${maxCampaniaNum(codigos) + 1}.1`
+  return `i-${maxCodigoNum(codigos, 'i') + 1}`
 }
 
 /** Lista el banco, más recientes primero. */
@@ -86,22 +140,31 @@ export interface RegistrarImagenInput {
   grupo?: string
   subgrupo?: string
   whatsapp?: boolean
+  favorita?: boolean
   aspect?: string
   ancho?: number | string
   alto?: number | string
   origen?: string
   modelo?: string
   creadoPor?: string
+  /** Código explícito (ej. backfill). Si se omite, se calcula por kind/campania. */
+  codigo?: string
+  /** Tipo para el código auto: 'foto' (i-N, default) o 'publicacion' (C-X.1). */
+  kind?: 'foto' | 'publicacion'
+  /** Campaña ya reservada con asignarCampania() → la imagen queda como C-X.Y. */
+  campania?: string
 }
 
 /** Registra una imagen ya subida a R2 en el banco. Devuelve la fila creada. */
 export async function registrarImagen(input: RegistrarImagenInput): Promise<ImagenBanco> {
   await ensureBanco()
   const id = await getNextId(TABLE)
+  const codigo = (input.codigo || '').trim() || calcularCodigo(await codigosImagenes(), { kind: input.kind, campania: input.campania })
   const row: Record<string, string> = {
     id,
     url: input.url,
     key: input.key,
+    codigo,
     descripcion: (input.descripcion || '').trim(),
     prompt: (input.prompt || '').trim(),
     tags: (input.tags || '').trim(),
@@ -109,6 +172,7 @@ export async function registrarImagen(input: RegistrarImagenInput): Promise<Imag
     grupo: (input.grupo || '').trim(),
     subgrupo: (input.subgrupo || '').trim(),
     whatsapp: input.whatsapp ? 'TRUE' : 'FALSE',
+    favorita: input.favorita ? 'TRUE' : 'FALSE',
     aspect: (input.aspect || '').trim(),
     ancho: input.ancho != null ? String(input.ancho) : '',
     alto: input.alto != null ? String(input.alto) : '',
@@ -148,6 +212,10 @@ export async function generarYGuardarImagen(args: {
   editar?: boolean
   /** Modo gráfico: la pieza lleva texto integrado (portada, placa con datos, anuncio). */
   conTexto?: boolean
+  /** Código: 'foto' (i-N, default) o 'publicacion' (C-X.1). */
+  kind?: 'foto' | 'publicacion'
+  /** Campaña reservada (asignarCampania) → la imagen queda C-X.Y. */
+  campania?: string
 }): Promise<ImagenGeneradaResult> {
   const img = await generarImagen({ prompt: args.prompt, aspect: args.aspect, referencias: args.referencias, editar: args.editar, conTexto: args.conTexto })
 
@@ -181,6 +249,8 @@ export async function generarYGuardarImagen(args: {
     origen: 'ai',
     modelo: img.modelo,
     creadoPor: args.creadoPor,
+    kind: args.kind,
+    campania: args.campania,
   })
   return { imagen, buffer, mime }
 }
@@ -223,7 +293,7 @@ export async function estamparLogoEnUrl(
  */
 export async function actualizarImagen(
   id: string,
-  cambios: { grupo?: string; subgrupo?: string; descripcion?: string; tags?: string; whatsapp?: boolean },
+  cambios: { grupo?: string; subgrupo?: string; descripcion?: string; tags?: string; whatsapp?: boolean; favorita?: boolean },
 ): Promise<void> {
   await ensureBanco()
   const rows = await getSheetData(TABLE)
@@ -235,6 +305,7 @@ export async function actualizarImagen(
   if (cambios.descripcion !== undefined) merged.descripcion = cambios.descripcion.trim()
   if (cambios.tags !== undefined) merged.tags = cambios.tags.trim()
   if (cambios.whatsapp !== undefined) merged.whatsapp = cambios.whatsapp ? 'TRUE' : 'FALSE'
+  if (cambios.favorita !== undefined) merged.favorita = cambios.favorita ? 'TRUE' : 'FALSE'
   await updateById(TABLE, id, merged)
 }
 

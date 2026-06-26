@@ -194,6 +194,10 @@ export const SHEETS: Record<string, string[]> = {
   // origen: 'ai' (generada) | 'upload' (subida). aspect ej. '16:9'.
   mailing_imagenes: [
     'id', 'url', 'key',
+    // codigo: identificador legible y estable para REFERIRSE a la imagen (en el chat
+    // del agente y en el banco). i-N = foto suelta/subida; C-X.Y = pieza de campaña
+    // (portada/placa/carrusel, X=campaña, Y=índice). Lo asigna el backend al crear.
+    'codigo',
     'descripcion', 'prompt', 'tags', 'alt',
     // grupo: clasificación que asigna el equipo (mascotas | personas | productos
     // | instalaciones | otro). 'instalaciones' SOLO existe en imágenes SUBIDAS por
@@ -204,14 +208,17 @@ export const SHEETS: Record<string, string[]> = {
     // whatsapp: TRUE si el agente de WhatsApp puede enviar esta imagen al cliente
     // cuando la pida (ej. fotos de ánforas/urnas). El equipo lo marca a mano.
     'whatsapp',
+    // favorita: TRUE si el equipo la marcó con la estrella (destacada en el banco).
+    'favorita',
     'aspect', 'ancho', 'alto',
     'origen', 'modelo',
     'creado_por', 'fecha_creacion',
   ],
   // Banco de VIDEOS de campañas (MP4 generados con Veo). Separado del de imágenes.
+  // codigo: ai-N = animado desde una imagen; v-N = video generado sin imagen base.
   mailing_videos: [
-    'id', 'url', 'key', 'descripcion', 'prompt', 'imagen_origen',
-    'aspect', 'duracion', 'modelo', 'creado_por', 'fecha_creacion',
+    'id', 'url', 'key', 'codigo', 'descripcion', 'prompt', 'imagen_origen',
+    'aspect', 'duracion', 'modelo', 'favorita', 'creado_por', 'fecha_creacion',
   ],
   // Calendario de campañas multicanal (email | instagram | facebook). Capa de
   // planificación del agente de marketing. estado: propuesta → aprobada →

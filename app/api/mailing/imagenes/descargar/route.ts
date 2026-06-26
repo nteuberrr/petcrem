@@ -11,6 +11,7 @@ import JSZip from 'jszip'
  *   GET ?id=<id>                      → descarga UNA imagen del banco (attachment).
  *   GET ?url=<url pública R2>         → descarga UNA imagen por su URL (las que muestra
  *                                       el agente en el chat con ![](URL)).
+ *   GET ?ids=<id,id,id>               → descarga una SELECCIÓN en un .zip.
  *   GET [?origen=ai|upload][?grupo=…] → descarga TODAS (o el subconjunto) en un .zip.
  *
  * Se descarga a través del servidor (no del link público de R2) para FORZAR la
@@ -73,6 +74,7 @@ export async function GET(req: NextRequest) {
 
   const id = req.nextUrl.searchParams.get('id')
   const url = req.nextUrl.searchParams.get('url')
+  const idsParam = req.nextUrl.searchParams.get('ids') // 'id,id,id' (selección)
   const origen = req.nextUrl.searchParams.get('origen') // 'ai' | 'upload' (opcional)
   const grupo = req.nextUrl.searchParams.get('grupo')   // opcional
 
@@ -103,6 +105,10 @@ export async function GET(req: NextRequest) {
 
     // ─── Descarga masiva (.zip) ───
     let lista = todas
+    if (idsParam) {
+      const set = new Set(idsParam.split(',').map(s => s.trim()).filter(Boolean))
+      lista = lista.filter(i => set.has(String(i.id)))
+    }
     if (origen === 'ai') lista = lista.filter(i => i.origen !== 'upload')
     else if (origen === 'upload') lista = lista.filter(i => i.origen === 'upload')
     if (grupo) lista = lista.filter(i => (i.grupo || '') === grupo)
