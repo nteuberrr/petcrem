@@ -607,10 +607,17 @@ export default function ConfiguracionPage() {
         </div>
 
         <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
+          <div className="flex items-center justify-between gap-2 px-6 py-4 border-b border-gray-300 flex-wrap">
             <h2 className="font-semibold text-gray-900">Bodega</h2>
-            <button onClick={() => { setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '' }); setShowProdModal(true) }}
-              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+            <div className="flex items-center gap-2">
+              <a href="/api/productos/catalogo" target="_blank" rel="noopener"
+                title="Descarga un PDF actualizado con las fotos y precios de los productos, listo para enviar a clientes"
+                className="inline-flex items-center gap-1.5 border border-brand text-brand hover:bg-brand/5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                📄 Descargar catálogo de productos
+              </a>
+              <button onClick={() => { setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '' }); setShowProdModal(true) }}
+                className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+            </div>
           </div>
           {productos.length === 0 ? (
             <div className="px-6 py-8 text-center text-sm text-gray-400">Sin productos registrados</div>
@@ -1729,6 +1736,17 @@ function DatosPersonalesPanel() {
       <div>
         <h2 className="text-base font-bold text-gray-900">Datos de la empresa</h2>
         <p className="text-xs text-gray-500">Estos datos están disponibles para mostrarlos en certificados, facturas y reportes.</p>
+      </div>
+
+      <div className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-sm font-semibold text-brand">Presentación de servicios (licitaciones)</p>
+          <p className="text-xs text-gray-500">Dossier corporativo en PDF, detallado y branded, con tarifas, proceso, trazabilidad y datos de la empresa. Siempre actualizado.</p>
+        </div>
+        <a href="/api/empresa/informe" target="_blank" rel="noopener"
+          className="inline-flex items-center gap-1.5 shrink-0 bg-brand hover:bg-brand-dark text-white px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors">
+          📄 Descargar informe corporativo
+        </a>
       </div>
 
       <Section title="Identidad">
