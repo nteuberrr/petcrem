@@ -2,13 +2,13 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getSheetData } from './datastore'
 import { fmtPrecio } from './format'
 import { getMarketingConfig } from './marketing-config'
-import { listarCalendario, crearItems, type NuevoItem } from './marketing-calendario'
+import { listarCalendario, crearItems, actualizarItem, eliminarItem, obtenerItem, type NuevoItem } from './marketing-calendario'
 import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
 import { esLogo } from './marca-logo'
 import { generarPieza, editarImagenPieza } from './marketing-pieza'
-import { generarGraficoMarca, FORMATOS_GRAFICO } from './marketing-grafico'
+import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
 import { publicarItem } from './marketing-publicar'
 import { resumenAds, resumenOrganico, isInsightsConfigurado } from './meta-insights'
@@ -49,6 +49,7 @@ CÓMO TRABAJÁS (lo más importante — leelo bien)
 - PENSÁ COMO DIRECTOR SENIOR. Cada pieza tiene UN objetivo, un gancho fuerte al inicio, UNA idea central, un CTA claro, el formato correcto del canal y el tono de la audiencia. Calidad sobre cantidad; si algo se puede hacer mejor, hacelo mejor sin que te lo pidan.
 - MOSTRÁ, no describas: cuando generás o elegís una imagen, inclúila en tu respuesta con ![](URL) para que el dueño la VEA. Nunca describas una imagen con palabras en vez de generarla.
 - Reutilizá del banco SOLO si hay una imagen que calza muy bien con lo pedido. Si piden algo nuevo o específico, generalo.
+- CÓDIGOS DEL BANCO: cada imagen/video tiene un CÓDIGO legible y estable — **i-N** (foto suelta), **C-X.Y** (pieza de campaña: portada/placa/carrusel; X=campaña, Y=imagen), **v-N** (video) y **ai-N** (video animado de una foto). SIEMPRE que generes o entregues una imagen/pieza, decí su código (ej. "Quedó lista, es la **C-12.1**") para que el dueño pueda referirse a ella después. El dueño te va a hablar por código ("editá la i-3", "usá la C-2.1", "esa portada C-12.1"): para encontrar su URL usá "consultar_banco_imagenes" con ese código (parámetro 'codigo' o 'buscar'); al EDITAR una foto, podés pasar 'referencia_codigo' directo en "generar_imagen".
 
 LÍNEA VISUAL DE MARCA
 - Seguí SIEMPRE la DIRECCIÓN VISUAL (fotos) y la DIRECCIÓN PARA GRÁFICOS (piezas con texto) que tenés más abajo. Los gráficos replican el estilo de nuestros correos (barra navy + "ALMA ANIMAL" + filete dorado + fondo crema; sobrio, cálido y premium). Paleta: crema/blanco domina, navy estructura, dorado acento.
@@ -102,6 +103,7 @@ FECHAS RELEVANTES DE CHILE (para colgar campañas con sentido; confirmá el día
 
 FLUJO Y HERRAMIENTAS
 1. PLANIFICAR (barato): para un plan, primero "listar_calendario" (no duplicar ni saturar) y luego "proponer_campanas" con ítems repartidos por canal/fecha/objetivo (solo idea + fecha + canal + audiencia + objetivo + título corto). No generes piezas en este paso.
+1b. GESTIONAR EL CALENDARIO (hacelo cuando te lo pidan, sin vueltas): podés EDITAR cualquier campaña con "editar_campana" (mover de fecha u hora, cambiar canal/audiencia/objetivo, corregir idea/título, aprobar→estado "aprobada", descartar→"descartada", archivar→activa=false), CREAR nuevas con "proponer_campanas", y BORRAR de forma permanente con "eliminar_campana" (solo si lo piden explícito; si dudás entre borrar o descartar, descartá o preguntá). Si no tenés el id, mirá "listar_calendario" primero. Para mover/editar varias a la vez, llamá la herramienta una vez por cada una en el mismo turno. Tras el cambio, confirmá en una frase qué quedó.
 2. GENERAR PIEZA DEL CALENDARIO: "generar_pieza" con el id (copy + imagen para social, o asunto + HTML para email). Úsalo cuando el dueño lo pida sobre ítems concretos.
 3. IMÁGENES Y GRÁFICOS sueltos (lo más usado en el chat). Entregá la pieza TERMINADA y mostrala con ![](URL). (Podés mirar el banco con "consultar_banco_imagenes" para reutilizar.)
    - GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita, post con texto) → "disenar_grafico": VOS diseñás el HTML (libre y creativo) y sale con la marca EXACTA (More Sugar + Inter, navy/dorado/crema exactos, logo real). Seguí las reglas de "DISEÑO DE GRÁFICOS CON TEXTO" del contexto. El texto SIEMPRE va por acá, NUNCA con una imagen generada por IA.
@@ -163,7 +165,7 @@ function bloqueBanco(banco: ImagenBanco[]): string {
   const porGrupo: Record<string, number> = {}
   for (const b of banco) porGrupo[b.grupo || 'otro'] = (porGrupo[b.grupo || 'otro'] || 0) + 1
   const resumen = Object.entries(porGrupo).map(([g, n]) => `${g}: ${n}`).join(', ')
-  return `BANCO DE IMÁGENES (${banco.length} imágenes — ${resumen}). Usa "consultar_banco_imagenes" para ver detalles y prioriza reutilizar.`
+  return `BANCO DE IMÁGENES (${banco.length} imágenes — ${resumen}). Cada imagen tiene un CÓDIGO (i-N foto · C-X.Y pieza). Usa "consultar_banco_imagenes" (con \`codigo\` o \`buscar\` para resolver una referencia del dueño, o \`grupo\` para filtrar) y prioriza reutilizar.`
 }
 
 /** Variantes del logo (grupo "marca") con su URL, para que el agente las coloque en
@@ -177,6 +179,39 @@ function bloqueLogos(banco: ImagenBanco[]): string {
     return `- ${l.descripcion || `logo #${l.id}`}: ${l.url}${hint}`
   }).join('\n')
   return `LOGOS DE MARCA (al diseñar un gráfico con "disenar_grafico", poné el logo con <img src="URL"> usando UNA de estas URLs; elegí la que CONTRASTE con el fondo donde lo ubiques):\n${lineas}`
+}
+
+/**
+ * Recupera el ÚLTIMO gráfico que el agente diseñó (su HTML final + las fotos), para
+ * inyectarlo en el contexto del turno siguiente.
+ *
+ * POR QUÉ: el chat solo persiste TEXTO ({rol,texto}); el HTML que el agente diseñó y
+ * las URLs de las fotos viven en bloques tool que se descartan entre requests. Sin
+ * esto, al pedir un ajuste el agente NO tiene cómo recuperar lo que hizo → rehace el
+ * diseño de cero y vuelve a pedir la foto (por eso "se le cambia la imagen" y la
+ * calidad deriva en cada ajuste). Le devolvemos el HTML EXACTO para que edite sobre él.
+ */
+async function bloqueUltimoGrafico(historial: TurnoMarketing[]): Promise<string> {
+  // URLs de imagen que el agente mostró (![](url)), de la más reciente a la más antigua.
+  const urls: string[] = []
+  for (let i = historial.length - 1; i >= 0 && urls.length < 6; i--) {
+    const t = historial[i]
+    if (t.rol !== 'agente' || !t.texto) continue
+    const enTurno: string[] = []
+    const re = /!\[[^\]]*\]\(([^)\s]+)\)/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(t.texto))) enTurno.push(m[1])
+    urls.push(...enTurno.reverse()) // dentro del turno, la última imagen primero
+  }
+  for (const url of urls.slice(0, 6)) {
+    const d = await cargarDisenoGrafico(url)
+    if (!d) continue // no es un gráfico con sidecar (foto suelta, etc.) → seguimos
+    const fotosTxt = d.fotos.length
+      ? `\nFotos ya generadas (sus URLs YA están en los <img> de abajo; dejalas IGUAL salvo que te pidan explícitamente otra foto): ${d.fotos.map(f => `${f.slot}=${f.url}`).join(', ')}.`
+      : ''
+    return `ÚLTIMO GRÁFICO QUE DISEÑASTE (formato=${d.formato}). Si el dueño pide AJUSTAR / cambiar / corregir esta portada/placa/gráfico (o dice "el último", "este", "lo de antes", "mantené el resto"), NO empieces de cero: llamá "disenar_grafico" con el MISMO formato, copiá EXACTAMENTE este HTML y cambiá SOLO lo que te pidan, manteniendo idénticos tamaños, colores, posiciones, el logo y LAS MISMAS FOTOS (por su URL real, que ya está en el <img>). NO uses FOTO:slot ni mandes "fotos" salvo que te pidan otra foto distinta.${fotosTxt}\nHTML EXACTO del último gráfico (editá sobre esto):\n\`\`\`html\n${d.html}\n\`\`\``
+  }
+  return ''
 }
 
 // ─── Herramientas ─────────────────────────────────────────────────────────────
@@ -222,6 +257,38 @@ const TOOL_PROPONER: Anthropic.Tool = {
   },
 }
 
+const TOOL_EDITAR_CAMPANA: Anthropic.Tool = {
+  name: 'editar_campana',
+  description: 'Edita uno o varios campos de un ítem del calendario por su id: fecha, hora, canal, audiencia, objetivo, idea, título, estado o si está activa. Úsalo cuando el dueño pida CAMBIAR o MOVER una campaña (otra fecha/hora, otro canal, corregir la idea/título), APROBARLA, DESCARTARLA o archivarla/reactivarla. Si no sabés el id, primero usá listar_calendario. Cambiá SOLO lo que te pidan; el resto queda igual. (Generar la pieza y publicar son acciones aparte: generar_pieza y publicar_pieza.) Podés llamarla varias veces en un mismo turno para editar varias campañas.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Id del ítem del calendario a editar.' },
+      fecha: { type: 'string', description: 'Nueva fecha YYYY-MM-DD (opcional).' },
+      hora: { type: 'string', description: 'Nueva hora HH:MM 24h (opcional). Pasá string vacío para quitarla.' },
+      canal: { type: 'string', enum: ['email', 'instagram', 'facebook'], description: 'Nuevo canal (opcional).' },
+      audiencia: { type: 'string', enum: ['tutores', 'veterinarios', 'ambos'], description: 'Nueva audiencia (opcional).' },
+      objetivo: { type: 'string', enum: ['captacion_vets', 'recordacion', 'educacion_tutores', 'postventa', 'promocion'], description: 'Nuevo objetivo (opcional).' },
+      idea: { type: 'string', description: 'Nueva idea/descripción de la campaña (opcional).' },
+      titulo: { type: 'string', description: 'Nuevo título/gancho (opcional).' },
+      estado: { type: 'string', enum: ['propuesta', 'aprobada', 'programada', 'descartada'], description: 'Nuevo estado (opcional). Aprobar="aprobada"; descartar sin borrar="descartada".' },
+      activa: { type: 'boolean', description: 'true=activa; false=archivar (sacar del calendario sin borrarla).' },
+      notas: { type: 'string', description: 'Notas internas (opcional).' },
+    },
+    required: ['id'],
+  },
+}
+
+const TOOL_ELIMINAR_CAMPANA: Anthropic.Tool = {
+  name: 'eliminar_campana',
+  description: 'BORRA de forma permanente un ítem del calendario por su id. Úsalo SOLO cuando el dueño pida explícitamente eliminar/borrar una campaña — es irreversible. Si solo quiere sacarla del plan sin borrarla, usá editar_campana con estado="descartada" o activa=false. Si no sabés el id, usá listar_calendario.',
+  input_schema: {
+    type: 'object',
+    properties: { id: { type: 'string', description: 'Id del ítem del calendario a borrar.' } },
+    required: ['id'],
+  },
+}
+
 const TOOL_PRECIOS: Anthropic.Tool = {
   name: 'leer_precios',
   description: 'Devuelve las tarifas vigentes de cremación (ya las tienes en el contexto, pero úsala si necesitas reconfirmar antes de mencionar un valor).',
@@ -230,10 +297,14 @@ const TOOL_PRECIOS: Anthropic.Tool = {
 
 const TOOL_BANCO: Anthropic.Tool = {
   name: 'consultar_banco_imagenes',
-  description: 'Lista imágenes del banco (para reutilizar en piezas). Filtra por grupo opcional (mascotas, personas, productos, instalaciones, otro).',
+  description: 'Lista/busca imágenes del banco (para reutilizar o para RESOLVER un código que mencionó el dueño a su URL). Filtros opcionales: codigo (exacto, ej. "i-3" o "C-2.1"), buscar (texto libre sobre código/descripción/tags), grupo (mascotas, personas, productos, instalaciones, otro). Devuelve cada imagen con su código y su URL.',
   input_schema: {
     type: 'object',
-    properties: { grupo: { type: 'string', description: 'Grupo a filtrar (opcional).' } },
+    properties: {
+      codigo: { type: 'string', description: 'Código exacto a resolver (ej. "i-3", "C-2.1"). Úsalo cuando el dueño se refiera a una imagen por su código.' },
+      buscar: { type: 'string', description: 'Texto libre para buscar en código/descripción/tags (opcional).' },
+      grupo: { type: 'string', description: 'Grupo a filtrar (opcional).' },
+    },
     required: [],
   },
 }
@@ -269,6 +340,7 @@ const TOOL_GENERAR_IMG: Anthropic.Tool = {
       subgrupo: { type: 'string', description: 'Etiqueta/campaña para ordenar en el banco (opcional).' },
       usar_adjunto: { type: 'boolean', description: 'true para usar como referencia la(s) imagen(es) que el dueño adjuntó en este turno.' },
       referencia_url: { type: 'string', description: 'URL exacta de una imagen del banco para usar como referencia (al editar, la imagen a modificar).' },
+      referencia_codigo: { type: 'string', description: 'Código del banco (ej. "i-3", "C-2.1") a usar como referencia/imagen a editar. Más cómodo que referencia_url cuando el dueño se refiere a la imagen por su código.' },
       logo_url: { type: 'string', description: 'Opcional: URL exacta de una variante de logo del banco (grupo "marca") para usar en vez de la que se elige automáticamente.' },
       sin_logo: { type: 'boolean', description: 'true para entregar la imagen SIN el logo de marca (por defecto TODO lo generado/editado lo lleva).' },
     },
@@ -419,8 +491,12 @@ export async function generarRespuestaMarketing(
   system.push({ type: 'text', text: bloqueBanco(banco) })
   const logos = bloqueLogos(banco)
   if (logos) system.push({ type: 'text', text: logos })
+  // Estado del último gráfico (para que los AJUSTES editen el HTML exacto en vez de
+  // rehacerlo y regenerar las fotos). Va sin cache (cambia cada turno).
+  const ultimoGrafico = await bloqueUltimoGrafico(historial)
+  if (ultimoGrafico) system.push({ type: 'text', text: ultimoGrafico })
 
-  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG]
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG]
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
   let cambios = false
@@ -478,15 +554,52 @@ export async function generarRespuestaMarketing(
             cambios = true
             resultText = `Creadas ${creados.length} propuestas: ${creados.map(c => `#${c.id} (${c.fecha}, ${c.canal})`).join(', ')}.`
           }
+        } else if (tu.name === 'editar_campana') {
+          const inp = tu.input as { id?: string; fecha?: string; hora?: string; canal?: string; audiencia?: string; objetivo?: string; idea?: string; titulo?: string; estado?: string; activa?: boolean; notas?: string }
+          const id = String(inp.id || '')
+          const actual = id ? await obtenerItem(id) : null
+          if (!id) resultText = 'Falta el id de la campaña a editar.'
+          else if (!actual) resultText = `No existe una campaña con id #${id}. Usá listar_calendario para ver los ids.`
+          else {
+            const patch: Record<string, string> = {}
+            const campos: string[] = []
+            const set = (k: string, v?: string) => { if (v != null && String(v).trim() !== '') { patch[k] = String(v).trim(); campos.push(k) } }
+            // hora admite "" para borrarla (caso especial: el set normal ignora vacíos)
+            set('fecha', inp.fecha); set('canal', inp.canal); set('audiencia', inp.audiencia)
+            set('objetivo', inp.objetivo); set('idea', inp.idea); set('titulo', inp.titulo); set('estado', inp.estado); set('notas', inp.notas)
+            if (inp.hora !== undefined) { patch.hora = String(inp.hora).trim(); campos.push('hora') }
+            if (inp.activa !== undefined) { patch.activa = inp.activa ? 'TRUE' : 'FALSE'; campos.push('activa') }
+            if (campos.length === 0) resultText = 'No indicaste ningún cambio para esa campaña.'
+            else {
+              const it = await actualizarItem(id, patch)
+              cambios = true
+              resultText = `Campaña #${id} actualizada (${campos.join(', ')}). Quedó: ${it.fecha}${it.hora ? ' ' + it.hora : ''} · ${it.canal} · ${it.estado}${it.activa === 'FALSE' ? ' (archivada)' : ''} — ${it.idea || it.titulo || ''}.`
+            }
+          }
+        } else if (tu.name === 'eliminar_campana') {
+          const id = String((tu.input as { id?: string }).id || '')
+          const actual = id ? await obtenerItem(id) : null
+          if (!id) resultText = 'Falta el id de la campaña a borrar.'
+          else if (!actual) resultText = `No existe una campaña con id #${id}.`
+          else {
+            await eliminarItem(id)
+            cambios = true
+            resultText = `Campaña #${id} (${actual.fecha} · ${actual.canal} — ${actual.idea || actual.titulo || ''}) eliminada del calendario de forma permanente.`
+          }
         } else if (tu.name === 'leer_precios') {
           resultText = await bloqueTarifas()
         } else if (tu.name === 'consultar_banco_imagenes') {
-          const grupo = (tu.input as { grupo?: string }).grupo
-          const lista = banco.filter(b => !grupo || b.grupo === grupo).slice(0, 40)
+          const inp = tu.input as { grupo?: string; codigo?: string; buscar?: string }
+          const codigo = (inp.codigo || '').trim().toLowerCase()
+          const buscar = (inp.buscar || '').trim().toLowerCase()
+          let lista = banco.filter(b => !inp.grupo || b.grupo === inp.grupo)
+          if (codigo) lista = lista.filter(b => (b.codigo || '').toLowerCase() === codigo)
+          if (buscar) lista = lista.filter(b => `${b.codigo} ${b.descripcion} ${b.alt} ${b.tags}`.toLowerCase().includes(buscar))
+          lista = lista.slice(0, 40)
           resultText = lista.length === 0
-            ? 'No hay imágenes en el banco con ese filtro.'
-            : lista.map(b => `#${b.id} [${b.grupo || 'otro'}] ${b.descripcion || b.alt || '(sin descripción)'} — ${b.url}`).join('\n')
-              + '\n\nSi le mostrás alguna al dueño, inclúyela con ![](URL).'
+            ? (codigo ? `No encontré ninguna imagen con código "${inp.codigo}".` : 'No hay imágenes en el banco con ese filtro.')
+            : lista.map(b => `${b.codigo || '#' + b.id} [${b.grupo || 'otro'}] ${b.descripcion || b.alt || '(sin descripción)'} — ${b.url}`).join('\n')
+              + '\n\nSi le mostrás alguna al dueño, inclúyela con ![](URL) y nombrá su código.'
         } else if (tu.name === 'generar_pieza') {
           const id = String((tu.input as { id?: string }).id || '')
           const r = await generarPieza(id, opts.creadoPor)
@@ -513,12 +626,19 @@ export async function generarRespuestaMarketing(
           if (!isNanoBananaConfigurado()) {
             resultText = 'No puedo generar imágenes ahora (falta GEMINI_API_KEY).'
           } else {
-            const inp = tu.input as { prompt?: string; editar?: boolean; aspect?: string; descripcion?: string; tags?: string; grupo?: string; subgrupo?: string; usar_adjunto?: boolean; referencia_url?: string; logo_url?: string; sin_logo?: boolean }
+            const inp = tu.input as { prompt?: string; editar?: boolean; aspect?: string; descripcion?: string; tags?: string; grupo?: string; subgrupo?: string; usar_adjunto?: boolean; referencia_url?: string; referencia_codigo?: string; logo_url?: string; sin_logo?: boolean }
             const refs: { data: Buffer; mime: string }[] = []
             if (inp.usar_adjunto && opts.adjuntos?.length) refs.push(...opts.adjuntos)
-            if (inp.referencia_url) {
+            // Referencia por código (i-3, C-2.1): resolver a su URL desde el banco.
+            let refUrl = inp.referencia_url
+            if (!refUrl && inp.referencia_codigo) {
+              const cod = inp.referencia_codigo.trim().toLowerCase()
+              refUrl = banco.find(b => (b.codigo || '').toLowerCase() === cod)?.url
+              if (!refUrl) { resultText = `No encontré ninguna imagen con código "${inp.referencia_codigo}" para usar de referencia.` ; results.push({ type: 'tool_result', tool_use_id: tu.id, content: resultText }); continue }
+            }
+            if (refUrl) {
               try {
-                const rr = await fetch(inp.referencia_url)
+                const rr = await fetch(refUrl)
                 if (rr.ok) refs.push({ data: Buffer.from(await rr.arrayBuffer()), mime: rr.headers.get('content-type') || 'image/png' })
               } catch { /* referencia no accesible: seguimos sin ella */ }
             }
@@ -547,7 +667,7 @@ export async function generarRespuestaMarketing(
               urlFinal = urlLogo
             }
             cambios = true
-            resultText = `Imagen ${editar ? 'editada' : 'creada'}${conLogoOk ? ' con el logo de marca' : ''} (guardada en el banco, grupo ${grupoImg}). Muéstrasela al dueño incluyéndola con ![](${urlFinal}).`
+            resultText = `Imagen ${editar ? 'editada' : 'creada'}${conLogoOk ? ' con el logo de marca' : ''} — código ${g.imagen.codigo || '(sin código)'} (guardada en el banco, grupo ${grupoImg}). Muéstrasela al dueño incluyéndola con ![](${urlFinal}) y decile su código (${g.imagen.codigo || ''}).`
           }
         } else if (tu.name === 'disenar_grafico') {
           const inp = tu.input as { formato?: string; html?: string; fotos?: { slot?: string; prompt?: string; aspect?: string }[] }
@@ -567,7 +687,7 @@ export async function generarRespuestaMarketing(
             const fotosTxt = r.fotos.length
               ? ` Fotos usadas (si después SOLO cambiás texto, REUSÁ esta URL exacta en el <img>, NO generes otra): ${r.fotos.map(f => `${f.slot}=${f.url}`).join(', ')}.`
               : ''
-            resultText = `Gráfico de marca generado (colores, tipografía y logo exactos). Muéstraselo al dueño con ![](${r.url}).${fotosTxt}${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}`
+            resultText = `Gráfico de marca generado (colores, tipografía y logo exactos) — código ${r.codigo || '(sin código)'}. Muéstraselo al dueño con ![](${r.url}) y decile su código (${r.codigo || ''}).${fotosTxt}${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}`
           }
         } else if (tu.name === 'publicar_pieza') {
           const id = String((tu.input as { id?: string }).id || '')
