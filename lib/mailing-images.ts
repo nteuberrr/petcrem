@@ -1,7 +1,8 @@
 import sharp from 'sharp'
 import { getSheetData, appendRow, getNextId, deleteById, updateById, ensureSheet, ensureColumns } from './datastore'
-import { uploadToR2, deleteFromR2, keyFromPublicUrl } from './cloudflare-r2'
+import { uploadToR2, deleteFromR2, keyFromPublicUrl, getFromR2 } from './cloudflare-r2'
 import { generarImagen, extFromMime } from './nano-banana'
+import { aplicarLogoMarca } from './marca-logo'
 import { todayISO } from './dates'
 
 /** Grupos válidos para clasificar imágenes del banco. */
@@ -122,14 +123,16 @@ export async function registrarImagen(input: RegistrarImagenInput): Promise<Imag
 
 export interface ImagenGeneradaResult {
   imagen: ImagenBanco
-  /** Bytes de la imagen recién generada — para el pase de revisión con visión. */
+  /** Bytes de la imagen (limpia, sin logo) — para revisión con visión o referencia de carrusel. */
   buffer: Buffer
   mime: string
 }
 
 /**
  * Genera una imagen con Nano Banana Pro, la sube a R2 y la registra en el banco.
- * Devuelve la fila del banco + los bytes (para revisarla con visión antes de entregar).
+ * Las imágenes del banco quedan SIEMPRE LIMPIAS (sin logo): el logo es un paso de
+ * cierre que se aplica a la pieza que se publica (ver estamparLogoEnUrl), así una
+ * misma imagen se puede reutilizar sin arrastrar el logo y no se duplica.
  */
 export async function generarYGuardarImagen(args: {
   prompt: string
@@ -141,8 +144,13 @@ export async function generarYGuardarImagen(args: {
   aspect?: string
   creadoPor?: string
   referencias?: { data: Buffer; mime: string }[]
+  /** Edición image-to-image: preserva la 1ª referencia y cambia solo lo pedido. */
+  editar?: boolean
+  /** Modo gráfico: la pieza lleva texto integrado (portada, placa con datos, anuncio). */
+  conTexto?: boolean
 }): Promise<ImagenGeneradaResult> {
-  const img = await generarImagen({ prompt: args.prompt, aspect: args.aspect, referencias: args.referencias })
+  const img = await generarImagen({ prompt: args.prompt, aspect: args.aspect, referencias: args.referencias, editar: args.editar, conTexto: args.conTexto })
+
   // Normaliza a JPEG: Instagram (Content Publishing API) SOLO acepta JPEG, y el
   // generador suele devolver PNG. Convertir acá deja toda imagen generada lista
   // para publicar en IG/FB y más liviana. Si la conversión falla, sube el original.
@@ -150,15 +158,15 @@ export async function generarYGuardarImagen(args: {
   let mime = img.mime
   if (mime !== 'image/jpeg') {
     try {
-      buffer = await sharp(img.buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 88 }).toBuffer()
+      buffer = await sharp(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 88 }).toBuffer()
       mime = 'image/jpeg'
     } catch (e) {
       console.warn('[mailing-images] no se pudo convertir a JPEG, se sube el original:', e)
     }
   }
+
   const ext = extFromMime(mime)
-  const ts = Date.now()
-  const key = `mailing/ai-images/${ts}.${ext}`
+  const key = `mailing/ai-images/${Date.now()}.${ext}`
   const up = await uploadToR2(buffer, key, mime)
   const imagen = await registrarImagen({
     url: up.url,
@@ -175,6 +183,37 @@ export async function generarYGuardarImagen(args: {
     creadoPor: args.creadoPor,
   })
   return { imagen, buffer, mime }
+}
+
+/**
+ * Paso de CIERRE: toma una imagen ya subida (por su URL pública de R2), le pega el
+ * logo de marca (mejor variante del banco grupo "marca", o el logo oficial), y sube
+ * una copia branded. Devuelve la URL nueva (o la original si no se pudo). Esto es lo
+ * que garantiza que TODO lo que publicamos lleve el logo, sin ensuciar el banco.
+ */
+export async function estamparLogoEnUrl(
+  url: string,
+  logos: ImagenBanco[],
+  opts: { preferUrl?: string } = {},
+): Promise<string> {
+  try {
+    if (!url) return url
+    const key = keyFromPublicUrl(url) || ''
+    let bytes = key ? await getFromR2(key) : null
+    if (!bytes) {
+      const r = await fetch(url)
+      if (r.ok) bytes = Buffer.from(await r.arrayBuffer())
+    }
+    if (!bytes) return url
+    const { buffer, aplicado } = await aplicarLogoMarca(bytes, logos, { preferUrl: opts.preferUrl })
+    if (!aplicado) return url
+    const jpeg = await sharp(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 88 }).toBuffer()
+    const up = await uploadToR2(jpeg, `mailing/ai-images/${Date.now()}-logo.jpg`, 'image/jpeg')
+    return up.url
+  } catch (e) {
+    console.warn('[mailing-images] no se pudo estampar el logo:', e)
+    return url
+  }
 }
 
 /**

@@ -2432,6 +2432,7 @@ function ImagenCard({ img, onGrupo, onWhatsapp, onRename, onCopy, onDelete, onAn
           </label>
           <div className="ml-auto flex items-center gap-1">
             <button type="button" onClick={() => onAnimar(img)} title="Animar a video (Veo)" className="text-gray-500 hover:text-brand text-xs">🎬</button>
+            <a href={`/api/mailing/imagenes/descargar?id=${encodeURIComponent(img.id)}`} download title="Descargar imagen" className="text-gray-500 hover:text-brand text-xs">⬇</a>
             <button type="button" onClick={() => onCopy(img.url)} title="Copiar URL" className="text-gray-500 hover:text-brand text-xs">⧉</button>
             <button type="button" onClick={() => onDelete(img)} title="Eliminar" className="text-gray-500 hover:text-red-600 text-xs">🗑</button>
           </div>
@@ -2698,7 +2699,11 @@ function ImagenesPanel() {
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <p className="text-xs text-gray-400">{imgs.length} imagen{imgs.length === 1 ? '' : 'es'} · agrupadas por etiqueta</p>
-            <button type="button" onClick={cargar} className="text-xs text-brand hover:underline">Actualizar</button>
+            <div className="flex items-center gap-3">
+              <a href="/api/mailing/imagenes/descargar" download title="Descargar todas las imágenes del banco en un .zip"
+                className="text-xs text-brand hover:underline">⬇ Descargar todas (ZIP)</a>
+              <button type="button" onClick={cargar} className="text-xs text-brand hover:underline">Actualizar</button>
+            </div>
           </div>
           {grupos.map(g => (
             <details key={g.key} className="bg-white rounded-2xl shadow-md border-2 border-gray-300 group">

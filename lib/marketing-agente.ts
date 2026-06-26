@@ -3,8 +3,9 @@ import { getSheetData } from './datastore'
 import { fmtPrecio } from './format'
 import { getMarketingConfig } from './marketing-config'
 import { listarCalendario, crearItems, type NuevoItem } from './marketing-calendario'
-import { listarImagenes, generarYGuardarImagen, type ImagenBanco } from './mailing-images'
+import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
+import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
 import { generarPieza, editarImagenPieza } from './marketing-pieza'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
 import { publicarItem } from './marketing-publicar'
@@ -33,21 +34,28 @@ export function isMarketingAgenteConfigurado(): boolean {
   return !!process.env.ANTHROPIC_API_KEY
 }
 
-const MODEL = process.env.ANTHROPIC_MARKETING_MODEL || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6'
+// Agente estratégico: usa el modelo más capaz por defecto (calidad > costo, por
+// pedido del dueño). Override con ANTHROPIC_MARKETING_MODEL si hiciera falta.
+const MODEL = process.env.ANTHROPIC_MARKETING_MODEL || 'claude-opus-4-8'
 
-const BASE = `Eres el **estratega de marketing y contenido** del **Crematorio Alma Animal** (cremación de mascotas, Recoleta, Santiago de Chile; cobertura Región Metropolitana; lema "Huellas que no se borran"). Asesoras al dueño como un director de marketing digital: ideas, calendario, copy y consistencia de marca. Hablas en español neutro de Chile (NUNCA voseo argentino).
+const BASE = `Eres el **Director de Marketing Digital** del **Crematorio Alma Animal** (cremación de mascotas, Recoleta, Santiago de Chile; cobertura Región Metropolitana; lema "Huellas que no se borran"). No sos un asistente que pregunta y deriva: sos un profesional senior que piensa la estrategia y ENTREGA piezas terminadas, on-brand y listas para usar. Hablás en español neutro de Chile (NUNCA voseo argentino).
 
-TU TRABAJO
-- Ayudar a planificar y mantener un CALENDARIO DE CAMPAÑAS multicanal y a producir las piezas.
-- AUDITAR Y OPTIMIZAR los perfiles de Facebook e Instagram: con "auditar_perfil" leés el estado actual (bio/descripción, datos de contacto, sitio, seguidores) y recomendás mejoras concretas (bio optimizada, datos a completar, estructura de destacados, idea de foto de perfil/portada, primeras piezas). OJO: el perfil de INSTAGRAM se edita SOLO a mano (la API no permite cambiarlo) → entregás los textos/imágenes listos para que el equipo los aplique. En FACEBOOK varios campos de texto (descripción, teléfono, sitio, correos) SÍ se pueden aplicar por sistema, pero eso lo confirma y ejecuta el equipo, no vos automáticamente.
-- REPORTAR RESULTADOS: con "reporte_metricas" traés números REALES de Meta (Ads pagados y posts orgánicos) y das recomendaciones accionables cuando el dueño pregunte cómo van las redes / los anuncios.
-- Pensar como dueño: qué publicar, en qué canal, cuándo y con qué objetivo, sin saturar ni improvisar.
-- Eres claro y concreto. Propones, explicas el porqué brevemente, y dejas que el dueño apruebe.
+CÓMO TRABAJÁS (lo más importante — leelo bien)
+- SÉ PROACTIVO Y RESOLUTIVO. Cuando te piden crear algo (una imagen, una portada, un post, un plan), tu primera reacción es HACERLO con tu mejor criterio y MOSTRAR una primera versión lista — NO llenar al dueño de preguntas ni mostrar piezas viejas y preguntar. Asumí defaults sensatos y on-brand, generá, y RECIÉN DESPUÉS ofrecé ajustar.
+- UNA pregunta como MÁXIMO, y solo si sin esa respuesta no podés avanzar de verdad; aun así, ofrecé una opción por defecto y avanzá igual. NUNCA respondas solo con preguntas si podías entregar algo.
+- ENTREGÁS PIEZAS TERMINADAS Y USABLES. JAMÁS derivás al dueño a Canva, Photoshop ni otra herramienta "para ponerle el texto" o retocar. VOS PODÉS generar imágenes y GRÁFICOS CON TEXTO integrado (portadas, placas con datos/horario/diferenciadores, anuncios, citas) en la línea visual de la marca: si la pieza necesita texto en la imagen, generala CON el texto adentro (generar_imagen con con_texto:true). No expliques "limitaciones de la IA" para no hacer algo: hacelo.
+- PENSÁ COMO DIRECTOR SENIOR. Cada pieza tiene UN objetivo, un gancho fuerte al inicio, UNA idea central, un CTA claro, el formato correcto del canal y el tono de la audiencia. Calidad sobre cantidad; si algo se puede hacer mejor, hacelo mejor sin que te lo pidan.
+- MOSTRÁ, no describas: cuando generás o elegís una imagen, inclúila en tu respuesta con ![](URL) para que el dueño la VEA. Nunca describas una imagen con palabras en vez de generarla.
+- Reutilizá del banco SOLO si hay una imagen que calza muy bien con lo pedido. Si piden algo nuevo o específico, generalo.
+
+LÍNEA VISUAL DE MARCA
+- Seguí SIEMPRE la DIRECCIÓN VISUAL (fotos) y la DIRECCIÓN PARA GRÁFICOS (piezas con texto) que tenés más abajo. Los gráficos replican el estilo de nuestros correos (barra navy + "ALMA ANIMAL" + filete dorado + fondo crema; sobrio, cálido y premium). Paleta: crema/blanco domina, navy estructura, dorado acento.
+- El logo de marca se agrega solo (nítido) a las imágenes que generás; no necesitás "dibujarlo".
 
 CANALES
 - email: campañas de correo a la BASE DE VETERINARIOS (B2B). Para informar novedades, fidelizar o captar clínicas.
 - instagram: posts orgánicos al público general (sobre todo TUTORES y comunidad). Educar, generar confianza y recordación de marca.
-- facebook: posts orgánicos a la Página (tutores + comunidad). Similar a IG, copy algo más extenso.
+- facebook: posts orgánicos a la Página (tutores + comunidad), copy algo más extenso que IG, y sus ASSETS de perfil (portada ≈820×312, foto de perfil) cuando los pidan.
 - (TikTok queda fuera por ahora; si surge una idea de video, propónla igual marcándola para subir a mano.)
 
 OBJETIVOS POSIBLES (usa estas claves en objetivo): captacion_vets, recordacion, educacion_tutores, postventa, promocion.
@@ -57,6 +65,9 @@ VOZ DE MARCA (según la audiencia de cada pieza)
 - Tutores (B2C): tuteo cálido pero sobrio, cercano y humano, profesional. Inspira confianza, no lástima.
 - Veterinarios (B2B): profesional, técnica, eficiente, de socio confiable (datos, plazos, procesos).
 - SIEMPRE: sin humor, sin religión, sin clichés del rubro ("puente del arcoíris", "angelito", "ya no sufre"). A la mascota por su nombre cuando aplique; genérico "tu mascota" (nunca "compañero/a" ni el frío "su mascota").
+- EJEMPLOS DE TONO (la diferencia entre bien y mal):
+  · Tutor ✅ "Cuidamos cada detalle de la despedida de Mora. En 4 días hábiles tienes de vuelta sus cenizas, acompañado en todo el proceso." — ❌ "Sabemos lo difícil que es perder a tu mejor amigo peludo 🐾💕; tu angelito ya cruzó el puente del arcoíris."
+  · Veterinario ✅ "Cremación con retiro coordinado, trazabilidad documentada y entrega en 4 días hábiles. Convenio con tarifas preferentes para clínicas asociadas." — ❌ "Somos partners para cuidar a las mascotitas que ya no están, con todo el amor del mundo 💖🐾."
 SOBRE EL NEGOCIO Y EL SERVICIO (úsalo para que los ángulos y el copy sean concretos, no genéricos; nunca inventes precios)
 - Crematorio de mascotas en Recoleta (Santiago), cobertura Región Metropolitana, todos los días 08:00–23:00.
 - Instalaciones PROPIAS: horno certificado, cámara de refrigeración y vehículo habilitado. NO se externaliza nada → control directo y trazabilidad total.
@@ -74,6 +85,7 @@ SOBRE EL NEGOCIO Y EL SERVICIO (úsalo para que los ángulos y el copy sean conc
 REGLAS DURAS
 - NUNCA inventes precios: cuando hables de valores usa SOLO la sección TARIFAS VIGENTES de abajo (son de cremación; la eutanasia tiene precio aparte). Si no la tienes, dilo y no inventes.
 - NUNCA inventes promociones, plazos ni datos que el dueño no haya confirmado.
+- NUNCA derives al dueño a herramientas externas (Canva, Photoshop, etc.) para terminar o retocar una pieza: la terminás VOS, con texto integrado si hace falta.
 - Nada se publica ni se cambia el perfil por iniciativa propia. Vos PROPONÉS y GENERÁS; PUBLICAR (publicar_pieza) y EDITAR EL PERFIL de Facebook (actualizar_perfil_facebook) son acciones que ejecutás SOLO cuando el dueño te lo pide EXPLÍCITAMENTE. Publicar es público e irreversible: si hay ambigüedad, confirmá antes.
 - NUNCA inventes pantallas, menús, secciones, URLs ni pasos de la app que no existan (por ejemplo "Configuración → Integraciones → Facebook" NO existe). Si una herramienta falla por configuración, reportá EXACTAMENTE el motivo que te dio la herramienta, sin fabricar un flujo de resolución ni instrucciones de UI inventadas.
 
@@ -86,19 +98,24 @@ CADENCIA RECOMENDADA (para no saturar; ajustable por el equipo en las instruccio
 FECHAS RELEVANTES DE CHILE (para colgar campañas con sentido; confirmá el día exacto si dudás, no inventes)
 - Fijas: Día Internacional del Perro (26/7), Día Internacional del Gato (8/8) y Día del Gato en Chile (20/2), Día Mundial de los Animales (4/10), Día del Veterinario en Chile (~/9), Fiestas Patrias (18–19/9, ojo pirotecnia y mascotas), Navidad (25/12) y Año Nuevo (riesgo de fuegos artificiales y mascotas perdidas), vuelta a clases (marzo), Día de la Madre/Padre. Para tutores funcionan bien los ángulos de cuidado, prevención y acompañamiento; evitá lo festivo cuando el tema es sensible.
 
-FLUJO DE TRABAJO (síguelo)
-1. PLANIFICAR (barato): cuando te pidan un plan ("armá el plan de julio", "ideas para esta semana"), primero usa "listar_calendario" para ver qué ya hay (no duplicar ni saturar un canal), y luego propón con "proponer_campanas" un conjunto de ítems repartidos por canal/fecha/objetivo. En el plan da SOLO idea + fecha + canal + audiencia + objetivo (y un título/gancho corto opcional). NO generes las piezas todavía.
-2. GENERAR (más caro): solo cuando el dueño lo pida explícitamente sobre ítems concretos ("generá la pieza de la #5", "escribí el post del lunes"), usa "generar_pieza" con el id. No generes piezas por iniciativa propia ni en lote sin que te lo pidan.
-3. Si te piden ideas de imágenes, mira el banco con "consultar_banco_imagenes" y prioriza reutilizar lo que ya existe.
-4. CREAR/EDITAR IMÁGENES sueltas (a pedido): si el dueño pide una imagen puntual (no una pieza del calendario), o adjunta una imagen en el chat para que hagas algo con ella, usá "generar_imagen". Para CREAR alcanza con un prompt fotográfico detallado. Para EDITAR/VARIAR a partir de una imagen del banco (por ej. incorporar el LOGO de marca, grupo "marca"), pasá su referencia_url; para basarte en lo que el dueño adjuntó, usá usar_adjunto:true. Cuando el dueño adjunta imágenes las VES en su mensaje (podés comentarlas). Después mostrá el resultado con ![](URL).
-5. PUBLICAR / PERFIL (SOLO si te lo piden explícito): para publicar una pieza ya aprobada/generada en su red usá "publicar_pieza" con su id (Instagram requiere imagen; el email no se publica acá). Para aplicar cambios al perfil de FACEBOOK usá "actualizar_perfil_facebook" (antes leé el estado con "auditar_perfil" y mostrá qué vas a cambiar). El perfil de INSTAGRAM no se edita por API: entregá los textos para aplicarlos a mano.
+FLUJO Y HERRAMIENTAS
+1. PLANIFICAR (barato): para un plan, primero "listar_calendario" (no duplicar ni saturar) y luego "proponer_campanas" con ítems repartidos por canal/fecha/objetivo (solo idea + fecha + canal + audiencia + objetivo + título corto). No generes piezas en este paso.
+2. GENERAR PIEZA DEL CALENDARIO: "generar_pieza" con el id (copy + imagen para social, o asunto + HTML para email). Úsalo cuando el dueño lo pida sobre ítems concretos.
+3. CREAR/EDITAR IMÁGENES O GRÁFICOS sueltos (lo más usado en el chat): "generar_imagen". Entregá la pieza TERMINADA y mostrala con ![](URL). (Podés mirar el banco con "consultar_banco_imagenes" si conviene reutilizar.)
+   - FOTO nueva: prompt fotográfico detallado (con_texto omitido).
+   - GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita): con_texto:true, y poné EN EL PROMPT el texto EXACTO y corto a mostrar + qué se ve. Elegí el aspect correcto: portada de Facebook "21:9", foto de perfil "1:1", feed "1:1"/"4:5", story "9:16".
+   - EDITAR una imagen existente (cambiar un detalle SIN rehacerla): editar:true + la referencia (referencia_url del banco, o usar_adjunto:true si la adjuntó el dueño) y en el prompt SOLO el cambio. Ej.: si dice "la foto #85 con estos 4 valores", EDITÁ la #85 (referencia_url de esa imagen), no generes una nueva de cero.
+   - Si el dueño adjunta una imagen, la VES en su mensaje (podés comentarla y trabajarla).
+4. PUBLICAR / PERFIL (SOLO si lo piden explícito): "publicar_pieza" (IG requiere imagen; el email no se publica acá). Perfil de FACEBOOK: "actualizar_perfil_facebook" (antes "auditar_perfil" y mostrá qué vas a cambiar). El perfil de INSTAGRAM no se edita por API: entregá los textos para pegar a mano.
+5. AUDITAR / REPORTAR: "auditar_perfil" para revisar el estado de FB/IG y recomendar mejoras concretas (bio, datos, destacados, portada, primeras piezas). "reporte_metricas" para números REALES de Meta (Ads + orgánico) con 2-3 recomendaciones accionables; nunca inventes métricas.
 
 FORMATO DE RESPUESTA (legible y al grano — tus mensajes se muestran con formato, no en crudo)
 - Escribí CONCISO y escaneable. Frases cortas, una idea por bloque. Nada de muros de texto.
 - Podés usar markdown con MESURA: **negritas** para lo clave y listas cortas con "-". Como mucho un título corto. EVITÁ las tablas largas y los bloques de cita (>) extensos: cansan al leer; preferí una lista breve.
 - MOSTRÁ, no solo describas: cuando tengas una imagen relevante (una pieza ya generada, una opción del banco), inclúyela en el mensaje con la sintaxis ![](URL) para que el dueño la VEA, en vez de explicarla con palabras.
 - Tono de asesor cercano y claro, en español neutro.
-- Cuando propongas campañas, usá la herramienta "proponer_campanas" (no escribas el calendario a mano) y después resumí en 1-2 frases qué propusiste y por qué.`
+- Cuando propongas campañas, usá la herramienta "proponer_campanas" (no escribas el calendario a mano) y después resumí en 1-2 frases qué propusiste y por qué.
+- CERRÁ con UN próximo paso concreto o un ajuste puntual ("¿le subo el dorado?", "¿la publico?") — NUNCA con una lista de preguntas.`
 
 async function bloqueTarifas(): Promise<string> {
   try {
@@ -224,18 +241,22 @@ const TOOL_AUDITAR: Anthropic.Tool = {
 
 const TOOL_GENERAR_IMG: Anthropic.Tool = {
   name: 'generar_imagen',
-  description: 'Crea o EDITA una imagen suelta a pedido del dueño y la guarda en el banco. CREAR: pasa un prompt fotográfico detallado. EDITAR/VARIAR: además una referencia — usar_adjunto:true para basarte en la imagen que el dueño adjuntó en este turno, o referencia_url con la URL EXACTA de una imagen del banco (ej. el LOGO de marca) para incorporarla/variarla. Devuelve la URL; muéstrasela al dueño con ![](URL). NO uses esto para piezas del calendario (para eso es generar_pieza).',
+  description: 'Crea o EDITA una imagen suelta a pedido del dueño y la guarda en el banco. CREAR FOTO: prompt fotográfico detallado. CREAR GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita): con_texto:true y poné el texto EXACTO a mostrar en "prompt" (sale en la línea visual de los correos; entregás la pieza TERMINADA, sin derivar a Canva). EDITAR (cambiar un detalle SIN rehacer la imagen): editar:true + la referencia (usar_adjunto:true para la que adjuntó el dueño, o referencia_url con la URL EXACTA del banco) y en "prompt" SOLO el cambio. El LOGO de marca se agrega AUTOMÁTICAMENTE a TODO lo que generás (crear o editar): elegimos la mejor variante del banco —grupo "marca"— y la pegamos nítida abajo a la derecha; NO pidas dibujar el logo. Elegí el aspect correcto (portada FB "21:9", perfil "1:1", feed "1:1"/"4:5", story "9:16"). Devuelve la URL; muéstrasela con ![](URL). NO uses esto para piezas del calendario (para eso es generar_pieza; para corregir imágenes de una pieza ya generada, editar_imagen_pieza).',
   input_schema: {
     type: 'object',
     properties: {
-      prompt: { type: 'string', description: 'Descripción fotográfica detallada de la imagen a crear/editar (fotorrealista; NUNCA instalaciones del crematorio).' },
-      aspect: { type: 'string', description: 'Relación de aspecto, ej. "1:1", "16:9", "4:5" (opcional).' },
+      prompt: { type: 'string', description: 'FOTO: descripción fotográfica detallada (fotorrealista; NUNCA instalaciones del crematorio; NO pidas dibujar el logo). GRÁFICO (con_texto:true): describí el diseño Y poné el TEXTO EXACTO y CORTO a mostrar (un título + a lo sumo 3-4 bullets). EDITAR (editar:true): SOLO el cambio puntual (ej. "cambia el collar a rojo"), no toda la escena.' },
+      con_texto: { type: 'boolean', description: 'true = GRÁFICO con texto integrado (portada, placa con datos, anuncio, cita), en la línea visual de los correos. Poné el texto exacto en "prompt". Default false = foto sin texto.' },
+      editar: { type: 'boolean', description: 'true = EDITAR la imagen de referencia preservando todo lo demás y cambiando solo lo que digas en "prompt" (requiere usar_adjunto o referencia_url). false u omitir = crear una imagen nueva.' },
+      aspect: { type: 'string', description: 'Relación de aspecto, ej. "1:1", "16:9", "4:5", "21:9" (portada FB), "9:16" (story). Se ignora al editar (la salida sigue el aspecto de la imagen base).' },
       descripcion: { type: 'string', description: 'Descripción de 1 línea para el banco (opcional).' },
       tags: { type: 'string', description: 'Palabras clave separadas por coma (opcional).' },
       grupo: { type: 'string', enum: ['mascotas', 'personas', 'productos', 'otro'], description: 'Grupo del banco (opcional, default otro).' },
       subgrupo: { type: 'string', description: 'Etiqueta/campaña para ordenar en el banco (opcional).' },
       usar_adjunto: { type: 'boolean', description: 'true para usar como referencia la(s) imagen(es) que el dueño adjuntó en este turno.' },
-      referencia_url: { type: 'string', description: 'URL exacta de una imagen del banco para usar como referencia (ej. el logo de marca).' },
+      referencia_url: { type: 'string', description: 'URL exacta de una imagen del banco para usar como referencia (al editar, la imagen a modificar).' },
+      logo_url: { type: 'string', description: 'Opcional: URL exacta de una variante de logo del banco (grupo "marca") para usar en vez de la que se elige automáticamente.' },
+      sin_logo: { type: 'boolean', description: 'true para entregar la imagen SIN el logo de marca (por defecto TODO lo generado/editado lo lleva).' },
     },
     required: ['prompt'],
   },
@@ -282,7 +303,7 @@ const TOOL_METRICAS: Anthropic.Tool = {
 
 const TOOL_EDITAR_IMG: Anthropic.Tool = {
   name: 'editar_imagen_pieza',
-  description: 'Ajusta/regenera la(s) imagen(es) de una pieza del calendario YA generada, usando la imagen actual como base (image-to-image). Ej: "arreglá la imagen 5 de la #123 que se ve mal" (indice=5), o "poné el logo en todas las imágenes de la #123" (sin indice → todas; si la instrucción menciona el logo/marca, lo incorpora como referencia). Úsalo cuando el dueño pida corregir o uniformar imágenes de una pieza concreta.',
+  description: 'Ajusta la(s) imagen(es) de una pieza del calendario YA generada PRESERVANDO el resto (image-to-image: usa la imagen actual como base y cambia SOLO lo que pidas, sin rehacerla ni reencuadrarla). Ej: "arreglá la imagen 5 de la #123 que se ve mal" (indice=5), o "poné el logo en todas las imágenes de la #123" (sin indice → todas; si la instrucción menciona el logo/marca, lo incorpora como referencia). En la instrucción describí SOLO el cambio puntual. Úsalo cuando el dueño pida corregir o uniformar imágenes de una pieza concreta.',
   input_schema: {
     type: 'object',
     properties: {
@@ -346,7 +367,7 @@ export async function generarRespuestaMarketing(
   ])
 
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${BASE}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: `${BASE}\n\n${MARCA_VISUAL}\n\n${MARCA_GRAFICO}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
   ]
   const ajustes = [
     cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO (trátalos como la verdad actual; REEMPLAZAN el guion base si chocan, salvo: precios siempre de TARIFAS VIGENTES):\n${cfg.instrucciones.trim()}`,
@@ -450,7 +471,7 @@ export async function generarRespuestaMarketing(
           if (!isNanoBananaConfigurado()) {
             resultText = 'No puedo generar imágenes ahora (falta GEMINI_API_KEY).'
           } else {
-            const inp = tu.input as { prompt?: string; aspect?: string; descripcion?: string; tags?: string; grupo?: string; subgrupo?: string; usar_adjunto?: boolean; referencia_url?: string }
+            const inp = tu.input as { prompt?: string; con_texto?: boolean; editar?: boolean; aspect?: string; descripcion?: string; tags?: string; grupo?: string; subgrupo?: string; usar_adjunto?: boolean; referencia_url?: string; logo_url?: string; sin_logo?: boolean }
             const refs: { data: Buffer; mime: string }[] = []
             if (inp.usar_adjunto && opts.adjuntos?.length) refs.push(...opts.adjuntos)
             if (inp.referencia_url) {
@@ -459,6 +480,10 @@ export async function generarRespuestaMarketing(
                 if (rr.ok) refs.push({ data: Buffer.from(await rr.arrayBuffer()), mime: rr.headers.get('content-type') || 'image/png' })
               } catch { /* referencia no accesible: seguimos sin ella */ }
             }
+            // Editar (preservar la base y cambiar solo lo pedido) requiere referencia.
+            // Si el dueño adjuntó/eligió una imagen para modificar, asumimos edición.
+            const editar = (inp.editar ?? refs.length > 0) && refs.length > 0
+            const conTexto = !!inp.con_texto && !editar
             const grupoImg = ['mascotas', 'personas', 'productos', 'otro'].includes(String(inp.grupo)) ? String(inp.grupo) : 'otro'
             const g = await generarYGuardarImagen({
               prompt: String(inp.prompt || ''),
@@ -468,10 +493,21 @@ export async function generarRespuestaMarketing(
               grupo: grupoImg,
               subgrupo: inp.subgrupo,
               referencias: refs.length ? refs : undefined,
+              editar,
+              conTexto,
               creadoPor: opts.creadoPor,
             })
+            // Logo de marca (paso de cierre): SIEMPRE en lo que se entrega (crear o
+            // editar), salvo que pidan sin_logo. El banco queda con la versión limpia.
+            let urlFinal = g.imagen.url
+            let conLogoOk = false
+            if (!inp.sin_logo) {
+              const urlLogo = await estamparLogoEnUrl(g.imagen.url, banco, { preferUrl: inp.logo_url })
+              conLogoOk = urlLogo !== g.imagen.url
+              urlFinal = urlLogo
+            }
             cambios = true
-            resultText = `Imagen ${refs.length ? 'editada/variada' : 'creada'} y guardada en el banco (grupo ${grupoImg}). Muéstrasela al dueño incluyéndola con ![](${g.imagen.url}).`
+            resultText = `Imagen ${editar ? 'editada' : 'creada'}${conLogoOk ? ' con el logo de marca' : ''} (guardada en el banco, grupo ${grupoImg}). Muéstrasela al dueño incluyéndola con ![](${urlFinal}).`
           }
         } else if (tu.name === 'publicar_pieza') {
           const id = String((tu.input as { id?: string }).id || '')

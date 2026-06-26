@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { BRAND, getContacto, LOGO_URL } from './email-layout'
-import { listarImagenes, generarYGuardarImagen, type ImagenBanco } from './mailing-images'
+import { BRAND, getContacto } from './email-layout'
+import { MARCA_VISUAL } from './marca-visual'
+import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { generarCampana } from './mailing-generator'
 import { obtenerItem, actualizarItem, type ItemCalendario } from './marketing-calendario'
@@ -74,7 +75,7 @@ export function isPiezaConfigurada(): boolean {
   return !!process.env.ANTHROPIC_API_KEY
 }
 
-const MODEL = process.env.ANTHROPIC_MAILING_MODEL || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6'
+const MODEL = process.env.ANTHROPIC_MAILING_MODEL || 'claude-opus-4-8'
 const BANCO_VISIBLE = 40
 
 const VOZ_AUDIENCIA: Record<string, string> = {
@@ -170,6 +171,8 @@ REGLAS:
 - La marca: paleta azul ${BRAND.navy}, dorado ${BRAND.amber}; cercana, confiable, respetuosa.
 - Contacto si hace falta un CTA: ${web} · ${contacto.telefono}.
 
+${MARCA_VISUAL}
+
 IMÁGENES (campo "imagenes", EN ORDEN):
 - Post SIMPLE = 1 imagen. CARRUSEL (solo Instagram) = 2 a ${MAX_IMGS} imágenes coherentes entre sí (misma línea visual y MISMO aspecto, porque Instagram recorta todas según la primera). Facebook: 1 sola imagen.
 - Haz un CARRUSEL cuando el contenido lo justifique (varios pasos/consejos, "qué incluye", antes/después, una lista) o cuando te lo pidan explícitamente. Si haces carrusel, que cada imagen aporte algo distinto y el copy acompañe (puede invitar a deslizar). Si NO es carrusel, devuelve UNA sola imagen y no escribas "desliza".
@@ -250,7 +253,7 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
           creadoPor,
         })
         resueltas.push({ url: r.imagen.url, alt: r.imagen.alt || '', id: r.imagen.id })
-        // La primera imagen generada queda como referencia visual de las siguientes.
+        // La primera imagen (limpia) queda como referencia visual de las siguientes.
         if (!refImagen) refImagen = { data: r.buffer, mime: r.mime }
       } catch (e) {
         avisos.push(`No se pudo generar una imagen: ${e instanceof Error ? e.message : String(e)}`)
@@ -263,6 +266,19 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
   // Degradar a imagen simple si el carrusel quedó con menos de 2 imágenes.
   if (esCarrusel && resueltas.length < 2) {
     avisos.push('El post se planificó como carrusel pero quedó con menos de 2 imágenes; se publicará como imagen simple. Revisá el copy si invitaba a "deslizar".')
+  }
+
+  // LOGO DE MARCA (paso de cierre): toda pieza que se publica lleva el logo. En post
+  // simple va en la imagen; en carrusel va SOLO en la ÚLTIMA (al final). Se estampa
+  // nítido sobre la imagen final (no lo dibuja la IA).
+  if (resueltas.length > 0) {
+    const idx = resueltas.length === 1 ? 0 : resueltas.length - 1
+    try {
+      const conLogo = await estamparLogoEnUrl(resueltas[idx].url, banco)
+      resueltas[idx] = { ...resueltas[idx], url: conLogo }
+    } catch (e) {
+      avisos.push('No se pudo agregar el logo a la imagen: ' + (e instanceof Error ? e.message : String(e)))
+    }
   }
 
   const imagenUrl = resueltas[0]?.url || ''
@@ -336,8 +352,8 @@ async function refDesdeUrl(url: string): Promise<{ data: Buffer; mime: string } 
 
 /**
  * Edita/regenera una imagen (o todas) de una pieza social YA generada, usando la
- * imagen actual como base (image-to-image). Si la instrucción menciona el logo/marca,
- * suma el logo como referencia. `indice` = posición 1-based; si se omite, aplica a TODAS.
+ * imagen actual como base (image-to-image). El logo NO lo dibuja la IA: se reaplica
+ * nítido al final sobre la pieza. `indice` = posición 1-based; si se omite, aplica a TODAS.
  */
 export async function editarImagenPieza(id: string, instruccion: string, indice?: number, creadoPor?: string): Promise<PiezaGenerada> {
   if (!instruccion?.trim()) throw new Error('Falta la instrucción de qué ajustar.')
@@ -352,14 +368,12 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
   if (imgs.length === 0) throw new Error('La pieza no tiene imágenes para editar. Generala primero.')
 
   const avisos: string[] = []
-  const conLogo = /\blogo\b|\bmarca\b|sello|timbre/i.test(instruccion)
-  const logoRef = conLogo ? await refDesdeUrl(LOGO_URL) : null
-  if (conLogo && !logoRef) avisos.push('No se pudo cargar el logo como referencia.')
+  const banco = await listarImagenes().catch(() => [] as ImagenBanco[])
   const targets = (indice && indice >= 1 && indice <= imgs.length) ? [indice - 1] : imgs.map((_, i) => i)
 
   for (const ti of targets) {
     const baseRef = await refDesdeUrl(imgs[ti].url)
-    const referencias = [baseRef, logoRef].filter(Boolean) as { data: Buffer; mime: string }[]
+    const referencias = [baseRef].filter(Boolean) as { data: Buffer; mime: string }[]
     if (referencias.length === 0) { avisos.push(`No se pudo leer la imagen ${ti + 1} como referencia.`); continue }
     try {
       const r = await generarYGuardarImagen({
@@ -368,12 +382,20 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
         tags: 'edicion',
         grupo: 'otro',
         subgrupo: (item.titulo || item.idea || '').slice(0, 60),
-        aspect: '1:1',
+        // Edición: preserva la imagen base y cambia solo lo pedido; sin forzar el
+        // aspecto (la salida sigue el de la imagen original, no se reencuadra a 1:1).
+        editar: true,
         referencias,
         creadoPor,
       })
       imgs[ti] = { url: r.imagen.url, alt: imgs[ti].alt || '' }
     } catch (e) { avisos.push(`No se pudo regenerar la imagen ${ti + 1}: ${e instanceof Error ? e.message : 'error'}`) }
+  }
+
+  // Reaplicar el logo tras editar (simple: la imagen; carrusel: la última).
+  if (imgs.length > 0) {
+    const idx = imgs.length === 1 ? 0 : imgs.length - 1
+    try { imgs[idx] = { ...imgs[idx], url: await estamparLogoEnUrl(imgs[idx].url, banco) } } catch { /* best-effort */ }
   }
 
   const imagenesJson = imgs.length > 1 ? JSON.stringify(imgs.map(x => ({ url: x.url, alt: x.alt || '' }))) : ''

@@ -32,7 +32,17 @@ export function Markdown({ children }: { children: string }) {
           th: ({ children }) => <th className="text-left px-2.5 py-1.5 font-semibold whitespace-nowrap">{children}</th>,
           td: ({ children }) => <td className="px-2.5 py-1.5 border-t border-gray-300 align-top">{children}</td>,
           img: ({ src, alt }) => (typeof src === 'string' && src)
-            ? <img src={src} alt={alt || ''} className="my-2 rounded-lg border border-gray-300 max-w-full max-h-72 object-contain" />
+            ? (
+              <span className="relative inline-block my-2 align-top group/img">
+                <img src={src} alt={alt || ''} className="block rounded-lg border border-gray-300 max-w-full max-h-72 object-contain" />
+                <a
+                  href={`/api/mailing/imagenes/descargar?url=${encodeURIComponent(src)}`}
+                  download
+                  title="Descargar imagen"
+                  className="absolute top-1.5 right-1.5 bg-white/90 hover:bg-white border border-gray-300 rounded-md px-1.5 py-1 text-xs text-gray-700 shadow-sm leading-none opacity-90 md:opacity-0 md:group-hover/img:opacity-100 transition"
+                >⬇</a>
+              </span>
+            )
             : null,
         }}
       >

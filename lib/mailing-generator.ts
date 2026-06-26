@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { BRAND, LOGO_URL, getContacto, type Contacto } from './email-layout'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { listarImagenes, generarYGuardarImagen, type ImagenBanco } from './mailing-images'
+import { MARCA_VISUAL } from './marca-visual'
 
 /**
  * Generador IA de campañas de mailing (B2B a la base de veterinarios).
@@ -34,7 +35,7 @@ export function isGeneradorConfigurado(): boolean {
   return !!process.env.ANTHROPIC_API_KEY
 }
 
-const MODEL = process.env.ANTHROPIC_MAILING_MODEL || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6'
+const MODEL = process.env.ANTHROPIC_MAILING_MODEL || 'claude-opus-4-8'
 
 /** Tope de imágenes nuevas por generación (control de costo/latencia). */
 const MAX_NUEVAS = 5
@@ -77,7 +78,9 @@ function systemPrompt(contacto: Contacto, puedeGenerar: boolean): string {
   const web = contacto.web?.startsWith('http') ? contacto.web : `https://${contacto.web || 'crematorioalmaanimal.cl'}`
   const tel = (contacto.telefono || '').replace(/[^\d+]/g, '')
   const imgInstr = puedeGenerar
-    ? `IMÁGENES NUEVAS (cuando ninguna del banco sirve):
+    ? `${MARCA_VISUAL}
+
+IMÁGENES NUEVAS (cuando ninguna del banco sirve):
   - En el HTML escribe el <img> con su tamaño/estilo y pon en el src un marcador: src="GEN:slot1" (slot2, slot3…). El sistema generará cada imagen y reemplazará el marcador por la URL real.
   - Por CADA marcador agrega una entrada en "nuevas" con: slot (ej. "slot1"), prompt (descripción FOTOGRÁFICA detallada de la escena, en español o inglés), alt (texto alternativo), aspect (ej. "16:9", "1:1", "4:5"), descripcion (1 línea para el banco), tags (palabras clave separadas por coma) y grupo (uno de: mascotas, personas, productos, otro).
   - TODAS las imágenes son FOTORREALISTAS: personas y mascotas REALES, luz natural, como una foto editorial. Nada de ilustración, cartoon, 3D ni texto incrustado en la imagen.
