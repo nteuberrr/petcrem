@@ -127,7 +127,10 @@ export async function renderGraficoHTML(opts: RenderGraficoOpts): Promise<{ buff
     background: BRAND.cream,
     fitTo: { mode: 'width', value: opts.width },
   }).render().asPng()
-  return { buffer: png, mime: 'image/png' }
+  // En Linux/Vercel, resvg devuelve un Buffer respaldado por un SharedArrayBuffer; el
+  // AWS SDK que firma la subida a R2 (y sharp) lo rechazan con «input ... ArrayBuffer».
+  // Copiamos a un Buffer normal (ArrayBuffer no compartido).
+  return { buffer: Buffer.from(new Uint8Array(png)), mime: 'image/png' }
 }
 
 export function isGraficoRenderConfigurado(): boolean {
