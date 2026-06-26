@@ -1,13 +1,44 @@
 import satori from 'satori'
-import { parse, type HTMLElement, type Node, NodeType } from 'node-html-parser'
 import { Resvg } from '@resvg/resvg-js'
+import { parse, type HTMLElement, type Node, NodeType } from 'node-html-parser'
 import { BRAND } from './email-layout'
 
 /**
- * HTML → VDOM de satori. Propio (no satori-html, que arrastra ultrahtml y rompe la
- * resolución ESM). satori espera nodos { type, props:{ style, children } } y el
- * style como objeto camelCase.
+ * Renderiza un GRÁFICO de marca (portada, placa, anuncio) a PNG a partir de HTML.
+ * El agente diseña libre en HTML; la marca sale EXACTA porque rasterizamos con las
+ * fuentes REALES (More Sugar + Inter) y colores hex exactos. Pipeline:
+ * HTML → satori (SVG con las fuentes) → resvg (PNG). Las fuentes viven en R2.
  */
+
+const R2_BASE = (process.env.R2_PUBLIC_URL || 'https://pub-9ca489d9f825495b83375f6e526f354e.r2.dev').replace(/\/$/, '')
+
+type SatoriFont = { name: string; data: Buffer; weight: 400 | 600 | 700; style: 'normal' }
+let fontsCache: SatoriFont[] | null = null
+
+async function bajar(file: string): Promise<Buffer> {
+  const r = await fetch(`${R2_BASE}/brand/fonts/${file}`)
+  if (!r.ok) throw new Error(`No se pudo cargar la fuente ${file} (HTTP ${r.status})`)
+  return Buffer.from(await r.arrayBuffer())
+}
+
+async function getFonts(): Promise<SatoriFont[]> {
+  if (fontsCache) return fontsCache
+  const [ms, ir, isb, ib] = await Promise.all([
+    bajar('MoreSugar-Regular.otf'),
+    bajar('Inter-Regular.woff'),
+    bajar('Inter-SemiBold.woff'),
+    bajar('Inter-Bold.woff'),
+  ])
+  fontsCache = [
+    { name: 'More Sugar', data: ms, weight: 400, style: 'normal' },
+    { name: 'Inter', data: ir, weight: 400, style: 'normal' },
+    { name: 'Inter', data: isb, weight: 600, style: 'normal' },
+    { name: 'Inter', data: ib, weight: 700, style: 'normal' },
+  ]
+  return fontsCache
+}
+
+// ─── HTML → VDOM de satori (propio; satori-html arrastra ultrahtml y rompe ESM) ──
 function aCamel(k: string): string { return k.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()) }
 
 function parseStyle(s?: string): Record<string, string> {
@@ -53,48 +84,6 @@ function htmlAVNode(html: string): VNode {
   const v = nodoAVNode(top as Node)
   if (!v || typeof v === 'string') throw new Error('El HTML del gráfico no tiene un elemento raíz válido')
   return v
-}
-
-/**
- * Renderiza un GRÁFICO de marca (portada, placa, anuncio) a PNG a partir de HTML.
- *
- * El agente diseña libremente en HTML (layout, jerarquía, info, acentos), pero la
- * marca sale EXACTA porque acá rasterizamos con las fuentes REALES de Alma Animal
- * (More Sugar para el wordmark, Inter para el resto) y colores hex exactos — la IA
- * no "dibuja" texto ni colores. Pipeline: HTML → satori (SVG con las fuentes) →
- * resvg (PNG).
- *
- * Las fuentes viven en R2 (subidas con scripts/upload-fonts.ts) y se cachean en
- * memoria por proceso. Las imágenes (<img src="http...">) se incrustan como data
- * URI antes de rasterizar (satori no hace fetch en serverless de forma fiable).
- */
-
-const R2_BASE = (process.env.R2_PUBLIC_URL || 'https://pub-9ca489d9f825495b83375f6e526f354e.r2.dev').replace(/\/$/, '')
-
-type SatoriFont = { name: string; data: Buffer; weight: 400 | 600 | 700; style: 'normal' }
-let fontsCache: SatoriFont[] | null = null
-
-async function bajar(file: string): Promise<Buffer> {
-  const r = await fetch(`${R2_BASE}/brand/fonts/${file}`)
-  if (!r.ok) throw new Error(`No se pudo cargar la fuente ${file} (HTTP ${r.status})`)
-  return Buffer.from(await r.arrayBuffer())
-}
-
-async function getFonts(): Promise<SatoriFont[]> {
-  if (fontsCache) return fontsCache
-  const [ms, ir, isb, ib] = await Promise.all([
-    bajar('MoreSugar-Regular.otf'),
-    bajar('Inter-Regular.woff'),
-    bajar('Inter-SemiBold.woff'),
-    bajar('Inter-Bold.woff'),
-  ])
-  fontsCache = [
-    { name: 'More Sugar', data: ms, weight: 400, style: 'normal' },
-    { name: 'Inter', data: ir, weight: 400, style: 'normal' },
-    { name: 'Inter', data: isb, weight: 600, style: 'normal' },
-    { name: 'Inter', data: ib, weight: 700, style: 'normal' },
-  ]
-  return fontsCache
 }
 
 /** Incrusta las imágenes remotas (<img src="http...">) como data URI. */

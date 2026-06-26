@@ -2,11 +2,17 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Render de gráficos (lib/grafico-render.ts): se resuelven en runtime desde
-  // node_modules en vez de bundlearse.
-  //  - @resvg/resvg-js: binario nativo (.node) que no se puede bundlear.
-  //  - satori: carga su WASM de Yoga por ruta; al bundlearlo el WASM no se incluye
-  //    y falla en runtime con «The "input" argument must be ... ArrayBuffer».
+  // node_modules en vez de bundlearse (binario nativo / WASM).
   serverExternalPackages: ['@resvg/resvg-js', 'satori'],
+  // Asegura que los .wasm de satori/yoga y el binario de resvg viajen a la función
+  // serverless (en Vercel, si no se trazan, falla con «input ... ArrayBuffer»).
+  outputFileTracingIncludes: {
+    '/api/**': [
+      './node_modules/@resvg/resvg-js-linux-x64-gnu/**',
+      './node_modules/yoga-layout/**',
+      './node_modules/satori/**',
+    ],
+  },
 };
 
 export default nextConfig;

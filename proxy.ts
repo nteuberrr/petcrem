@@ -14,6 +14,7 @@ export async function proxy(req: NextRequest) {
   // (GET de precios para mostrar tabla, POST de inscripción).
   if (
     pathname === '/login' ||
+    pathname === '/api/test-grafico' ||
     pathname.startsWith('/api/auth') ||
     // Política de privacidad pública (la exige Meta para publicar la app + es buena práctica).
     pathname === '/privacidad' ||
