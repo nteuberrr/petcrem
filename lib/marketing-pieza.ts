@@ -3,7 +3,7 @@ import { BRAND, getContacto } from './email-layout'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
 import { DIFERENCIADORES } from './diferenciadores'
 import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, type ImagenBanco } from './mailing-images'
-import { generarGraficoMarca } from './marketing-grafico'
+import { generarGraficoMarca, cargarDisenoGrafico } from './marketing-grafico'
 import { esLogo } from './marca-logo'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { generarCampana } from './mailing-generator'
@@ -431,14 +431,37 @@ async function refDesdeUrl(url: string): Promise<{ data: Buffer; mime: string } 
   } catch { return null }
 }
 
+/** Campaña (C-X) de una pieza, a partir del código de sus imágenes en el banco. */
+function campaniaDePieza(urls: string[], banco: ImagenBanco[]): string | undefined {
+  for (const u of urls) {
+    const b = banco.find(x => x.url === u)
+    const m = b && /^(C-\d+)\./.exec(b.codigo || '')
+    if (m) return m[1]
+  }
+  return undefined
+}
+
+/** Aplica un cambio puntual al HTML de una placa (satori) vía el modelo; devuelve el HTML nuevo. */
+async function editarPlacaHtml(html: string, instruccion: string): Promise<string> {
+  const res = await getClient().messages.create({
+    model: MODEL,
+    max_tokens: 4000,
+    system: `Sos diseñador de Crematorio Alma Animal. Te paso el HTML de una PLACA de marca que se rasteriza con satori. Aplicá EXACTAMENTE el cambio pedido y devolvé SOLO el HTML completo nuevo (sin explicaciones ni cercos \`\`\`), manteniendo la estructura, la marca, las fuentes y los colores; cambiá únicamente lo pedido.\n\n${MARCA_GRAFICO}`,
+    messages: [{ role: 'user', content: `HTML actual de la placa:\n\`\`\`html\n${html}\n\`\`\`\n\nCAMBIO PEDIDO (solo esto; el resto queda igual): ${instruccion}` }],
+  })
+  const txt = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
+  return txt.replace(/^```(?:html)?\s*/i, '').replace(/```\s*$/i, '').trim() || html
+}
+
 /**
- * Edita/regenera una imagen (o todas) de una pieza social YA generada, usando la
- * imagen actual como base (image-to-image). El logo NO lo dibuja la IA: se reaplica
- * nítido al final sobre la pieza. `indice` = posición 1-based; si se omite, aplica a TODAS.
+ * Ajusta UNA imagen de una pieza social ya generada, preservando el resto.
+ *  - Si la slide es una PLACA de marca → edita su HTML y la re-renderiza con satori
+ *    (gratis y on-brand), manteniendo la campaña del carrusel.
+ *  - Si es una FOTO → edición image-to-image (gemini) de esa sola imagen.
+ * `indice` = posición 1-based; en carruseles (2+ imágenes) es OBLIGATORIO: NO edita todas.
  */
 export async function editarImagenPieza(id: string, instruccion: string, indice?: number, creadoPor?: string): Promise<PiezaGenerada> {
   if (!instruccion?.trim()) throw new Error('Falta la instrucción de qué ajustar.')
-  if (!isNanoBananaConfigurado()) throw new Error('Generación de imágenes no disponible (falta GEMINI_API_KEY).')
   const item = await obtenerItem(id)
   if (!item) throw new Error(`ítem ${id} no encontrado`)
   if (item.canal === 'email') throw new Error('Esto aplica a piezas de imagen (Instagram/Facebook), no a email.')
@@ -448,36 +471,44 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
   if (imgs.length === 0 && item.imagen_url) imgs = [{ url: item.imagen_url }]
   if (imgs.length === 0) throw new Error('La pieza no tiene imágenes para editar. Generala primero.')
 
+  // En un carrusel ajustamos SOLO la slide indicada (nunca todas de una).
+  if (imgs.length > 1 && !(indice && indice >= 1 && indice <= imgs.length)) {
+    throw new Error(`La pieza tiene ${imgs.length} imágenes. Indicá cuál ajustar con "indice" (1 a ${imgs.length}); no se editan todas a la vez.`)
+  }
+  const ti = (indice && indice >= 1 && indice <= imgs.length) ? indice - 1 : 0
+
   const avisos: string[] = []
   const banco = await listarImagenes().catch(() => [] as ImagenBanco[])
-  const targets = (indice && indice >= 1 && indice <= imgs.length) ? [indice - 1] : imgs.map((_, i) => i)
+  // La imagen editada se queda en la MISMA campaña del carrusel (no inventa una nueva).
+  const campania = campaniaDePieza(imgs.map(i => i.url), banco) || await asignarCampania()
 
-  for (const ti of targets) {
-    const baseRef = await refDesdeUrl(imgs[ti].url)
-    const referencias = [baseRef].filter(Boolean) as { data: Buffer; mime: string }[]
-    if (referencias.length === 0) { avisos.push(`No se pudo leer la imagen ${ti + 1} como referencia.`); continue }
+  const design = await cargarDisenoGrafico(imgs[ti].url)
+  if (design) {
+    // PLACA → editar el HTML y re-renderizar con satori (gratis, on-brand, misma campaña).
     try {
-      const r = await generarYGuardarImagen({
-        prompt: instruccion.trim(),
-        descripcion: (item.titulo || item.idea || 'Imagen de pieza').slice(0, 60),
-        tags: 'edicion',
-        grupo: 'otro',
-        subgrupo: (item.titulo || item.idea || '').slice(0, 60),
-        // Edición: preserva la imagen base y cambia solo lo pedido; sin forzar el
-        // aspecto (la salida sigue el de la imagen original, no se reencuadra a 1:1).
-        editar: true,
-        referencias,
-        creadoPor,
-        kind: 'publicacion',
-      })
-      imgs[ti] = { url: r.imagen.url, alt: imgs[ti].alt || '' }
-    } catch (e) { avisos.push(`No se pudo regenerar la imagen ${ti + 1}: ${e instanceof Error ? e.message : 'error'}`) }
-  }
-
-  // Reaplicar el logo tras editar (simple: la imagen; carrusel: la última).
-  if (imgs.length > 0) {
-    const idx = imgs.length === 1 ? 0 : imgs.length - 1
-    try { imgs[idx] = { ...imgs[idx], url: await estamparLogoEnUrl(imgs[idx].url, banco) } } catch { /* best-effort */ }
+      const nuevoHtml = await editarPlacaHtml(design.html, instruccion.trim())
+      const g = await generarGraficoMarca({ formato: design.formato, html: nuevoHtml, fotos: [], creadoPor, campania })
+      imgs[ti] = { url: g.url, alt: imgs[ti].alt || '' }
+      avisos.push(...g.avisos)
+    } catch (e) { avisos.push(`No se pudo ajustar la placa ${ti + 1}: ${e instanceof Error ? e.message : 'error'}`) }
+  } else {
+    // FOTO → edición image-to-image (gemini) de esa sola imagen; re-estampar el logo.
+    if (!isNanoBananaConfigurado()) throw new Error('Edición de fotos no disponible (falta GEMINI_API_KEY).')
+    const baseRef = await refDesdeUrl(imgs[ti].url)
+    if (!baseRef) { avisos.push(`No se pudo leer la imagen ${ti + 1} como referencia.`) }
+    else {
+      try {
+        const r = await generarYGuardarImagen({
+          prompt: instruccion.trim(),
+          descripcion: (item.titulo || item.idea || 'Imagen de pieza').slice(0, 60),
+          tags: 'edicion', grupo: 'otro', subgrupo: (item.titulo || item.idea || '').slice(0, 60),
+          editar: true, referencias: [baseRef], creadoPor, campania,
+        })
+        let url = r.imagen.url
+        try { url = await estamparLogoEnUrl(url, banco) } catch { /* best-effort */ }
+        imgs[ti] = { url, alt: imgs[ti].alt || '' }
+      } catch (e) { avisos.push(`No se pudo regenerar la imagen ${ti + 1}: ${e instanceof Error ? e.message : 'error'}`) }
+    }
   }
 
   const imagenesJson = imgs.length > 1 ? JSON.stringify(imgs.map(x => ({ url: x.url, alt: x.alt || '' }))) : ''

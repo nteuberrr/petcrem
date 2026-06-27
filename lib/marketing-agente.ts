@@ -74,8 +74,8 @@ VOZ DE MARCA (según la audiencia de cada pieza)
   · Veterinario ✅ "Cremación con retiro coordinado, trazabilidad documentada y entrega en 3 días hábiles. Convenio con tarifas preferentes para clínicas asociadas." — ❌ "Somos partners para cuidar a las mascotitas que ya no están, con todo el amor del mundo 💖🐾."
 SOBRE EL NEGOCIO Y EL SERVICIO (úsalo para que los ángulos y el copy sean concretos, no genéricos; nunca inventes precios)
 - Crematorio de mascotas en Recoleta (Santiago), cobertura Región Metropolitana, de lunes a domingo, 09:00–22:00.
-- Instalaciones PROPIAS: horno certificado, cámara de refrigeración y vehículo habilitado. NO se externaliza nada → control directo y trazabilidad total.
-- Proceso (5 pasos): 1) contacto y coordinación, 2) retiro a domicilio o desde la clínica en vehículo habilitado (en menos de 3 horas), 3) refrigeración certificada, 4) cremación en horno certificado con código de seguimiento individual, 5) entrega de cenizas + certificado digital en máximo 3 días hábiles. Hay video del proceso disponible si lo piden.
+- Instalaciones PROPIAS y CERTIFICADAS en Recoleta: horno certificado, cámara de refrigeración y vehículo habilitado. NO se externaliza nada → control directo y trazabilidad total.
+- Proceso (5 pasos): 1) contacto y coordinación, 2) retiro a domicilio o desde la clínica en vehículo habilitado (en menos de 3 horas), 3) la mascota se mantiene en cámara de refrigeración hasta el momento de la cremación, 4) cremación individual en horno certificado, con código de seguimiento individual, 5) entrega de cenizas + certificado digital en máximo 3 días hábiles. Hay video del proceso disponible si lo piden.
 - Modalidades (qué incluye cada una; el precio sale SIEMPRE de TARIFAS VIGENTES):
   · Individual (la más elegida): retiro, cremación individual trazable, certificado digital, nombre grabado en placa de madera, ánfora de greda marmoleada y botellita con mechón de pelo.
   · Premium: todo lo de Individual + ánfora premium a elección + un cuadro estilo acuarela conmemorativo.
@@ -418,13 +418,13 @@ const TOOL_METRICAS: Anthropic.Tool = {
 
 const TOOL_EDITAR_IMG: Anthropic.Tool = {
   name: 'editar_imagen_pieza',
-  description: 'Ajusta la(s) imagen(es) de una pieza del calendario YA generada PRESERVANDO el resto (image-to-image: usa la imagen actual como base y cambia SOLO lo que pidas, sin rehacerla ni reencuadrarla). Ej: "arreglá la imagen 5 de la #123 que se ve mal" (indice=5), o "poné el logo en todas las imágenes de la #123" (sin indice → todas; si la instrucción menciona el logo/marca, lo incorpora como referencia). En la instrucción describí SOLO el cambio puntual. Úsalo cuando el dueño pida corregir o uniformar imágenes de una pieza concreta.',
+  description: 'Ajusta UNA imagen de una pieza del calendario ya generada, PRESERVANDO el resto. Si es una placa de marca, edita su texto/diseño y la re-renderiza (gratis); si es una foto, la edita image-to-image. Ej: "arreglá la slide 3 de la #123" (indice=3). SIEMPRE indicá el "indice" de la slide a ajustar: en un carrusel NO se editan todas a la vez (si el dueño quiere cambiar varias, llamá la herramienta una vez por cada slide con su indice). En la instrucción describí SOLO el cambio puntual.',
   input_schema: {
     type: 'object',
     properties: {
       id: { type: 'string', description: 'Id de la pieza del calendario.' },
-      instruccion: { type: 'string', description: 'Qué ajustar (ej. "corregí las manos", "incorporá el logo arriba a la derecha").' },
-      indice: { type: 'number', description: 'Posición de la imagen a editar (1 = primera). Omitir para aplicar a TODAS las del carrusel.' },
+      instruccion: { type: 'string', description: 'Qué ajustar en esa slide (ej. "cambiá el título a X", "corregí el dato del horario").' },
+      indice: { type: 'number', description: 'Posición de la slide a editar (1 = primera). OBLIGATORIO en carruseles (2+ imágenes): se edita SOLO esa.' },
     },
     required: ['id', 'instruccion'],
   },
