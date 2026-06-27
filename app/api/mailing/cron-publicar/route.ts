@@ -44,6 +44,16 @@ async function ejecutar(req: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
   const hoy = todayISO()
+  // Hora actual de Chile (HH:MM) para respetar la hora programada, no solo la fecha.
+  const horaActual = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Santiago', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+  // ¿Ya llegó el momento? fecha pasada → sí; fecha de hoy → solo si la hora ya pasó
+  // (sin hora = a cualquier hora de ese día).
+  const yaEsHora = (it: ItemCalendario): boolean => {
+    if (!it.fecha) return false
+    if (it.fecha < hoy) return true
+    if (it.fecha > hoy) return false
+    return !it.hora?.trim() || it.hora <= horaActual
+  }
   const todos = await listarCalendario()
   // Solo publica lo que el equipo PROGRAMÓ explícitamente (estado 'programada').
   // 'aprobada' NO se autopublica — eso lo hace el admin a mano ("nada se publica solo").
@@ -55,7 +65,7 @@ async function ejecutar(req: NextRequest) {
     it.estado_publicacion !== 'publicando' &&
     !it.post_externo_id &&
     it.cuerpo?.trim() &&
-    it.fecha && it.fecha <= hoy
+    yaEsHora(it)
   )
 
   const resultados: Array<{ id: string; canal: string; ok: boolean; error?: string; url?: string }> = []

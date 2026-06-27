@@ -118,8 +118,21 @@ export async function actualizarPerfilFacebook(campos: Record<string, string>): 
 }
 
 /**
+ * Devuelve el permalink REAL del post (URL clickeable). En la "New Pages Experience"
+ * la URL pública NO es facebook.com/{pageId}_{postId} (eso no abre), sino el
+ * permalink_url que entrega la propia API. Best-effort: si no se puede leer, '' .
+ */
+async function permalinkDe(idPost: string, pt: string): Promise<string> {
+  if (!idPost) return ''
+  try {
+    const d = await graph(idPost, { fields: 'permalink_url', access_token: pt })
+    return (d.permalink_url as string) || ''
+  } catch { return '' }
+}
+
+/**
  * Publica en la Página de Facebook. Si hay imagen, sube una foto con caption;
- * si no, un post de texto (con link opcional).
+ * si no, un post de texto (con link opcional). Devuelve el permalink REAL.
  */
 export async function publicarFacebook(args: { mensaje: string; imagenUrl?: string; link?: string }): Promise<ResultadoPublicacion> {
   if (!isFacebookConfigurado()) throw new Error('Facebook no configurado (faltan META_GRAPH_TOKEN o META_PAGE_ID)')
@@ -132,13 +145,15 @@ export async function publicarFacebook(args: { mensaje: string; imagenUrl?: stri
       access_token: pt,
     }, 'POST')
     const postId = (data.post_id as string) || (data.id as string) || ''
-    return { id: postId, url: postId ? `https://www.facebook.com/${postId}` : '' }
+    const url = await permalinkDe(postId, pt)
+    return { id: postId, url: url || (postId ? `https://www.facebook.com/${postId}` : '') }
   }
   const params: Record<string, string> = { message: args.mensaje || '', access_token: pt }
   if (args.link) params.link = args.link
   const data = await graph(`${pid}/feed`, params, 'POST')
   const postId = (data.id as string) || ''
-  return { id: postId, url: postId ? `https://www.facebook.com/${postId}` : '' }
+  const url = await permalinkDe(postId, pt)
+  return { id: postId, url: url || (postId ? `https://www.facebook.com/${postId}` : '') }
 }
 
 /** Espera a que un contenedor quede FINISHED, lo publica y devuelve {id, url}. */
