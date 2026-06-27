@@ -3,9 +3,10 @@ import { getSheetData } from './datastore'
 import { fmtPrecio } from './format'
 import { getMarketingConfig } from './marketing-config'
 import { listarCalendario, crearItems, actualizarItem, eliminarItem, obtenerItem, validarCambioEstado, type NuevoItem } from './marketing-calendario'
-import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, type ImagenBanco } from './mailing-images'
+import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
+import { DIFERENCIADORES } from './diferenciadores'
 import { esLogo } from './marca-logo'
 import { generarPieza, editarImagenPieza } from './marketing-pieza'
 import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
@@ -69,12 +70,12 @@ VOZ DE MARCA (según la audiencia de cada pieza)
 - Veterinarios (B2B): profesional, técnica, eficiente, de socio confiable (datos, plazos, procesos).
 - SIEMPRE: sin humor, sin religión, sin clichés del rubro ("puente del arcoíris", "angelito", "ya no sufre"). A la mascota por su nombre cuando aplique; genérico "tu mascota" (nunca "compañero/a" ni el frío "su mascota").
 - EJEMPLOS DE TONO (la diferencia entre bien y mal):
-  · Tutor ✅ "Cuidamos cada detalle de la despedida de Mora. En 4 días hábiles tienes de vuelta sus cenizas, acompañado en todo el proceso." — ❌ "Sabemos lo difícil que es perder a tu mejor amigo peludo 🐾💕; tu angelito ya cruzó el puente del arcoíris."
-  · Veterinario ✅ "Cremación con retiro coordinado, trazabilidad documentada y entrega en 4 días hábiles. Convenio con tarifas preferentes para clínicas asociadas." — ❌ "Somos partners para cuidar a las mascotitas que ya no están, con todo el amor del mundo 💖🐾."
+  · Tutor ✅ "Cuidamos cada detalle de la despedida de Mora. En 3 días hábiles tienes de vuelta sus cenizas, acompañado en todo el proceso." — ❌ "Sabemos lo difícil que es perder a tu mejor amigo peludo 🐾💕; tu angelito ya cruzó el puente del arcoíris."
+  · Veterinario ✅ "Cremación con retiro coordinado, trazabilidad documentada y entrega en 3 días hábiles. Convenio con tarifas preferentes para clínicas asociadas." — ❌ "Somos partners para cuidar a las mascotitas que ya no están, con todo el amor del mundo 💖🐾."
 SOBRE EL NEGOCIO Y EL SERVICIO (úsalo para que los ángulos y el copy sean concretos, no genéricos; nunca inventes precios)
-- Crematorio de mascotas en Recoleta (Santiago), cobertura Región Metropolitana, todos los días 08:00–23:00.
+- Crematorio de mascotas en Recoleta (Santiago), cobertura Región Metropolitana, de lunes a domingo, 09:00–22:00.
 - Instalaciones PROPIAS: horno certificado, cámara de refrigeración y vehículo habilitado. NO se externaliza nada → control directo y trazabilidad total.
-- Proceso (5 pasos): 1) contacto y coordinación, 2) retiro a domicilio o desde la clínica en vehículo habilitado (en menos de 3 horas), 3) refrigeración certificada, 4) cremación en horno certificado con código de seguimiento individual, 5) entrega de cenizas + certificado digital en máximo 4 días hábiles. Hay video del proceso disponible si lo piden.
+- Proceso (5 pasos): 1) contacto y coordinación, 2) retiro a domicilio o desde la clínica en vehículo habilitado (en menos de 3 horas), 3) refrigeración certificada, 4) cremación en horno certificado con código de seguimiento individual, 5) entrega de cenizas + certificado digital en máximo 3 días hábiles. Hay video del proceso disponible si lo piden.
 - Modalidades (qué incluye cada una; el precio sale SIEMPRE de TARIFAS VIGENTES):
   · Individual (la más elegida): retiro, cremación individual trazable, certificado digital, nombre grabado en placa de madera, ánfora de greda marmoleada y botellita con mechón de pelo.
   · Premium: todo lo de Individual + ánfora premium a elección + un cuadro estilo acuarela conmemorativo.
@@ -83,7 +84,7 @@ SOBRE EL NEGOCIO Y EL SERVICIO (úsalo para que los ángulos y el copy sean conc
   · CÓMO FUNCIONA EL CONVENIO (úsalo para campañas que buscan SUMAR veterinarios a la red): el vet se inscribe gratis en la landing pública (crematorioalmaanimal.cl/convenio-eutanasias) indicando las comunas que cubre y sus horarios. Cuando entra una solicitud en su zona/horario, le llega un email para aceptarla (el primero que acepta se la queda); coordina con la familia, realiza el servicio y lo marca como "realizado"; carga sus datos bancarios una sola vez y se le paga por cada servicio (tarifa según el tramo de peso). NO tiene que loguearse a ningún sistema ni administrar nada: todo pasa por links en el correo.
   · PROPUESTA DE VALOR PARA EL VET (el ángulo de la campaña de captación): ingreso adicional por eutanasias a domicilio sin tener que buscar pacientes (le derivamos los casos de su zona), cero burocracia (todo por email), pago claro por servicio, y un partner serio que además se encarga de la cremación con trazabilidad. Para estas campañas: objetivo=captacion_vets, audiencia=veterinarios, voz B2B (profesional, concreta, de socio).
 - Recargo de $20.000 en comunas fuera de la zona habitual (Lampa, Buin, Colina, Calera de Tango, Paine).
-- Diferenciadores para comunicar: instalaciones propias, trazabilidad total con código de seguimiento, retiro a domicilio/clínica, entrega en 4 días hábiles, certificado digital, tecnología de punta, red de eutanasia a domicilio para clínicas.
+- Diferenciadores para comunicar: instalaciones propias, trazabilidad total con código de seguimiento, retiro a domicilio/clínica, entrega en 3 días hábiles, certificado digital, tecnología de punta, red de eutanasia a domicilio para clínicas.
 
 REGLAS DURAS
 - NUNCA inventes precios: cuando hables de valores usa SOLO la sección TARIFAS VIGENTES de abajo (son de cremación; la eutanasia tiene precio aparte). Si no la tienes, dilo y no inventes.
@@ -107,7 +108,7 @@ FLUJO Y HERRAMIENTAS
    FLUJO DE PUBLICACIÓN (importante): es generar → aprobar → programar → (auto)publicar. NO se puede APROBAR sin GENERAR la pieza primero (estado "aprobada" requiere copy+imagen), ni PROGRAMAR sin APROBAR (estado "programada"). Una campaña en estado "programada" se PUBLICA SOLA cuando llega su fecha/hora. Entonces, si el dueño te pide "programá/agendá la publicación de la #X para tal fecha a tal hora": 1) si no está generada, generá la pieza ("generar_pieza"); 2) aprobala ("editar_campana" estado="aprobada"); 3) fijá la fecha/hora y dejala en estado="programada" ("editar_campana"). Aclarale que quedó programada y se publicará sola a esa hora.
 2. GENERAR PIEZA DEL CALENDARIO: "generar_pieza" con el id (copy + imagen para social, o asunto + HTML para email). Úsalo cuando el dueño lo pida sobre ítems concretos.
 3. IMÁGENES Y GRÁFICOS sueltos (lo más usado en el chat). Entregá la pieza TERMINADA y mostrala con ![](URL). (Podés mirar el banco con "consultar_banco_imagenes" para reutilizar.)
-   - GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita, post con texto) → "disenar_grafico": VOS diseñás el HTML (libre y creativo) y sale con la marca EXACTA (More Sugar + Inter, navy/dorado/crema exactos, logo real). Seguí las reglas de "DISEÑO DE GRÁFICOS CON TEXTO" del contexto. El texto SIEMPRE va por acá, NUNCA con una imagen generada por IA.
+   - GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita, post con texto) → "disenar_grafico": VOS diseñás el HTML (libre y creativo) y sale con la marca EXACTA (More Sugar + Inter, navy/dorado/crema exactos, logo real). Seguí las reglas de "DISEÑO DE GRÁFICOS CON TEXTO" del contexto. El texto SIEMPRE va por acá, NUNCA con una imagen generada por IA. CARRUSEL (varias placas de una serie): generá TODAS las placas en la MISMA respuesta y poné el MISMO valor en "carrusel" (ej. "por-que-elegirnos") en todas, para que queden agrupadas como una sola campaña (C-X.1, C-X.2, …) y no como campañas sueltas.
    - FOTO sola (sin texto) → "generar_imagen": prompt fotográfico detallado.
    - EDITAR una foto existente (cambiar un detalle SIN rehacerla) → "generar_imagen" con editar:true + la referencia (referencia_url del banco, o usar_adjunto:true si la adjuntó el dueño) y en el prompt SOLO el cambio.
    - Si el dueño adjunta una imagen, la VES en su mensaje (podés comentarla y trabajarla).
@@ -132,7 +133,7 @@ async function bloqueTarifas(): Promise<string> {
         return `- ${max}: Individual ${fmtPrecio(parseInt(r.precio_ci, 10) || 0)} · Premium ${fmtPrecio(parseInt(r.precio_cp, 10) || 0)} · Sin Devolución ${fmtPrecio(parseInt(r.precio_sd, 10) || 0)}`
       }).join('\n')
     const nombres = ts.map(t => `${t.codigo}=${t.nombre}`).join(', ')
-    return `TARIFAS VIGENTES de cremación (CLP, por peso):\n${tramos}\n\nTipos de servicio: ${nombres}. Entrega en hasta 4 días hábiles.`
+    return `TARIFAS VIGENTES de cremación (CLP, por peso):\n${tramos}\n\nTipos de servicio: ${nombres}. Entrega en hasta 3 días hábiles.`
   } catch {
     return 'TARIFAS: (no disponibles ahora — no inventes precios).'
   }
@@ -356,6 +357,7 @@ const TOOL_DISENAR_GRAFICO: Anthropic.Tool = {
     type: 'object',
     properties: {
       formato: { type: 'string', enum: FORMATOS_GRAFICO, description: 'Tamaño/uso: portada_fb (portada de Facebook 1640x624), post (1080x1080), post_vertical (1080x1350), story (1080x1920), horizontal (1200x675).' },
+      carrusel: { type: 'string', description: 'Si esta placa es parte de un CARRUSEL/serie, poné el MISMO identificador en TODAS las placas del carrusel (ej. "por-que-elegirnos"). Así quedan agrupadas en UNA campaña (C-X.1, C-X.2, …). Generá TODAS las placas del carrusel en esta misma respuesta. Dejalo vacío si es una placa suelta.' },
       html: { type: 'string', description: 'El diseño en HTML (un solo <div> raíz del tamaño exacto del canvas; estilos inline; flexbox; font-family \'More Sugar\' solo para el título y \'Inter\' para el resto; colores hex de marca; NO dibujes el logo; usá <img src="FOTO:slotN"> para fotos).' },
       fotos: {
         type: 'array',
@@ -480,7 +482,7 @@ export async function generarRespuestaMarketing(
   ])
 
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${BASE}\n\n${MARCA_VISUAL}\n\n${MARCA_GRAFICO}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: `${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${MARCA_GRAFICO}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
   ]
   const ajustes = [
     cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO (trátalos como la verdad actual; REEMPLAZAN el guion base si chocan, salvo: precios siempre de TARIFAS VIGENTES):\n${cfg.instrucciones.trim()}`,
@@ -502,6 +504,8 @@ export async function generarRespuestaMarketing(
   const acciones: string[] = []
   let cambios = false
   let textoFinal = ''
+  // Carruseles de disenar_grafico en este turno: identificador → campaña compartida.
+  const campaniasCarrusel = new Map<string, string>()
 
   for (let iter = 0; iter < 6; iter++) {
     const res = await getClient().messages.create({ model: MODEL, max_tokens: 2200, system, messages: convo, tools })
@@ -673,18 +677,27 @@ export async function generarRespuestaMarketing(
             resultText = `Imagen ${editar ? 'editada' : 'creada'}${conLogoOk ? ' con el logo de marca' : ''} — código ${g.imagen.codigo || '(sin código)'} (guardada en el banco, grupo ${grupoImg}). Muéstrasela al dueño incluyéndola con ![](${urlFinal}) y decile su código (${g.imagen.codigo || ''}).`
           }
         } else if (tu.name === 'disenar_grafico') {
-          const inp = tu.input as { formato?: string; html?: string; fotos?: { slot?: string; prompt?: string; aspect?: string }[] }
+          const inp = tu.input as { formato?: string; html?: string; carrusel?: string; fotos?: { slot?: string; prompt?: string; aspect?: string }[] }
           if (!inp.html?.trim()) {
             resultText = 'Falta el HTML del diseño.'
           } else {
             const fotos = (inp.fotos || [])
               .filter(f => f?.slot && f?.prompt)
               .map(f => ({ slot: String(f.slot), prompt: String(f.prompt), aspect: f.aspect }))
+            // Carrusel: todas las placas con el MISMO 'carrusel' comparten una campaña
+            // (C-X.1, C-X.2, …). Se reserva una vez por identificador en este turno.
+            let campania: string | undefined
+            const carrKey = (inp.carrusel || '').trim()
+            if (carrKey) {
+              campania = campaniasCarrusel.get(carrKey)
+              if (!campania) { campania = await asignarCampania(); campaniasCarrusel.set(carrKey, campania) }
+            }
             const r = await generarGraficoMarca({
               formato: String(inp.formato || 'post'),
               html: String(inp.html),
               fotos,
               creadoPor: opts.creadoPor,
+              campania,
             })
             cambios = true
             const fotosTxt = r.fotos.length

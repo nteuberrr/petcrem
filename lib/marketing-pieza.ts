@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { BRAND, getContacto } from './email-layout'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
+import { DIFERENCIADORES } from './diferenciadores'
 import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, type ImagenBanco } from './mailing-images'
 import { generarGraficoMarca } from './marketing-grafico'
 import { esLogo } from './marca-logo'
@@ -84,7 +85,7 @@ const BANCO_VISIBLE = 40
 
 const VOZ_AUDIENCIA: Record<string, string> = {
   tutores: `AUDIENCIA: TUTORES (B2C), adultos en duelo por su mascota. Voz: tuteo cálido pero sobrio, cercana y humana, profesional. Inspira confianza, NO lástima. Sin clichés del rubro ("puente del arcoíris", "angelito", "ya no sufre"), sin humor, sin religión. A la mascota por su nombre cuando aplique; genérico "tu mascota".`,
-  veterinarios: `AUDIENCIA: VETERINARIOS / CLÍNICAS (B2B). Voz: profesional, técnica, eficiente, de socio confiable (datos, plazos, procesos). Cercana pero sobria. Comunica diferenciadores: instalaciones propias, trazabilidad, retiro desde la clínica, entrega en 4 días hábiles, red de eutanasia a domicilio.`,
+  veterinarios: `AUDIENCIA: VETERINARIOS / CLÍNICAS (B2B). Voz: profesional, técnica, eficiente, de socio confiable (datos, plazos, procesos). Cercana pero sobria. Comunica diferenciadores: instalaciones propias, trazabilidad, retiro desde la clínica, entrega en 3 días hábiles, red de eutanasia a domicilio.`,
   ambos: `AUDIENCIA: MIXTA (tutores y veterinarios). Voz cercana y profesional, español neutro de Chile. Sin clichés del rubro, sin humor, sin religión.`,
 }
 
@@ -219,17 +220,17 @@ ${MARCA_VISUAL}
 
 ${MARCA_GRAFICO}
 
-IMÁGENES (campo "imagenes", EN ORDEN) — PENSÁ COMO DIRECTOR SENIOR Y SÉ EFICIENTE:
-- NO generes una foto nueva por cada slide: es caro e innecesario. La mayoría de los posts y carruseles se arman con PLACAS DE MARCA (texto sobre nuestro diseño) y, a lo sumo, UNA foto reutilizada del banco.
-- Tres modos por imagen:
-  · "grafico" = PLACA DE MARCA (lo MÁS usado; NO cuesta generarla): una pieza con TEXTO sobre el diseño de Alma Animal (navy/dorado/crema + logo + tipografía de marca). VOS escribís el HTML (ver "DISEÑO DE GRÁFICOS CON TEXTO"). ESTAS SON NUESTRAS PLANTILLAS. Usá placas para TODO lo informativo/comercial: portada del carrusel con el gancho, listas de virtudes/diferenciadores, datos, horario, pasos del proceso, "por qué elegirnos", comparativas, citas, y la placa de cierre con CTA + contacto.
-  · "reuse" = reutilizar una FOTO del banco (URL exacta del banco). Para un momento cálido cuando alguna calza.
-  · "nueva" = generar una FOTO fotorrealista NUEVA. SOLO excepcional: una imagen cálida y emocional (una mascota viva tranquila o feliz, o un tutor con su mascota) cuando NO hay nada en el banco que sirva. NUNCA fotos ejecutivas/corporativas/de oficina/de negocios/financieras; NUNCA instalaciones.
-- B2B (clínicas/veterinarios) y cualquier contenido de virtudes/datos/proceso → PLACAS (grafico), NO fotos. Una clínica quiere ver el profesionalismo de NUESTRA marca (cálida y confiable), no stock de oficina.
-- Post SIMPLE = 1 imagen (placa o foto). CARRUSEL (solo Instagram) = 2 a ${MAX_IMGS} placas/imágenes coherentes entre sí (misma línea visual y MISMO aspecto, porque Instagram recorta todas según la primera). Estructura típica de carrusel: placa-portada con el gancho → una placa por idea/virtud → placa de cierre con CTA + contacto. Facebook = 1 sola imagen.
-- Para Instagram usá cuadrado (1:1) o vertical (4:5); MISMO aspecto en TODAS las del carrusel.
-${puedeGenerar ? '' : '- (Generación de FOTOS nuevas no disponible ahora: armá la pieza con placas (grafico) y reutilización del banco.)\n'}
-Devuelve SIEMPRE con la herramienta "entregar_post".`
+IMÁGENES (campo "imagenes", EN ORDEN) — OBLIGATORIO:
+- Una pieza social SIEMPRE lleva imagen(es). Instagram NO se puede publicar sin imagen → para Instagram NUNCA devuelvas "imagenes" vacío. Post simple = 1 imagen; CARRUSEL (recomendado en Instagram) = 2 a ${MAX_IMGS}; Facebook = 1.
+- La forma de tener VARIAS imágenes sin gastar es la PLACA DE MARCA (modo "grafico"): se renderiza GRATIS (no es una foto IA), así que un carrusel se arma con VARIAS placas (ej. 3 a 6). "Eficiente" = usar PLACAS y reutilizar del banco; NO significa poner menos imágenes ni generar una foto nueva por slide.
+- Modos por imagen:
+  · "grafico" = PLACA DE MARCA (lo MÁS usado): pieza con TEXTO sobre el diseño de Alma Animal (navy/dorado/crema + logo + tipografía de marca). VOS escribís el HTML (ver "DISEÑO DE GRÁFICOS CON TEXTO"). ES NUESTRA PLANTILLA. Usala para TODO lo informativo/comercial: portada del carrusel con el gancho, listas de virtudes/diferenciadores, datos, horario, pasos del proceso, "por qué elegirnos", comparativas, citas, y la placa de cierre con CTA + contacto.
+  · "reuse" = reutilizar una FOTO del banco (URL exacta) para un momento cálido cuando alguna calza.
+  · "nueva" = generar una FOTO fotorrealista nueva. SOLO excepcional: una imagen cálida y emocional (una mascota viva tranquila o feliz, o un tutor con su mascota) cuando NO hay nada en el banco. NUNCA fotos ejecutivas/corporativas/de oficina/de negocios/financieras; NUNCA instalaciones.
+- B2B (clínicas/veterinarios) y todo lo de virtudes/datos/proceso → PLACAS (grafico), NO fotos. Una clínica quiere ver el profesionalismo de NUESTRA marca (cálida y confiable), no stock de oficina.
+- Carrusel típico: placa-portada (gancho) → una placa por idea/virtud → placa de cierre (CTA + contacto). Instagram cuadrado (1:1) o vertical (4:5); MISMO aspecto en TODAS las del carrusel.
+${puedeGenerar ? '' : '- (Generación de FOTOS nuevas no disponible ahora: armá la pieza SOLO con placas (grafico) y reutilización del banco — igual DEBE llevar imágenes.)\n'}
+Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes.`
 
   const instruccion = [
     `OBJETIVO: ${item.objetivo || '(general)'}`,
@@ -241,9 +242,11 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
 
   const res = await getClient().messages.create({
     model: MODEL,
-    max_tokens: 2000,
+    // Alto: una pieza social puede traer el copy + el HTML de VARIAS placas (verboso).
+    max_tokens: 8000,
     system: [
       { type: 'text', text: system },
+      { type: 'text', text: DIFERENCIADORES },
       { type: 'text', text: bancoBloque(banco) },
       ...(bloqueLogosPieza(banco) ? [{ type: 'text' as const, text: bloqueLogosPieza(banco) }] : []),
     ],
@@ -334,8 +337,10 @@ Devuelve SIEMPRE con la herramienta "entregar_post".`
       }
     }
   }
-  if (resueltas.length === 0 && specs.length > 0) {
-    avisos.push('No se pudo resolver ninguna imagen del post.')
+  if (resueltas.length === 0 && (item.canal === 'instagram' || item.canal === 'facebook')) {
+    avisos.push(specs.length === 0
+      ? 'La pieza quedó SIN imagen (el modelo no devolvió ninguna). Una pieza social necesita al menos una; probá regenerar.'
+      : 'No se pudo resolver ninguna imagen del post.')
   }
   // Degradar a imagen simple si el carrusel quedó con menos de 2 imágenes.
   if (esCarrusel && resueltas.length < 2) {
