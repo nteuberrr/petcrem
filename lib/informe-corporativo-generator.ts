@@ -266,7 +266,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   p('Controlamos directamente cada etapa, sin externalizar ninguna parte del proceso. Esto nos permite garantizar plazos, trazabilidad y respeto en todo momento.')
   defItem('1. Contacto y coordinación', 'Recibimos la solicitud (familia o clínica), registramos los datos de la mascota y coordinamos el retiro.')
   defItem('2. Retiro', 'Retiramos a la mascota a domicilio o desde la clínica veterinaria en un vehículo habilitado, habitualmente en menos de 3 horas.')
-  defItem('3. Refrigeración certificada', 'La mascota ingresa a nuestra cámara de refrigeración hasta el momento de la cremación, preservando las condiciones sanitarias.')
+  defItem('3. Refrigeración', 'La mascota ingresa a nuestra cámara de refrigeración hasta el momento de la cremación, preservando las condiciones sanitarias.')
   defItem('4. Cremación individual trazable', 'Se realiza en horno certificado, de manera individual, con un código de seguimiento único asignado a cada caso.')
   defItem('5. Entrega', 'Entregamos las cenizas junto al certificado digital de cremación en un máximo de 3 días hábiles. Disponemos de video del proceso para quien lo solicite.')
 
@@ -280,11 +280,11 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
     'Cumplimiento sanitario y ambiental en la disposición final de residuos no peligrosos (giro de la empresa).',
   ])
 
-  h1('Instalaciones propias y tecnología')
-  p('Contamos con instalaciones e infraestructura propias en Recoleta, lo que nos permite operar con autonomía y estándar técnico:')
+  h1('Instalaciones propias y certificadas')
+  p('Contamos con instalaciones e infraestructura propias y certificadas en Recoleta, lo que nos permite operar con autonomía y un alto estándar técnico:')
   bullets([
     'Horno crematorio certificado para cremación individual.',
-    'Cámara de refrigeración para la correcta preservación hasta la cremación.',
+    'Cámara de refrigeración para mantener a la mascota en condiciones sanitarias hasta la cremación.',
     'Vehículo habilitado para el retiro a domicilio y desde clínicas.',
     'Sistema de gestión propio que administra fichas, trazabilidad, certificados, despachos y comunicación con el cliente.',
   ])

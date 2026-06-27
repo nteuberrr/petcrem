@@ -14,6 +14,7 @@ export const ENTREGA = 'entrega en 3 días hábiles'
 /** Bloque de texto para inyectar en los prompts de los agentes/generadores. */
 export const DIFERENCIADORES = `VALOR AGREGADO Y DIFERENCIADORES (oficiales — trátalos como la verdad del negocio y comunícalos cuando aporten):
 - Abiertos de lunes a domingo, de 09:00 a 22:00 h.
+- Instalaciones propias y certificadas, con horno certificado; no externalizamos ninguna etapa.
 - Trazabilidad total durante todo el proceso, con código de seguimiento y certificado de cremación.
 - Servicios EXPRESS: entrega en 3 días hábiles.
 - Retiro directo a domicilio o desde la clínica.
