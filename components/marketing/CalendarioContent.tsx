@@ -275,6 +275,9 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
           <button disabled={enCurso} onClick={() => patch(it.id, { estado: 'aprobada' }, 'desprog')} title="Quitar de programadas (vuelve a aprobada)" className="text-xs px-2 py-1 rounded border border-teal-300 text-teal-700 hover:bg-teal-50 disabled:opacity-50">Desprogramar</button>
         )}
         {it.cuerpo && <button onClick={() => setPreview(it)} className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50">Ver</button>}
+        {social && nImgs(it) > 0 && (
+          <a href={`/api/mailing/calendario/${it.id}/descargar`} download title="Descargar la(s) imagen(es) de la campaña" className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50">⬇</a>
+        )}
         {social && it.cuerpo && ['aprobada', 'programada'].includes(it.estado) && (
           <button disabled={enCurso} onClick={() => publicar(it.id)} title="Publicar ahora a mano" className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
             {busy === `${it.id}:pub` ? '…' : 'Publicar'}
