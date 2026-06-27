@@ -224,7 +224,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
 
   h1('Presentación de la empresa')
   p('Crematorio Alma Animal es una empresa chilena dedicada a la cremación digna y responsable de mascotas, con instalaciones propias ubicadas en la comuna de Recoleta, Región Metropolitana. Brindamos un servicio cercano, rápido y trazable a las familias que atraviesan la despedida de su mascota, así como a clínicas y hospitales veterinarios que requieren un partner confiable para la disposición final.')
-  p('Operamos todos los días del año, en horario extendido de 09:00 a 22:00 horas, con cobertura en toda la Región Metropolitana. Nuestra propuesta combina un trato humano y respetuoso con un alto estándar técnico y tecnológico: control directo de todo el proceso, trazabilidad individual documentada y comunicación permanente con el cliente.')
+  p('Operamos todos los días del año, en horario extendido de 09:00 a 22:00 horas, con cobertura en toda la Región Metropolitana. Nuestra propuesta combina un trato humano y respetuoso con un alto estándar técnico y tecnológico: control directo de todo el proceso, trazabilidad documentada y comunicación permanente con el cliente.')
   h2('Datos de identificación')
   bullets([
     `Razón social: ${E.nombre}`,
@@ -247,10 +247,10 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   ])
 
   h1('Servicios de cremación')
-  p('Ofrecemos cremación individual trazable en tres modalidades, para adaptarnos a las necesidades y posibilidades de cada familia. En todos los casos la cremación es individual y con seguimiento documentado.')
-  defItem('Cremación Individual', 'Cremación individual con trazabilidad y código de seguimiento, certificado digital, nombre grabado en placa de madera, ánfora de greda incluida y una botellita con un mechón de pelo. Es la modalidad más elegida.')
+  p('Ofrecemos cremación trazable en tres modalidades, para adaptarnos a las necesidades y posibilidades de cada familia. En todos los casos el proceso es trazable y con seguimiento documentado.')
+  defItem('Cremación Individual', 'Cremación con trazabilidad y código de seguimiento, certificado digital, nombre grabado en placa de madera, ánfora de greda incluida y una botellita con un mechón de pelo. Es la modalidad más elegida.')
   defItem('Cremación Premium', 'Incluye todo lo de la modalidad Individual y, además, permite elegir cualquier ánfora de nuestra selección premium, más un cuadro conmemorativo estilo acuarela.')
-  defItem('Cremación Sin Devolución', 'Cremación individual con trazabilidad, sin devolución de cenizas. Es la alternativa más económica, manteniendo el mismo estándar de proceso y respeto.')
+  defItem('Cremación Sin Devolución', 'Cremación con trazabilidad, sin devolución de cenizas. Es la alternativa más económica, manteniendo el mismo estándar de proceso y respeto.')
   p('Servicio complementario: coordinamos eutanasia a domicilio a través de una red de médicos veterinarios en convenio, que acuden al domicilio de la familia y permiten gestionar en un mismo proceso la eutanasia y la posterior cremación. Se cotiza por caso según las características del servicio.', { color: C.muted, size: 10 })
 
   h1('Tarifas vigentes')
@@ -267,13 +267,13 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   defItem('1. Contacto y coordinación', 'Recibimos la solicitud (familia o clínica), registramos los datos de la mascota y coordinamos el retiro.')
   defItem('2. Retiro', 'Retiramos a la mascota a domicilio o desde la clínica veterinaria en un vehículo habilitado, habitualmente en menos de 3 horas.')
   defItem('3. Refrigeración', 'La mascota ingresa a nuestra cámara de refrigeración hasta el momento de la cremación, preservando las condiciones sanitarias.')
-  defItem('4. Cremación individual trazable', 'Se realiza en horno certificado, de manera individual, con un código de seguimiento único asignado a cada caso.')
+  defItem('4. Cremación trazable', 'Se realiza en horno certificado, con un código de seguimiento único asignado a cada caso.')
   defItem('5. Entrega', 'Entregamos las cenizas junto al certificado digital de cremación en un máximo de 3 días hábiles. Disponemos de video del proceso para quien lo solicite.')
 
   h1('Trazabilidad, certificación y control')
   p('La trazabilidad es uno de los pilares de nuestro servicio y un diferenciador clave frente a alternativas que externalizan la operación.')
   bullets([
-    'Código de seguimiento individual asignado a cada mascota, que acompaña todo el proceso.',
+    'Código de seguimiento asignado a cada mascota, que acompaña todo el proceso.',
     'Certificado digital de cremación con firma electrónica (estándar PAdES / PKCS#7), verificable y con sello formal de la empresa.',
     'Proceso 100% propio y no externalizado: control directo de retiro, refrigeración, cremación y entrega.',
     'Registro documentado de cada etapa en nuestro sistema de gestión interno.',
@@ -283,7 +283,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   h1('Instalaciones propias y certificadas')
   p('Contamos con instalaciones e infraestructura propias y certificadas en Recoleta, lo que nos permite operar con autonomía y un alto estándar técnico:')
   bullets([
-    'Horno crematorio certificado para cremación individual.',
+    'Horno crematorio certificado.',
     'Cámara de refrigeración para mantener a la mascota en condiciones sanitarias hasta la cremación.',
     'Vehículo habilitado para el retiro a domicilio y desde clínicas.',
     'Sistema de gestión propio que administra fichas, trazabilidad, certificados, despachos y comunicación con el cliente.',
@@ -320,7 +320,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   h1('Valor agregado y diferenciadores')
   bullets([
     'Instalaciones propias en Recoleta: no externalizamos ninguna etapa del proceso.',
-    'Trazabilidad total con código de seguimiento individual y certificado digital firmado.',
+    'Trazabilidad total con código de seguimiento y certificado digital firmado.',
     'Entrega garantizada en un máximo de 3 días hábiles.',
     'Retiro a domicilio y desde clínicas, habitualmente en menos de 3 horas.',
     'Atención todos los días, 09:00 a 22:00 h, con contacto permanente por WhatsApp y correo.',

@@ -26,7 +26,7 @@ const SELLO = '/brand/sello-alma-animal.png'
 const SERVICIOS = [
   { nombre: 'Cremación Individual', codigo: 'CI', desc: 'Devolvemos las cenizas en ánfora, con certificado y placa con su nombre.' },
   { nombre: 'Cremación Premium', codigo: 'CP', desc: 'Lo de la Individual + ánfora premium a elección y cuadro conmemorativo.' },
-  { nombre: 'Cremación Sin Devolución', codigo: 'SD', desc: 'Cremación individual trazable, sin devolución de cenizas.' },
+  { nombre: 'Cremación Sin Devolución', codigo: 'SD', desc: 'Cremación trazable, sin devolución de cenizas.' },
 ] as const
 
 const FORM_DEFAULT = {

@@ -149,9 +149,9 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
   tituloSeccion('Modalidades de servicio')
   const LABEL_W = 122
   const modalidades: [string, string][] = [
-    ['Individual', 'Cremación individual con trazabilidad, certificado digital, nombre grabado en placa de madera, ánfora de greda incluida y botellita con un mechón.'],
+    ['Individual', 'Cremación con trazabilidad, certificado digital, nombre grabado en placa de madera, ánfora de greda incluida y botellita con un mechón.'],
     ['Premium', 'Todo lo de Individual y, además, puedes elegir cualquier ánfora de esta selección, más un cuadro conmemorativo.'],
-    ['Sin Devolución', 'Cremación individual con trazabilidad, sin devolución de cenizas (la opción más económica).'],
+    ['Sin Devolución', 'Cremación con trazabilidad, sin devolución de cenizas (la opción más económica).'],
   ]
   for (const [t, d] of modalidades) {
     const lines = wrapText(d, f.regular, 10.5, CONTENT_W - LABEL_W - 16)
