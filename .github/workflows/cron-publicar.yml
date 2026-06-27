@@ -1,0 +1,41 @@
+name: Publicar campañas programadas (Alma Animal)
+
+# Dispara la publicación automática de las campañas en estado "programada" cuya
+# fecha/hora ya llegó. Llama al endpoint del sistema, que valida el Bearer CRON_SECRET
+# y publica en Facebook/Instagram. Reemplaza al cron de Vercel (que en plan Hobby corre
+# solo 1 vez al día); acá controlamos la frecuencia.
+#
+# CONFIGURAR en GitHub → Settings → Secrets and variables → Actions:
+#   • Variable (pestaña "Variables")  APP_URL     = la URL de la app en producción
+#                                                   (ej. https://petcrem.vercel.app)
+#   • Secret   (pestaña "Secrets")    CRON_SECRET = el MISMO valor que pusiste en Vercel
+#
+# Se puede correr a mano desde la pestaña Actions ("Run workflow") para probar.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'   # cada 15 minutos (horario UTC)
+  workflow_dispatch: {}
+
+# Evita solapamientos si una corrida se demora.
+concurrency:
+  group: cron-publicar
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar publicación de programadas
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ]; then echo "Falta la variable de repo APP_URL"; exit 1; fi
+          if [ -z "$CRON_SECRET" ]; then echo "Falta el secret CRON_SECRET"; exit 1; fi
+          BASE="${APP_URL%/}"
+          echo "POST ${BASE}/api/mailing/cron-publicar"
+          # -f: falla si HTTP >= 400; muestra el JSON de resultado.
+          curl -fsS -X POST "${BASE}/api/mailing/cron-publicar" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Content-Type: application/json"

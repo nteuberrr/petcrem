@@ -259,17 +259,24 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
         <button disabled={enCurso} onClick={() => patch(it.id, { favorita: it.favorita === 'TRUE' ? 'FALSE' : 'TRUE' }, 'fav')}
           title={it.favorita === 'TRUE' ? 'Quitar de favoritas' : 'Marcar como favorita'}
           className={`text-xs px-2 py-1 rounded border ${it.favorita === 'TRUE' ? 'border-amber-300 text-amber-500 bg-amber-50' : 'border-gray-300 text-gray-400 hover:bg-gray-50'}`}>{it.favorita === 'TRUE' ? '★' : '☆'}</button>
-        {it.activa !== 'FALSE' && (it.estado === 'propuesta' || it.estado === 'generada') && (
-          <button disabled={enCurso} onClick={() => patch(it.id, { estado: 'aprobada' }, 'ap')} className="text-xs px-2 py-1 rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50">Aprobar</button>
-        )}
-        {it.activa !== 'FALSE' && (it.estado === 'aprobada' || it.estado === 'generada' || it.estado === 'propuesta') && (
+        {/* Flujo: generar → aprobar → programar → (auto)publicar */}
+        {it.activa !== 'FALSE' && ['propuesta', 'generada', 'aprobada'].includes(it.estado) && (
           <button disabled={enCurso} onClick={() => generar(it.id)} className="text-xs px-2 py-1 rounded bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50">
             {busy === `${it.id}:gen` ? '…' : it.cuerpo ? 'Regenerar' : 'Generar'}
           </button>
         )}
+        {it.activa !== 'FALSE' && it.estado === 'generada' && it.cuerpo && (
+          <button disabled={enCurso} onClick={() => patch(it.id, { estado: 'aprobada' }, 'ap')} title="Aprobá la pieza generada para poder programarla o publicarla" className="text-xs px-2 py-1 rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50">Aprobar</button>
+        )}
+        {social && it.activa !== 'FALSE' && it.estado === 'aprobada' && (
+          <button disabled={enCurso} onClick={() => patch(it.id, { estado: 'programada' }, 'prog')} title="Programar: se publica solo en la fecha/hora del ítem" className="text-xs px-2 py-1 rounded bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50">Programar</button>
+        )}
+        {social && it.estado === 'programada' && (
+          <button disabled={enCurso} onClick={() => patch(it.id, { estado: 'aprobada' }, 'desprog')} title="Quitar de programadas (vuelve a aprobada)" className="text-xs px-2 py-1 rounded border border-teal-300 text-teal-700 hover:bg-teal-50 disabled:opacity-50">Desprogramar</button>
+        )}
         {it.cuerpo && <button onClick={() => setPreview(it)} className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50">Ver</button>}
-        {social && it.cuerpo && ['aprobada', 'generada', 'programada'].includes(it.estado) && (
-          <button disabled={enCurso} onClick={() => publicar(it.id)} className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
+        {social && it.cuerpo && ['aprobada', 'programada'].includes(it.estado) && (
+          <button disabled={enCurso} onClick={() => publicar(it.id)} title="Publicar ahora a mano" className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
             {busy === `${it.id}:pub` ? '…' : 'Publicar'}
           </button>
         )}

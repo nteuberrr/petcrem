@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { esAdminTotal } from '@/lib/roles'
-import { actualizarItem, eliminarItem, obtenerItem, type ItemCalendario } from '@/lib/marketing-calendario'
+import { actualizarItem, eliminarItem, obtenerItem, validarCambioEstado, type ItemCalendario } from '@/lib/marketing-calendario'
 
 /**
  * /api/mailing/calendario/[id]  (admin)
@@ -33,12 +33,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     for (const k of EDITABLES) {
       if (body[k] !== undefined) cambios[k] = String(body[k])
     }
-    // Al aprobar, registrar quién aprobó.
-    if (body.estado === 'aprobada') {
-      cambios.aprobado_por = session?.user?.name || session?.user?.email || ''
-    }
     if (Object.keys(cambios).length === 0) {
       return NextResponse.json({ error: 'Nada que actualizar.' }, { status: 400 })
+    }
+    // Flujo controlado: aprobar requiere generada; programar requiere aprobada.
+    if (cambios.estado) {
+      const actual = await obtenerItem(id)
+      if (!actual) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+      const err = validarCambioEstado(actual, cambios.estado)
+      if (err) return NextResponse.json({ error: err }, { status: 400 })
+    }
+    // Al aprobar, registrar quién aprobó.
+    if (cambios.estado === 'aprobada') {
+      cambios.aprobado_por = session?.user?.name || session?.user?.email || ''
     }
     const item = await actualizarItem(id, cambios)
     return NextResponse.json({ item })

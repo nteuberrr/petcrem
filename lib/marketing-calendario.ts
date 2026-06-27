@@ -171,6 +171,27 @@ export async function eliminarItem(id: string): Promise<void> {
   await deleteById(TABLE, id)
 }
 
+/**
+ * Valida una transición de estado en el flujo controlado generar → aprobar → programar:
+ *  - APROBAR requiere la pieza GENERADA (con cuerpo; en social, también su imagen).
+ *  - PROGRAMAR requiere estar APROBADA, generada y con fecha (el cron la autopublica).
+ * Devuelve un mensaje de error, o null si la transición es válida. (Pasar a otros
+ * estados —descartada, generada, publicada, etc.— no se restringe acá.)
+ */
+export function validarCambioEstado(item: ItemCalendario, nuevo: string): string | null {
+  if (!nuevo || nuevo === item.estado) return null
+  const generado = !!(item.cuerpo && item.cuerpo.trim())
+  if (nuevo === 'aprobada' && !generado) {
+    return 'No se puede aprobar sin generar la pieza primero (necesita copy y, en social, imagen). Generala y después aprobala.'
+  }
+  if (nuevo === 'programada') {
+    if (!generado) return 'No se puede programar sin generar la pieza primero.'
+    if (item.estado !== 'aprobada') return 'No se puede programar sin aprobar primero. El flujo es: generar → aprobar → programar.'
+    if (!item.fecha?.trim()) return 'Para programar la publicación, la campaña necesita una fecha (y opcionalmente hora).'
+  }
+  return null
+}
+
 // ─── Publicación atómica (anti doble-publicación) ─────────────────────────────
 // Reclamar/finalizar pasan por updateByIdIf, que en Postgres es un UPDATE
 // condicional ATÓMICO (UPDATE ... WHERE id=? AND col=?) y PARCIAL (no pisa la fila
