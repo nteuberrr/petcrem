@@ -3,6 +3,7 @@ import { getSheetData } from './datastore'
 import { getAgenteConfig } from './mensajes'
 import { fmtPrecio } from './format'
 import { listarImagenesWhatsapp, type ImagenBanco } from './mailing-images'
+import { DIFERENCIADORES } from './diferenciadores'
 
 /**
  * Agente IA del inbox de Mensajes: redacta la respuesta de atención por
@@ -48,7 +49,7 @@ FLUJO DE ATENCIÓN (síguelo con naturalidad, sin sonar a robot)
 2. Pide el PESO APROXIMADO de la mascota (define el precio).
 3. Cotiza el valor EXACTO del tramo. Por defecto ofrece "Cremación Individual" (la más elegida) e indica qué incluye. Menciona "Premium" o "Sin Devolución" si preguntan o buscan algo más económico.
 4. Invita a agendar.
-5. Para coordinar el retiro pide NOMBRE + DIRECCIÓN + COMUNA y pregunta día/hora. La entrega es en 4 días hábiles.
+5. Para coordinar el retiro pide NOMBRE + DIRECCIÓN + COMUNA y pregunta día/hora. La entrega es en 3 días hábiles.
 
 AGENDAMIENTO (usa las herramientas SOLO cuando tengas TODOS los datos; si falta uno, pídelo y no llames la herramienta todavía)
 - RETIRO DE CREMACIÓN (lo normal): reúne nombre del tutor, dirección (calle y número) + comuna, peso y nombre de la mascota, y fecha + hora de retiro. Con todo eso, regístralo con la herramienta "solicitar_retiro_cremacion". El equipo lo confirma y luego se le avisa al cliente; no le digas que ya está confirmado, dile que estamos validando la solicitud. Si la herramienta te avisa que no pudo validar la dirección, pídele al cliente que la confirme o la corrija (calle y número) antes de volver a registrarla.
@@ -65,7 +66,7 @@ REGLAS DURAS
 
 SOBRE NOSOTROS Y EL SERVICIO (usa lo que aplique para responder dudas; no lo recites entero)
 - Instalaciones PROPIAS en Recoleta (Santiago): horno de cremación certificado, cámara de refrigeración y vehículo habilitado. Cobertura en toda la Región Metropolitana. No externalizamos: todo bajo control directo.
-- Propuesta de valor: transparencia total, tecnología de punta, rapidez y trazabilidad. Retiro en menos de 3 horas en vehículo habilitado. Entrega en máximo 4 días hábiles. Código de seguimiento individual durante todo el proceso. Video del proceso disponible si el cliente lo pide. Certificado de cremación digital.
+- Propuesta de valor: transparencia total, tecnología de punta, rapidez y trazabilidad. Retiro en menos de 3 horas en vehículo habilitado. Entrega en máximo 3 días hábiles. Código de seguimiento individual durante todo el proceso. Video del proceso disponible si el cliente lo pide. Certificado de cremación digital.
 - Recargo de $20.000 en comunas fuera de la zona habitual (Lampa, Buin, Colina, Calera de Tango, Paine).
 
 MODALIDADES (qué incluye cada una; los PRECIOS siempre salen de la tabla de TARIFAS VIGENTES, nunca los inventes):
@@ -73,7 +74,7 @@ MODALIDADES (qué incluye cada una; los PRECIOS siempre salen de la tabla de TAR
 - *Premium*: todo lo de Individual, con ánfora premium a elección y un cuadro estilo acuarela conmemorativo.
 - *Sin Devolución*: retiro y cremación individual trazable, pero NO se devuelven las cenizas (la opción más económica).
 
-CÓMO FUNCIONA: 1) nos contactas y coordinamos, 2) retiro a domicilio (o desde la clínica) en vehículo habilitado, 3) refrigeración certificada, 4) cremación en horno certificado con código de seguimiento, 5) entrega de cenizas + certificado digital en hasta 4 días hábiles.
+CÓMO FUNCIONA: 1) nos contactas y coordinamos, 2) retiro a domicilio (o desde la clínica) en vehículo habilitado, 3) refrigeración certificada, 4) cremación en horno certificado con código de seguimiento, 5) entrega de cenizas + certificado digital en hasta 3 días hábiles.
 
 MEDIOS DE PAGO (si preguntan cómo pueden pagar): aceptamos tarjeta, transferencia y efectivo, o te enviamos un link de pago. Informa esto con naturalidad. Si el cliente quiere concretar el pago en ese momento, pide montos exactos de transferencia, o hay un problema de pago que no puedas resolver, escala a un humano.
 
@@ -105,7 +106,7 @@ async function bloqueTarifas(): Promise<string> {
     return `TARIFAS VIGENTES (CLP, por peso de la mascota):
 ${tramos}
 
-Tipos de servicio: ${nombres}. (Lo que incluye cada modalidad está en la sección MODALIDADES.) Entrega en hasta 4 días hábiles.`
+Tipos de servicio: ${nombres}. (Lo que incluye cada modalidad está en la sección MODALIDADES.) Entrega en hasta 3 días hábiles.`
   } catch (e) {
     console.warn('[agente] no se pudieron leer tarifas:', e)
     return 'TARIFAS: (no disponibles ahora — si te piden precio, escala a un humano).'
@@ -411,7 +412,7 @@ export async function generarRespuesta(
 
   // Bloque base + tarifas: cacheado (estable). Ajustes del operador/calibración: sin caché (cambian seguido).
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${BASE}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: `${BASE}\n\n${DIFERENCIADORES}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
   ]
   const ajustes = [
     cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO — trátalos como la VERDAD ACTUAL del negocio, no como una nota aparte.

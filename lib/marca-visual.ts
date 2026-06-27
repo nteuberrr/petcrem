@@ -85,7 +85,7 @@ EJEMPLO (formato portada_fb, 1640x624 — adaptá libremente la composición y l
     <span style="font-family:Inter;font-weight:600;font-size:34px;color:${BRAND.amber};margin-top:14px">Huellas que no se borran</span>
     <div style="display:flex;width:180px;height:7px;background:${BRAND.amber};margin:28px 0"></div>
     <div style="display:flex;flex-direction:column">
-      <span style="font-family:Inter;font-size:28px;color:#e8eef5;margin-bottom:8px">Entrega en 4 días hábiles</span>
+      <span style="font-family:Inter;font-size:28px;color:#e8eef5;margin-bottom:8px">Entrega en 3 días hábiles</span>
       <span style="font-family:Inter;font-size:28px;color:#e8eef5">Retiro a domicilio y desde clínicas</span>
     </div>
   </div>

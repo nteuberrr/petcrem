@@ -224,14 +224,14 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
 
   h1('Presentación de la empresa')
   p('Crematorio Alma Animal es una empresa chilena dedicada a la cremación digna y responsable de mascotas, con instalaciones propias ubicadas en la comuna de Recoleta, Región Metropolitana. Brindamos un servicio cercano, rápido y trazable a las familias que atraviesan la despedida de su mascota, así como a clínicas y hospitales veterinarios que requieren un partner confiable para la disposición final.')
-  p('Operamos todos los días del año, en horario extendido de 08:00 a 23:00 horas, con cobertura en toda la Región Metropolitana. Nuestra propuesta combina un trato humano y respetuoso con un alto estándar técnico y tecnológico: control directo de todo el proceso, trazabilidad individual documentada y comunicación permanente con el cliente.')
+  p('Operamos todos los días del año, en horario extendido de 09:00 a 22:00 horas, con cobertura en toda la Región Metropolitana. Nuestra propuesta combina un trato humano y respetuoso con un alto estándar técnico y tecnológico: control directo de todo el proceso, trazabilidad individual documentada y comunicación permanente con el cliente.')
   h2('Datos de identificación')
   bullets([
     `Razón social: ${E.nombre}`,
     `RUT: ${E.rut}`,
     `Giro: ${E.giro}`,
     `Domicilio: ${E.direccion}`,
-    'Cobertura: Región Metropolitana · Atención todos los días de 08:00 a 23:00 h',
+    'Cobertura: Región Metropolitana · Atención todos los días de 09:00 a 22:00 h',
   ])
 
   h1('Propósito e identidad de marca')
@@ -257,7 +257,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   p('Valores en pesos chilenos (CLP), por tramo de peso de la mascota y modalidad de servicio. Las tarifas se administran en nuestro sistema y se mantienen siempre actualizadas; este documento refleja los valores vigentes a la fecha de emisión.')
   if (tramos.length) tablaPrecios(tramos)
   bullets([
-    'La entrega de cenizas y certificado se realiza en un máximo de 4 días hábiles.',
+    'La entrega de cenizas y certificado se realiza en un máximo de 3 días hábiles.',
     'Recargo de $20.000 por retiro en comunas fuera de la zona habitual (Lampa, Buin, Colina, Calera de Tango y Paine).',
     'Para mascotas de peso superior al último tramo, el valor se cotiza de forma individual.',
   ])
@@ -268,7 +268,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   defItem('2. Retiro', 'Retiramos a la mascota a domicilio o desde la clínica veterinaria en un vehículo habilitado, habitualmente en menos de 3 horas.')
   defItem('3. Refrigeración certificada', 'La mascota ingresa a nuestra cámara de refrigeración hasta el momento de la cremación, preservando las condiciones sanitarias.')
   defItem('4. Cremación individual trazable', 'Se realiza en horno certificado, de manera individual, con un código de seguimiento único asignado a cada caso.')
-  defItem('5. Entrega', 'Entregamos las cenizas junto al certificado digital de cremación en un máximo de 4 días hábiles. Disponemos de video del proceso para quien lo solicite.')
+  defItem('5. Entrega', 'Entregamos las cenizas junto al certificado digital de cremación en un máximo de 3 días hábiles. Disponemos de video del proceso para quien lo solicite.')
 
   h1('Trazabilidad, certificación y control')
   p('La trazabilidad es uno de los pilares de nuestro servicio y un diferenciador clave frente a alternativas que externalizan la operación.')
@@ -301,7 +301,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   h1('Comunicación y contacto permanente')
   p('El acompañamiento y la información son parte central de nuestro servicio. Mantenemos contacto permanente con el cliente durante todo el proceso:')
   bullets([
-    'Atención todos los días de 08:00 a 23:00 horas, por teléfono y WhatsApp.',
+    'Atención todos los días de 09:00 a 22:00 horas, por teléfono y WhatsApp.',
     'Asistente de atención por WhatsApp para coordinar retiros, resolver consultas y entregar información en tiempo real.',
     'Notificaciones automáticas por correo en cada hito: registro, inicio de la cremación, salida a ruta de entrega, entrega realizada y emisión del certificado.',
     'Posibilidad de seguimiento del estado de cada caso y entrega del certificado digital.',
@@ -321,9 +321,9 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   bullets([
     'Instalaciones propias en Recoleta: no externalizamos ninguna etapa del proceso.',
     'Trazabilidad total con código de seguimiento individual y certificado digital firmado.',
-    'Entrega garantizada en un máximo de 4 días hábiles.',
+    'Entrega garantizada en un máximo de 3 días hábiles.',
     'Retiro a domicilio y desde clínicas, habitualmente en menos de 3 horas.',
-    'Atención todos los días, 08:00 a 23:00 h, con contacto permanente por WhatsApp y correo.',
+    'Atención todos los días, 09:00 a 22:00 h, con contacto permanente por WhatsApp y correo.',
     'Tecnología propia de gestión, trazabilidad y comunicación.',
     'Red de eutanasia a domicilio como servicio complementario.',
     'Trato humano, cercano y respetuoso, con foco en la dignidad de la mascota y su familia.',

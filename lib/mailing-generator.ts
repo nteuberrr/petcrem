@@ -3,6 +3,7 @@ import { BRAND, LOGO_URL, getContacto, type Contacto } from './email-layout'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { listarImagenes, generarYGuardarImagen, type ImagenBanco } from './mailing-images'
 import { MARCA_VISUAL } from './marca-visual'
+import { DIFERENCIADORES } from './diferenciadores'
 
 /**
  * Generador IA de campañas de mailing (B2B a la base de veterinarios).
@@ -100,7 +101,7 @@ AUDIENCIA Y VOZ (B2B veterinarios):
   - Profesional, técnica, eficiente: hablas como un socio confiable (datos, plazos, procesos claros). Cercana pero sobria.
   - Español neutro de Chile. NUNCA voseo argentino (nada de "tenés", "podés", "querés").
   - Sin humor, sin referencias religiosas, sin clichés del rubro ("puente del arcoíris", "angelitos", "tu ángel").
-  - Diferenciadores que puedes comunicar si aplican: instalaciones propias en Recoleta (no se externaliza), trazabilidad total, entrega en 4 días hábiles, retiro a domicilio o desde la clínica, certificado digital, tecnología de punta, red de eutanasia a domicilio para clínicas en convenio.
+  - Diferenciadores que puedes comunicar si aplican: instalaciones propias en Recoleta (no se externaliza), trazabilidad total, entrega en 3 días hábiles, retiro a domicilio o desde la clínica, certificado digital, tecnología de punta, red de eutanasia a domicilio para clínicas en convenio.
   - NUNCA inventes precios, descuentos, plazos ni promesas que no estén en la instrucción del usuario.
 
 HTML SEGURO PARA EMAIL (obligatorio — Gmail / Outlook / Apple Mail):
@@ -236,6 +237,7 @@ export async function generarCampana(opts: GenerarOpts): Promise<CampanaGenerada
 
   const system: Anthropic.TextBlockParam[] = [
     { type: 'text', text: systemPrompt(contacto, puedeGenerar) },
+    { type: 'text', text: DIFERENCIADORES },
     { type: 'text', text: bloqueBanco(banco) },
   ]
 
