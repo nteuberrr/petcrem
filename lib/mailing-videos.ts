@@ -2,6 +2,7 @@ import { getSheetData, appendRow, getNextId, deleteById } from './datastore'
 import { uploadToR2, deleteFromR2, keyFromPublicUrl } from './cloudflare-r2'
 import { descargarVideo, VEO_MODEL } from './veo'
 import { maxCodigoNum } from './mailing-images'
+import { nextContador } from './banco-contadores'
 import { todayISO } from './dates'
 
 /**
@@ -78,10 +79,10 @@ export async function guardarVideo(args: {
   const key = `mailing/videos/${Date.now()}.${ext}`
   const up = await uploadToR2(buffer, key, mime)
   const id = await getNextId(TABLE)
-  // Código: ai-N si se animó desde una imagen del banco; v-N si fue text-to-video.
+  // Código MONOTÓNICO: ai-N si se animó desde una imagen del banco; v-N si fue text-to-video.
   const codigos = (await getSheetData(TABLE)).map(r => r.codigo || '')
   const prefijo = args.imagenOrigen ? 'ai' : 'v'
-  const codigo = `${prefijo}-${maxCodigoNum(codigos, prefijo) + 1}`
+  const codigo = `${prefijo}-${await nextContador(`vid:${prefijo}`, maxCodigoNum(codigos, prefijo))}`
   const row: Record<string, string> = {
     id,
     url: up.url,

@@ -3,6 +3,7 @@ import { getSheetData, appendRow, getNextId, deleteById, updateById, ensureSheet
 import { uploadToR2, deleteFromR2, keyFromPublicUrl, getFromR2 } from './cloudflare-r2'
 import { generarImagen, extFromMime } from './nano-banana'
 import { aplicarLogoMarca } from './marca-logo'
+import { nextContador } from './banco-contadores'
 import { todayISO } from './dates'
 
 /** Grupos válidos para clasificar imágenes del banco. */
@@ -69,9 +70,10 @@ function toImagen(r: Record<string, string>): ImagenBanco {
 }
 
 // ─── Códigos legibles (i-N / C-X.Y) ──────────────────────────────────────────
-// Se calculan escaneando los códigos ya usados en la tabla. Para inserts en lote
-// (un carrusel = una campaña) hay que llamar a las funciones de forma SECUENCIAL
-// (await uno por uno) para que cada lectura vea el anterior — igual que getNextId.
+// MONOTÓNICOS: el número lo entrega nextContador() (tabla banco_contadores, atómico),
+// que guarda el high-water mark y NUNCA reutiliza un número aunque se borre la imagen.
+// maxCodigoNum/maxCampaniaNum se siguen usando solo para auto-sincronizar el contador
+// (p_min) con el máximo real de los datos por si quedó atrás.
 
 const reNum = (p: string) => new RegExp(`^${p}-(\\d+)$`)
 
@@ -101,20 +103,28 @@ async function codigosImagenes(): Promise<string[]> {
  * quedan C-X.1, C-X.2, … Llamar UNA vez por campaña, antes del lote.
  */
 export async function asignarCampania(): Promise<string> {
-  return `C-${maxCampaniaNum(await codigosImagenes()) + 1}`
+  const x = await nextContador('img:C', maxCampaniaNum(await codigosImagenes()))
+  return `C-${x}`
 }
 
-/** Calcula el código a usar para una imagen nueva según kind/campania. */
-function calcularCodigo(codigos: string[], opts: { kind?: 'foto' | 'publicacion'; campania?: string }): string {
+/** Calcula el código MONOTÓNICO a usar para una imagen nueva según kind/campania. */
+async function calcularCodigo(codigos: string[], opts: { kind?: 'foto' | 'publicacion'; campania?: string }): Promise<string> {
   if (opts.campania) {
-    // Imagen dentro de una campaña ya reservada → siguiente índice .Y.
+    // Imagen dentro de una campaña ya reservada → siguiente índice .Y (contador por campaña).
     const re = new RegExp(`^${opts.campania.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.(\\d+)$`)
     let maxY = 0
     for (const c of codigos) { const m = re.exec((c || '').trim()); if (m) maxY = Math.max(maxY, parseInt(m[1], 10) || 0) }
-    return `${opts.campania}.${maxY + 1}`
+    const y = await nextContador(`img:${opts.campania}`, maxY)
+    return `${opts.campania}.${y}`
   }
-  if (opts.kind === 'publicacion') return `C-${maxCampaniaNum(codigos) + 1}.1`
-  return `i-${maxCodigoNum(codigos, 'i') + 1}`
+  if (opts.kind === 'publicacion') {
+    // Pieza suelta que abre su propia campaña → C-X.1 (X y Y, ambos monotónicos).
+    const x = await nextContador('img:C', maxCampaniaNum(codigos))
+    const y = await nextContador(`img:C-${x}`, 0)
+    return `C-${x}.${y}`
+  }
+  const n = await nextContador('img:i', maxCodigoNum(codigos, 'i'))
+  return `i-${n}`
 }
 
 /** Lista el banco, más recientes primero. */
@@ -159,7 +169,7 @@ export interface RegistrarImagenInput {
 export async function registrarImagen(input: RegistrarImagenInput): Promise<ImagenBanco> {
   await ensureBanco()
   const id = await getNextId(TABLE)
-  const codigo = (input.codigo || '').trim() || calcularCodigo(await codigosImagenes(), { kind: input.kind, campania: input.campania })
+  const codigo = (input.codigo || '').trim() || (await calcularCodigo(await codigosImagenes(), { kind: input.kind, campania: input.campania }))
   const row: Record<string, string> = {
     id,
     url: input.url,

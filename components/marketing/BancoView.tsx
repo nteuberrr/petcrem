@@ -26,8 +26,10 @@ const GRUPOS = ['marca', 'mascotas', 'personas', 'productos', 'instalaciones', '
 const GRUPOS_GEN = ['mascotas', 'personas', 'productos', 'otro'] as const
 const GRUPO_LABEL: Record<string, string> = {
   marca: 'Marca', mascotas: 'Mascotas', personas: 'Personas', productos: 'Productos',
-  instalaciones: 'Instalaciones', otro: 'Otro',
+  instalaciones: 'Instalaciones', otro: 'Otro', sin: 'Sin grupo',
 }
+/** Orden de los grupos en la galería (acordeón). */
+const ORDEN_GRUPOS = ['marca', 'mascotas', 'personas', 'productos', 'instalaciones', 'otro', 'sin'] as const
 const ASPECTOS = ['16:9', '4:3', '1:1', '4:5', '3:2', '9:16'] as const
 const num = (s: string) => parseInt(s, 10) || 0
 
@@ -244,12 +246,14 @@ export default function BancoView() {
 
   // filtros
   const [q, setQ] = useState('')
-  const [fGrupo, setFGrupo] = useState('todos')
+  const [qCodigo, setQCodigo] = useState('')
   const [fOrigen, setFOrigen] = useState('todos')
   const [fTipo, setFTipo] = useState('todos')
   const [fWhatsapp, setFWhatsapp] = useState(false)
   const [fFav, setFFav] = useState(false)
   const [orden, setOrden] = useState('reciente')
+  // grupos abiertos en el acordeón (colapsados por defecto)
+  const [abiertos, setAbiertos] = useState<Set<string>>(new Set())
 
   // selección
   const [sel, setSel] = useState<Set<string>>(new Set())
@@ -281,7 +285,8 @@ export default function BancoView() {
     let l = imgs
     const term = q.trim().toLowerCase()
     if (term) l = l.filter(i => `${i.codigo} ${i.descripcion} ${i.alt} ${i.tags} ${i.grupo} ${i.subgrupo}`.toLowerCase().includes(term))
-    if (fGrupo !== 'todos') l = l.filter(i => (fGrupo === 'sin' ? !i.grupo : i.grupo === fGrupo))
+    const cod = qCodigo.trim().toLowerCase()
+    if (cod) l = l.filter(i => (i.codigo || '').toLowerCase().includes(cod))
     if (fOrigen !== 'todos') l = l.filter(i => fOrigen === 'ai' ? i.origen !== 'upload' : i.origen === 'upload')
     if (fTipo !== 'todos') l = l.filter(i => (i.codigo || '').startsWith(fTipo + '-'))
     if (fWhatsapp) l = l.filter(i => i.whatsapp)
@@ -291,12 +296,27 @@ export default function BancoView() {
     else if (orden === 'antiguo') l.sort((a, b) => num(a.id) - num(b.id))
     else if (orden === 'favoritas') l.sort((a, b) => (b.favorita ? 1 : 0) - (a.favorita ? 1 : 0) || num(b.id) - num(a.id))
     return l
-  }, [imgs, q, fGrupo, fOrigen, fTipo, fWhatsapp, fFav, orden])
+  }, [imgs, q, qCodigo, fOrigen, fTipo, fWhatsapp, fFav, orden])
 
-  const hayFiltro = !!q.trim() || fGrupo !== 'todos' || fOrigen !== 'todos' || fTipo !== 'todos' || fWhatsapp || fFav
+  // Agrupadas para el acordeón (orden fijo; "sin grupo" al final).
+  const grupos = useMemo(() => {
+    const by = new Map<string, ImagenBanco[]>()
+    for (const i of filtradas) {
+      const k = (GRUPOS as readonly string[]).includes(i.grupo) ? i.grupo : 'sin'
+      const arr = by.get(k); if (arr) arr.push(i); else by.set(k, [i])
+    }
+    return ORDEN_GRUPOS.map(k => ({ key: k as string, label: GRUPO_LABEL[k] || k, imgs: by.get(k) || [] })).filter(g => g.imgs.length > 0)
+  }, [filtradas])
+
+  // Al buscar (texto o código) se abren todos los grupos con resultados; si no, manda el set manual.
+  const buscando = !!q.trim() || !!qCodigo.trim()
+  const hayFiltro = buscando || fOrigen !== 'todos' || fTipo !== 'todos' || fWhatsapp || fFav
   const seleccionadas = useMemo(() => imgs.filter(i => sel.has(i.id)), [imgs, sel])
 
-  function limpiarFiltros() { setQ(''); setFGrupo('todos'); setFOrigen('todos'); setFTipo('todos'); setFWhatsapp(false); setFFav(false) }
+  function limpiarFiltros() { setQ(''); setQCodigo(''); setFOrigen('todos'); setFTipo('todos'); setFWhatsapp(false); setFFav(false) }
+  function toggleGrupo(k: string) { setAbiertos(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n }) }
+  function abrirTodos() { setAbiertos(new Set(grupos.map(g => g.key))) }
+  function cerrarTodos() { setAbiertos(new Set()) }
   function toggleSel(img: ImagenBanco) { setSel(prev => { const n = new Set(prev); if (n.has(img.id)) n.delete(img.id); else n.add(img.id); return n }) }
   function limpiarSel() { setSel(new Set()); setBulkGrupo('') }
   function toggleTodasVisibles() {
@@ -448,13 +468,10 @@ export default function BancoView() {
       {/* Filtros */}
       <Card className="p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar por código, nombre, tag…"
-            className="flex-1 min-w-[180px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-          <select value={fGrupo} onChange={e => setFGrupo(e.target.value)} title="Grupo" className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
-            <option value="todos">Todos los grupos</option>
-            {GRUPOS.map(g => <option key={g} value={g}>{GRUPO_LABEL[g] || g}</option>)}
-            <option value="sin">Sin grupo</option>
-          </select>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar por nombre, tag…"
+            className="flex-1 min-w-[160px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+          <input value={qCodigo} onChange={e => setQCodigo(e.target.value)} placeholder="Código (C-26, i-5)…" title="Buscar por código"
+            className="w-[150px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand" />
           <select value={fTipo} onChange={e => setFTipo(e.target.value)} title="Tipo de código" className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
             {TIPOS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
           </select>
@@ -474,9 +491,13 @@ export default function BancoView() {
             className={`text-xs rounded-lg px-2.5 py-1.5 border ${fFav ? 'bg-gold/20 border-gold text-brand' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>★ Favoritas</button>
           {hayFiltro && <button type="button" onClick={limpiarFiltros} className="text-xs text-brand hover:underline">Limpiar filtros</button>}
         </div>
-        <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-          <span>{filtradas.length} de {imgs.length} imágenes</span>
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between mt-2 text-xs text-gray-500 flex-wrap gap-2">
+          <span>{filtradas.length} de {imgs.length} imágenes · {grupos.length} grupo{grupos.length === 1 ? '' : 's'}</span>
+          <div className="flex items-center gap-3 flex-wrap">
+            {!buscando && <>
+              <button type="button" onClick={abrirTodos} className="text-brand hover:underline">Abrir todos</button>
+              <button type="button" onClick={cerrarTodos} className="text-brand hover:underline">Cerrar todos</button>
+            </>}
             <button type="button" onClick={toggleTodasVisibles} className="text-brand hover:underline">{todasVisiblesSel ? 'Deseleccionar' : 'Seleccionar'} visibles</button>
             <a href="/api/mailing/imagenes/descargar" download className="text-brand hover:underline">⬇ Descargar todo (ZIP)</a>
             <button type="button" onClick={() => { cargar(); cargarVideos() }} className="text-brand hover:underline">Actualizar</button>
@@ -507,7 +528,7 @@ export default function BancoView() {
         </div>
       )}
 
-      {/* Galería */}
+      {/* Galería por grupos (acordeón; colapsado por defecto, se abre el que quieras) */}
       {loading ? (
         <Card className="p-8 text-center text-sm text-gray-400">Cargando…</Card>
       ) : filtradas.length === 0 ? (
@@ -515,13 +536,34 @@ export default function BancoView() {
           {imgs.length === 0 ? 'Sin imágenes todavía. Generá la primera arriba o subí una propia.' : 'Sin resultados con esos filtros.'}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtradas.map(img => (
-            <ImagenCard key={img.id} img={img} selected={sel.has(img.id)} onToggleSelect={toggleSel}
-              onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onFavorita={cambiarFavorita} onRename={renombrar}
-              onCopyUrl={u => copiar(u, 'URL copiada.')} onCopyCodigo={c => copiar(c, `Código ${c} copiado.`)}
-              onDelete={eliminar} onAnimar={i => setAnimar([i])} onZoom={setVerImg} />
-          ))}
+        <div className="space-y-3">
+          {grupos.map(g => {
+            const abierto = buscando || abiertos.has(g.key)
+            const selEnGrupo = g.imgs.reduce((n, i) => n + (sel.has(i.id) ? 1 : 0), 0)
+            return (
+              <Card key={g.key} className="overflow-hidden">
+                <button type="button" onClick={() => toggleGrupo(g.key)} title={abierto ? 'Colapsar' : 'Expandir'}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 transition">
+                  <span className="flex items-center gap-2 font-bold text-brand">
+                    <span className={`inline-block transition-transform ${abierto ? 'rotate-90' : ''}`}>▸</span>
+                    {g.label}
+                    <span className="text-xs font-normal text-gray-400">({g.imgs.length}{selEnGrupo ? ` · ${selEnGrupo} sel.` : ''})</span>
+                  </span>
+                  <span className="text-xs text-gray-400">{abierto ? 'ocultar' : 'ver'}</span>
+                </button>
+                {abierto && (
+                  <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {g.imgs.map(img => (
+                      <ImagenCard key={img.id} img={img} selected={sel.has(img.id)} onToggleSelect={toggleSel}
+                        onGrupo={cambiarGrupo} onWhatsapp={cambiarWhatsapp} onFavorita={cambiarFavorita} onRename={renombrar}
+                        onCopyUrl={u => copiar(u, 'URL copiada.')} onCopyCodigo={c => copiar(c, `Código ${c} copiado.`)}
+                        onDelete={eliminar} onAnimar={i => setAnimar([i])} onZoom={setVerImg} />
+                    ))}
+                  </div>
+                )}
+              </Card>
+            )
+          })}
         </div>
       )}
 
@@ -597,7 +639,7 @@ export function BancoMiniPanel() {
     <div className="flex flex-col h-full">
       <div className="p-3 border-b border-gray-200 space-y-2">
         <div className="flex items-center gap-2">
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar imagen…"
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar (código / nombre)…"
             className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           <button type="button" onClick={cargar} title="Actualizar" className="text-xs text-brand hover:underline">↻</button>
         </div>
