@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { BRAND, getContacto } from './email-layout'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
 import { DIFERENCIADORES } from './diferenciadores'
+import { REGLAS_INVIOLABLES } from './marca-voz'
+import { lintCopy, extraerTextoHtml } from './marketing-lint'
 import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, type ImagenBanco } from './mailing-images'
 import { generarGraficoMarca, cargarDisenoGrafico } from './marketing-grafico'
 import { esLogo } from './marca-logo'
@@ -249,28 +251,51 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
     item.notas && `NOTAS: ${item.notas}`,
   ].filter(Boolean).join('\n\n')
 
-  const res = await getClient().messages.create({
-    model: MODEL,
-    // Alto: una pieza social puede traer el copy + el HTML de VARIAS placas (verboso).
-    max_tokens: 8000,
-    system: [
-      { type: 'text', text: system },
-      { type: 'text', text: DIFERENCIADORES },
-      { type: 'text', text: bancoBloque(banco) },
-      ...(bloqueLogosPieza(banco) ? [{ type: 'text' as const, text: bloqueLogosPieza(banco) }] : []),
-    ],
-    tools: [TOOL_POST],
-    tool_choice: { type: 'tool', name: 'entregar_post' },
-    messages: [{ role: 'user', content: instruccion }],
-  })
-
-  const tu = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'entregar_post')
-  if (!tu) throw new Error('El modelo no devolvió el post')
-  const out = tu.input as SalidaPost
-  const cuerpo = (out.caption || '').trim()
-  if (!cuerpo) throw new Error('El modelo no devolvió el texto del post')
+  // REGLAS_INVIOLABLES al INICIO y al FINAL (máxima saliencia; evita lost-in-the-middle).
+  const systemBlocks: Anthropic.TextBlockParam[] = [
+    { type: 'text', text: REGLAS_INVIOLABLES },
+    { type: 'text', text: system },
+    { type: 'text', text: DIFERENCIADORES },
+    { type: 'text', text: bancoBloque(banco) },
+    ...(bloqueLogosPieza(banco) ? [{ type: 'text' as const, text: bloqueLogosPieza(banco) }] : []),
+    { type: 'text', text: REGLAS_INVIOLABLES },
+  ]
 
   const avisos: string[] = []
+  // AUTO-RECHAZO + reintento: si el linter determinista detecta violaciones de marca
+  // (compañero, cámara certificada, teléfono que no coincide, glifos rotos), se le
+  // devuelve el hallazgo al modelo y se regenera (hasta 3 intentos). Así lo binario no
+  // depende de que el modelo recuerde la regla.
+  const convo: Anthropic.MessageParam[] = [{ role: 'user', content: instruccion }]
+  let out: SalidaPost | null = null
+  let cuerpo = ''
+  for (let intento = 0; intento < 3; intento++) {
+    const res = await getClient().messages.create({
+      model: MODEL,
+      max_tokens: 8000, // Alto: copy + el HTML de VARIAS placas (verboso).
+      system: systemBlocks,
+      tools: [TOOL_POST],
+      tool_choice: { type: 'tool', name: 'entregar_post' },
+      messages: convo,
+    })
+    const tu = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'entregar_post')
+    if (!tu) throw new Error('El modelo no devolvió el post')
+    out = tu.input as SalidaPost
+    cuerpo = (out.caption || '').trim()
+    const placaTextos = (out.imagenes || [])
+      .filter(im => im.modo === 'grafico' && (im.html || '').trim())
+      .map(im => extraerTextoHtml(String(im.html)))
+    const hallazgos = lintCopy({ caption: cuerpo, placas: placaTextos, telefono: contacto.telefono, web })
+    if (hallazgos.length === 0) break
+    if (intento === 2) {
+      avisos.push('Tras reintentar, la pieza aún podría tener problemas de marca: ' + hallazgos.map(h => `${h.campo}: ${h.problema}`).join('; '))
+      break
+    }
+    convo.push({ role: 'assistant', content: res.content })
+    convo.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: tu.id, content: 'RECHAZADO por reglas de marca. Corregí EXACTAMENTE esto y volvé a entregar con entregar_post (mantené el resto igual):\n- ' + hallazgos.map(h => `[${h.campo}] ${h.problema}`).join('\n- ') }] })
+  }
+  if (!out) throw new Error('El modelo no devolvió el post')
+  if (!cuerpo) throw new Error('El modelo no devolvió el texto del post')
   // Instagram (carrusel) y Facebook (álbum) admiten hasta MAX_IMGS imágenes.
   const tope = MAX_IMGS
   const specs = (out.imagenes || []).slice(0, tope)
@@ -455,7 +480,7 @@ async function editarPlacaHtml(html: string, instruccion: string): Promise<strin
   const res = await getClient().messages.create({
     model: MODEL,
     max_tokens: 4000,
-    system: `Sos diseñador de Crematorio Alma Animal. Te paso el HTML de una PLACA de marca que se rasteriza con satori. Aplicá EXACTAMENTE el cambio pedido y devolvé SOLO el HTML completo nuevo (sin explicaciones ni cercos \`\`\`), manteniendo la estructura, la marca, las fuentes y los colores; cambiá únicamente lo pedido.\n\n${MARCA_GRAFICO}`,
+    system: `${REGLAS_INVIOLABLES}\n\nSos diseñador de Crematorio Alma Animal. Te paso el HTML de una PLACA de marca que se rasteriza con satori. Aplicá EXACTAMENTE el cambio pedido y devolvé SOLO el HTML completo nuevo (sin explicaciones ni cercos \`\`\`), manteniendo la estructura, la marca, las fuentes y los colores; cambiá únicamente lo pedido.\n\n${MARCA_GRAFICO}`,
     messages: [{ role: 'user', content: `HTML actual de la placa:\n\`\`\`html\n${html}\n\`\`\`\n\nCAMBIO PEDIDO (solo esto; el resto queda igual): ${instruccion}` }],
   })
   const txt = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()

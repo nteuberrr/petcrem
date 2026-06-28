@@ -17,5 +17,10 @@ export const DIFERENCIADORES = `VALOR AGREGADO Y DIFERENCIADORES (oficiales — 
 - Instalaciones propias y certificadas, con horno certificado; no externalizamos ninguna etapa.
 - Trazabilidad total durante todo el proceso, con código de seguimiento y certificado de cremación.
 - Servicios EXPRESS: entrega en 3 días hábiles.
-- Retiro directo a domicilio o desde la clínica.
-- Precios convenientes, con variedad de productos y servicios adicionales.`
+- Retiro directo a domicilio o desde la clínica, habitualmente en menos de 3 horas.
+- Precios convenientes, con variedad de productos y servicios adicionales.
+
+PRECISIONES (para no cometer errores de marca):
+- Lo CERTIFICADO es el HORNO. La cámara es de REFRIGERACIÓN: NO la llames "cámara certificada" ni "sala certificada".
+- NO digas "cada cremación es individual": "Cremación Individual" es solo el nombre de una de las modalidades.
+- Plazos oficiales que SÍ se pueden afirmar: entrega en 3 días hábiles; retiro habitualmente en menos de 3 horas. No afirmes otros plazos.`

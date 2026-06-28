@@ -7,6 +7,9 @@ import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampan
 import { isNanoBananaConfigurado } from './nano-banana'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
 import { DIFERENCIADORES } from './diferenciadores'
+import { REGLAS_INVIOLABLES } from './marca-voz'
+import { lintCopy, extraerTextoHtml } from './marketing-lint'
+import { getContacto } from './email-layout'
 import { esLogo } from './marca-logo'
 import { generarPieza, editarImagenPieza, setImagenesPieza } from './marketing-pieza'
 import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
@@ -507,15 +510,16 @@ export async function generarRespuestaMarketing(
     }
   }
 
-  const [tarifas, cfg, banco, empresa] = await Promise.all([
+  const [tarifas, cfg, banco, empresa, contacto] = await Promise.all([
     bloqueTarifas(),
     getMarketingConfig().catch(() => null),
     listarImagenes().catch(() => [] as ImagenBanco[]),
     bloqueEmpresa(),
+    getContacto().catch(() => null),
   ])
 
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${MARCA_GRAFICO}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: `${REGLAS_INVIOLABLES}\n\n${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${MARCA_GRAFICO}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
   ]
   const ajustes = [
     cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO (trátalos como la verdad actual; REEMPLAZAN el guion base si chocan, salvo: precios siempre de TARIFAS VIGENTES):\n${cfg.instrucciones.trim()}`,
@@ -531,6 +535,8 @@ export async function generarRespuestaMarketing(
   // rehacerlo y regenerar las fotos). Va sin cache (cambia cada turno).
   const ultimoGrafico = await bloqueUltimoGrafico(historial)
   if (ultimoGrafico) system.push({ type: 'text', text: ultimoGrafico })
+  // Reglas inviolables REPETIDAS al final (máxima saliencia; se validan además por código).
+  system.push({ type: 'text', text: REGLAS_INVIOLABLES })
 
   const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG, TOOL_REUTILIZAR, TOOL_USAR_IMGS]
   const convo: Anthropic.MessageParam[] = [...base]
@@ -711,8 +717,11 @@ export async function generarRespuestaMarketing(
           }
         } else if (tu.name === 'disenar_grafico') {
           const inp = tu.input as { formato?: string; html?: string; carrusel?: string; fotos?: { slot?: string; prompt?: string; aspect?: string }[] }
+          const lintH = inp.html?.trim() ? lintCopy({ placas: [extraerTextoHtml(String(inp.html))], telefono: contacto?.telefono, web: contacto?.web }) : []
           if (!inp.html?.trim()) {
             resultText = 'Falta el HTML del diseño.'
+          } else if (lintH.length) {
+            resultText = 'RECHAZADO por reglas de marca (corregí el HTML y volvé a llamar disenar_grafico, sin tocar el resto):\n- ' + lintH.map(h => `[${h.campo}] ${h.problema}`).join('\n- ')
           } else {
             const fotos = (inp.fotos || [])
               .filter(f => f?.slot && f?.prompt)
