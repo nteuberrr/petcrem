@@ -112,7 +112,7 @@ interface EspecieImagen {
   /** modo=grafico: el HTML de la PLACA de marca (ver MARCA_GRAFICO). */
   html?: string
   /** modo=grafico: fotos reales a insertar en la placa (FOTO:slot). */
-  fotos?: { slot?: string; prompt?: string; aspect?: string }[]
+  fotos?: { slot?: string; prompt?: string; aspect?: string; recortar?: boolean }[]
 }
 interface SalidaPost {
   caption?: string
@@ -188,6 +188,7 @@ const TOOL_POST: Anthropic.Tool = {
                   slot: { type: 'string', description: 'ej. "slot1" (debe coincidir con src="FOTO:slot1").' },
                   prompt: { type: 'string', description: 'Descripción fotográfica (fotorrealista, cálida, on-brand; NUNCA instalaciones).' },
                   aspect: { type: 'string' },
+                  recortar: { type: 'boolean', description: 'true = CUTOUT (mascota recortada, PNG transparente) para asomándose/recortada sobre el color; false para full-bleed o panel.' },
                 },
                 required: ['slot', 'prompt'],
               },
@@ -321,7 +322,7 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
     if (sp.modo === 'grafico' && (sp.html || '').trim()) {
       try {
         if (!campania) campania = await asignarCampania()
-        const fotos = (sp.fotos || []).filter(ff => ff?.slot && ff?.prompt).map(ff => ({ slot: String(ff.slot), prompt: String(ff.prompt), aspect: ff.aspect }))
+        const fotos = (sp.fotos || []).filter(ff => ff?.slot && ff?.prompt).map(ff => ({ slot: String(ff.slot), prompt: String(ff.prompt), aspect: ff.aspect, recortar: ff.recortar }))
         if (fotos.length && !puedeGenerar) avisos.push('Una placa pedía fotos pero la generación no está disponible; va sin ellas.')
         const g = await generarGraficoMarca({
           formato: aspectoAFormato(aspectoForzado || sp.aspect),
@@ -394,6 +395,35 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
         avisos.push('No se pudo agregar el logo a la imagen: ' + (e instanceof Error ? e.message : String(e)))
       }
     }
+  }
+
+  // QA con VISIÓN (Bloque C): revisa el render REAL, autocorrige lo OBJETIVO de placas
+  // (re-edita su HTML y re-renderiza, misma campaña; cap 3) y escala el resto como aviso.
+  if (resueltas.length > 0) {
+    try {
+      const problemas = await qaPieza(resueltas, item)
+      let correcciones = 0
+      for (const p of problemas) {
+        const i = (p.slide >= 1 && p.slide <= resueltas.length) ? p.slide - 1 : -1
+        const autocorr = i >= 0 && p.objetivo && p.severidad !== 'baja' && !!p.correccion?.trim() && resueltas[i].grafico && correcciones < 3
+        if (autocorr) {
+          const design = await cargarDisenoGrafico(resueltas[i].url)
+          if (design) {
+            try {
+              const nuevoHtml = await editarPlacaHtml(design.html, p.correccion!.trim())
+              const g = await generarGraficoMarca({ formato: design.formato, html: nuevoHtml, fotos: [], creadoPor, campania: campania || undefined })
+              resueltas[i] = { ...resueltas[i], url: g.url, grafico: true }
+              correcciones++
+              avisos.push(`QA: corregí la slide ${p.slide} (${p.tipo}).`)
+              continue
+            } catch { /* cae a aviso */ }
+          }
+        }
+        if (p.severidad === 'alta' || (p.severidad === 'media' && !p.objetivo)) {
+          avisos.push(`QA (slide ${p.slide}, ${p.tipo}): ${p.detalle}${p.objetivo ? '' : ' — revisá si te convence'}`)
+        }
+      }
+    } catch { /* QA best-effort: si falla, la pieza igual se entrega */ }
   }
 
   const imagenUrl = resueltas[0]?.url || ''
@@ -485,6 +515,70 @@ async function editarPlacaHtml(html: string, instruccion: string): Promise<strin
   })
   const txt = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
   return txt.replace(/^```(?:html)?\s*/i, '').replace(/```\s*$/i, '').trim() || html
+}
+
+// ─── QA con VISIÓN (Bloque C) ────────────────────────────────────────────────
+// Tras renderizar la pieza, un "director de arte" con visión mira el resultado REAL
+// y reporta problemas que el linter de texto no ve (logo ilegible, composición vacía,
+// texto cortado, foto ausente, inconsistencia de carrusel). Lo OBJETIVO de placas se
+// autocorrige; lo subjetivo se escala al dueño como aviso. Best-effort.
+interface QAProblema { slide: number; tipo: string; severidad: 'alta' | 'media' | 'baja'; objetivo: boolean; detalle: string; correccion?: string }
+
+const TOOL_QA: Anthropic.Tool = {
+  name: 'reportar_qa',
+  description: 'Reporta los problemas de calidad de las imágenes de la pieza (lista vacía si está todo bien).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      problemas: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            slide: { type: 'number', description: 'Número de imagen, 1 = primera.' },
+            tipo: { type: 'string', description: 'logo | glifo | composicion | texto | foto | dato | consistencia | otro' },
+            severidad: { type: 'string', enum: ['alta', 'media', 'baja'] },
+            objetivo: { type: 'boolean', description: 'true = problema OBJETIVO y claro (logo ilegible, texto cortado, caja rota, placa vacía); false = criterio/subjetivo.' },
+            detalle: { type: 'string', description: 'Qué está mal, concreto.' },
+            correccion: { type: 'string', description: 'Si es una PLACA de texto con arreglo de texto/diseño, la instrucción EXACTA para corregirla (ej. "achicá el título para que no se corte"). Vacío si no aplica.' },
+          },
+          required: ['slide', 'tipo', 'severidad', 'objetivo', 'detalle'],
+        },
+      },
+    },
+    required: ['problemas'],
+  },
+}
+
+async function qaPieza(resueltas: ImagenResuelta[], item: ItemCalendario): Promise<QAProblema[]> {
+  const imgs: Anthropic.ImageBlockParam[] = []
+  for (const r of resueltas) {
+    const ref = await refDesdeUrl(r.url)
+    if (ref) imgs.push({ type: 'image', source: { type: 'base64', media_type: (ref.mime || 'image/jpeg') as 'image/jpeg', data: ref.data.toString('base64') } })
+  }
+  if (imgs.length === 0) return []
+  const sys = `Sos director de arte + control de calidad de Crematorio Alma Animal (cremación de mascotas; marca navy/dorado/crema; voz sobria, cálida, profesional). Te paso las ${imgs.length} imágenes de una pieza para ${item.canal} (audiencia ${item.audiencia}), EN ORDEN. Revisalas CRÍTICAMENTE como si se publicaran en la página de un negocio premium. Reportá SOLO problemas REALES que VEAS (no inventes):
+- LOGO ilegible/borroso/cortado/desproporcionado o ausente;
+- CAJAS o glifos ROTOS (cuadritos, símbolos raros);
+- TEXTO cortado, encimado, ilegible o que se sale del lienzo;
+- COMPOSICIÓN vacía/desbalanceada (gran parte del lienzo en blanco sin razón) o que se ve plana/aburrida;
+- FOTO ausente cuando aportaría calidez (todo texto) o con recorte/calidad fea;
+- en CARRUSEL: inconsistencia entre slides (badges/logo/fondos sin sistema);
+- errores visibles en el texto.
+Marcá cada uno como OBJETIVO (claro y binario) o no. Si es una PLACA de texto con arreglo de texto/diseño, dá la "correccion" exacta. Si está todo bien, problemas: []. Reportá SIEMPRE con reportar_qa.`
+  try {
+    const res = await getClient().messages.create({
+      model: MODEL, max_tokens: 1500, system: sys,
+      tools: [TOOL_QA], tool_choice: { type: 'tool', name: 'reportar_qa' },
+      messages: [{ role: 'user', content: [...imgs, { type: 'text', text: `Pieza: "${(item.titulo || item.idea || '').slice(0, 120)}". Revisá las ${imgs.length} imágenes en orden.` }] }],
+    })
+    const tu = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'reportar_qa')
+    const out = (tu?.input as { problemas?: QAProblema[] })?.problemas
+    return Array.isArray(out) ? out.filter(p => p && p.detalle) : []
+  } catch (e) {
+    console.warn('[marketing-pieza] QA visión falló:', e instanceof Error ? e.message : e)
+    return []
+  }
 }
 
 /**

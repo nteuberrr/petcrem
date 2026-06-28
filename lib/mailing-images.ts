@@ -203,6 +203,42 @@ export interface ImagenGeneradaResult {
 }
 
 /**
+ * Recorta el fondo UNIFORME de una imagen (cutout) → PNG con transparencia. Flood-fill
+ * desde las 4 esquinas: vuelve transparentes los píxeles conectados al borde cuyo color
+ * se parece al del fondo (tolerancia). El sujeto (color distinto) queda opaco; los huecos
+ * internos del color del fondo pero NO conectados al borde se conservan. Best-effort:
+ * pensado para imágenes generadas sobre fondo blanco liso. Devuelve PNG con alpha.
+ */
+async function recortarFondo(input: Buffer): Promise<Buffer> {
+  const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const W = info.width, H = info.height, C = info.channels
+  if (!W || !H || C < 4) return input
+  const corners = [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]] as const
+  let r0 = 0, g0 = 0, b0 = 0
+  for (const [x, y] of corners) { const i = (y * W + x) * C; r0 += data[i]; g0 += data[i + 1]; b0 += data[i + 2] }
+  r0 /= 4; g0 /= 4; b0 /= 4
+  const TOL2 = 42 * 42 // tolerancia de color (al cuadrado)
+  const cerca = (i: number) => { const dr = data[i] - r0, dg = data[i + 1] - g0, db = data[i + 2] - b0; return dr * dr + dg * dg + db * db <= TOL2 }
+  const visited = new Uint8Array(W * H)
+  const stack: number[] = []
+  for (const [x, y] of corners) stack.push(y * W + x)
+  while (stack.length) {
+    const p = stack.pop() as number
+    if (visited[p]) continue
+    visited[p] = 1
+    const i = p * C
+    if (!cerca(i)) continue
+    data[i + 3] = 0 // transparente
+    const x = p % W, y = (p / W) | 0
+    if (x > 0) stack.push(p - 1)
+    if (x < W - 1) stack.push(p + 1)
+    if (y > 0) stack.push(p - W)
+    if (y < H - 1) stack.push(p + W)
+  }
+  return sharp(data, { raw: { width: W, height: H, channels: C } }).png().toBuffer()
+}
+
+/**
  * Genera una imagen con Nano Banana Pro, la sube a R2 y la registra en el banco.
  * Las imágenes del banco quedan SIEMPRE LIMPIAS (sin logo): el logo es un paso de
  * cierre que se aplica a la pieza que se publica (ver estamparLogoEnUrl), así una
@@ -226,15 +262,24 @@ export async function generarYGuardarImagen(args: {
   kind?: 'foto' | 'publicacion'
   /** Campaña reservada (asignarCampania) → la imagen queda C-X.Y. */
   campania?: string
+  /** CUTOUT: genera el sujeto sobre fondo uniforme y lo recorta a PNG transparente (para usar dentro de placas). */
+  recortar?: boolean
 }): Promise<ImagenGeneradaResult> {
-  const img = await generarImagen({ prompt: args.prompt, aspect: args.aspect, referencias: args.referencias, editar: args.editar, conTexto: args.conTexto })
+  // Para CUTOUT pedimos el sujeto sobre fondo blanco uniforme para poder recortarlo limpio.
+  const promptGen = args.recortar
+    ? `${args.prompt}. La mascota COMPLETA y centrada sobre un fondo BLANCO LISO y UNIFORME (plain solid white studio background), sin piso visible ni sombras proyectadas, para recortarla limpiamente.`
+    : args.prompt
+  const img = await generarImagen({ prompt: promptGen, aspect: args.aspect, referencias: args.referencias, editar: args.editar, conTexto: args.conTexto })
 
-  // Normaliza a JPEG: Instagram (Content Publishing API) SOLO acepta JPEG, y el
-  // generador suele devolver PNG. Convertir acá deja toda imagen generada lista
-  // para publicar en IG/FB y más liviana. Si la conversión falla, sube el original.
   let buffer = img.buffer
   let mime = img.mime
-  if (mime !== 'image/jpeg') {
+  if (args.recortar) {
+    // CUTOUT: recorta el fondo uniforme → PNG transparente (alpha) para componer en placas.
+    try { buffer = await recortarFondo(buffer); mime = 'image/png' }
+    catch (e) { console.warn('[mailing-images] no se pudo recortar el fondo, se usa la imagen entera:', e) }
+  } else if (mime !== 'image/jpeg') {
+    // Normaliza a JPEG: Instagram (Content Publishing API) SOLO acepta JPEG, y el
+    // generador suele devolver PNG. Si la conversión falla, sube el original.
     try {
       buffer = await sharp(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 88 }).toBuffer()
       mime = 'image/jpeg'

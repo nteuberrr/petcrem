@@ -376,6 +376,7 @@ const TOOL_DISENAR_GRAFICO: Anthropic.Tool = {
             slot: { type: 'string', description: 'Identificador, ej. "slot1" (debe coincidir con src="FOTO:slot1").' },
             prompt: { type: 'string', description: 'Descripción fotográfica detallada (fotorrealista, cálida, on-brand; NUNCA instalaciones).' },
             aspect: { type: 'string', description: 'Relación de aspecto de la foto, ej. "4:5", "1:1", "16:9" (acompañá el tamaño del contenedor).' },
+            recortar: { type: 'boolean', description: 'true = CUTOUT: mascota recortada (PNG transparente) para "asomándose"/recortada sobre el color de fondo. Para foto full-bleed o panel rectangular, false.' },
           },
           required: ['slot', 'prompt'],
         },
@@ -716,7 +717,7 @@ export async function generarRespuestaMarketing(
             resultText = `Imagen ${editar ? 'editada' : 'creada'}${conLogoOk ? ' con el logo de marca' : ''} — código ${g.imagen.codigo || '(sin código)'} (guardada en el banco, grupo ${grupoImg}). Muéstrasela al dueño incluyéndola con ![](${urlFinal}) y decile su código (${g.imagen.codigo || ''}).`
           }
         } else if (tu.name === 'disenar_grafico') {
-          const inp = tu.input as { formato?: string; html?: string; carrusel?: string; fotos?: { slot?: string; prompt?: string; aspect?: string }[] }
+          const inp = tu.input as { formato?: string; html?: string; carrusel?: string; fotos?: { slot?: string; prompt?: string; aspect?: string; recortar?: boolean }[] }
           const lintH = inp.html?.trim() ? lintCopy({ placas: [extraerTextoHtml(String(inp.html))], telefono: contacto?.telefono, web: contacto?.web }) : []
           if (!inp.html?.trim()) {
             resultText = 'Falta el HTML del diseño.'
@@ -725,7 +726,7 @@ export async function generarRespuestaMarketing(
           } else {
             const fotos = (inp.fotos || [])
               .filter(f => f?.slot && f?.prompt)
-              .map(f => ({ slot: String(f.slot), prompt: String(f.prompt), aspect: f.aspect }))
+              .map(f => ({ slot: String(f.slot), prompt: String(f.prompt), aspect: f.aspect, recortar: f.recortar }))
             // Carrusel: todas las placas con el MISMO 'carrusel' comparten una campaña
             // (C-X.1, C-X.2, …). Se reserva una vez por identificador en este turno.
             let campania: string | undefined

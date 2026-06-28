@@ -23,7 +23,7 @@ const DIMS: Record<string, { w: number; h: number }> = {
 }
 export const FORMATOS_GRAFICO = Object.keys(DIMS)
 
-export interface FotoGrafico { slot: string; prompt: string; aspect?: string }
+export interface FotoGrafico { slot: string; prompt: string; aspect?: string; recortar?: boolean }
 
 export interface GraficoGenerado {
   url: string
@@ -79,7 +79,7 @@ export async function generarGraficoMarca(args: {
     for (const f of fotos) {
       try {
         const g = await generarYGuardarImagen({
-          prompt: f.prompt, aspect: f.aspect || '4:5', grupo: 'mascotas', subgrupo: 'grafico', creadoPor: args.creadoPor,
+          prompt: f.prompt, aspect: f.aspect || '4:5', grupo: 'mascotas', subgrupo: 'grafico', creadoPor: args.creadoPor, recortar: f.recortar,
         })
         html = html.split(`FOTO:${f.slot}`).join(g.imagen.url)
         fotosUsadas.push({ slot: f.slot, url: g.imagen.url })
