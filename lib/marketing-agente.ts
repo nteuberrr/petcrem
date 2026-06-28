@@ -108,6 +108,16 @@ FECHAS RELEVANTES DE CHILE (para colgar campañas con sentido; confirmá el día
 - Fijas: Día Internacional del Perro (26/7), Día Internacional del Gato (8/8) y Día del Gato en Chile (20/2), Día Mundial de los Animales (4/10), Día del Veterinario en Chile (~/9), Fiestas Patrias (18–19/9, ojo pirotecnia y mascotas), Navidad (25/12) y Año Nuevo (riesgo de fuegos artificiales y mascotas perdidas), vuelta a clases (marzo), Día de la Madre/Padre. Para tutores funcionan bien los ángulos de cuidado, prevención y acompañamiento; evitá lo festivo cuando el tema es sensible.
 
 FLUJO Y HERRAMIENTAS
+
+⚠️ DECISIÓN CLAVE — ¿gráfico suelto o PUBLICACIÓN? (no la confundas):
+- Si el dueño solo quiere VER un gráfico/imagen en el chat (sin publicar ni agendar) → "disenar_grafico" (uno) o "generar_imagen".
+- Si pide una PUBLICACIÓN para PUBLICAR, AGENDAR, PROGRAMAR o DEJAR EN EL CALENDARIO / "para [fecha]/hoy/mañana" (y MÁS si es de VARIAS LÁMINAS) → SIEMPRE el FLUJO DEL CALENDARIO, COMPLETO y de punta a punta, sin parar a mitad:
+  1) "proponer_campanas" → creá el ítem (fecha + canal + audiencia + objetivo + idea).
+  2) "generar_pieza" con ese id → genera el POST COMPLETO (todas las láminas en una sola pasada; NUNCA armes el carrusel con disenar_grafico lámina por lámina).
+  3) "editar_campana" estado="aprobada".
+  4) "editar_campana" fecha=<la fecha pedida> estado="programada" (se autopublica a esa fecha/hora).
+  Hacé los 4 pasos en el MISMO turno y recién al final confirmá en 1-2 frases. JAMÁS entregues una sola lámina y pares cuando pidieron una publicación a agendar.
+
 1. PLANIFICAR (barato): para un plan, primero "listar_calendario" (no duplicar ni saturar) y luego "proponer_campanas" con ítems repartidos por canal/fecha/objetivo (solo idea + fecha + canal + audiencia + objetivo + título corto). No generes piezas en este paso.
 1b. GESTIONAR EL CALENDARIO (hacelo cuando te lo pidan, sin vueltas): podés EDITAR cualquier campaña con "editar_campana" (mover de fecha u hora, cambiar canal/audiencia/objetivo, corregir idea/título, aprobar, programar, descartar→"descartada", archivar→activa=false), CREAR nuevas con "proponer_campanas", y BORRAR de forma permanente con "eliminar_campana" (solo si lo piden explícito; si dudás entre borrar o descartar, descartá o preguntá). Si no tenés el id, mirá "listar_calendario" primero. Para mover/editar varias a la vez, llamá la herramienta una vez por cada una en el mismo turno. Tras el cambio, confirmá en una frase qué quedó.
    FLUJO DE PUBLICACIÓN (importante): es generar → aprobar → programar → (auto)publicar. NO se puede APROBAR sin GENERAR la pieza primero (estado "aprobada" requiere copy+imagen), ni PROGRAMAR sin APROBAR (estado "programada"). Una campaña en estado "programada" se PUBLICA SOLA cuando llega su fecha/hora. Entonces, si el dueño te pide "programá/agendá la publicación de la #X para tal fecha a tal hora": 1) si no está generada, generá la pieza ("generar_pieza"); 2) aprobala ("editar_campana" estado="aprobada"); 3) fijá la fecha/hora y dejala en estado="programada" ("editar_campana"). Aclarale que quedó programada y se publicará sola a esa hora.
@@ -116,7 +126,7 @@ FLUJO Y HERRAMIENTAS
    - Republicar un post entero o llevarlo a otro canal → "reutilizar_publicacion" (id; canal opcional para IG↔FB). Crea una copia con el copy y TODAS las imágenes, lista para publicar/programar; el original queda intacto. Ej.: "subí a Facebook el carrusel que hicimos en Instagram".
    - Poner imágenes que YA existen en una pieza → "usar_imagenes_en_pieza" (id, codigos). Una campaña "C-X" trae TODAS sus imágenes en orden. Ej.: "agarrá la C-4 y poné esas 7 placas en la pieza de Facebook #21".
 3. IMÁGENES Y GRÁFICOS sueltos (lo más usado en el chat). Entregá la pieza TERMINADA y mostrala con ![](URL). (Podés mirar el banco con "consultar_banco_imagenes" para reutilizar.)
-   - GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita, post con texto) → "disenar_grafico": VOS diseñás el HTML (libre y creativo) y sale con la marca EXACTA (More Sugar + Inter, navy/dorado/crema exactos, logo real). Seguí las reglas de "DISEÑO DE GRÁFICOS CON TEXTO" del contexto. El texto SIEMPRE va por acá, NUNCA con una imagen generada por IA. CARRUSEL (varias placas de una serie): generá TODAS las placas en la MISMA respuesta y poné el MISMO valor en "carrusel" (ej. "por-que-elegirnos") en todas, para que queden agrupadas como una sola campaña (C-X.1, C-X.2, …) y no como campañas sueltas.
+   - GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita, post con texto) → "disenar_grafico": VOS diseñás el HTML (libre y creativo) y sale con la marca EXACTA (More Sugar + Inter, navy/dorado/crema exactos, logo real). Seguí las reglas de "DISEÑO DE GRÁFICOS CON TEXTO" del contexto. El texto SIEMPRE va por acá, NUNCA con una imagen generada por IA. CARRUSEL (varias placas de una serie): generá TODAS las placas en la MISMA respuesta y poné el MISMO valor en "carrusel" (ej. "por-que-elegirnos") en todas, para que queden agrupadas como una sola campaña (C-X.1, C-X.2, …) y no como campañas sueltas. ⚠️ disenar_grafico es para un gráfico SUELTO que el dueño quiere VER en el chat; si pide una PUBLICACIÓN para publicar/agendar/dejar en el calendario, NO uses esto → flujo del calendario (proponer_campanas → generar_pieza → aprobar → programar).
    - FOTO sola (sin texto) → "generar_imagen": prompt fotográfico detallado.
    - EDITAR una foto existente (cambiar un detalle SIN rehacerla) → "generar_imagen" con editar:true + la referencia (referencia_url del banco, o usar_adjunto:true si la adjuntó el dueño) y en el prompt SOLO el cambio.
    - Si el dueño adjunta una imagen, la VES en su mensaje (podés comentarla y trabajarla).
@@ -547,7 +557,7 @@ export async function generarRespuestaMarketing(
   // Carruseles de disenar_grafico en este turno: identificador → campaña compartida.
   const campaniasCarrusel = new Map<string, string>()
 
-  for (let iter = 0; iter < 6; iter++) {
+  for (let iter = 0; iter < 8; iter++) {
     const res = await getClient().messages.create({ model: MODEL, max_tokens: 2200, system, messages: convo, tools })
     const texto = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
     if (texto) textoFinal = texto
