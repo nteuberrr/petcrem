@@ -172,6 +172,54 @@ export async function eliminarItem(id: string): Promise<void> {
 }
 
 /**
+ * REUTILIZA una publicación: crea una COPIA nueva con el mismo copy e imágenes,
+ * lista para volver a publicarse (republicar un post que funcionó, o llevar un post
+ * de un canal a otro: IG↔FB — se copian TODAS las imágenes). El original queda
+ * intacto. NO copia los campos de publicación (post_externo_id/url, estado_publicacion)
+ * → la copia se puede publicar de nuevo. Permite cambiar canal/fecha/hora.
+ */
+export async function reutilizarItem(
+  id: string,
+  opts: { canal?: string; fecha?: string; hora?: string; creadoPor?: string } = {},
+): Promise<ItemCalendario> {
+  const orig = await obtenerItem(id)
+  if (!orig) throw new Error(`ítem ${id} no encontrado`)
+  if (orig.canal === 'email') throw new Error('La reutilización aplica a posts de Instagram/Facebook, no a email.')
+  const canal = (opts.canal || orig.canal).trim()
+  const tieneCopy = !!(orig.cuerpo && orig.cuerpo.trim())
+  const newId = await getNextId(TABLE)
+  const row: Record<string, string> = {
+    id: newId,
+    fecha: (opts.fecha || todayISO()).trim(),
+    hora: (opts.hora || '').trim(),
+    canal,
+    // Con copy ya cargado, queda "generada" (lista para aprobar/publicar/programar).
+    estado: tieneCopy ? 'generada' : 'propuesta',
+    activa: 'TRUE',
+    favorita: 'FALSE',
+    objetivo: orig.objetivo,
+    audiencia: orig.audiencia,
+    idea: orig.idea,
+    titulo: orig.titulo,
+    cuerpo: orig.cuerpo,
+    imagen_id: orig.imagen_id,
+    imagen_url: orig.imagen_url,
+    imagenes_json: orig.imagenes_json,
+    campana_id: orig.campana_id,
+    // Campos de publicación RESET → la copia puede publicarse de nuevo.
+    post_externo_id: '', post_url: '', estado_publicacion: '', error_publicacion: '',
+    generado_por: orig.generado_por || 'ia',
+    aprobado_por: '',
+    fecha_publicacion: '',
+    notas: `Reutilizada de #${orig.id}${canal !== orig.canal ? ` (${orig.canal}→${canal})` : ''}.`,
+    creado_por: (opts.creadoPor || '').trim(),
+    fecha_creacion: todayISO(),
+  }
+  await appendRow(TABLE, row)
+  return toItem(row)
+}
+
+/**
  * Valida una transición de estado en el flujo controlado generar → aprobar → programar:
  *  - APROBAR requiere la pieza GENERADA (con cuerpo; en social, también su imagen).
  *  - PROGRAMAR requiere estar APROBADA, generada y con fecha (el cron la autopublica).

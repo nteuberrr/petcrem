@@ -91,7 +91,7 @@ const VOZ_AUDIENCIA: Record<string, string> = {
 
 const CANAL_HINT: Record<string, string> = {
   instagram: 'Instagram (feed): copy breve y con gancho, 1-3 frases potentes, salto de línea entre ideas, y 5-12 hashtags relevantes al final (mezcla marca + nicho mascotas/Chile). Emojis con MUCHA moderación (a lo sumo una huellita 🐾). Instagram admite CARRUSEL (varias imágenes que el usuario desliza).',
-  facebook: 'Facebook (Página): copy un poco más extenso que IG, 2-4 frases, puede incluir un llamado a la acción y el sitio web. Pocos o ningún hashtag. Sin emojis tristes. (Se publica con una sola imagen.)',
+  facebook: 'Facebook (Página): copy un poco más extenso que IG, 2-4 frases, puede incluir un llamado a la acción y el sitio web. Pocos o ningún hashtag. Sin emojis tristes. Facebook admite VARIAS imágenes en un mismo post (álbum/paso a paso): si la idea es una secuencia o varias ideas, hacé varias placas.',
 }
 
 /** Tope de imágenes por pieza y de imágenes NUEVAS a generar (control de costo). */
@@ -144,25 +144,34 @@ function bloqueLogosPieza(banco: ImagenBanco[]): string {
 
 function bancoBloque(banco: ImagenBanco[]): string {
   if (banco.length === 0) return 'BANCO DE IMÁGENES: (vacío — no hay imágenes para reutilizar).'
-  const lineas = banco.slice(0, BANCO_VISIBLE).map(b => {
+  const esFotoReal = (b: ImagenBanco) => ['mascotas', 'personas', 'productos'].includes((b.grupo || '').toLowerCase())
+  const fmt = (b: ImagenBanco) => {
     const desc = b.descripcion || b.alt || b.prompt || '(sin descripción)'
-    const grupo = b.grupo ? ` | grupo: ${b.grupo}` : ''
     const tags = b.tags ? ` | tags: ${b.tags}` : ''
-    return `- URL: ${b.url}\n  ${desc}${grupo}${tags}`
-  }).join('\n')
-  return `BANCO DE IMÁGENES PARA REUTILIZAR (revísalo SIEMPRE primero; reutiliza si alguna calza):\n${lineas}`
+    return `- ${b.url}\n  ${desc} (grupo: ${b.grupo || 'otro'})${tags}`
+  }
+  const fotos = banco.filter(esFotoReal)
+  const otras = banco.filter(b => !esFotoReal(b))
+  const partes: string[] = []
+  if (fotos.length) {
+    partes.push(`FOTOS REALES (mascotas/personas/productos) — reutilizá una de estas (modo "reuse", URL exacta) cuando una FOTO cálida aporte cercanía a la pieza; así no queda todo en placas de texto:\n${fotos.slice(0, 24).map(fmt).join('\n')}`)
+  }
+  if (otras.length) {
+    partes.push(`OTRAS IMÁGENES (placas/varios):\n${otras.slice(0, Math.max(0, BANCO_VISIBLE - Math.min(fotos.length, 24))).map(fmt).join('\n')}`)
+  }
+  return `BANCO DE IMÁGENES PARA REUTILIZAR (revísalo SIEMPRE primero):\n${partes.join('\n\n')}`
 }
 
 const TOOL_POST: Anthropic.Tool = {
   name: 'entregar_post',
-  description: 'Entrega el copy del post y sus imágenes EN ORDEN (1 imagen = post simple; 2 a 8 = carrusel para Instagram). Cada imagen se reutiliza del banco o se genera nueva.',
+  description: 'Entrega el copy del post y sus imágenes EN ORDEN (1 imagen = post simple; 2 a 10 = varias imágenes: carrusel en Instagram o álbum/paso a paso en Facebook). Cada imagen se reutiliza del banco o se genera nueva.',
   input_schema: {
     type: 'object',
     properties: {
       caption: { type: 'string', description: 'Texto del post listo para publicar (incluye hashtags si corresponde al canal). Si es carrusel, el copy puede invitar a deslizar.' },
       imagenes: {
         type: 'array',
-        description: 'Imágenes del post EN ORDEN. 1 imagen = post simple. Para Instagram puedes hacer un CARRUSEL con 2 a 8 imágenes coherentes entre sí. Para Facebook usa solo 1. Vacío si no hay imagen. Lo más usado es "grafico" (placa de marca); las fotos nuevas son la excepción.',
+        description: 'Imágenes del post EN ORDEN. 1 imagen = post simple. Para VARIAS imágenes (carrusel en Instagram, álbum/paso a paso en Facebook) devolvé 2 a 10 coherentes entre sí — AMBOS canales lo admiten. Vacío si no hay imagen. Lo más usado es "grafico" (placa de marca); las fotos nuevas son la excepción.',
         items: {
           type: 'object',
           properties: {
@@ -221,14 +230,14 @@ ${MARCA_VISUAL}
 ${MARCA_GRAFICO}
 
 IMÁGENES (campo "imagenes", EN ORDEN) — OBLIGATORIO:
-- Una pieza social SIEMPRE lleva imagen(es). Instagram NO se puede publicar sin imagen → para Instagram NUNCA devuelvas "imagenes" vacío. Post simple = 1 imagen; CARRUSEL (recomendado en Instagram) = 2 a ${MAX_IMGS}; Facebook = 1.
+- Una pieza social SIEMPRE lleva imagen(es). Instagram NO se puede publicar sin imagen → para Instagram NUNCA devuelvas "imagenes" vacío. Post simple = 1 imagen; VARIAS = 2 a ${MAX_IMGS} (carrusel en Instagram, álbum/paso a paso en Facebook). TANTO Instagram COMO Facebook admiten varias imágenes: si la idea es un paso a paso, una lista o una serie, devolvé VARIAS placas (una por paso/idea), nunca una sola.
 - La forma de tener VARIAS imágenes sin gastar es la PLACA DE MARCA (modo "grafico"): se renderiza GRATIS (no es una foto IA), así que un carrusel se arma con VARIAS placas (ej. 3 a 6). "Eficiente" = usar PLACAS y reutilizar del banco; NO significa poner menos imágenes ni generar una foto nueva por slide.
 - Modos por imagen:
   · "grafico" = PLACA DE MARCA (lo MÁS usado): pieza con TEXTO sobre el diseño de Alma Animal (navy/dorado/crema + logo + tipografía de marca). VOS escribís el HTML (ver "DISEÑO DE GRÁFICOS CON TEXTO"). ES NUESTRA PLANTILLA. Usala para TODO lo informativo/comercial: portada del carrusel con el gancho, listas de virtudes/diferenciadores, datos, horario, pasos del proceso, "por qué elegirnos", comparativas, citas, y la placa de cierre con CTA + contacto.
-  · "reuse" = reutilizar una FOTO del banco (URL exacta) para un momento cálido cuando alguna calza.
+  · "reuse" = reutilizar una FOTO del banco (URL exacta). Tenemos varias fotos de mascotas/personas: usalas para dar CALIDEZ y cercanía cuando aporten (con criterio, no a la fuerza ni en cada slide) — es lo que evita que la pieza quede plana de puras placas de texto.
   · "nueva" = generar una FOTO fotorrealista nueva. SOLO excepcional: una imagen cálida y emocional (una mascota viva tranquila o feliz, o un tutor con su mascota) cuando NO hay nada en el banco. NUNCA fotos ejecutivas/corporativas/de oficina/de negocios/financieras; NUNCA instalaciones.
 - B2B (clínicas/veterinarios) y todo lo de virtudes/datos/proceso → PLACAS (grafico), NO fotos. Una clínica quiere ver el profesionalismo de NUESTRA marca (cálida y confiable), no stock de oficina.
-- Carrusel típico: placa-portada (gancho) → una placa por idea/virtud → placa de cierre (CTA + contacto). Instagram cuadrado (1:1) o vertical (4:5); MISMO aspecto en TODAS las del carrusel.
+- Carrusel típico: placa-portada (gancho) → una placa por idea/virtud → placa de cierre (CTA + contacto). En piezas para TUTORES, cuando tenga sentido sumá una FOTO REAL cálida reutilizada del banco (p. ej. abrir o cerrar con una mascota/tutor) para que no sea 100% texto — con criterio, no obligatorio. Instagram cuadrado (1:1) o vertical (4:5); MISMO aspecto en TODAS las del carrusel.
 ${puedeGenerar ? '' : '- (Generación de FOTOS nuevas no disponible ahora: armá la pieza SOLO con placas (grafico) y reutilización del banco — igual DEBE llevar imágenes.)\n'}
 Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes.`
 
@@ -262,8 +271,8 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
   if (!cuerpo) throw new Error('El modelo no devolvió el texto del post')
 
   const avisos: string[] = []
-  // Facebook = 1 imagen; Instagram = hasta MAX_IMGS (carrusel).
-  const tope = item.canal === 'facebook' ? 1 : MAX_IMGS
+  // Instagram (carrusel) y Facebook (álbum) admiten hasta MAX_IMGS imágenes.
+  const tope = MAX_IMGS
   const specs = (out.imagenes || []).slice(0, tope)
   const esCarrusel = specs.length > 1
   // COHERENCIA DEL CARRUSEL: todas las imágenes comparten el MISMO aspecto (IG
@@ -514,4 +523,49 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
   const imagenesJson = imgs.length > 1 ? JSON.stringify(imgs.map(x => ({ url: x.url, alt: x.alt || '' }))) : ''
   const item2 = await actualizarItem(id, { imagen_url: imgs[0]?.url || '', imagen_id: '', imagenes_json: imagenesJson })
   return { item: item2, avisos }
+}
+
+/** Resuelve códigos del banco a imágenes EN ORDEN. Un código de CAMPAÑA "C-X" trae
+ *  TODAS sus C-X.Y ordenadas por Y; un código exacto (i-N, C-X.Y) trae esa imagen. */
+function resolverCodigos(codigos: string[], banco: ImagenBanco[]): { url: string; alt: string }[] {
+  const out: { url: string; alt: string }[] = []
+  const vistos = new Set<string>()
+  for (const raw of codigos) {
+    const cod = (raw || '').trim()
+    if (!cod) continue
+    const mCamp = /^C-(\d+)$/i.exec(cod) // campaña entera (sin .Y)
+    let matches: ImagenBanco[]
+    if (mCamp) {
+      const re = new RegExp(`^C-${mCamp[1]}\\.\\d+$`, 'i')
+      matches = banco.filter(b => re.test(b.codigo || ''))
+        .sort((a, b) => (parseInt(a.codigo.split('.')[1] || '0', 10)) - (parseInt(b.codigo.split('.')[1] || '0', 10)))
+    } else {
+      matches = banco.filter(b => (b.codigo || '').toLowerCase() === cod.toLowerCase())
+    }
+    for (const m of matches) {
+      if (m.url && !vistos.has(m.url)) { vistos.add(m.url); out.push({ url: m.url, alt: m.alt || m.descripcion || '' }) }
+    }
+  }
+  return out
+}
+
+/**
+ * Pone en una pieza del calendario imágenes que YA EXISTEN en el banco (sin
+ * regenerar nada), resolviendo sus códigos. Sirve para REUTILIZAR las placas/fotos
+ * de una campaña en otra publicación o canal (ej. "subí a Facebook las 7 placas de
+ * la C-4"): pasá "C-4" (toda la campaña, en orden) o códigos sueltos (i-N, C-X.Y).
+ */
+export async function setImagenesPieza(id: string, codigos: string[]): Promise<{ item: ItemCalendario; n: number; noEncontrados: string[] }> {
+  const item = await obtenerItem(id)
+  if (!item) throw new Error(`ítem ${id} no encontrado`)
+  if (item.canal === 'email') throw new Error('Esto aplica a piezas de Instagram/Facebook, no a email.')
+  const banco = await listarImagenes().catch(() => [] as ImagenBanco[])
+  const resueltas = resolverCodigos(codigos, banco)
+  const noEncontrados = codigos.map(c => (c || '').trim()).filter(c => c && resolverCodigos([c], banco).length === 0)
+  if (resueltas.length === 0) throw new Error(`No encontré imágenes en el banco para esos códigos (${codigos.join(', ')}).`)
+  const imagenesJson = resueltas.length > 1 ? JSON.stringify(resueltas) : ''
+  // Si ya tiene copy y estaba en "propuesta", pasa a "generada" (lista para publicar).
+  const estado = item.cuerpo?.trim() && item.estado === 'propuesta' ? 'generada' : item.estado
+  const item2 = await actualizarItem(id, { imagen_url: resueltas[0].url, imagen_id: '', imagenes_json: imagenesJson, estado })
+  return { item: item2, n: resueltas.length, noEncontrados }
 }

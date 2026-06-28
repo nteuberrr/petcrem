@@ -131,23 +131,47 @@ async function permalinkDe(idPost: string, pt: string): Promise<string> {
 }
 
 /**
- * Publica en la Página de Facebook. Si hay imagen, sube una foto con caption;
- * si no, un post de texto (con link opcional). Devuelve el permalink REAL.
+ * Publica en la Página de Facebook:
+ *  - 2+ imágenes → post de VARIAS fotos (álbum): sube cada foto SIN publicar
+ *    (published=false) y las adjunta a un post de /feed con attached_media,
+ *    preservando el orden (sirve para un "paso a paso").
+ *  - 1 imagen → foto simple con caption.
+ *  - 0 imágenes → post de texto (con link opcional).
+ * Devuelve el permalink REAL. (FB acepta JPEG y PNG; no exige JPEG como Instagram.)
  */
-export async function publicarFacebook(args: { mensaje: string; imagenUrl?: string; link?: string }): Promise<ResultadoPublicacion> {
+export async function publicarFacebook(args: { mensaje: string; imagenUrl?: string; imagenUrls?: string[]; link?: string }): Promise<ResultadoPublicacion> {
   if (!isFacebookConfigurado()) throw new Error('Facebook no configurado (faltan META_GRAPH_TOKEN o META_PAGE_ID)')
   const pt = await getPageToken()
   const pid = pageId()
-  if (args.imagenUrl) {
-    const data = await graph(`${pid}/photos`, {
-      url: args.imagenUrl,
-      caption: args.mensaje || '',
-      access_token: pt,
-    }, 'POST')
+  const urls = (args.imagenUrls && args.imagenUrls.length ? args.imagenUrls : (args.imagenUrl ? [args.imagenUrl] : [])).filter(Boolean).slice(0, 10)
+
+  // VARIAS fotos → álbum: subir cada una sin publicar (published=false) y adjuntarlas
+  // a un post de /feed con attached_media[i] (mantiene el orden del paso a paso).
+  if (urls.length > 1) {
+    const fbids: string[] = []
+    for (const u of urls) {
+      const ph = await graph(`${pid}/photos`, { url: u, published: 'false', access_token: pt }, 'POST')
+      const fid = (ph.id as string) || ''
+      if (fid) fbids.push(fid)
+    }
+    if (fbids.length === 0) throw new Error('No se pudieron subir las fotos a Facebook.')
+    const params: Record<string, string> = { message: args.mensaje || '', access_token: pt }
+    fbids.forEach((fid, i) => { params[`attached_media[${i}]`] = JSON.stringify({ media_fbid: fid }) })
+    const data = await graph(`${pid}/feed`, params, 'POST')
+    const postId = (data.id as string) || ''
+    const url = await permalinkDe(postId, pt)
+    return { id: postId, url: url || (postId ? `https://www.facebook.com/${postId}` : '') }
+  }
+
+  // UNA foto → foto simple con caption.
+  if (urls.length === 1) {
+    const data = await graph(`${pid}/photos`, { url: urls[0], caption: args.mensaje || '', access_token: pt }, 'POST')
     const postId = (data.post_id as string) || (data.id as string) || ''
     const url = await permalinkDe(postId, pt)
     return { id: postId, url: url || (postId ? `https://www.facebook.com/${postId}` : '') }
   }
+
+  // SIN imagen → post de texto (con link opcional).
   const params: Record<string, string> = { message: args.mensaje || '', access_token: pt }
   if (args.link) params.link = args.link
   const data = await graph(`${pid}/feed`, params, 'POST')
@@ -235,7 +259,7 @@ export async function publicarEnCanal(
   args: { mensaje: string; imagenUrl?: string; imagenUrls?: string[]; link?: string },
 ): Promise<ResultadoPublicacion> {
   const urls = (args.imagenUrls && args.imagenUrls.length ? args.imagenUrls : (args.imagenUrl ? [args.imagenUrl] : [])).filter(Boolean)
-  if (canal === 'facebook') return publicarFacebook({ mensaje: args.mensaje, imagenUrl: urls[0], link: args.link })
+  if (canal === 'facebook') return publicarFacebook({ mensaje: args.mensaje, imagenUrls: urls, link: args.link })
   if (canal === 'instagram') {
     if (urls.length === 0) throw new Error('Instagram requiere al menos una imagen para publicar')
     return publicarInstagram({ caption: args.mensaje, imagenUrls: urls })

@@ -2,13 +2,13 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getSheetData } from './datastore'
 import { fmtPrecio } from './format'
 import { getMarketingConfig } from './marketing-config'
-import { listarCalendario, crearItems, actualizarItem, eliminarItem, obtenerItem, validarCambioEstado, type NuevoItem } from './marketing-calendario'
+import { listarCalendario, crearItems, actualizarItem, eliminarItem, obtenerItem, reutilizarItem, validarCambioEstado, type NuevoItem } from './marketing-calendario'
 import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
 import { DIFERENCIADORES } from './diferenciadores'
 import { esLogo } from './marca-logo'
-import { generarPieza, editarImagenPieza } from './marketing-pieza'
+import { generarPieza, editarImagenPieza, setImagenesPieza } from './marketing-pieza'
 import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
 import { publicarItem } from './marketing-publicar'
@@ -55,11 +55,12 @@ CÓMO TRABAJÁS (lo más importante — leelo bien)
 LÍNEA VISUAL DE MARCA
 - Seguí SIEMPRE la DIRECCIÓN VISUAL (fotos) y la DIRECCIÓN PARA GRÁFICOS (piezas con texto) que tenés más abajo. Los gráficos replican el estilo de nuestros correos (barra navy + "ALMA ANIMAL" + filete dorado + fondo crema; sobrio, cálido y premium). Paleta: crema/blanco domina, navy estructura, dorado acento.
 - El logo de marca se agrega solo (nítido) a las imágenes que generás; no necesitás "dibujarlo".
+- VARIÁ entre placas y FOTOS REALES. Tenemos varias fotos de mascotas/personas en el banco: cuando aporte calidez y cercanía (sobre todo en piezas para tutores), reutilizá una de esas fotos en vez de hacer TODO con placas de texto. Con criterio y creatividad — NO en cada post ni a la fuerza, pero tampoco caigas siempre en lo plano "puras letras". Un buen mix (foto cálida + placas con la info) se siente más humano.
 
 CANALES
 - email: campañas de correo a la BASE DE VETERINARIOS (B2B). Para informar novedades, fidelizar o captar clínicas.
 - instagram: posts orgánicos al público general (sobre todo TUTORES y comunidad). Educar, generar confianza y recordación de marca.
-- facebook: posts orgánicos a la Página (tutores + comunidad), copy algo más extenso que IG, y sus ASSETS de perfil (portada ≈820×312, foto de perfil) cuando los pidan.
+- facebook: posts orgánicos a la Página (tutores + comunidad), copy algo más extenso que IG, y sus ASSETS de perfil (portada ≈820×312, foto de perfil) cuando los pidan. Facebook admite VARIAS imágenes por post (álbum/paso a paso), igual que un carrusel de IG — no es de una sola imagen.
 - (TikTok queda fuera por ahora; si surge una idea de video, propónla igual marcándola para subir a mano.)
 
 OBJETIVOS POSIBLES (usa estas claves en objetivo): captacion_vets, recordacion, educacion_tutores, postventa, promocion.
@@ -108,6 +109,9 @@ FLUJO Y HERRAMIENTAS
 1b. GESTIONAR EL CALENDARIO (hacelo cuando te lo pidan, sin vueltas): podés EDITAR cualquier campaña con "editar_campana" (mover de fecha u hora, cambiar canal/audiencia/objetivo, corregir idea/título, aprobar, programar, descartar→"descartada", archivar→activa=false), CREAR nuevas con "proponer_campanas", y BORRAR de forma permanente con "eliminar_campana" (solo si lo piden explícito; si dudás entre borrar o descartar, descartá o preguntá). Si no tenés el id, mirá "listar_calendario" primero. Para mover/editar varias a la vez, llamá la herramienta una vez por cada una en el mismo turno. Tras el cambio, confirmá en una frase qué quedó.
    FLUJO DE PUBLICACIÓN (importante): es generar → aprobar → programar → (auto)publicar. NO se puede APROBAR sin GENERAR la pieza primero (estado "aprobada" requiere copy+imagen), ni PROGRAMAR sin APROBAR (estado "programada"). Una campaña en estado "programada" se PUBLICA SOLA cuando llega su fecha/hora. Entonces, si el dueño te pide "programá/agendá la publicación de la #X para tal fecha a tal hora": 1) si no está generada, generá la pieza ("generar_pieza"); 2) aprobala ("editar_campana" estado="aprobada"); 3) fijá la fecha/hora y dejala en estado="programada" ("editar_campana"). Aclarale que quedó programada y se publicará sola a esa hora.
 2. GENERAR PIEZA DEL CALENDARIO: "generar_pieza" con el id (copy + imagen para social, o asunto + HTML para email). Úsalo cuando el dueño lo pida sobre ítems concretos.
+2b. REUTILIZAR lo que YA existe (NUNCA lo regeneres con generar_pieza, que crea contenido NUEVO y distinto). Resolvelo VOS de una, sin ofrecer menús de opciones:
+   - Republicar un post entero o llevarlo a otro canal → "reutilizar_publicacion" (id; canal opcional para IG↔FB). Crea una copia con el copy y TODAS las imágenes, lista para publicar/programar; el original queda intacto. Ej.: "subí a Facebook el carrusel que hicimos en Instagram".
+   - Poner imágenes que YA existen en una pieza → "usar_imagenes_en_pieza" (id, codigos). Una campaña "C-X" trae TODAS sus imágenes en orden. Ej.: "agarrá la C-4 y poné esas 7 placas en la pieza de Facebook #21".
 3. IMÁGENES Y GRÁFICOS sueltos (lo más usado en el chat). Entregá la pieza TERMINADA y mostrala con ![](URL). (Podés mirar el banco con "consultar_banco_imagenes" para reutilizar.)
    - GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita, post con texto) → "disenar_grafico": VOS diseñás el HTML (libre y creativo) y sale con la marca EXACTA (More Sugar + Inter, navy/dorado/crema exactos, logo real). Seguí las reglas de "DISEÑO DE GRÁFICOS CON TEXTO" del contexto. El texto SIEMPRE va por acá, NUNCA con una imagen generada por IA. CARRUSEL (varias placas de una serie): generá TODAS las placas en la MISMA respuesta y poné el MISMO valor en "carrusel" (ej. "por-que-elegirnos") en todas, para que queden agrupadas como una sola campaña (C-X.1, C-X.2, …) y no como campañas sueltas.
    - FOTO sola (sin texto) → "generar_imagen": prompt fotográfico detallado.
@@ -431,6 +435,34 @@ const TOOL_EDITAR_IMG: Anthropic.Tool = {
   },
 }
 
+const TOOL_REUTILIZAR: Anthropic.Tool = {
+  name: 'reutilizar_publicacion',
+  description: 'Reutiliza una publicación ANTIGUA (ya generada o publicada) para volver a usarla: crea una COPIA nueva en el calendario con el MISMO copy y TODAS sus imágenes, lista para publicar o programar. Sirve para republicar un post que funcionó, o para llevar un post de un canal a otro (ej. reusar en Facebook el carrusel que hicimos en Instagram → se copian TODAS las placas, no una sola). El original queda intacto. Para republicar tal cual NO cambies el canal. Si no sabés el id, usá listar_calendario. Después confirmá; publicar/programar es aparte y solo si lo pide.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Id de la publicación a reutilizar (el original).' },
+      canal: { type: 'string', enum: ['instagram', 'facebook'], description: 'Canal de la copia (opcional; por defecto el mismo del original). Útil para llevar un post de IG a FB o viceversa.' },
+      fecha: { type: 'string', description: 'Fecha de la copia YYYY-MM-DD (opcional; por defecto hoy).' },
+      hora: { type: 'string', description: 'Hora HH:MM 24h (opcional).' },
+    },
+    required: ['id'],
+  },
+}
+
+const TOOL_USAR_IMGS: Anthropic.Tool = {
+  name: 'usar_imagenes_en_pieza',
+  description: 'Pone en una pieza del calendario (por su id) imágenes que YA EXISTEN en el banco, reemplazando las que tenga, SIN regenerar nada. En "codigos": un código de CAMPAÑA (ej. "C-4") trae TODAS sus imágenes en orden (C-4.1, C-4.2, …); también podés pasar códigos sueltos (ej. ["i-5","C-2.1"]) en el orden que quieras. Úsalo cuando el dueño quiera reutilizar fotos/placas que YA existen en una publicación (ej. "subí a Facebook las mismas 7 placas de la C-4"): para eso NUNCA uses generar_pieza (genera otras distintas). Funciona en Instagram y Facebook (ambos admiten varias imágenes).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Id de la pieza del calendario.' },
+      codigos: { type: 'array', items: { type: 'string' }, description: 'Códigos del banco: una campaña "C-X" (todas sus imágenes en orden) o códigos sueltos (i-N, C-X.Y) en el orden deseado.' },
+    },
+    required: ['id', 'codigos'],
+  },
+}
+
 export interface RespuestaMarketing {
   mensaje: string
   acciones: string[]
@@ -500,7 +532,7 @@ export async function generarRespuestaMarketing(
   const ultimoGrafico = await bloqueUltimoGrafico(historial)
   if (ultimoGrafico) system.push({ type: 'text', text: ultimoGrafico })
 
-  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG]
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG, TOOL_REUTILIZAR, TOOL_USAR_IMGS]
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
   let cambios = false
@@ -756,6 +788,33 @@ export async function generarRespuestaMarketing(
           const r = await editarImagenPieza(String(inp.id || ''), String(inp.instruccion || ''), inp.indice, opts.creadoPor)
           cambios = true
           resultText = `Imagen(es) ajustada(s) en la pieza #${r.item.id}.${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}${r.item.imagen_url ? ` Mostrale el resultado al dueño con ![](${r.item.imagen_url}).` : ''}`
+        } else if (tu.name === 'reutilizar_publicacion') {
+          const inp = tu.input as { id?: string; canal?: string; fecha?: string; hora?: string }
+          const id = String(inp.id || '')
+          const orig = id ? await obtenerItem(id) : null
+          if (!id) resultText = 'Falta el id de la publicación a reutilizar.'
+          else if (!orig) resultText = `No existe una publicación con id #${id}. Usá listar_calendario para ver los ids.`
+          else {
+            const nuevo = await reutilizarItem(id, { canal: inp.canal, fecha: inp.fecha, hora: inp.hora, creadoPor: opts.creadoPor })
+            cambios = true
+            let nImgs = 0
+            try { const a = nuevo.imagenes_json ? JSON.parse(nuevo.imagenes_json) : []; nImgs = Array.isArray(a) ? a.length : 0 } catch { /* */ }
+            if (!nImgs && nuevo.imagen_url) nImgs = 1
+            const cc = nuevo.canal !== orig.canal ? ` (${orig.canal}→${nuevo.canal})` : ''
+            resultText = `Copié la publicación #${orig.id} como #${nuevo.id}${cc}, con su copy y ${nImgs} imagen(es), en estado "generada" (lista para publicar o programar). El original quedó intacto.${nuevo.imagen_url ? ` Mostrá la primera con ![](${nuevo.imagen_url}).` : ''} Preguntale al dueño si la publica ahora o la programa; NO la publiques sin que lo pida.`
+          }
+        } else if (tu.name === 'usar_imagenes_en_pieza') {
+          const inp = tu.input as { id?: string; codigos?: string[] }
+          const id = String(inp.id || '')
+          const codigos = Array.isArray(inp.codigos) ? inp.codigos.map(String).filter(Boolean) : []
+          if (!id) resultText = 'Falta el id de la pieza.'
+          else if (codigos.length === 0) resultText = 'Pasá al menos un código (ej. "C-4" para toda la campaña, o "i-5").'
+          else {
+            const r = await setImagenesPieza(id, codigos)
+            cambios = true
+            const aviso = r.noEncontrados.length ? ` (no encontré: ${r.noEncontrados.join(', ')})` : ''
+            resultText = `La pieza #${r.item.id} (${r.item.canal}) quedó con ${r.n} imagen(es) de ${codigos.join(', ')}${aviso}, en orden y SIN regenerar.${r.item.imagen_url ? ` Mostrá la primera con ![](${r.item.imagen_url}).` : ''} Si el dueño lo pide, publicала o programала.`
+          }
         } else {
           resultText = 'Herramienta no disponible.'
         }
