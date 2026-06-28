@@ -64,33 +64,44 @@ export const ESTILO_MARCA_EN =
  * colores REALES de la marca (satori) → marca EXACTA con layout libre. NO es para
  * que la IA "dibuje" el gráfico.
  */
-export const MARCA_GRAFICO = `DISEÑO DE GRÁFICOS CON TEXTO (herramienta "disenar_grafico") — marca EXACTA, layout libre:
-Vos escribís el DISEÑO en HTML y el sistema lo rasteriza con las FUENTES y COLORES REALES (no los dibuja la IA). Tenés libertad de composición/jerarquía/información, pero respetá SIEMPRE la marca:
-- COLORES (hex EXACTOS): navy ${BRAND.navy} (bloques/estructura), dorado ${BRAND.amber} (acentos, filetes), crema ${BRAND.cream} y blanco #ffffff (fondos), texto sobre claro ${BRAND.ink}, texto sobre navy #ffffff o #e8eef5. Domina crema/blanco; navy estructura; dorado acento. Podés sumar UN color de acento puntual sin romper la línea.
-- TIPOGRAFÍA: font-family:'More Sugar' SOLO para el título/wordmark grande (es la fuente del logo); font-family:'Inter' para TODO el resto (subtítulos, bullets, datos), con font-weight 400/600/700.
-- REDACCIÓN: NO copies literal lo que te dice el dueño. Redactá los textos en tono PROFESIONAL y pulido de marca, parejo y bien jerarquizado (ej. te dice "retiro a domicilio" → escribí "Retiro a domicilio y desde clínicas"). Títulos cortos; bullets de pocas palabras.
-- LOGO: PONELO VOS en el diseño con <img src="URL"> usando una de las URLs de la sección "LOGOS DE MARCA". Elegí la variante por CONTRASTE: sobre fondo navy/oscuro usá el logo BLANCO; sobre crema/blanco/foto clara usá el logo AZUL. Ubicalo donde quede mejor y donde lo pida el dueño (NO siempre abajo a la derecha; puede ir en una esquina del bloque navy, etc.); chico, prolijo y NUNCA encima de la parte cargada de una foto. SIEMPRE incluí el logo.
-- FOTOS reales: poné <img src="FOTO:slot1" width=".." height=".." style="object-fit:cover" /> donde quieras una foto y pedí esa foto en "fotos" (con su prompt). Cálidas, reales (mascotas vivas), nunca instalaciones.
-- AJUSTES (CLAVE): cuando el dueño pida cambiar algo de un gráfico que YA hiciste, NO lo rehagas de cero. Arriba, en "ÚLTIMO GRÁFICO QUE DISEÑASTE", tenés el HTML EXACTO con las fotos ya puestas por su URL real: COPIALO y cambiá SOLO lo que te piden, dejando idéntico todo el resto (tamaños, colores, posiciones, el logo y la MISMA foto — su URL ya está en el <img>). NUNCA generes una foto nueva ni cambies la imagen si solo te pidieron tocar el texto u otro detalle. No toques lo que no te pidieron.
+export const MARCA_GRAFICO = `DISEÑO DE GRÁFICOS CON TEXTO (herramienta "disenar_grafico") — marca EXACTA, layout LIBRE y CREATIVO:
+Vos escribís el DISEÑO en HTML y el sistema lo rasteriza con las FUENTES y COLORES REALES (no los dibuja la IA). Tenés libertad TOTAL de composición — USALA: variá, no repitas siempre el mismo molde.
+
+DIRECCIÓN DE ARTE (apuntamos al nivel de las buenas marcas de mascotas en redes):
+- LA FOTO suele ser PROTAGONISTA, no decoración. Las marcas buenas del rubro usan MUCHA foto real (mascota viva, feliz o serena) y rara vez puro texto. No hace falta foto en TODAS las piezas, pero usala SEGUIDO (reutilizá el banco cuando haya una que calce, o pedí una con FOTO:slot). Lo que NO queremos es el molde repetido de placas de puro texto.
+- VARIÁ EL LAYOUT entre piezas y entre slides de un carrusel. Menú de formatos (elegí y combiná, no uses siempre el mismo):
+  1) FOTO FULL-BLEED + texto encima: la foto cubre todo el lienzo (img absoluta), con un velo navy translúcido (rgba) en una franja y el titular en blanco encima.
+  2) MASCOTA RECORTADA sobre fondo de color de marca (navy o crema): la foto del animal a un lado y el titular + bullets al otro. (Es el layout más usado del rubro.)
+  3) MASCOTA ASOMÁNDOSE desde un borde/esquina (medio cuerpo entrando al cuadro) y el texto en el espacio libre. Da calidez sin tapar todo.
+  4) EDITORIAL: fondo crema, titular grande, y una foto en una banda o esquina. Aire elegante PERO con la foto presente.
+  5) PLACA DE TEXTO pura (navy o crema, sin foto): de vez en cuando, SOLO para una cita corta, un dato fuerte o el cierre con contacto.
+- TITULAR con FUERZA: corto, alto impacto; podés resaltar UNA palabra en dorado (${BRAND.amber}) o más grande. IMPORTANTE: poné la palabra resaltada en su PROPIO <span>/línea (NO un <span> de color en MEDIO de una oración: satori lo envuelve mal y queda suelto). Para titulares informativos o sobre foto preferí 'Inter' peso 700 en MAYÚSCULAS (más legible y serio); reservá 'More Sugar' para el wordmark o un título corto y cálido.
+- LLENÁ el lienzo: nada de media placa vacía. Si sobra espacio, agrandá la foto o el titular; no dejes un hueco muerto.
+
+MARCA (respetar SIEMPRE):
+- COLORES (hex EXACTOS): navy ${BRAND.navy} (estructura/velos), dorado ${BRAND.amber} (acentos, filetes, palabra resaltada), crema ${BRAND.cream} y blanco #ffffff (fondos), texto sobre claro ${BRAND.ink}, texto sobre navy/foto #ffffff o #e8eef5. Domina la foto o crema/blanco; navy estructura; dorado acento (poco).
+- TIPOGRAFÍA: 'More Sugar' SOLO para el wordmark o un título corto cálido; 'Inter' (400/600/700) para titulares informativos, subtítulos, bullets y datos.
+- REDACCIÓN: NO copies literal lo que te dicen. Redactá profesional y pulido, jerarquizado (ej. "retiro a domicilio" → "Retiro a domicilio y desde clínicas"). Títulos cortos; bullets de pocas palabras. (Aplican las REGLAS INVIOLABLES de más arriba: nada de "compañero", "cámara certificada", etc.)
+- LOGO: ponelo VOS con <img src="URL"> (URLs de "LOGOS DE MARCA"), variante por CONTRASTE: BLANCO sobre navy/foto oscura; AZUL sobre crema/foto clara. Tamaño y posición CONSISTENTES dentro de un carrusel. Para tamaños chicos (<200px) usá la variante ISOTIPO (sin la bajada "Huellas que no se borran", que a ese tamaño no se lee); la versión con bajada va GRANDE (portada). Nunca sobre la parte cargada de una foto. SIEMPRE incluí el logo.
+- FOTOS reales: <img src="FOTO:slot1" width=".." height=".." style="object-fit:cover" /> y pedí cada foto en "fotos" (prompt cálido, mascota viva; NUNCA instalaciones). Reutilizá las del banco poniendo su URL directa en el <img> (sin pedirla en "fotos").
+- AJUSTES (CLAVE): si piden cambiar algo de un gráfico YA hecho, NO lo rehagas. En "ÚLTIMO GRÁFICO QUE DISEÑASTE" tenés el HTML EXACTO con las fotos por su URL real: COPIALO y cambiá SOLO lo pedido (misma foto, mismo logo, mismos tamaños). No toques lo que no te pidieron.
+- PROHIBIDO en placas: flechas (→), emojis (🐾 ✅) y símbolos Unicode raros — el motor los dibuja como cajas rotas. Usá texto.
 
 REGLAS TÉCNICAS DEL HTML (obligatorias — el motor es satori):
-- UN solo <div> RAÍZ del tamaño EXACTO del canvas según el formato: portada_fb=1640x624, post=1080x1080, post_vertical=1080x1350, story=1080x1920, horizontal=1200x675.
-- Solo estilos INLINE (style="..."). Layout con FLEXBOX: TODO <div> con 2 o más hijos DEBE llevar display:flex (y flex-direction). Podés usar position:relative en la raíz + position:absolute en el logo para ubicarlo en una esquina. Nada de grid, float ni tablas.
-- El texto va dentro de <span>/<p>. Tamaños y espaciados en px. Imágenes con width/height explícitos.
+- UN solo <div> RAÍZ del tamaño EXACTO del canvas: portada_fb=1640x624, post=1080x1080, post_vertical=1080x1350, story=1080x1920, horizontal=1200x675.
+- Solo estilos INLINE. Layout con FLEXBOX: TODO <div> con 2+ hijos DEBE llevar display:flex (+ flex-direction). position:relative en la raíz + position:absolute para la foto full-bleed o el logo. Nada de grid, float ni tablas. Sin <br>: el texto envuelve solo por el ancho del contenedor.
+- Para FOTO full-bleed: <img position:absolute;top:0;left:0 width=CANVAS height=CANVAS object-fit:cover> y ENCIMA un <div> con el texto (sumá un velo navy translúcido si hace falta legibilidad).
+- El texto va en <span>/<p>. Tamaños/espaciados en px. Imágenes con width/height explícitos.
 
-EJEMPLO (formato portada_fb, 1640x624 — adaptá libremente la composición y la posición del logo):
-<div style="display:flex;position:relative;width:1640px;height:624px;background:${BRAND.cream}">
-  <div style="display:flex;flex-direction:column;justify-content:center;width:940px;height:624px;background:${BRAND.navy};padding:0 88px">
-    <span style="font-family:'More Sugar';font-size:84px;color:#ffffff;line-height:1.04">Alma Animal</span>
-    <span style="font-family:Inter;font-weight:600;font-size:34px;color:${BRAND.amber};margin-top:14px">Huellas que no se borran</span>
-    <div style="display:flex;width:180px;height:7px;background:${BRAND.amber};margin:28px 0"></div>
-    <div style="display:flex;flex-direction:column">
-      <span style="font-family:Inter;font-size:28px;color:#e8eef5;margin-bottom:8px">Entrega en 3 días hábiles</span>
-      <span style="font-family:Inter;font-size:28px;color:#e8eef5">Retiro a domicilio y desde clínicas</span>
-    </div>
+EJEMPLO (post 1080x1080, mascota recortada sobre navy — adaptá libremente, NO lo copies igual siempre):
+<div style="display:flex;position:relative;width:1080px;height:1080px;background:${BRAND.navy}">
+  <div style="display:flex;flex-direction:column;justify-content:center;width:560px;height:1080px;padding:0 70px">
+    <span style="font-family:Inter;font-weight:700;font-size:60px;color:#ffffff;line-height:1.07">Cuidamos cada detalle</span>
+    <span style="font-family:Inter;font-weight:700;font-size:64px;color:${BRAND.amber};line-height:1.07">de la despedida</span>
+    <span style="font-family:Inter;font-size:30px;color:#e8eef5;margin-top:24px">Acompañamiento real, todos los días.</span>
   </div>
-  <div style="display:flex;width:700px;height:624px"><img src="FOTO:slot1" width="700" height="624" style="object-fit:cover" /></div>
-  <img src="URL_DEL_LOGO_BLANCO" width="150" style="position:absolute;top:40px;left:752px" />
+  <img src="FOTO:slot1" width="520" height="1080" style="object-fit:cover" />
+  <img src="URL_DEL_LOGO_BLANCO" width="150" style="position:absolute;top:48px;left:70px" />
 </div>`
 
 /**

@@ -2,6 +2,7 @@ import satori from 'satori'
 import { Resvg } from '@resvg/resvg-js'
 import { parse, type HTMLElement, type Node, NodeType } from 'node-html-parser'
 import { BRAND } from './email-layout'
+import { sanitizarGlifos } from './marketing-lint'
 
 /**
  * Renderiza un GRÁFICO de marca (portada, placa, anuncio) a PNG a partir de HTML.
@@ -116,7 +117,8 @@ export interface RenderGraficoOpts {
 export async function renderGraficoHTML(opts: RenderGraficoOpts): Promise<{ buffer: Buffer; mime: 'image/png' }> {
   if (!opts.html?.trim()) throw new Error('Falta el HTML del gráfico')
   const fonts = await getFonts()
-  const inlined = await incrustarImagenes(opts.html)
+  // Defensa en profundidad: saca glifos que satori no dibuja (flechas/emojis → cajas rotas).
+  const inlined = await incrustarImagenes(sanitizarGlifos(opts.html))
   const vnode = htmlAVNode(inlined)
   const svg = await satori(vnode as Parameters<typeof satori>[0], {
     width: opts.width,

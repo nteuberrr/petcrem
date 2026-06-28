@@ -116,7 +116,10 @@ async function componerLogo(base: Buffer, logoBytes: Buffer, escala: number): Pr
   const meta = await sharp(base).metadata()
   const W = meta.width || 1024, H = meta.height || 1024
   const targetW = Math.max(96, Math.round(W * escala))
-  const logo = await sharp(logoBytes).resize({ width: targetW, withoutEnlargement: true }).png().toBuffer()
+  // Recortar el aire del asset (si la imagen es uniforme, trim() falla → usamos el original).
+  let src = logoBytes
+  try { src = await sharp(logoBytes).trim().toBuffer() } catch { /* sin trim */ }
+  const logo = await sharp(src).resize({ width: targetW, withoutEnlargement: true }).png().toBuffer()
   const lm = await sharp(logo).metadata()
   const margin = Math.round(W * 0.04)
   const left = Math.max(0, W - (lm.width || targetW) - margin)

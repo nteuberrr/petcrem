@@ -1,6 +1,6 @@
 import sharp from 'sharp'
 import { renderGraficoHTML } from './grafico-render'
-import { generarYGuardarImagen, listarImagenes, registrarImagen } from './mailing-images'
+import { generarYGuardarImagen, listarImagenes, registrarImagen, type ImagenBanco } from './mailing-images'
 import { aplicarLogoMarca, esLogo } from './marca-logo'
 import { uploadToR2, getFromR2, keyFromPublicUrl } from './cloudflare-r2'
 import { isNanoBananaConfigurado } from './nano-banana'
@@ -32,6 +32,29 @@ export interface GraficoGenerado {
   /** Fotos generadas (slot → URL) para que el agente las REUSE si solo ajusta el texto. */
   fotos: { slot: string; url: string }[]
   avisos: string[]
+}
+
+/**
+ * Pre-procesa los logos del diseño: para cada <img> que apunta a una variante del
+ * grupo "marca", recorta el AIRE (sharp.trim) y lo deja a resolución crisp, incrustado
+ * como data URI. Sin esto, satori escala el asset original (lienzo grande con mucho aire)
+ * a ~150px y el logo + la bajada "Huellas que no se borran" salen borrosos/ilegibles.
+ */
+async function preprocesarLogos(html: string, logos: ImagenBanco[]): Promise<string> {
+  const urls = [...new Set(logos.map(l => l.url).filter(u => u && html.includes(u)))]
+  if (urls.length === 0) return html
+  let out = html
+  for (const u of urls) {
+    try {
+      const key = keyFromPublicUrl(u) || ''
+      let bytes = key ? await getFromR2(key) : null
+      if (!bytes) { const r = await fetch(u); if (r.ok) bytes = Buffer.from(await r.arrayBuffer()) }
+      if (!bytes) continue
+      const png = await sharp(bytes).trim().resize({ width: 600, withoutEnlargement: true }).png().toBuffer()
+      out = out.split(u).join(`data:image/png;base64,${png.toString('base64')}`)
+    } catch { /* deja la URL original; satori la escala como antes */ }
+  }
+  return out
 }
 
 export async function generarGraficoMarca(args: {
@@ -71,6 +94,9 @@ export async function generarGraficoMarca(args: {
   // 2) ¿El agente ya ubicó el logo en el diseño? (referencia una variante del grupo "marca").
   const logos = (await listarImagenes().catch(() => [])).filter(esLogo)
   const agentePusoLogo = logos.some(l => l.url && html.includes(l.url))
+
+  // Logo NÍTIDO: recortar el aire del asset y dejarlo crisp ANTES de que satori lo escale.
+  html = await preprocesarLogos(html, logos)
 
   // 3) Rasterizar el HTML con las fuentes de marca (More Sugar + Inter), colores exactos.
   const { buffer: png } = await renderGraficoHTML({ html, width: dims.w, height: dims.h })

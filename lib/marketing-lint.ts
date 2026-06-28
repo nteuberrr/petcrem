@@ -24,8 +24,9 @@ export function extraerTextoHtml(html: string): string {
     .trim()
 }
 
-// Puntuación/símbolos que las fuentes de marca (More Sugar + Inter) SÍ dibujan.
-const PUNT_OK = new Set(' .,;:()[]{}"\'«»¿?¡!…–—-/%&@#°ºª$+=*·•|<>~^_\\\n\r\t'.split(''))
+// Puntuación/símbolos que las fuentes de marca (More Sugar + Inter) SÍ dibujan
+// (incluye comillas tipográficas ‘’“” que Inter sí tiene).
+const PUNT_OK = new Set(' .,;:()[]{}"\'«»¿?¡!…–—-/%&@#°ºª$+=*·•|<>~^_\\‘’“”\n\r\t'.split(''))
 
 /** Caracteres en una placa que el motor (satori) no puede dibujar → saldrían rotos. */
 function glifosRotos(texto: string): string[] {
@@ -37,6 +38,17 @@ function glifosRotos(texto: string): string[] {
     malos.add(ch)
   }
   return [...malos]
+}
+
+/** Quita de un texto los caracteres que el motor de placas (satori) NO puede dibujar
+ *  (emojis, flechas, símbolos raros). Defensa en profundidad junto al linter: se aplica
+ *  al HTML antes de rasterizar, así un glifo colado NUNCA sale como caja rota. */
+export function sanitizarGlifos(texto: string): string {
+  let out = ''
+  for (const ch of texto) {
+    if (/\s/.test(ch) || /[\p{L}\p{N}]/u.test(ch) || PUNT_OK.has(ch)) out += ch
+  }
+  return out
 }
 
 const digitos = (s: string): string => (s || '').replace(/\D/g, '')

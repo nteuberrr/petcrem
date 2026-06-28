@@ -232,15 +232,15 @@ ${MARCA_VISUAL}
 ${MARCA_GRAFICO}
 
 IMÁGENES (campo "imagenes", EN ORDEN) — OBLIGATORIO:
-- Una pieza social SIEMPRE lleva imagen(es). Instagram NO se puede publicar sin imagen → para Instagram NUNCA devuelvas "imagenes" vacío. Post simple = 1 imagen; VARIAS = 2 a ${MAX_IMGS} (carrusel en Instagram, álbum/paso a paso en Facebook). TANTO Instagram COMO Facebook admiten varias imágenes: si la idea es un paso a paso, una lista o una serie, devolvé VARIAS placas (una por paso/idea), nunca una sola.
-- La forma de tener VARIAS imágenes sin gastar es la PLACA DE MARCA (modo "grafico"): se renderiza GRATIS (no es una foto IA), así que un carrusel se arma con VARIAS placas (ej. 3 a 6). "Eficiente" = usar PLACAS y reutilizar del banco; NO significa poner menos imágenes ni generar una foto nueva por slide.
+- Una pieza social SIEMPRE lleva imagen(es). Instagram NO se puede publicar sin imagen. Post simple = 1; VARIAS = 2 a ${MAX_IMGS} (carrusel en Instagram, álbum/paso a paso en Facebook). Si la idea es una serie/lista/paso a paso, devolvé VARIAS, nunca una sola.
+- VARIEDAD ante todo (es la queja del dueño: hoy todo sale igual, placas de puro texto). Las marcas buenas del rubro usan MUCHA foto real (mascota viva, feliz o serena) y MUCHOS layouts distintos. No hace falta foto en TODAS las piezas, pero usá fotos SEGUIDO (reutilizá el banco cuando haya una que calce) y NO repitas siempre el mismo molde. Con criterio y creatividad, no a la fuerza.
 - Modos por imagen:
-  · "grafico" = PLACA DE MARCA (lo MÁS usado): pieza con TEXTO sobre el diseño de Alma Animal (navy/dorado/crema + logo + tipografía de marca). VOS escribís el HTML (ver "DISEÑO DE GRÁFICOS CON TEXTO"). ES NUESTRA PLANTILLA. Usala para TODO lo informativo/comercial: portada del carrusel con el gancho, listas de virtudes/diferenciadores, datos, horario, pasos del proceso, "por qué elegirnos", comparativas, citas, y la placa de cierre con CTA + contacto.
-  · "reuse" = reutilizar una FOTO del banco (URL exacta). Tenemos varias fotos de mascotas/personas: usalas para dar CALIDEZ y cercanía cuando aporten (con criterio, no a la fuerza ni en cada slide) — es lo que evita que la pieza quede plana de puras placas de texto.
-  · "nueva" = generar una FOTO fotorrealista nueva. SOLO excepcional: una imagen cálida y emocional (una mascota viva tranquila o feliz, o un tutor con su mascota) cuando NO hay nada en el banco. NUNCA fotos ejecutivas/corporativas/de oficina/de negocios/financieras; NUNCA instalaciones.
-- B2B (clínicas/veterinarios) y todo lo de virtudes/datos/proceso → PLACAS (grafico), NO fotos. Una clínica quiere ver el profesionalismo de NUESTRA marca (cálida y confiable), no stock de oficina.
-- Carrusel típico: placa-portada (gancho) → una placa por idea/virtud → placa de cierre (CTA + contacto). En piezas para TUTORES, cuando tenga sentido sumá una FOTO REAL cálida reutilizada del banco (p. ej. abrir o cerrar con una mascota/tutor) para que no sea 100% texto — con criterio, no obligatorio. Instagram cuadrado (1:1) o vertical (4:5); MISMO aspecto en TODAS las del carrusel.
-${puedeGenerar ? '' : '- (Generación de FOTOS nuevas no disponible ahora: armá la pieza SOLO con placas (grafico) y reutilización del banco — igual DEBE llevar imágenes.)\n'}
+  · "grafico" = tu placa/diseño de marca (escribís el HTML, ver "DISEÑO DE GRÁFICOS CON TEXTO"). PUEDE y normalmente conviene que INTEGRE una foto (FOTO:slot reutilizando el banco, o full-bleed), no ser puro texto. Sirve para portada con gancho, datos, pasos, "por qué elegirnos", cierre con CTA — variando el layout. Una placa SIN foto (cita corta, dato fuerte, cierre) está OK de vez en cuando, no como molde único.
+  · "reuse" = usar una FOTO del banco (URL exacta) como imagen completa de la slide. Tenemos fotos de mascotas/personas: aprovechalas.
+  · "nueva" = generar una FOTO nueva (cálida: mascota viva tranquila/feliz, o un tutor con su mascota) SOLO si el banco no tiene ninguna que calce. NUNCA fotos ejecutivas/de oficina/financieras; NUNCA instalaciones.
+- B2B (clínicas/veterinarios): igual va con fotos cálidas (mascota viva, atención cercana) + diseño on-brand; el profesionalismo se transmite con el diseño, NO con placas frías de puro texto ni stock de oficina.
+- Carrusel: portada con una FOTO potente + gancho cuando se pueda → slides que MEZCLAN foto y datos VARIANDO el layout (no todas iguales) → cierre con CTA + contacto. Mismo aspecto en TODAS (Instagram 1:1 o 4:5). Si numerás pasos, badge IDÉNTICO en todas.
+${puedeGenerar ? '' : '- (Generación de FOTOS nuevas no disponible ahora: REUTILIZÁ fotos del banco + placas; igual DEBE llevar imágenes y variar el layout.)\n'}
 Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes.`
 
   const instruccion = [
