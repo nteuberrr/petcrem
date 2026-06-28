@@ -148,9 +148,13 @@ export async function publicarFacebook(args: { mensaje: string; imagenUrl?: stri
   // VARIAS fotos → álbum: subir cada una sin publicar (published=false) y adjuntarlas
   // a un post de /feed con attached_media[i] (mantiene el orden del paso a paso).
   if (urls.length > 1) {
+    // temporary:true → las fotos existen SOLO para este post (no como entradas sueltas en un
+    // álbum). Sin esto, en la New Pages Experience las fotos quedan en el álbum pero la
+    // historia multi-foto NO se renderiza en el muro. Con temporary se publica como un
+    // post de varias fotos en el feed.
     const fbids: string[] = []
     for (const u of urls) {
-      const ph = await graph(`${pid}/photos`, { url: u, published: 'false', access_token: pt }, 'POST')
+      const ph = await graph(`${pid}/photos`, { url: u, published: 'false', temporary: 'true', access_token: pt }, 'POST')
       const fid = (ph.id as string) || ''
       if (fid) fbids.push(fid)
     }
