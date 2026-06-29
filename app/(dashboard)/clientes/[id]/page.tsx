@@ -9,6 +9,7 @@ import { fmtLitros, fmtPrecio, fmtFecha } from '@/lib/format'
 import { formatDateForSheet } from '@/lib/dates'
 import { parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
+import { anforaPremiumIncluida, servicioIncluyeAnforaPremium } from '@/lib/anforas-premium'
 
 type Certificado = {
   id: string
@@ -519,7 +520,12 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     : null
 
   const vetSeleccionada = veterinarias.find(v => v.id === cliente.veterinaria_id)
-  const totalAdicionales = adicionales.reduce((sum, a) => sum + a.precio * a.qty, 0)
+  // Cremación Premium (CP) incluye sin costo cualquier ánfora premium: su línea
+  // suma $0 (igual descuenta stock). Se resuelve por la categoría del producto.
+  const adicionalIncluido = (a: AdicionalItem) =>
+    a.tipo === 'producto' &&
+    anforaPremiumIncluida(form.codigo_servicio, productosDisp.find(p => p.id === a.id)?.categoria)
+  const totalAdicionales = adicionales.reduce((sum, a) => sum + (adicionalIncluido(a) ? 0 : a.precio * a.qty), 0)
 
   // Resolver tabla de precios según tipo_precios del formulario
   const tablaPrecios: Tramo[] = form.tipo_precios === 'especial'
@@ -645,9 +651,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      {/* Header limpio sobre fondo claro: borde lateral indigo + tipografía grande */}
-      <div className="rounded-2xl bg-white border-2 border-gray-300 shadow-md overflow-hidden mb-6">
-        <div className="border-l-4 border-brand px-6 py-6 sm:px-8 sm:py-7">
+      {/* Header limpio sobre fondo claro: borde lateral indigo + tipografía grande.
+          El acento navy va sobre la tarjeta redondeada (el borde respeta el border-radius),
+          así no hace falta overflow-hidden — que recortaba el menú "Documentos" en desktop. */}
+      <div className="rounded-2xl bg-white border-2 border-gray-300 border-l-4 border-l-brand shadow-md mb-6">
+        <div className="px-6 py-6 sm:px-8 sm:py-7">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex-1 min-w-[260px]">
               <div className="flex items-center gap-2 flex-wrap mb-2">
@@ -1158,6 +1166,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               return (
                 <div className="mb-6">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Productos</p>
+                  {servicioIncluyeAnforaPremium(form.codigo_servicio) && (
+                    <p className="mb-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-1.5">
+                      Cremación Premium incluye un ánfora premium sin costo: al elegirla queda en $0 y se descuenta del stock igual.
+                    </p>
+                  )}
                   <div className="space-y-4">
                     {orden.map(cat => (
                       <div key={cat}>
@@ -1167,6 +1180,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                             const item = adicionales.find(a => a.tipo === 'producto' && a.id === p.id)
                             const stockNum = parseInt(p.stock || '0')
                             const sinStock = stockNum <= 0
+                            const incluido = anforaPremiumIncluida(form.codigo_servicio, p.categoria)
                             return (
                               <div key={p.id} className={`flex items-center gap-3 py-1.5 ${sinStock ? 'opacity-50' : ''}`}>
                                 <input
@@ -1177,7 +1191,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                                   className="w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand disabled:cursor-not-allowed"
                                 />
                                 <span className={`flex-1 text-sm ${sinStock ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{p.nombre}</span>
-                                <span className={`text-xs ${sinStock ? 'text-gray-400 line-through' : 'text-gray-500'}`}>{fmtPrecio(p.precio)}</span>
+                                {incluido ? (
+                                  <span className="text-xs font-semibold text-emerald-600">Incluida{p.precio && parseFloat(p.precio) > 0 ? <span className="ml-1 text-gray-400 font-normal line-through">{fmtPrecio(p.precio)}</span> : null}</span>
+                                ) : (
+                                  <span className={`text-xs ${sinStock ? 'text-gray-400 line-through' : 'text-gray-500'}`}>{fmtPrecio(p.precio)}</span>
+                                )}
                                 {sinStock && <span className="text-xs text-red-600 font-semibold">sin stock</span>}
                                 {item && !sinStock && (
                                   <input
@@ -1285,7 +1303,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     {a.nombre}
                     {a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
                   </p>
-                  <p className="text-sm text-gray-700">{fmtPrecio(a.precio * a.qty)}</p>
+                  {adicionalIncluido(a)
+                    ? <p className="text-sm font-medium text-emerald-600">Incluida</p>
+                    : <p className="text-sm text-gray-700">{fmtPrecio(a.precio * a.qty)}</p>}
                 </div>
               ))}
               <div className="flex items-center justify-between py-1 border-t border-gray-300 pt-2">

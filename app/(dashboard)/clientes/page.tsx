@@ -7,6 +7,7 @@ import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtKg, fmtPrecio, fmtFecha } from '@/lib/format'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseDecimal, parsePeso } from '@/lib/numbers'
+import { anforaPremiumIncluida, servicioIncluyeAnforaPremium } from '@/lib/anforas-premium'
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
@@ -394,7 +395,12 @@ export default function ClientesPage() {
     setSaving(false)
   }
 
-  const totalAdicionales = adicionales.reduce((sum, a) => sum + a.precio * a.qty, 0)
+  // Cremación Premium (CP) incluye sin costo cualquier ánfora premium: su línea
+  // suma $0 (igual descuenta stock). Se resuelve por la categoría del producto.
+  const adicionalIncluido = (a: AdicionalItem) =>
+    a.tipo === 'producto' &&
+    anforaPremiumIncluida(form.codigo_servicio, productosDisp.find(p => p.id === a.id)?.categoria)
+  const totalAdicionales = adicionales.reduce((sum, a) => sum + (adicionalIncluido(a) ? 0 : a.precio * a.qty), 0)
 
   // Resumen del servicio en vivo: tabla aplicable según veterinaria y cálculo del tramo
   function encontrarTramo(tabla: Tramo[], peso: number): Tramo | null {
@@ -637,7 +643,11 @@ export default function ClientesPage() {
               let items: AdicionalItem[] = []
               try { items = JSON.parse(selected.adicionales || '[]') } catch {}
               if (!Array.isArray(items) || items.length === 0) return null
-              const total = items.reduce((s, a) => s + (a.precio || 0) * (a.qty || 1), 0)
+              // Ánforas premium incluidas (Cremación Premium) → su línea vale $0.
+              const incluido = (a: AdicionalItem) =>
+                a.tipo === 'producto' &&
+                anforaPremiumIncluida(selected.codigo_servicio, productosDisp.find(p => p.id === a.id)?.categoria)
+              const total = items.reduce((s, a) => s + (incluido(a) ? 0 : (a.precio || 0) * (a.qty || 1)), 0)
               const productos = items.filter(a => a.tipo === 'producto')
               const servicios = items.filter(a => a.tipo === 'servicio')
               return (
@@ -657,7 +667,9 @@ export default function ClientesPage() {
                             <span className="text-gray-800">
                               {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
                             </span>
-                            <span className="text-gray-700">{fmtPrecio(a.precio * (a.qty || 1))}</span>
+                            {incluido(a)
+                              ? <span className="font-medium text-emerald-600">Incluida</span>
+                              : <span className="text-gray-700">{fmtPrecio(a.precio * (a.qty || 1))}</span>}
                           </div>
                         ))}
                       </div>
@@ -862,6 +874,11 @@ export default function ClientesPage() {
                     return (
                       <div className="mb-3">
                         <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Productos</p>
+                        {servicioIncluyeAnforaPremium(form.codigo_servicio) && (
+                          <p className="mb-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-1.5">
+                            Cremación Premium incluye un ánfora premium sin costo: al elegirla queda en $0 y se descuenta del stock igual.
+                          </p>
+                        )}
                         <div className="space-y-3">
                           {orden.map(cat => (
                             <div key={cat}>
@@ -871,13 +888,18 @@ export default function ClientesPage() {
                                   const item = adicionales.find(a => a.tipo === 'producto' && a.id === p.id)
                                   const stockNum = parseInt(p.stock || '0')
                                   const sinStock = stockNum <= 0
+                                  const incluido = anforaPremiumIncluida(form.codigo_servicio, p.categoria)
                                   return (
                                     <div key={p.id} className={`flex items-center gap-2 ${sinStock ? 'opacity-50' : ''}`}>
                                       <input type="checkbox" checked={!!item} disabled={sinStock && !item}
                                         onChange={() => toggleAdicional('producto', p)}
                                         className="w-3.5 h-3.5 rounded border-gray-400 text-brand focus:ring-brand disabled:cursor-not-allowed" />
                                       <span className={`flex-1 text-sm ${sinStock ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{p.nombre}</span>
-                                      <span className={`text-xs ${sinStock ? 'text-gray-400 line-through' : 'text-gray-500'}`}>{fmtPrecio(p.precio)}</span>
+                                      {incluido ? (
+                                        <span className="text-xs font-semibold text-emerald-600">Incluida{p.precio && parseFloat(p.precio) > 0 ? <span className="ml-1 text-gray-400 font-normal line-through">{fmtPrecio(p.precio)}</span> : null}</span>
+                                      ) : (
+                                        <span className={`text-xs ${sinStock ? 'text-gray-400 line-through' : 'text-gray-500'}`}>{fmtPrecio(p.precio)}</span>
+                                      )}
                                       {sinStock && <span className="text-[10px] text-red-600 font-semibold">sin stock</span>}
                                       {item && !sinStock && (
                                         <input type="number" min={1} value={item.qty} onChange={e => updateQty('producto', p.id, parseInt(e.target.value) || 1)}
@@ -952,7 +974,9 @@ export default function ClientesPage() {
                       <span className="text-gray-700">
                         {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
                       </span>
-                      <span className="text-gray-700">{fmtPrecio(a.precio * a.qty)}</span>
+                      {adicionalIncluido(a)
+                        ? <span className="font-medium text-emerald-600">Incluida</span>
+                        : <span className="text-gray-700">{fmtPrecio(a.precio * a.qty)}</span>}
                     </div>
                   ))}
                   <div className="flex items-center justify-between pt-1 border-t border-gray-300">
@@ -1060,14 +1084,19 @@ export default function ClientesPage() {
                 {fichaCreada.adicionales.length > 0 && (
                   <div className="border-t border-gray-300 pt-2 space-y-1">
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Adicionales</p>
-                    {fichaCreada.adicionales.map(a => (
-                      <div key={`${a.tipo}-${a.id}`} className="flex items-center justify-between text-sm">
-                        <span className="text-gray-700">
-                          {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
-                        </span>
-                        <span className="text-gray-700">{fmtPrecio(a.precio * a.qty)}</span>
-                      </div>
-                    ))}
+                    {fichaCreada.adicionales.map(a => {
+                      const incl = a.tipo === 'producto' && anforaPremiumIncluida(fichaCreada.codigo_servicio, productosDisp.find(p => p.id === a.id)?.categoria)
+                      return (
+                        <div key={`${a.tipo}-${a.id}`} className="flex items-center justify-between text-sm">
+                          <span className="text-gray-700">
+                            {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
+                          </span>
+                          {incl
+                            ? <span className="font-medium text-emerald-600">Incluida</span>
+                            : <span className="text-gray-700">{fmtPrecio(a.precio * a.qty)}</span>}
+                        </div>
+                      )
+                    })}
                     <div className="flex items-center justify-between pt-1 border-t border-gray-300">
                       <span className="text-xs text-gray-500">Subtotal adicionales</span>
                       <span className="text-sm font-medium text-gray-700">{fmtPrecio(fichaCreada.total_adicionales)}</span>

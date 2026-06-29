@@ -1,6 +1,7 @@
 import { getSheetData } from './datastore'
 import { PrecioTramo } from '@/types'
 import { findTramo, precioDelTramo, numTramo as num } from './tramos'
+import { servicioIncluyeAnforaPremium, anforaPremiumIncluida } from './anforas-premium'
 
 export async function calcularPrecio(
   peso: number,
@@ -120,10 +121,24 @@ export async function calcularSnapshotFicha(input: SnapshotInput): Promise<Preci
 
   // 4) Sumar adicionales — precio y cantidad acotados a ≥0 para que un item con
   // valores negativos (manipulación del payload) no reste del total.
-  const precio_adicionales = adicionales.reduce(
-    (s, a) => s + Math.max(0, num(a.precio)) * Math.max(0, a.qty ?? 1),
-    0
-  )
+  // Excepción: en Cremación Premium (CP) las ánforas premium van INCLUIDAS
+  // (costo 0); igual consumen stock (lo maneja adjustProductStock por cantidad).
+  // Cargamos las categorías de productos solo si hace falta resolver la inclusión.
+  let categoriaPorProducto: Map<string, string> | null = null
+  if (servicioIncluyeAnforaPremium(codigo_servicio) && adicionales.some(a => a.tipo === 'producto')) {
+    try {
+      const prods = await getSheetData('productos')
+      categoriaPorProducto = new Map(prods.map(p => [String(p.id), String(p.categoria ?? '')]))
+    } catch {
+      categoriaPorProducto = null // si falla, no incluimos (se cobra normal)
+    }
+  }
+  const precio_adicionales = adicionales.reduce((s, a) => {
+    const incluida = a.tipo === 'producto' && categoriaPorProducto != null &&
+      anforaPremiumIncluida(codigo_servicio, categoriaPorProducto.get(String(a.id)))
+    const precioUnit = incluida ? 0 : Math.max(0, num(a.precio))
+    return s + precioUnit * Math.max(0, a.qty ?? 1)
+  }, 0)
 
   const subtotal = precio_servicio + precio_adicionales
 
