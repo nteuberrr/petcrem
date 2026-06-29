@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 import { buscarComuna } from '@/lib/comunas'
-import { enviarBienvenidaVet } from '@/lib/eutanasia-mailer'
+import { enviarBienvenidaVet, enviarAvisoNuevoVetConvenio } from '@/lib/eutanasia-mailer'
 import { capitalizarNombre } from '@/lib/nombres'
 
 const SHEET = 'vet_convenio_eutanasia'
@@ -153,6 +153,9 @@ export async function POST(req: NextRequest) {
     // termina al return y mata el promise pendiente. Si falla, no abortamos
     // la inscripción (la fila ya quedó), pero loggeamos el detalle.
     const bienvenida = await enviarBienvenidaVet({ vetId: id, nombre: nombreCap, apellido: apellidoCap, email })
+
+    // Aviso interno al admin (correo de seguimiento) de que entró un vet nuevo. Best-effort.
+    await enviarAvisoNuevoVetConvenio({ nombre: nombreCap, apellido: apellidoCap, email, telefono, rut, comunas, horarios })
 
     return NextResponse.json({
       ok: true,

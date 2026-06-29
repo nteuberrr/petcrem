@@ -1,4 +1,5 @@
 import { sendEmail, isResendConfigured, getFromAddress } from './resend-mailer'
+import { getSheetData } from './datastore'
 import { agregarDiasHabiles } from './dias-habiles'
 import { formatDate, formatHoraDia } from './dates'
 import { fmtPrecio } from './format'
@@ -26,6 +27,78 @@ export function nombreCompletoVet(nombre: string | undefined, apellido: string |
   if (!n) return a
   if (n.toLowerCase().endsWith(a.toLowerCase())) return n
   return `${n} ${a}`
+}
+
+/** Correo del admin para avisos internos: el de seguimiento (empresa_config) o ADMIN_EMAIL. */
+async function resolverEmailAdmin(): Promise<string | null> {
+  try {
+    const rows = await getSheetData('empresa_config')
+    const row = rows.find(r => r.id === '1') || rows[0]
+    const seg = (row?.email_seguimiento || '').trim()
+    if (seg) return seg
+  } catch { /* sigue al fallback */ }
+  return (process.env.ADMIN_EMAIL || '').trim() || null
+}
+
+/** Resumen legible de disponibilidad: "Lun AM/PM · Mié PM · …". */
+function resumenHorarios(h?: Record<string, { am?: boolean; pm?: boolean }>): string {
+  if (!h) return '—'
+  const dias: Record<string, string> = { lun: 'Lun', mar: 'Mar', mie: 'Mié', jue: 'Jue', vie: 'Vie', sab: 'Sáb', dom: 'Dom' }
+  const parts: string[] = []
+  for (const k of Object.keys(dias)) {
+    const v = h[k]
+    if (!v) continue
+    const slots = [v.am ? 'AM' : '', v.pm ? 'PM' : ''].filter(Boolean).join('/')
+    if (slots) parts.push(`${dias[k]} ${slots}`)
+  }
+  return parts.join(' · ') || '—'
+}
+
+/**
+ * Aviso INTERNO al admin (correo de seguimiento) cuando un vet nuevo se inscribe
+ * al convenio de eutanasias. Best-effort: no rompe la inscripción si falla.
+ */
+export async function enviarAvisoNuevoVetConvenio(args: {
+  nombre: string
+  apellido: string
+  email: string
+  telefono?: string
+  rut?: string
+  comunas?: string[]
+  horarios?: Record<string, { am?: boolean; pm?: boolean }>
+}): Promise<void> {
+  if (!isResendConfigured()) return
+  try {
+    const to = await resolverEmailAdmin()
+    if (!to) { console.warn('[eutanasia-mailer] sin correo admin para avisar nuevo vet'); return }
+    const contacto = await getContacto()
+    const nombre = nombreCompletoVet(args.nombre, args.apellido)
+    const filas: [string, string][] = [
+      ['Nombre', nombre],
+      ['Email', args.email || '—'],
+      ['Teléfono', args.telefono ? `+56 ${args.telefono}` : '—'],
+      ['RUT', args.rut || '—'],
+      ['Comunas', (args.comunas || []).join(', ') || '—'],
+      ['Disponibilidad', resumenHorarios(args.horarios)],
+    ]
+    const tabla = filas
+      .map(([k, v]) => `<tr><td style="padding:7px 12px;font-weight:700;color:${BRAND.navy};white-space:nowrap;vertical-align:top">${escapeHtml(k)}</td><td style="padding:7px 12px;color:${BRAND.muted}">${escapeHtml(v)}</td></tr>`)
+      .join('')
+    const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">Se inscribió un <strong>nuevo veterinario</strong> al convenio de eutanasias a domicilio:</p>
+      <table style="border-collapse:collapse;width:100%;font-size:14px;background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:10px;overflow:hidden">${tabla}</table>
+      <p style="margin:16px 0 0;font-size:13px;color:${BRAND.muted}">Quedó activo automáticamente. Lo puedes ver y gestionar en <strong>Servicios → Veterinarios</strong>.</p>`
+    await sendEmail({
+      to,
+      subject: `Nuevo veterinario en el convenio: ${nombre}`,
+      html: renderEmailLayout({ titulo: 'Nuevo veterinario en el convenio', bodyHtml: cuerpo, contacto }),
+      preview_text: `${nombre} se inscribió al convenio de eutanasias a domicilio.`,
+      noBcc: true, // aviso interno al admin → no duplicar con el BCC de seguimiento
+      tags: [{ name: 'tipo', value: 'aviso_nuevo_vet_convenio' }],
+    })
+  } catch (e) {
+    console.warn('[eutanasia-mailer] aviso nuevo vet falló:', e instanceof Error ? e.message : String(e))
+  }
 }
 
 export interface BienvenidaResult {
