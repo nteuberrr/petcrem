@@ -16,6 +16,8 @@ export const SHEETS: Record<string, string[]> = {
     'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
     'precio_servicio', 'precio_adicionales', 'precio_total',
     'notas', 'tipo_pago', 'estado_pago',
+    // Si 'TRUE', el correo de entrega va SIN el pedido de evaluación (clientes conflictivos).
+    'omitir_evaluacion',
     // JSON array de URLs (R2) de fotos que el tutor sube desde /subir-foto para
     // incluir una en el certificado de cremación.
     'fotos_mascota',

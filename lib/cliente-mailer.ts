@@ -212,6 +212,9 @@ export interface EntregaArgs {
   /** Código de la mascota; se muestra entre paréntesis junto al nombre. */
   codigo?: string
   clienteId?: string
+  /** Si es true, el correo de entrega NO incluye el pedido de evaluación
+   *  (clientes marcados como "no pedir evaluación"). */
+  sinEvaluacion?: boolean
 }
 
 /**
@@ -242,16 +245,25 @@ export function buildEntrega(args: EntregaArgs, contacto: Contacto): SendOpts {
   const mascota = escapeHtml(args.nombreMascota)
   // Nombre con el código entre paréntesis, ej. "Molly (G79-CI)".
   const mascotaCodigo = args.codigo ? `${mascota} (${escapeHtml(args.codigo)})` : mascota
-  const reseña = contacto.googleReviewUrl
+  const reseña = (contacto.googleReviewUrl && !args.sinEvaluacion)
     ? `
-      <div style="text-align:center;margin:22px 0 6px">
-        <a href="${escapeHtml(contacto.googleReviewUrl)}" style="display:inline-block;background:${BRAND.amber};color:${BRAND.navy};text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">
+      <div style="margin:28px 0 6px;padding:30px 24px;background:${BRAND.navy};border-radius:16px;text-align:center">
+        <div style="font-size:30px;line-height:1;letter-spacing:4px;margin-bottom:14px">⭐⭐⭐⭐⭐</div>
+        <p style="margin:0 0 12px;font-size:21px;font-weight:700;color:#ffffff;line-height:1.3">
+          Para cerrar el proceso, ¿nos dejas tu evaluación?
+        </p>
+        <p style="margin:0 auto 22px;max-width:440px;font-size:15px;color:#e8eef5;line-height:1.65">
+          Para nosotros es lo más valioso que podemos recibir. Contar tu experiencia ayuda a otras familias
+          a elegir con confianza en uno de los momentos más difíciles, y a nosotros nos impulsa a seguir
+          cuidando cada despedida como se merece.
+        </p>
+        <a href="${escapeHtml(contacto.googleReviewUrl)}" style="display:inline-block;background:${BRAND.amber};color:${BRAND.navy};text-decoration:none;font-weight:700;font-size:17px;padding:16px 40px;border-radius:12px">
           ⭐ Evalúanos aquí
         </a>
-      </div>
-      <p style="margin:8px 0 0;font-size:13px;color:${BRAND.muted};text-align:center;line-height:1.5">
-        Tu opinión nos ayuda muchísimo y le sirve a otras familias que nos buscan en un momento difícil.
-      </p>`
+        <p style="margin:16px 0 0;font-size:13px;color:#aebfd4;line-height:1.5">
+          Te toma menos de un minuto y para nosotros significa muchísimo.
+        </p>
+      </div>`
     : ''
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">${saludo(args.nombreTutor)}</p>

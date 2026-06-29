@@ -56,6 +56,7 @@ export default function CorreosConfig() {
   const [verMeta, setVerMeta] = useState<LogRow | null>(null)
   const [verHtml, setVerHtml] = useState('')
   const [verLoading, setVerLoading] = useState(false)
+  const [reenviando, setReenviando] = useState<string | null>(null)
 
   const cargarLista = useCallback(async (opts?: { aviso?: boolean }) => {
     setActualizando(true)
@@ -203,6 +204,34 @@ export default function CorreosConfig() {
       setVerHtml(d?.html || '')
     } catch { setVerHtml('') }
     finally { setVerLoading(false) }
+  }
+
+  // Reenvía un correo del registro (mismo asunto + cuerpo) a una dirección ingresada
+  // a mano. Si el seguimiento está activo para ese tipo, te llega copia (BCC).
+  async function reenviar(row: LogRow) {
+    const destino = window.prompt(`¿A qué correo reenviar "${row.asunto || row.tipo}"?\n(Original: ${row.destinatario || '—'})`, '')
+    if (destino === null) return
+    const to = destino.trim()
+    if (!to) return
+    setReenviando(row.id)
+    try {
+      const r = await fetch('/api/correos/log', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id, to }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok) {
+        const copia = segActivo && segTipos[row.tipo] !== false
+        alert(`Reenviado a ${d.to}${copia ? ' (con copia a tu seguimiento)' : ''}.`)
+        cargarLog({ page: logPage, desde: logDesde, hasta: logHasta, q: logQ }) // aparece el reenvío en el registro
+      } else {
+        alert(d.error || 'No se pudo reenviar.')
+      }
+    } catch {
+      alert('Error de red al reenviar.')
+    } finally {
+      setReenviando(null)
+    }
   }
 
   const seleccionado = correos.find(c => c.key === sel)
@@ -402,7 +431,7 @@ export default function CorreosConfig() {
                   <th className="px-3 py-2 font-semibold">Destinatario</th>
                   <th className="px-3 py-2 font-semibold">Asunto</th>
                   <th className="px-3 py-2 font-semibold">Estado</th>
-                  <th className="px-3 py-2 font-semibold text-right">Ver</th>
+                  <th className="px-3 py-2 font-semibold text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -422,8 +451,9 @@ export default function CorreosConfig() {
                     <td className="px-3 py-2">
                       <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${estadoBadge(row.estado)}`}>{row.estado || 'enviado'}</span>
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
                       <button onClick={() => ver(row)} className="text-brand hover:text-brand font-semibold text-xs">Ver</button>
+                      <button onClick={() => reenviar(row)} disabled={reenviando === row.id} className="ml-3 text-brand hover:text-brand font-semibold text-xs disabled:opacity-50">{reenviando === row.id ? 'Enviando…' : 'Reenviar'}</button>
                     </td>
                   </tr>
                 ))}
@@ -456,7 +486,16 @@ export default function CorreosConfig() {
                 </p>
                 {verMeta.motivo && <p className="text-[11px] text-red-600 mt-0.5">Error: {verMeta.motivo}</p>}
               </div>
-              <button onClick={() => setVerMeta(null)} className="text-gray-400 hover:text-gray-700 text-xl leading-none shrink-0">✕</button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => reenviar(verMeta)}
+                  disabled={reenviando === verMeta.id}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm"
+                >
+                  {reenviando === verMeta.id ? '⌛ Enviando…' : '↪ Reenviar'}
+                </button>
+                <button onClick={() => setVerMeta(null)} className="text-gray-400 hover:text-gray-700 text-xl leading-none">✕</button>
+              </div>
             </div>
             <div className="flex-1 p-3 overflow-auto bg-gray-50">
               {verLoading ? (

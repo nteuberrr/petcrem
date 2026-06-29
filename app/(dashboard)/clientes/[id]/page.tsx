@@ -75,6 +75,7 @@ type ClienteDetalle = {
   notas: string
   tipo_pago: string
   estado_pago: string
+  omitir_evaluacion?: string
   fotos_mascota?: string
   videos_servicio?: string
   fotos_evidencia?: string
@@ -1097,6 +1098,24 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             placeholder="Comentarios sobre el servicio, la mascota o el tutor..."
             className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none"
           />
+        </div>
+
+        {/* No pedir evaluación: el correo de entrega va sin el pedido de reseña (clientes conflictivos). */}
+        <div className="mt-5 pt-5 border-t border-gray-300">
+          <label className="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={String(form.omitir_evaluacion || '').toUpperCase() === 'TRUE'}
+              onChange={e => setForm(f => ({ ...f, omitir_evaluacion: e.target.checked ? 'TRUE' : 'FALSE' }))}
+              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand"
+            />
+            <span>
+              <span className="text-sm font-semibold text-gray-900">No pedir evaluación a este cliente</span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                Al entregar, se envía el correo de entrega normal pero <strong>sin</strong> el pedido de reseña en Google. Útil para clientes conflictivos.
+              </span>
+            </span>
+          </label>
         </div>
 
         <div className="flex justify-end gap-3 mt-5">

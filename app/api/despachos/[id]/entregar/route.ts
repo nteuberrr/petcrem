@@ -123,6 +123,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           nombreTutor: cliente.nombre_tutor,
           codigo: cliente.codigo,
           clienteId: cliente.id,
+          // Clientes marcados "no pedir evaluación" reciben la entrega SIN el pedido de reseña.
+          sinEvaluacion: String(cliente.omitir_evaluacion || '').toUpperCase() === 'TRUE',
         })
       } catch (e) {
         console.warn('[despachos/entregar] fallo correo entrega (no bloqueante):', e)
