@@ -710,6 +710,10 @@ function PreviewModal({ item, onClose, onUpdated }: { item: Item; onClose: () =>
   }
   const esCarrusel = imgs.length > 1
   const [editando, setEditando] = useState<number | null>(null)
+  // Lightbox: índice de la imagen abierta en grande (null = cerrado).
+  const [lightbox, setLightbox] = useState<number | null>(null)
+  // Descarga mismo-origen (el atributo download se ignora cross-origin en R2).
+  const dl = (url: string) => `/api/mailing/imagenes/descargar?url=${encodeURIComponent(url)}`
   async function regenerar(indice: number) {
     const instruccion = window.prompt('¿Qué querés ajustar de esta imagen? (ej. "corregí las manos", "poné el logo arriba a la derecha")')
     if (!instruccion?.trim()) return
@@ -738,7 +742,7 @@ function PreviewModal({ item, onClose, onUpdated }: { item: Item; onClose: () =>
             {esCarrusel && (
               <div className="text-xs font-medium text-gray-500 inline-flex items-center gap-1">
                 <span className="px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">🎠 Carrusel · {imgs.length} imágenes</span>
-                <span className="text-gray-400">desliza para verlas todas</span>
+                <span className="text-gray-400">tocá una para ampliarla y descargarla</span>
               </div>
             )}
             {imgs.length > 0 ? (
@@ -747,17 +751,23 @@ function PreviewModal({ item, onClose, onUpdated }: { item: Item; onClose: () =>
                   {imgs.map((im, i) => (
                     <div key={i} className="relative shrink-0 w-48 snap-start">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={im.url} alt={im.alt || ''} className="w-48 h-48 object-cover rounded-lg border border-gray-300 bg-gray-50" />
+                      <img src={im.url} alt={im.alt || ''} onClick={() => setLightbox(i)} title="Ampliar" className="w-48 h-48 object-cover rounded-lg border border-gray-300 bg-gray-50 cursor-zoom-in" />
                       <span className="absolute top-1 left-1 text-[10px] font-bold bg-black/60 text-white rounded px-1.5 py-0.5">{i + 1}/{imgs.length}</span>
-                      <button onClick={() => regenerar(i + 1)} disabled={editando !== null} className="absolute bottom-1 right-1 text-[10px] bg-white/90 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-white disabled:opacity-50">{editando === i + 1 ? '…' : '✏️ Editar'}</button>
+                      <div className="absolute bottom-1 right-1 flex items-center gap-1">
+                        <a href={dl(im.url)} download title="Descargar" className="text-[10px] bg-white/90 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-white">⬇</a>
+                        <button onClick={() => regenerar(i + 1)} disabled={editando !== null} className="text-[10px] bg-white/90 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-white disabled:opacity-50">{editando === i + 1 ? '…' : '✏️ Editar'}</button>
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="relative inline-block">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={imgs[0].url} alt={imgs[0].alt || ''} className="w-full max-h-[40vh] object-contain rounded-lg border border-gray-300 bg-gray-50" />
-                  <button onClick={() => regenerar(1)} disabled={editando !== null} className="absolute bottom-2 right-2 text-xs bg-white/90 border border-gray-300 rounded px-2 py-1 hover:bg-white disabled:opacity-50">{editando === 1 ? '…' : '✏️ Editar imagen'}</button>
+                  <img src={imgs[0].url} alt={imgs[0].alt || ''} onClick={() => setLightbox(0)} title="Ampliar" className="w-full max-h-[40vh] object-contain rounded-lg border border-gray-300 bg-gray-50 cursor-zoom-in" />
+                  <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                    <a href={dl(imgs[0].url)} download title="Descargar" className="text-xs bg-white/90 border border-gray-300 rounded px-2 py-1 hover:bg-white">⬇</a>
+                    <button onClick={() => regenerar(1)} disabled={editando !== null} className="text-xs bg-white/90 border border-gray-300 rounded px-2 py-1 hover:bg-white disabled:opacity-50">{editando === 1 ? '…' : '✏️ Editar imagen'}</button>
+                  </div>
                 </div>
               )
             ) : null}
@@ -766,6 +776,25 @@ function PreviewModal({ item, onClose, onUpdated }: { item: Item; onClose: () =>
         )}
         {item.post_url && <a href={item.post_url} target="_blank" rel="noreferrer" className="text-sm text-emerald-700 hover:underline">Ver publicación ↗</a>}
       </div>
+
+      {/* Lightbox: imagen en grande + descargar (clic en el fondo o ✕ para cerrar). */}
+      {lightbox !== null && imgs[lightbox] && (
+        <div className="fixed inset-0 z-[80] bg-black/80 flex flex-col items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <div className="absolute top-3 right-3 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+            <a href={dl(imgs[lightbox].url)} download className="text-sm font-medium bg-white/95 hover:bg-white text-gray-800 rounded-lg px-3 py-1.5">⬇ Descargar</a>
+            <button onClick={() => setLightbox(null)} title="Cerrar" className="text-white/90 hover:text-white text-3xl leading-none px-2">×</button>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imgs[lightbox].url} alt={imgs[lightbox].alt || ''} onClick={e => e.stopPropagation()} className="max-h-[85vh] max-w-[92vw] object-contain rounded-lg shadow-2xl" />
+          {esCarrusel && (
+            <div className="mt-3 flex items-center gap-4" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setLightbox(l => l === null ? l : (l - 1 + imgs.length) % imgs.length)} className="text-white/90 hover:text-white text-sm bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5">← Anterior</button>
+              <span className="text-white/80 text-sm tabular-nums">{lightbox + 1} / {imgs.length}</span>
+              <button onClick={() => setLightbox(l => l === null ? l : (l + 1) % imgs.length)} className="text-white/90 hover:text-white text-sm bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5">Siguiente →</button>
+            </div>
+          )}
+        </div>
+      )}
     </Modal>
   )
 }

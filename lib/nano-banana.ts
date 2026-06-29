@@ -1,10 +1,13 @@
 /**
- * Generación de imágenes con Nano Banana Pro (Gemini 3 Pro Image) vía la API REST
- * de Google Generative Language. Devuelve los bytes de la imagen para subirla a R2.
+ * Generación de imágenes con Nano Banana (Gemini 2.5 Flash Image por defecto) vía la
+ * API REST de Google Generative Language. Devuelve los bytes de la imagen para subirla a R2.
  *
  * Requiere GEMINI_API_KEY (API key de Google AI Studio). El modelo y la versión de
  * la API son configurables por entorno por si cambian los identificadores:
- *   GEMINI_IMAGE_MODEL   (default 'gemini-3-pro-image-preview')
+ *   GEMINI_IMAGE_MODEL   (default 'gemini-2.5-flash-image' = "Nano Banana", ~3x más
+ *                         barato que la variante Pro. Como el TEXTO de las piezas se
+ *                         dibuja con satori — no dentro de la foto IA — no se pierde la
+ *                         ventaja del Pro. Para volver al Pro: 'gemini-3-pro-image-preview'.)
  *   GEMINI_API_VERSION   (default 'v1beta')
  *
  * Política de estilo (decisión de marca): TODAS las imágenes deben ser
@@ -15,7 +18,10 @@
 import { ESTILO_MARCA_EN, ESTILO_GRAFICO_EN, PROHIBIDOS_EN } from './marca-visual'
 
 const API_VERSION = process.env.GEMINI_API_VERSION || 'v1beta'
-const MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image-preview'
+// "Nano Banana" (Gemini 2.5 Flash Image): ~3x más barato por imagen que la variante Pro.
+// El texto de las piezas va en placas satori (no en la foto IA), así que la calidad de
+// las fotos sin texto se mantiene. Override con GEMINI_IMAGE_MODEL=gemini-3-pro-image-preview.
+const MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image'
 
 export function isNanoBananaConfigurado(): boolean {
   return !!process.env.GEMINI_API_KEY

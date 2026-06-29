@@ -4,8 +4,8 @@ import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
 import { DIFERENCIADORES } from './diferenciadores'
 import { REGLAS_INVIOLABLES } from './marca-voz'
 import { lintCopy, extraerTextoHtml } from './marketing-lint'
-import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, type ImagenBanco } from './mailing-images'
-import { generarGraficoMarca, cargarDisenoGrafico } from './marketing-grafico'
+import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, reducirParaVision, type ImagenBanco } from './mailing-images'
+import { generarGraficoMarca, cargarDisenoGrafico, type FotoGrafico } from './marketing-grafico'
 import { esLogo } from './marca-logo'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { generarCampana } from './mailing-generator'
@@ -82,7 +82,9 @@ export function isPiezaConfigurada(): boolean {
   return !!process.env.ANTHROPIC_API_KEY
 }
 
-const MODEL = process.env.ANTHROPIC_MAILING_MODEL || 'claude-opus-4-8'
+// Sonnet por defecto (costo): ~5x más barato que Opus para planificación/QA/edición de
+// placas. El linter + las reglas inviolables sostienen la marca. Override con ANTHROPIC_MAILING_MODEL.
+const MODEL = process.env.ANTHROPIC_MAILING_MODEL || 'claude-sonnet-4-6'
 const BANCO_VISIBLE = 40
 
 const VOZ_AUDIENCIA: Record<string, string> = {
@@ -156,7 +158,7 @@ function bancoBloque(banco: ImagenBanco[]): string {
   const otras = banco.filter(b => !esFotoReal(b))
   const partes: string[] = []
   if (fotos.length) {
-    partes.push(`FOTOS REALES (mascotas/personas/productos) — reutilizá una de estas (modo "reuse", URL exacta) cuando una FOTO cálida aporte cercanía a la pieza; así no queda todo en placas de texto:\n${fotos.slice(0, 24).map(fmt).join('\n')}`)
+    partes.push(`FOTOS REALES (mascotas/personas/productos) — reutilizá una de estas (modo "reuse", URL exacta) cuando una FOTO cálida aporte cercanía a la pieza (reutilizar es más barato que generar; así tampoco queda todo en placas). Pero con VARIEDAD: rotá entre las disponibles, NO pongas siempre la misma. Generá una foto NUEVA solo si ninguna calza o si vendrías repitiendo:\n${fotos.slice(0, 24).map(fmt).join('\n')}`)
   }
   if (otras.length) {
     partes.push(`OTRAS IMÁGENES (placas/varios):\n${otras.slice(0, Math.max(0, BANCO_VISIBLE - Math.min(fotos.length, 24))).map(fmt).join('\n')}`)
@@ -410,8 +412,8 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
           const design = await cargarDisenoGrafico(resueltas[i].url)
           if (design) {
             try {
-              const nuevoHtml = await editarPlacaHtml(design.html, p.correccion!.trim())
-              const g = await generarGraficoMarca({ formato: design.formato, html: nuevoHtml, fotos: [], creadoPor, campania: campania || undefined })
+              const { html: nuevoHtml, fotos } = await editarPlacaHtml(design.html, p.correccion!.trim())
+              const g = await generarGraficoMarca({ formato: design.formato, html: nuevoHtml, fotos, creadoPor, campania: campania || undefined })
               resueltas[i] = { ...resueltas[i], url: g.url, grafico: true }
               correcciones++
               avisos.push(`QA: corregí la slide ${p.slide} (${p.tipo}).`)
@@ -506,15 +508,60 @@ function campaniaDePieza(urls: string[], banco: ImagenBanco[]): string | undefin
 }
 
 /** Aplica un cambio puntual al HTML de una placa (satori) vía el modelo; devuelve el HTML nuevo. */
-async function editarPlacaHtml(html: string, instruccion: string): Promise<string> {
+const TOOL_EDIT_PLACA: Anthropic.Tool = {
+  name: 'entregar_placa',
+  description: 'Devuelve el HTML completo de la placa editada y, si el cambio pide agregar/cambiar una FOTO, las fotos a generar e incrustar.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      html: { type: 'string', description: 'HTML COMPLETO de la placa, listo para rasterizar con satori. Mantené estructura, marca, fuentes y colores; cambiá SOLO lo pedido.' },
+      fotos: {
+        type: 'array',
+        description: 'Fotos a GENERAR e incrustar. Incluila SOLO si el cambio pide agregar/cambiar una foto. Cada una se referencia en el HTML como <img src="FOTO:slot" .../>.',
+        items: {
+          type: 'object',
+          properties: {
+            slot: { type: 'string', description: 'Identificador corto (ej. "principal"); debe coincidir EXACTO con el src="FOTO:slot" del HTML.' },
+            prompt: { type: 'string', description: 'Prompt fotorealista, on-brand, SIN texto incrustado (perro/gato y/o tutor; luz cálida y sobria).' },
+            recortar: { type: 'boolean', description: 'true si va recortada sobre fondo transparente (mascota asomándose); false = foto rectangular/full-bleed.' },
+          },
+          required: ['slot', 'prompt'],
+        },
+      },
+    },
+    required: ['html'],
+  },
+}
+
+async function editarPlacaHtml(html: string, instruccion: string): Promise<{ html: string; fotos: FotoGrafico[] }> {
+  // Algunas placas (las generadas con el logo ya incrustado) traen imágenes como data
+  // URI base64 ENORMES. El modelo NO debe reescribir ese base64: lo trunca/corrompe y
+  // al rasterizar tira "Invalid character". Las enmascaramos con un marcador corto,
+  // dejamos que edite el resto, y las restauramos byte a byte.
+  const assets: string[] = []
+  const htmlSeguro = html.replace(/data:[a-z0-9.+-]+\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi, (m) => {
+    const i = assets.length
+    assets.push(m)
+    return `__ASSET_${i}__`
+  })
   const res = await getClient().messages.create({
     model: MODEL,
     max_tokens: 4000,
-    system: `${REGLAS_INVIOLABLES}\n\nSos diseñador de Crematorio Alma Animal. Te paso el HTML de una PLACA de marca que se rasteriza con satori. Aplicá EXACTAMENTE el cambio pedido y devolvé SOLO el HTML completo nuevo (sin explicaciones ni cercos \`\`\`), manteniendo la estructura, la marca, las fuentes y los colores; cambiá únicamente lo pedido.\n\n${MARCA_GRAFICO}`,
-    messages: [{ role: 'user', content: `HTML actual de la placa:\n\`\`\`html\n${html}\n\`\`\`\n\nCAMBIO PEDIDO (solo esto; el resto queda igual): ${instruccion}` }],
+    tools: [TOOL_EDIT_PLACA],
+    tool_choice: { type: 'tool', name: 'entregar_placa' },
+    system: `${REGLAS_INVIOLABLES}\n\nSos diseñador de Crematorio Alma Animal. Te paso el HTML de una PLACA de marca que se rasteriza con satori. Aplicá EXACTAMENTE el cambio pedido manteniendo la estructura, la marca, las fuentes y los colores; cambiá únicamente lo pedido. Devolvés el resultado SOLO con la tool entregar_placa.\n\nREGLAS:\n- Si ves marcadores como __ASSET_0__ (imágenes ya incrustadas, p. ej. el logo), copialos TAL CUAL: no los borres, no los muevas de su <img>, no los reescribas.\n- Si el cambio pide AGREGAR o cambiar una FOTO: reestructurá el layout para que la foto sea protagonista (full-bleed, panel lateral o mascota asomándose, según el menú de layouts), poné un <img src="FOTO:slot" .../> dimensionado con CSS donde va, y devolvé esa foto en "fotos" con un prompt fotorealista on-brand. NO inventes <img> con URLs http: las fotos nuevas SIEMPRE van como FOTO:slot.\n- Conservá el copy/los datos salvo que el cambio pida lo contrario.\n\n${MARCA_GRAFICO}`,
+    messages: [{ role: 'user', content: `HTML actual de la placa:\n\`\`\`html\n${htmlSeguro}\n\`\`\`\n\nCAMBIO PEDIDO (solo esto; el resto queda igual): ${instruccion}` }],
   })
-  const txt = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
-  return txt.replace(/^```(?:html)?\s*/i, '').replace(/```\s*$/i, '').trim() || html
+  const call = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'entregar_placa')
+  const input = (call?.input || {}) as { html?: string; fotos?: { slot?: string; prompt?: string; recortar?: boolean }[] }
+  // Restaurar los assets enmascarados (intactos). Si el modelo borró algún marcador, el
+  // logo se reaplica solo en generarGraficoMarca (no quedó base64 roto en el HTML).
+  const editado = (input.html || '').trim()
+  const htmlFinal = (editado ? editado.replace(/__ASSET_(\d+)__/g, (_, n) => assets[Number(n)] ?? '') : html)
+  const fotos: FotoGrafico[] = Array.isArray(input.fotos)
+    ? input.fotos.filter(f => f?.slot && f?.prompt).map(f => ({ slot: String(f.slot), prompt: String(f.prompt), recortar: !!f.recortar }))
+    : []
+  return { html: htmlFinal, fotos }
 }
 
 // ─── QA con VISIÓN (Bloque C) ────────────────────────────────────────────────
@@ -554,7 +601,10 @@ async function qaPieza(resueltas: ImagenResuelta[], item: ItemCalendario): Promi
   const imgs: Anthropic.ImageBlockParam[] = []
   for (const r of resueltas) {
     const ref = await refDesdeUrl(r.url)
-    if (ref) imgs.push({ type: 'image', source: { type: 'base64', media_type: (ref.mime || 'image/jpeg') as 'image/jpeg', data: ref.data.toString('base64') } })
+    if (ref) {
+      const mini = await reducirParaVision(ref.data) // ~768px: menos tokens de visión
+      imgs.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: mini.data.toString('base64') } })
+    }
   }
   if (imgs.length === 0) return []
   const sys = `Sos director de arte + control de calidad de Crematorio Alma Animal (cremación de mascotas; marca navy/dorado/crema; voz sobria, cálida, profesional). Te paso las ${imgs.length} imágenes de una pieza para ${item.canal} (audiencia ${item.audiencia}), EN ORDEN. Revisalas CRÍTICAMENTE como si se publicaran en la página de un negocio premium. Reportá SOLO problemas REALES que VEAS (no inventes):
@@ -613,9 +663,11 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
   const design = await cargarDisenoGrafico(imgs[ti].url)
   if (design) {
     // PLACA → editar el HTML y re-renderizar con satori (gratis, on-brand, misma campaña).
+    // Si el cambio pide agregar/cambiar una FOTO, editarPlacaHtml devuelve los FOTO:slot
+    // y generarGraficoMarca las genera (gemini) e incrusta.
     try {
-      const nuevoHtml = await editarPlacaHtml(design.html, instruccion.trim())
-      const g = await generarGraficoMarca({ formato: design.formato, html: nuevoHtml, fotos: [], creadoPor, campania })
+      const { html: nuevoHtml, fotos } = await editarPlacaHtml(design.html, instruccion.trim())
+      const g = await generarGraficoMarca({ formato: design.formato, html: nuevoHtml, fotos, creadoPor, campania })
       imgs[ti] = { url: g.url, alt: imgs[ti].alt || '' }
       avisos.push(...g.avisos)
     } catch (e) { avisos.push(`No se pudo ajustar la placa ${ti + 1}: ${e instanceof Error ? e.message : 'error'}`) }

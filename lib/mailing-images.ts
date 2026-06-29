@@ -239,7 +239,25 @@ async function recortarFondo(input: Buffer): Promise<Buffer> {
 }
 
 /**
- * Genera una imagen con Nano Banana Pro, la sube a R2 y la registra en el banco.
+ * Reduce una imagen para mandarla a la QA con VISIÓN (Claude): la lleva a ~768px
+ * lado máximo y la re-encoda JPEG liviano. Manda menos tokens de entrada al modelo
+ * (la QA no necesita resolución completa para juzgar logo/composición/texto cortado).
+ * Best-effort: si falla, devuelve el buffer original como JPEG.
+ */
+export async function reducirParaVision(buf: Buffer): Promise<{ data: Buffer; mime: 'image/jpeg' }> {
+  try {
+    const out = await sharp(buf)
+      .resize({ width: 768, height: 768, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 78 })
+      .toBuffer()
+    return { data: out, mime: 'image/jpeg' }
+  } catch {
+    return { data: buf, mime: 'image/jpeg' }
+  }
+}
+
+/**
+ * Genera una imagen con Nano Banana, la sube a R2 y la registra en el banco.
  * Las imágenes del banco quedan SIEMPRE LIMPIAS (sin logo): el logo es un paso de
  * cierre que se aplica a la pieza que se publica (ver estamparLogoEnUrl), así una
  * misma imagen se puede reutilizar sin arrastrar el logo y no se duplica.

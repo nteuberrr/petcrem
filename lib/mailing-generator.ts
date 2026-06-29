@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { BRAND, LOGO_URL, getContacto, type Contacto } from './email-layout'
 import { isNanoBananaConfigurado } from './nano-banana'
-import { listarImagenes, generarYGuardarImagen, type ImagenBanco } from './mailing-images'
+import { listarImagenes, generarYGuardarImagen, reducirParaVision, type ImagenBanco } from './mailing-images'
 import { MARCA_VISUAL } from './marca-visual'
 import { DIFERENCIADORES } from './diferenciadores'
 
@@ -36,7 +36,9 @@ export function isGeneradorConfigurado(): boolean {
   return !!process.env.ANTHROPIC_API_KEY
 }
 
-const MODEL = process.env.ANTHROPIC_MAILING_MODEL || 'claude-opus-4-8'
+// Sonnet por defecto (costo): ~5x más barato que Opus. El linter de marca + las reglas
+// inviolables sostienen la calidad. Override con ANTHROPIC_MAILING_MODEL si se quiere Opus.
+const MODEL = process.env.ANTHROPIC_MAILING_MODEL || 'claude-sonnet-4-6'
 
 /** Tope de imágenes nuevas por generación (control de costo/latencia). */
 const MAX_NUEVAS = 5
@@ -86,7 +88,7 @@ IMÁGENES NUEVAS (cuando ninguna del banco sirve):
   - Por CADA marcador agrega una entrada en "nuevas" con: slot (ej. "slot1"), prompt (descripción FOTOGRÁFICA detallada de la escena, en español o inglés), alt (texto alternativo), aspect (ej. "16:9", "1:1", "4:5"), descripcion (1 línea para el banco), tags (palabras clave separadas por coma) y grupo (uno de: mascotas, personas, productos, otro).
   - TODAS las imágenes son FOTORREALISTAS: personas y mascotas REALES, luz natural, como una foto editorial. Nada de ilustración, cartoon, 3D ni texto incrustado en la imagen.
   - PROHIBIDO generar fotos de INSTALACIONES, locales, hornos, salas, fachada, vehículos o cualquier dependencia del crematorio. Esas fotos SOLO se muestran reutilizando imágenes del banco con grupo "instalaciones" (las sube el equipo). Si el correo necesitaría mostrar instalaciones y no hay ninguna en el banco, omite esa imagen — NO la inventes.
-  - Máximo ${MAX_NUEVAS} imágenes nuevas por campaña. Reutiliza del banco siempre que puedas para no generar de más.`
+  - Máximo ${MAX_NUEVAS} imágenes nuevas por campaña. PRIORIZA reutilizar del banco cuando haya una imagen que CALCE de verdad (reutilizar es gratis; generar cuesta) — pero con VARIEDAD: no repitas siempre las mismas fotos entre campañas, rotá entre las disponibles. Generá una nueva solo si ninguna del banco encaja o si vendrías repitiendo lo ya usado.`
     : `IMÁGENES: la generación de imágenes nuevas NO está disponible ahora. Usa SOLO imágenes del banco (si hay) o diseña un correo atractivo sin fotos (bloques de color, tipografía, el logo). No uses marcadores GEN: ni inventes URLs.`
 
   return `Eres diseñador senior de email marketing del **Crematorio Alma Animal** (cremación de mascotas, Recoleta, Santiago de Chile; cobertura Región Metropolitana; lema "Huellas que no se borran"). Diseñas campañas para la BASE DE VETERINARIOS (B2B): clínicas en convenio o potenciales socios. Tienes LIBERTAD TOTAL de diseño para crear una pieza de excelencia.
@@ -367,8 +369,6 @@ const REVIEW_TOOL: Anthropic.Tool = {
   },
 }
 
-type MediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
-
 async function revisarYPulir(
   html: string,
   imgs: { label: string; buffer: Buffer; mime: string }[],
@@ -379,9 +379,10 @@ async function revisarYPulir(
   if (imgs.length > 0) {
     content.push({ type: 'text', text: 'Imágenes generadas para este correo (revisa su consistencia visual entre sí y con el correo):' })
     for (const im of imgs) {
-      const mt: MediaType = (['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(im.mime) ? im.mime : 'image/png') as MediaType
+      // ~768px: la QA no necesita resolución completa → menos tokens de visión.
+      const mini = await reducirParaVision(im.buffer)
       content.push({ type: 'text', text: `Imagen: ${im.label}` })
-      content.push({ type: 'image', source: { type: 'base64', media_type: mt, data: im.buffer.toString('base64') } })
+      content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: mini.data.toString('base64') } })
     }
   }
   const res = await getClient().messages.create({

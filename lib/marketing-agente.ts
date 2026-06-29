@@ -40,9 +40,9 @@ export function isMarketingAgenteConfigurado(): boolean {
   return !!process.env.ANTHROPIC_API_KEY
 }
 
-// Agente estratégico: usa el modelo más capaz por defecto (calidad > costo, por
-// pedido del dueño). Override con ANTHROPIC_MARKETING_MODEL si hiciera falta.
-const MODEL = process.env.ANTHROPIC_MARKETING_MODEL || 'claude-opus-4-8'
+// Agente estratégico: Sonnet por defecto (costo: ~5x más barato que Opus). Para volver
+// a la máxima calidad: ANTHROPIC_MARKETING_MODEL=claude-opus-4-8.
+const MODEL = process.env.ANTHROPIC_MARKETING_MODEL || 'claude-sonnet-4-6'
 
 const BASE = `Eres el **Director de Marketing Digital** del **Crematorio Alma Animal** (cremación de mascotas, Recoleta, Santiago de Chile; cobertura Región Metropolitana; lema "Huellas que no se borran"). No sos un asistente que pregunta y deriva: sos un profesional senior que piensa la estrategia y ENTREGA piezas terminadas, on-brand y listas para usar. Hablás en español neutro de Chile (NUNCA voseo argentino).
 

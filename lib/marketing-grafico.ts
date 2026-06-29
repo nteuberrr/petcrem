@@ -91,15 +91,19 @@ export async function generarGraficoMarca(args: {
   // Limpiar placeholders FOTO: que hayan quedado sin resolver (evita src roto).
   html = html.replace(/<img\b[^>]*\bsrc=["']FOTO:[^"']*["'][^>]*>/gi, '').replace(/FOTO:[\w-]+/g, '')
 
-  // 2) ¿El agente ya ubicó el logo en el diseño? (referencia una variante del grupo "marca").
+  // 2) ¿El agente ya ubicó el logo en el diseño? (referencia una variante del grupo
+  //    "marca", o el logo ya viene incrustado como data URI en una placa recuperada/editada).
   const logos = (await listarImagenes().catch(() => [])).filter(esLogo)
-  const agentePusoLogo = logos.some(l => l.url && html.includes(l.url))
+  const agentePusoLogo = logos.some(l => l.url && html.includes(l.url)) || /data:image\/[a-z0-9.+-]+;base64,/i.test(html)
 
   // Logo NÍTIDO: recortar el aire del asset y dejarlo crisp ANTES de que satori lo escale.
-  html = await preprocesarLogos(html, logos)
+  // OJO: esto inlinea el logo como data URI gigante → SOLO para el render. El sidecar de
+  //   diseño (paso 6) se guarda con `html` (logo como URL), NO con esta versión: si no, al
+  //   editar la placa el modelo trunca/corrompe ese base64 → "Invalid character" al rasterizar.
+  const htmlRender = await preprocesarLogos(html, logos)
 
   // 3) Rasterizar el HTML con las fuentes de marca (More Sugar + Inter), colores exactos.
-  const { buffer: png } = await renderGraficoHTML({ html, width: dims.w, height: dims.h })
+  const { buffer: png } = await renderGraficoHTML({ html: htmlRender, width: dims.w, height: dims.h })
 
   // 4) Logo: el AGENTE lo ubica dentro del diseño (placement libre, en su HTML). Solo si NO
   //    lo puso, lo estampamos como respaldo (mejor variante por contraste, abajo a la derecha).

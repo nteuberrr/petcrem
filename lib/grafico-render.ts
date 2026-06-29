@@ -40,6 +40,19 @@ async function getFonts(): Promise<SatoriFont[]> {
 }
 
 // ─── HTML → VDOM de satori (propio; satori-html arrastra ultrahtml y rompe ESM) ──
+
+// Tags VOID de HTML (se auto-cierran de verdad). Cualquier OTRO tag auto-cerrado
+// (`<div .../>`, `<span .../>` que el modelo escribe para elementos decorativos)
+// node-html-parser lo parsea de forma inconsistente (a veces anida los hermanos
+// siguientes dentro) → árbol corrupto → satori tira "Expected <div> to have explicit
+// display: flex...". Los expandimos a `<tag ...></tag>` ANTES de parsear: determinista.
+const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'])
+function expandirAutocierre(html: string): string {
+  // attrs: tolera comillas con `>` adentro. Solo convierte tags NO-void.
+  return html.replace(/<([a-zA-Z][\w-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)\/>/g, (m, tag: string, attrs: string) =>
+    VOID_TAGS.has(tag.toLowerCase()) ? m : `<${tag}${attrs}></${tag}>`)
+}
+
 function aCamel(k: string): string { return k.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()) }
 
 function parseStyle(s?: string): Record<string, string> {
@@ -74,7 +87,25 @@ function nodoAVNode(node: Node): VNode | null {
   if (attrs.src) props.src = attrs.src
   if (tag === 'img') return { type: 'img', props }
   const hijos = el.childNodes.map(nodoAVNode).filter((c): c is VNode => c !== null)
-  props.children = hijos.length === 1 ? hijos[0] : hijos
+  // satori EXIGE display explícito (flex/contents/none) en todo elemento que tenga
+  // >1 hijo O un hijo que sea ELEMENTO (un solo hijo de TEXTO sí está permitido sin
+  // display — por eso los <span> de texto funcionan). Si no, tira "Expected <div> to
+  // have explicit display: flex...". Algunos modelos (Sonnet) omiten el display o ponen
+  // display:block. Normalizamos: si falta o no es válido, forzamos flex + column (≈ el
+  // apilado en bloque que se espera). Si el modelo YA puso display:flex, se respeta.
+  const necesitaDisplay = hijos.length > 1 || hijos.some(h => typeof h !== 'string')
+  if (necesitaDisplay) {
+    const d = String((style.display as string) || '')
+    if (d !== 'flex' && d !== 'contents' && d !== 'none') {
+      style.display = 'flex'
+      if (!style.flexDirection) style.flexDirection = 'column'
+    }
+  }
+  // children: un solo hijo va suelto; varios, como array; CERO → no seteamos `children`.
+  // (Un array vacío hace que satori cuente "varios hijos" y exija display flex → reventaba
+  // con los <div .../> auto-cerrados que genera el modelo para elementos decorativos.)
+  if (hijos.length === 1) props.children = hijos[0]
+  else if (hijos.length > 1) props.children = hijos
   return { type: tag, props }
 }
 
@@ -118,7 +149,7 @@ export async function renderGraficoHTML(opts: RenderGraficoOpts): Promise<{ buff
   if (!opts.html?.trim()) throw new Error('Falta el HTML del gráfico')
   const fonts = await getFonts()
   // Defensa en profundidad: saca glifos que satori no dibuja (flechas/emojis → cajas rotas).
-  const inlined = await incrustarImagenes(sanitizarGlifos(opts.html))
+  const inlined = await incrustarImagenes(sanitizarGlifos(expandirAutocierre(opts.html)))
   const vnode = htmlAVNode(inlined)
   const svg = await satori(vnode as Parameters<typeof satori>[0], {
     width: opts.width,
