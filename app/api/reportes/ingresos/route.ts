@@ -110,6 +110,22 @@ export async function GET(req: NextRequest) {
       return 'General'
     }
 
+    function adicionalesTexto(c: Record<string, string>): string {
+      try {
+        const items = JSON.parse(c.adicionales || '[]') as AdicionalItem[]
+        if (!Array.isArray(items) || items.length === 0) return ''
+        return items
+          .map(a => {
+            const qty = Math.max(1, a.qty ?? 1)
+            const nom = a.nombre || a.tipo || a.id || 'Adicional'
+            return qty > 1 ? `${nom} x${qty}` : nom
+          })
+          .join(', ')
+      } catch {
+        return ''
+      }
+    }
+
     // Filtrar clientes por fecha_retiro (driver de venta). Los borradores (fichas
     // del bot aún sin registrar) no son ventas: se excluyen del reporte.
     const clientesFiltrados = clientes.filter(c => {
@@ -129,6 +145,16 @@ export async function GET(req: NextRequest) {
     const especieMap = new Map<string, Bucket>()
     const comunaMap = new Map<string, Bucket>()
     const tipoPrecioMap = new Map<string, Bucket>()
+
+    // Detalle fila-por-fila: la base completa de registros de venta (una por ficha),
+    // con su tramo y el desglose de precio (snapshots de la ficha).
+    type Detalle = {
+      codigo: string; fecha: string; tutor: string; mascota: string; especie: string
+      peso: number; tramo: string; orden: number; servicio: string; tipo_precio: string
+      veterinaria: string; comuna: string; adicionales: string
+      precio_servicio: number; precio_adicionales: number; descuento: number; total: number
+    }
+    const detalle: Detalle[] = []
 
     let total = 0
     let cantidad = 0
@@ -183,7 +209,31 @@ export async function GET(req: NextRequest) {
       t.ingresos += ingreso
       t.cantidad += 1
       tipoPrecioMap.set(tp, t)
+
+      // Fila de detalle (base de ventas)
+      detalle.push({
+        codigo: c.codigo || `#${c.id}`,
+        fecha: formatDateForSheet(c.fecha_retiro || c.fecha_creacion) || '',
+        tutor: c.nombre_tutor?.trim() || '',
+        mascota: c.nombre_mascota?.trim() || '',
+        especie: esp,
+        peso,
+        tramo: trLabel,
+        orden,
+        servicio: codigo,
+        tipo_precio: tp,
+        veterinaria: c.veterinaria_id ? (vetById[c.veterinaria_id]?.nombre || '') : '',
+        comuna: com,
+        adicionales: adicionalesTexto(c),
+        precio_servicio: parseDecimalOr0(c.precio_servicio),
+        precio_adicionales: parseDecimalOr0(c.precio_adicionales),
+        descuento: parseDecimalOr0(c.descuento_monto),
+        total: ingreso,
+      })
     }
+
+    // Ordenado por tramo (luego por fecha) → "la base completa según el tramo".
+    detalle.sort((a, b) => (a.orden - b.orden) || a.fecha.localeCompare(b.fecha))
 
     const evolucion = Array.from(evolMap.entries())
       .map(([mes_key, v]) => ({ mes_key, mes_label: v.mes_label, ingresos: v.ingresos, cantidad: v.cantidad }))
@@ -221,6 +271,7 @@ export async function GET(req: NextRequest) {
       por_especie: porEspecie,
       por_comuna: porComuna,
       por_tipo_precio: porTipoPrecio,
+      detalle,
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

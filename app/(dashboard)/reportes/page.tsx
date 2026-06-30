@@ -62,6 +62,12 @@ const CHART_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#e
 
 type IngresoBucket = { mes_key: string; mes_label: string; ingresos: number; cantidad: number }
 type IngresoSlice = { ingresos: number; cantidad: number }
+type IngresoDetalle = {
+  codigo: string; fecha: string; tutor: string; mascota: string; especie: string
+  peso: number; tramo: string; orden: number; servicio: string; tipo_precio: string
+  veterinaria: string; comuna: string; adicionales: string
+  precio_servicio: number; precio_adicionales: number; descuento: number; total: number
+}
 type IngresosData = {
   resumen: { total: number; cantidad: number; ticket_promedio: number }
   evolucion_mensual: IngresoBucket[]
@@ -70,6 +76,7 @@ type IngresosData = {
   por_especie: Array<IngresoSlice & { especie: string }>
   por_comuna: Array<IngresoSlice & { comuna: string }>
   por_tipo_precio: Array<IngresoSlice & { tipo: string }>
+  detalle: IngresoDetalle[]
 }
 
 function fmtPrecioCorto(n: number): string {
@@ -979,6 +986,7 @@ function IngresosTab({
   const porEspecie = data?.por_especie ?? []
   const porComuna = (data?.por_comuna ?? []).slice(0, 10)
   const porTipoPrecio = data?.por_tipo_precio ?? []
+  const detalle = data?.detalle ?? []
 
   async function descargarExcel() {
     if (!data) return
@@ -1014,6 +1022,59 @@ function IngresosTab({
     XLSX.writeFile(wb, `petcrem-ingresos-${sufijo}.xlsx`)
   }
 
+  // Informe detallado: la base completa de registros de venta, ordenada por tramo.
+  async function descargarDetalle() {
+    if (!data || detalle.length === 0) return
+    const XLSX = await import('xlsx-js-style')
+    const wb = XLSX.utils.book_new()
+    const headerStyle = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '143C64' } } }
+    const headers = [
+      'Código', 'Fecha retiro', 'Tutor', 'Mascota', 'Especie', 'Peso (kg)', 'Tramo',
+      'Servicio', 'Tipo de precio', 'Veterinaria', 'Comuna', 'Adicionales',
+      'Precio servicio', 'Precio adicionales', 'Descuento', 'Total',
+    ]
+    const filas: (string | number)[][] = detalle.map(d => [
+      d.codigo,
+      d.fecha ? fmtFecha(d.fecha) : '',
+      d.tutor,
+      d.mascota,
+      d.especie,
+      d.peso || 0,
+      d.tramo,
+      d.servicio,
+      d.tipo_precio,
+      d.veterinaria,
+      d.comuna,
+      d.adicionales,
+      d.precio_servicio,
+      d.precio_adicionales,
+      d.descuento,
+      d.total,
+    ])
+    // Fila de totales
+    const sumServicio = detalle.reduce((s, d) => s + d.precio_servicio, 0)
+    const sumAdic = detalle.reduce((s, d) => s + d.precio_adicionales, 0)
+    const sumDesc = detalle.reduce((s, d) => s + d.descuento, 0)
+    const sumTotal = detalle.reduce((s, d) => s + d.total, 0)
+    const totalRow: (string | number)[] = ['TOTAL', '', '', '', '', '', '', '', '', '', '', `${detalle.length} ventas`, sumServicio, sumAdic, sumDesc, sumTotal]
+
+    const aoa = [headers, ...filas, [], totalRow]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    // Estilo del encabezado
+    for (let c = 0; c < headers.length; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c })
+      if (ws[ref]) ws[ref].s = headerStyle
+    }
+    ws['!cols'] = [
+      { wch: 10 }, { wch: 12 }, { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 9 }, { wch: 12 },
+      { wch: 10 }, { wch: 13 }, { wch: 24 }, { wch: 16 }, { wch: 26 },
+      { wch: 14 }, { wch: 15 }, { wch: 12 }, { wch: 13 },
+    ]
+    XLSX.utils.book_append_sheet(wb, ws, 'Base de ventas')
+    const sufijo = desde || hasta ? `${desde || 'inicio'}_${hasta || 'hoy'}` : 'completo'
+    XLSX.writeFile(wb, `petcrem-ingresos-detalle-${sufijo}.xlsx`)
+  }
+
   return (
     <div className="space-y-6">
       {/* Filtros de período */}
@@ -1038,10 +1099,14 @@ function IngresosTab({
             Limpiar
           </button>
         )}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
           <button onClick={descargarExcel} disabled={!data}
             className="text-sm text-brand hover:text-brand font-medium disabled:opacity-40">
-            ↓ Excel
+            ↓ Resumen (Excel)
+          </button>
+          <button onClick={descargarDetalle} disabled={!data || (data?.detalle?.length ?? 0) === 0}
+            className="bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40">
+            ↓ Base de ventas (detalle)
           </button>
         </div>
         {loading && <span className="text-xs text-gray-400">Cargando...</span>}
