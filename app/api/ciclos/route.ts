@@ -83,9 +83,13 @@ export async function POST(req: NextRequest) {
       data.mascotas_ids.map((mascotaId) => {
         const idx = idxById.get(mascotaId)
         if (idx === undefined) return Promise.resolve()
+        // Sin Devolución (SD) no se despacha: su flujo termina en la cremación,
+        // así que pasa directo a 'despachado' (sin despacho_id ni ruta) en vez de
+        // quedar como 'cremado' pendiente de despacho.
+        const esSD = (clientes[idx].codigo_servicio || 'CI').toUpperCase() === 'SD'
         return updateById('clientes', clientes[idx].id, {
           ...clientes[idx],
-          estado: 'cremado',
+          estado: esSD ? 'despachado' : 'cremado',
           ciclo_id: id,
         })
       })
@@ -187,9 +191,14 @@ export async function DELETE(req: NextRequest) {
         mascotasIds.map((mid) => {
           const cIdx = idxById.get(mid)
           if (cIdx === undefined) return Promise.resolve()
-          // Solo revertir si seguía en cremado vinculada a este ciclo
-          if (clientes[cIdx].estado === 'cremado' && clientes[cIdx].ciclo_id === id) {
-            return updateById('clientes', clientes[cIdx].id, { ...clientes[cIdx], estado: 'pendiente', ciclo_id: '' })
+          const c = clientes[cIdx]
+          if (c.ciclo_id !== id) return Promise.resolve()
+          const esSD = (c.codigo_servicio || 'CI').toUpperCase() === 'SD'
+          // Revertir si seguía cremado por este ciclo, o si es un SD que pasó
+          // directo a 'despachado' por este ciclo (sin despacho real asociado).
+          const revertible = c.estado === 'cremado' || (esSD && c.estado === 'despachado' && !c.despacho_id)
+          if (revertible) {
+            return updateById('clientes', c.id, { ...c, estado: 'pendiente', ciclo_id: '' })
           }
           return Promise.resolve()
         })

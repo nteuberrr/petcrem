@@ -918,6 +918,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               <InfoField label="N° global" value={cliente.despacho.numero_global ? `N° ${cliente.despacho.numero_global}` : '—'} />
               <InfoField label="Nota" value={cliente.despacho.nota || '—'} />
             </div>
+          ) : (cliente.codigo_servicio || '').toUpperCase() === 'SD' ? (
+            <p className="text-sm text-gray-600">Servicio <strong>Sin Devolución</strong>: el proceso finaliza en la cremación (no se devuelven las cenizas), por lo que no requiere despacho.</p>
           ) : (
             <p className="text-sm text-gray-500">Despacho no encontrado (id: {cliente.despacho_id || '—'}).</p>
           )}

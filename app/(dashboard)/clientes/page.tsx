@@ -309,7 +309,9 @@ export default function ClientesPage() {
     return {
       pagoPendiente: reales.filter(c => c.estado_pago !== 'pagado').length,
       enCamara: reales.filter(c => c.estado === 'pendiente' || !c.estado).length,
-      porDespachar: reales.filter(c => c.estado === 'cremado').length,
+      // Los Sin Devolución (SD) NO se despachan (su flujo termina en "cremado"),
+      // así que no cuentan como pendientes de despacho.
+      porDespachar: reales.filter(c => c.estado === 'cremado' && (c.codigo_servicio || 'CI').toUpperCase() !== 'SD').length,
       datosPendientes: reales.filter(c => tieneDatosPendientes(c)).length,
     }
   }, [clientes])
