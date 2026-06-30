@@ -626,6 +626,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const videosServicio: string[] = (() => {
     try { const x = JSON.parse(cliente.videos_servicio || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
   })()
+  // El tutor pidió el video del proceso desde el correo (deja la marca en `notas`).
+  const solicitaVideo = /solicit[oó] el video/i.test(cliente.notas || '')
   const fotosEvidencia: string[] = (() => {
     try { const x = JSON.parse(cliente.fotos_evidencia || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
   })()
@@ -768,6 +770,15 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     </div>
                   </div>
                   </>
+                )}
+
+                {solicitaVideo && (
+                  <div
+                    title="El tutor solicitó el video del proceso desde el correo. Recuerda prepararlo y adjuntarlo."
+                    className="mt-3 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-50 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-800"
+                  >
+                    🎥 Cliente solicita video
+                  </div>
                 )}
               </div>
             )}
