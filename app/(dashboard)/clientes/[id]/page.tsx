@@ -10,6 +10,7 @@ import { formatDateForSheet } from '@/lib/dates'
 import { parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { anforaPremiumIncluida, servicioIncluyeAnforaPremium } from '@/lib/anforas-premium'
+import { esAdmin } from '@/lib/roles'
 
 type Certificado = {
   id: string
@@ -106,7 +107,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const { id } = use(params)
   const router = useRouter()
   const { data: session } = useSession()
-  const isAdmin = (session?.user as { role?: string })?.role === 'admin'
+  const isAdmin = esAdmin((session?.user as { role?: string })?.role)
   const [cliente, setCliente] = useState<ClienteDetalle | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

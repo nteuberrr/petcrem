@@ -9,6 +9,7 @@ import {
 import Link from 'next/link'
 import TimelineStatus from '@/components/TimelineStatus'
 import { Modal } from '@/components/ui/Modal'
+import { esAdmin } from '@/lib/roles'
 
 type RatioKey = 'litros_por_mascota' | 'litros_por_ciclo' | 'costo_vehiculo_por_mascota' | 'duracion_promedio_ciclo_min'
 type RatioMensual = { mes: string; litros_por_mascota: number; litros_por_ciclo: number; costo_vehiculo_por_mascota: number; duracion_promedio_ciclo_min: number }
@@ -35,7 +36,7 @@ const COLORS = ['#143C64', '#F2B84B', '#2A6DB0', '#10b981', '#ec4899', '#f59e0b'
 
 export default function DashboardPage() {
   const { data: session } = useSession()
-  const isAdmin = (session?.user as { role?: string })?.role === 'admin'
+  const isAdmin = esAdmin((session?.user as { role?: string })?.role)
   const [data, setData] = useState<Data | null>(null)
   const [loading, setLoading] = useState(true)
   const [ratioOpen, setRatioOpen] = useState<RatioKey | null>(null)

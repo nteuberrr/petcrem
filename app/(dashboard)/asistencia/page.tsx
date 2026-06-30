@@ -5,6 +5,7 @@ import { fmtPrecio, fmtNumero, fmtFecha } from '@/lib/format'
 import { todayISO, formatDateForSheet, formatHora } from '@/lib/dates'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
+import { esAdmin } from '@/lib/roles'
 
 type Registro = {
   id: string
@@ -68,7 +69,8 @@ function fmtMinutos(mins: number): string {
 export default function AsistenciaPage() {
   const { data: session } = useSession()
   const role = (session?.user as { role?: string })?.role ?? 'operador'
-  const isAdmin = role === 'admin'
+  // admin y admin2 gestionan asistencia (ver todos, aprobar horas, registrar pagos).
+  const isAdmin = esAdmin(role)
   const myId = (session?.user as { id?: string })?.id ?? '0'
   const myName = session?.user?.name ?? session?.user?.email ?? ''
 

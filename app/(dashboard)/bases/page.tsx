@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
+import { esAdmin } from '@/lib/roles'
 import { Toggle } from '@/components/ui/Toggle'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { Modal } from '@/components/ui/Modal'
@@ -13,7 +14,8 @@ const emptyVet = { nombre: '', direccion: '', telefono: '', correo: '', nombre_c
 
 export default function BasesPage() {
   const { data: session, status } = useSession()
-  const isAdmin = status === 'authenticated' && (session?.user?.role === 'admin' || session?.user?.role === undefined)
+  // admin y admin2 acceden a esta sección (admin2 = "General", todo menos Config Avanzada).
+  const isAdmin = status === 'authenticated' && (esAdmin(session?.user?.role) || session?.user?.role === undefined)
 
   const [vets, setVets] = useState<Vet[]>([])
 
