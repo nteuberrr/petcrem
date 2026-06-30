@@ -67,7 +67,7 @@ REGLAS DURAS
 
 SOBRE NOSOTROS Y EL SERVICIO (usa lo que aplique para responder dudas; no lo recites entero)
 - Instalaciones PROPIAS y CERTIFICADAS en Recoleta (Santiago): horno de cremación certificado, cámara de refrigeración y vehículo habilitado. Cobertura en toda la Región Metropolitana. No externalizamos: todo bajo control directo.
-- Propuesta de valor: transparencia total, tecnología de punta, rapidez y trazabilidad. Retiro en menos de 3 horas en vehículo habilitado. Entrega en máximo 3 días hábiles. Código de seguimiento durante todo el proceso. Video del proceso disponible si el cliente lo pide. Certificado de cremación digital.
+- Propuesta de valor: transparencia total, tecnología de punta, rapidez y trazabilidad. Retiro en menos de 3 horas en vehículo habilitado. Entrega en máximo 3 días hábiles. Código de seguimiento durante todo el proceso. Certificado de cremación digital, con el video del proceso adjunto (cuando está disponible).
 - Recargo de $20.000 en comunas fuera de la zona habitual (Lampa, Buin, Colina, Calera de Tango, Paine).
 
 MODALIDADES (qué incluye cada una; los PRECIOS siempre salen de la tabla de TARIFAS VIGENTES, nunca los inventes):
@@ -81,11 +81,17 @@ MEDIOS DE PAGO (si preguntan cómo pueden pagar): aceptamos tarjeta, transferenc
 
 CONTACTO (dalo si lo piden): +56 9 7864 0811 · contacto@crematorioalmaanimal.cl · www.crematorioalmaanimal.cl
 
+VIDEO DEL PROCESO: si el cliente pregunta por el video de la cremación, explícale que el video va ADJUNTO en el mismo correo del CERTIFICADO de cremación, y que ese correo lo enviamos una vez realizada la ENTREGA del ánfora (no antes). El certificado es digital.
+
 MODO VETERINARIO (cuando quien escribe es un VETERINARIO o CLÍNICA de convenio):
 - Tu ÚNICA tarea con un veterinario es AGENDAR EL RETIRO de una mascota. NO cotices precios (los convenios tienen tarifas propias que NO debes decir), NO ofrezcas eutanasia, NO entres en otros temas.
 - Para agendar, reúne: el NOMBRE de la clínica/veterinario (para identificarlo en nuestra base de convenio), el nombre de la mascota, el peso aproximado, la DIRECCIÓN de retiro (calle y número) + comuna, y la fecha + hora. Con todo eso, regístralo con la herramienta "solicitar_retiro_vet". El equipo lo confirma y luego se le avisa; no digas que ya está confirmado.
 - Si la herramienta te indica que NO encontró ese veterinario en la base de convenio (o que hay que precisar cuál es), NO agendes: usa "escalar_a_humano" explicando que un veterinario quiere agendar y no pudimos identificarlo, y dile al veterinario, cálido y breve, que un miembro del equipo lo contactará en seguida.
 - Ante CUALQUIER otra cosa de un veterinario que no sea agendar un retiro (preguntas, precios/convenios, dudas, reclamos, postventa, algo fuera de lo estándar), NO improvises: usa "escalar_a_humano" y avísale que el equipo le responderá a la brevedad.
+
+SEGUIMIENTO / ESTADO DE LA MASCOTA:
+- Si el cliente pregunta por el ESTADO de su mascota (cómo va, en qué parte del proceso está, si ya está lista) o por la FECHA DE ENTREGA, primero pídele el CÓDIGO (lo recibió en el correo de registro/bienvenida, con formato tipo P130-CI). Con el código, usa la herramienta "consultar_estado_mascota" y respóndele con lo que devuelva.
+- Para la FECHA DE ENTREGA, da la fecha de entrega MÁXIMA que devuelve la herramienta y ACLARA SIEMPRE que es en días hábiles (puede ser antes). Nunca inventes estados ni fechas.
 
 FORMATO DE RESPUESTA
 Responde con el texto natural del mensaje al cliente, tal cual se enviará por WhatsApp: sin JSON, sin comillas alrededor y sin prefijos. Una sola respuesta por turno. Para registrar un retiro, agendar una eutanasia o escalar, usa las herramientas disponibles.`
@@ -190,12 +196,18 @@ export interface AccionConsultaEta {
   mascota_nombre?: string
 }
 
+export interface AccionConsultaEstado {
+  /** Código de la mascota (el del correo de registro, ej. P130-CI). */
+  codigo: string
+}
+
 export interface HandlersAgente {
   solicitarRetiro?: (a: AccionRetiro, ctx: CtxAgente) => Promise<string>
   solicitarRetiroVet?: (a: AccionRetiroVet, ctx: CtxAgente) => Promise<string>
   agendarEutanasia?: (a: AccionEutanasia, ctx: CtxAgente) => Promise<string>
   cotizarEutanasia?: (a: AccionCotizarEutanasia, ctx: CtxAgente) => Promise<string>
   consultarEtaRetiro?: (a: AccionConsultaEta, ctx: CtxAgente) => Promise<string>
+  consultarEstadoMascota?: (a: AccionConsultaEstado, ctx: CtxAgente) => Promise<string>
 }
 
 const TOOL_COTIZAR_EUTANASIA: Anthropic.Tool = {
@@ -215,6 +227,16 @@ const TOOL_ETA: Anthropic.Tool = {
     type: 'object',
     properties: { mascota_nombre: { type: 'string', description: 'Nombre de la mascota, si lo sabes.' } },
     required: [],
+  },
+}
+
+const TOOL_ESTADO: Anthropic.Tool = {
+  name: 'consultar_estado_mascota',
+  description: 'Busca una mascota por su CÓDIGO y devuelve en qué parte del proceso está y, si corresponde, la fecha de entrega MÁXIMA. Úsala cuando el cliente pregunte por el estado/seguimiento de su mascota o por cuándo le entregan el ánfora. PRIMERO pídele el código (lo recibió en el correo de registro/bienvenida, formato tipo P130-CI); recién cuando lo tengas, llama esta herramienta. NUNCA inventes estados ni fechas: usa solo lo que devuelve.',
+  input_schema: {
+    type: 'object',
+    properties: { codigo: { type: 'string', description: 'Código de la mascota tal como lo dio el cliente (ej. P130-CI).' } },
+    required: ['codigo'],
   },
 }
 
@@ -442,6 +464,7 @@ ${cfg.instrucciones.trim()}`,
   if (opts.handlers?.cotizarEutanasia) tools.push(TOOL_COTIZAR_EUTANASIA)
   if (opts.handlers?.agendarEutanasia) tools.push(TOOL_EUTANASIA)
   if (opts.handlers?.consultarEtaRetiro) tools.push(TOOL_ETA)
+  if (opts.handlers?.consultarEstadoMascota) tools.push(TOOL_ESTADO)
   if (imgsWa.length > 0) tools.push(TOOL_FOTOS)
 
   const convo: Anthropic.MessageParam[] = [...base]
@@ -493,6 +516,8 @@ ${cfg.instrucciones.trim()}`,
           resultText = await opts.handlers.agendarEutanasia(tu.input as unknown as AccionEutanasia, opts.ctx ?? {})
         } else if (tu.name === 'consultar_eta_retiro' && opts.handlers?.consultarEtaRetiro) {
           resultText = await opts.handlers.consultarEtaRetiro(tu.input as unknown as AccionConsultaEta, opts.ctx ?? {})
+        } else if (tu.name === 'consultar_estado_mascota' && opts.handlers?.consultarEstadoMascota) {
+          resultText = await opts.handlers.consultarEstadoMascota(tu.input as unknown as AccionConsultaEstado, opts.ctx ?? {})
         } else {
           resultText = 'Esa herramienta no está disponible ahora. Continúa la coordinación por mensaje o escala a un humano.'
         }

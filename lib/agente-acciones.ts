@@ -2,12 +2,13 @@ import { ensureSheet, ensureColumns, appendRow, getNextId, getSheetData } from '
 import { enviarBotonesWhatsapp, enviarTextoWhatsapp, adminWhatsapp } from './whatsapp'
 import { crearRelayPendiente } from './relay-retiro'
 import { geocodeAddress, coordEnChile } from './google-maps'
-import { formatDate, todayISO } from './dates'
+import { formatDate, formatDateForSheet, todayISO } from './dates'
+import { agregarDiasHabiles, isoFecha } from './dias-habiles'
 import { fmtPrecio } from './format'
 import { precioClienteEutanasia } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
 import { capitalizarNombre } from './nombres'
-import type { HandlersAgente, AccionRetiro, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, CtxAgente } from './agente-mensajes'
+import type { HandlersAgente, AccionRetiro, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, AccionConsultaEstado, CtxAgente } from './agente-mensajes'
 
 /**
  * Valida que una dirección + comuna exista y caiga dentro de Chile (geocoding).
@@ -345,7 +346,63 @@ async function consultarEtaRetiro(a: AccionConsultaEta, ctx: CtxAgente): Promise
   return 'Avisé al equipo para que confirme el horario. Dile al cliente, cálido y breve, que estás confirmando cuánto falta para el retiro y que apenas el equipo responda se lo avisas por aquí. NO inventes una hora.'
 }
 
+/**
+ * Estado de una mascota por CÓDIGO: en qué parte del proceso está + la fecha de
+ * entrega MÁXIMA (en días hábiles, igual que el calendario de Despachos:
+ * fecha_retiro + plazo_entrega_dias del tipo de servicio). Solo lee la ficha; no
+ * inventa nada. Si no encuentra el código, pide verificarlo / escalar.
+ */
+async function consultarEstadoMascota(a: AccionConsultaEstado): Promise<string> {
+  const codigo = (a.codigo || '').trim()
+  if (!codigo) {
+    return 'Pídele al cliente el CÓDIGO de su mascota (lo recibió en el correo de registro/bienvenida, formato tipo P130-CI) y vuelve a consultar. NO inventes el estado.'
+  }
+  const norm = (s: string) => (s || '').trim().toUpperCase().replace(/\s+/g, '')
+  const clientes = await getSheetData('clientes')
+  const c = clientes.find(x => norm(x.codigo) === norm(codigo))
+  if (!c) {
+    return `No encontré ninguna mascota con el código "${codigo}". Pídele al cliente que lo verifique (está en el correo de registro/bienvenida, formato tipo P130-CI). Si insiste en que es correcto, ofrécele que lo revise el equipo (escala a un humano). NO inventes un estado.`
+  }
+
+  const nombre = c.nombre_mascota || 'la mascota'
+  const estado = (c.estado || 'pendiente').toLowerCase()
+  const codigoServ = (c.codigo_servicio || 'CI').toUpperCase()
+
+  let estadoLegible: string
+  if (estado === 'despachado') estadoLegible = 'YA ENTREGADA — el ánfora ya fue entregada al tutor'
+  else if (estado === 'cremado') estadoLegible = 'CREMACIÓN LISTA — estamos coordinando la entrega'
+  else if (estado === 'borrador') estadoLegible = 'EN INGRESO — el equipo está terminando de registrar la ficha'
+  else estadoLegible = 'EN PROCESO de cremación — ya la recibimos y está en proceso'
+
+  // Fecha de entrega MÁXIMA (días hábiles). No aplica a Sin Devolución (no hay
+  // entrega) ni a fichas ya despachadas o en borrador (sin fecha de retiro firme).
+  let entregaTxt = ''
+  if (codigoServ === 'SD') {
+    entregaTxt = ' Es una Cremación Sin Devolución: no hay entrega de ánfora.'
+  } else if (estado !== 'despachado' && estado !== 'borrador') {
+    try {
+      const tipos = await getSheetData('tipos_servicio')
+      const t = tipos.find(x => (x.codigo || '').toUpperCase() === codigoServ)
+      const n = parseInt(t?.plazo_entrega_dias || '3', 10)
+      const plazo = Number.isFinite(n) && n > 0 ? n : 3
+      const isoRetiro = c.fecha_retiro ? formatDateForSheet(c.fecha_retiro) : ''
+      if (isoRetiro) {
+        const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
+        if (!isNaN(fechaRetiro.getTime())) {
+          const obj = agregarDiasHabiles(fechaRetiro, plazo)
+          entregaTxt = ` Fecha de entrega MÁXIMA: ${formatDate(isoFecha(obj))} (hasta ${plazo} días HÁBILES desde el retiro; puede ser antes).`
+        }
+      }
+    } catch { /* sin fecha disponible */ }
+  }
+
+  return `Datos REALES de la mascota (código ${c.codigo}): nombre "${nombre}", estado: ${estadoLegible}.${entregaTxt} ` +
+    `Respóndele al cliente de forma cálida y clara contándole en qué parte del proceso está ${nombre}. ` +
+    `Si preguntó por la fecha de entrega, dásela ACLARANDO que es en días hábiles. ` +
+    `Usá SOLO estos datos; no inventes fechas ni estados.`
+}
+
 /** Handlers disponibles para el agente (Flujo A: retiro · Flujo B: eutanasia). */
 export function handlersAgente(): HandlersAgente {
-  return { solicitarRetiro, solicitarRetiroVet, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro }
+  return { solicitarRetiro, solicitarRetiroVet, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro, consultarEstadoMascota }
 }
