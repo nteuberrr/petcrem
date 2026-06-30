@@ -75,6 +75,14 @@ MODALIDADES (qué incluye cada una; los PRECIOS siempre salen de la tabla de TAR
 - *Premium*: todo lo de Individual, con ánfora premium a elección y un cuadro estilo acuarela conmemorativo.
 - *Sin Devolución*: retiro y cremación trazable, pero NO se devuelven las cenizas (la opción más económica).
 
+FOTOS DE ÁNFORAS / URNAS (cuando el cliente pida ver fotos de las ánforas/urnas, pregunte cómo se ven o cómo es el cuadro). Para enviarlas usa la herramienta "enviar_fotos" con los IDs de la lista "FOTOS DISPONIBLES" (ahí ves el código de cada foto: i-5, i-11, etc.). Acompáñalas SIEMPRE con un mensaje breve y cálido; no inventes ni describas fotos que no estén en esa lista:
+- Manda SIEMPRE la foto de la *ánfora de greda marmoleada* (código i-11) y explícale que ESA es la que viene INCLUIDA en el servicio, sin costo adicional.
+- Junto con ella, envía 3 o 4 fotos de ánforas premium como ALTERNATIVAS (las demás ánforas del banco; p. ej. i-12, i-13, i-30 Egipcia, i-31 Greda Alta, i-34 Marmoleada, i-37 Piedra Blanca, i-38 Piedra Negra), aclarando que son alternativas premium opcionales.
+- Si preguntan por el SERVICIO PREMIUM: manda la foto i-5 o i-6 y explícale que con el Premium puede elegir CUALQUIER ánfora del catálogo (e incluye además el cuadro estilo acuarela conmemorativo).
+- Si preguntan "cómo es el cuadro" (el cuadro estilo acuarela conmemorativo del Premium): NO escales. Explícale con tus palabras que es un retrato conmemorativo de tu mascota en acuarela, incluido en el Premium, y muéstrale las fotos i-5 o i-6 como REFERENCIA (en esas fotos se ve el cuadro junto al ánfora y la tarjeta).
+- Preguntar por fotos de ánforas, por el cuadro o por qué incluye el Premium NUNCA es motivo para escalar a un humano: son consultas normales que TÚ respondes con esta sección y con MODALIDADES. (Escala solo si, además, hay un reclamo o algo realmente fuera de lo estándar.)
+- Al presentar las fotos, hazlo de forma natural y cálida; NUNCA escribas en el mensaje el nombre de archivo, la descripción técnica ni el código (i-5, i-11, etc.) de las fotos.
+
 CÓMO FUNCIONA: 1) nos contactas y coordinamos, 2) retiro a domicilio (o desde la clínica) en vehículo habilitado, 3) la mascota se mantiene en cámara de refrigeración hasta la cremación, 4) cremación en horno certificado, con código de seguimiento, 5) entrega de cenizas + certificado digital en hasta 3 días hábiles.
 
 MEDIOS DE PAGO (si preguntan cómo pueden pagar): aceptamos tarjeta, transferencia y efectivo, o te enviamos un link de pago. Informa esto con naturalidad. Si el cliente quiere concretar el pago en ese momento, pide montos exactos de transferencia, o hay un problema de pago que no puedas resolver, escala a un humano.
@@ -408,7 +416,8 @@ function bloqueImagenesWhatsapp(imgs: ImagenBanco[]): string {
     const desc = (i.descripcion || i.alt || 'imagen').replace(/\s+/g, ' ').trim().slice(0, 120)
     const tags = i.tags ? ` — tags: ${i.tags.slice(0, 80)}` : ''
     const grupo = i.grupo ? ` [${i.grupo}]` : ''
-    return `- ID ${i.id}${grupo}: ${desc}${tags}`
+    const codigo = i.codigo ? ` · código ${i.codigo}` : ''
+    return `- ID ${i.id}${codigo}${grupo}: ${desc}${tags}`
   }).join('\n')
   return `FOTOS DISPONIBLES PARA ENVIAR (banco habilitado para WhatsApp). Si el cliente pide ver fotos (ánforas/urnas, productos, instalaciones, etc.) y alguna de estas calza, envíaselas con la herramienta enviar_fotos pasando sus IDs. Acompáñalas SIEMPRE con un mensaje breve y cálido. NO inventes ni describas fotos que no estén en esta lista:\n${lista}`
 }
