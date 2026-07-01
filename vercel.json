@@ -1,6 +1,5 @@
 {
   "crons": [
-    { "path": "/api/backup", "schedule": "0 7 * * *" },
-    { "path": "/api/mailing/cron-publicar", "schedule": "0 13 * * *" }
+    { "path": "/api/backup", "schedule": "0 7 * * *" }
   ]
 }
