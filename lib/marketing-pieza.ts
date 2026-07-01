@@ -612,7 +612,7 @@ async function qaPieza(resueltas: ImagenResuelta[], item: ItemCalendario): Promi
 - CAJAS o glifos ROTOS (cuadritos, símbolos raros);
 - TEXTO cortado, encimado, ilegible o que se sale del lienzo;
 - COMPOSICIÓN vacía/desbalanceada (gran parte del lienzo en blanco sin razón) o que se ve plana/aburrida;
-- FOTO ausente cuando aportaría calidez (todo texto) o con recorte/calidad fea;
+- FOTO ausente cuando aportaría calidez (todo texto); o FOTO MAL ENCUADRADA (OBJETIVO y grave): la mascota con la CARA/CABEZA/OJOS cortados por el borde, o se ve solo un pedazo del animal (lomo, patas o cuerpo sin rostro), o recorte/calidad fea;
 - en CARRUSEL: inconsistencia entre slides (badges/logo/fondos sin sistema);
 - errores visibles en el texto.
 Marcá cada uno como OBJETIVO (claro y binario) o no. Si es una PLACA de texto con arreglo de texto/diseño, dá la "correccion" exacta. Si está todo bien, problemas: []. Reportá SIEMPRE con reportar_qa.`
