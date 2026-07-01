@@ -37,7 +37,7 @@ export const MODULOS: Modulo[] = [
   { key: 'clientes', label: 'Clientes', pages: ['/clientes'], apis: ['/api/clientes', '/api/upload', '/api/places', '/api/veterinarios', '/api/precios', '/api/descuentos', '/api/especies', '/api/productos', '/api/servicios'], def: { admin2: true, operador: true } },
   { key: 'operaciones', label: 'Operaciones', pages: ['/operaciones'], apis: ['/api/ciclos', '/api/petroleo', '/api/vehiculo', '/api/despachos'], def: { admin2: true, operador: true } },
   { key: 'asistencia', label: 'Asistencia', pages: ['/asistencia'], apis: ['/api/asistencia', '/api/jornada-config', '/api/retiros-adicionales'], def: { admin2: true, operador: true } },
-  { key: 'mensajes', label: 'Mensajes', pages: ['/mensajes'], apis: ['/api/mensajes'], def: { admin2: true, operador: false } },
+  { key: 'mensajes', label: 'Mensajes', pages: ['/mensajes'], apis: ['/api/mensajes', '/api/solicitudes-retiro'], def: { admin2: true, operador: false } },
   { key: 'rendiciones', label: 'Rendiciones', pages: ['/rendiciones'], apis: ['/api/rendiciones'], def: { admin2: true, operador: false } },
   { key: 'bases', label: 'Veterinarios (Bases)', pages: ['/bases'], apis: ['/api/veterinarios'], def: { admin2: true, operador: false } },
   { key: 'servicios', label: 'Servicios (Eutanasias)', pages: ['/servicios'], apis: ['/api/eutanasias', '/api/servicios'], def: { admin2: true, operador: false } },

@@ -30,6 +30,8 @@ export default function Sidebar() {
   const [open, setOpen] = useState(false)
   // Módulos permitidos para este usuario (dinámico). null = cargando.
   const [allowed, setAllowed] = useState<Set<string> | null>(null)
+  // Solicitudes de retiro del bot pendientes (badge en "Mensajes"). Se refresca solo.
+  const [pendientes, setPendientes] = useState(0)
 
   useEffect(() => {
     let cancel = false
@@ -39,6 +41,18 @@ export default function Sidebar() {
       .catch(() => { if (!cancel) setAllowed(new Set<string>()) })
     return () => { cancel = true }
   }, [])
+
+  useEffect(() => {
+    if (!allowed?.has('mensajes')) return
+    let cancel = false
+    const cargar = () => fetch('/api/solicitudes-retiro', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : []))
+      .then(d => { if (!cancel) setPendientes(Array.isArray(d) ? d.length : 0) })
+      .catch(() => {})
+    cargar()
+    const t = setInterval(cargar, 30000)
+    return () => { cancel = true; clearInterval(t) }
+  }, [allowed])
 
   // Mientras carga, mostramos solo Dashboard (evita parpadeo de ítems no permitidos).
   const items = allowed ? nav.filter(n => allowed.has(n.modulo)) : nav.filter(n => n.modulo === 'dashboard')
@@ -100,7 +114,12 @@ export default function Sidebar() {
                 }`}
               >
                 <span className="text-lg">{icon}</span>
-                {label}
+                <span className="flex-1">{label}</span>
+                {href === '/mensajes' && pendientes > 0 && (
+                  <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                    {pendientes}
+                  </span>
+                )}
               </Link>
             )
           })}
