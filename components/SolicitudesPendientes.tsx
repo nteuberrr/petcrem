@@ -84,12 +84,12 @@ export default function SolicitudesPendientes() {
           </div>
           <div className={GRID}>
             {pendientes.map(s => (
-              <div key={s.id} className="rounded-xl border-2 border-amber-300 bg-amber-50 shadow-sm p-3 flex flex-col justify-between gap-2 min-h-[150px]">
+              <div key={s.id} className="rounded-xl border-2 border-red-300 bg-red-50 shadow-sm p-3 flex flex-col justify-between gap-2 min-h-[150px]">
                 <div className="min-w-0">
                   <div className="flex items-center justify-between gap-1">
                     <p className="font-bold text-gray-900 text-sm truncate">{s.nombre_mascota || '—'}</p>
                     {s.tipo_servicio && (
-                      <span className="text-[10px] font-semibold text-amber-800 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded shrink-0">{SERVICIO[s.tipo_servicio] || s.tipo_servicio}</span>
+                      <span className="text-[10px] font-semibold text-red-800 bg-red-100 border border-red-200 px-1.5 py-0.5 rounded shrink-0">{SERVICIO[s.tipo_servicio] || s.tipo_servicio}</span>
                     )}
                   </div>
                   <p className="text-xs text-gray-700 truncate mt-0.5">{esVet(s) ? '🏥 ' : ''}{quien(s)}</p>

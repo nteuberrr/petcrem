@@ -316,6 +316,9 @@ export const SHEETS: Record<string, string[]> = {
     // veterinaria_id liga la ficha al vet (tarifas de convenio); vet_nombre/vet_email
     // se usan para el correo de confirmación y los del ciclo.
     'origen', 'veterinaria_id', 'vet_nombre', 'vet_email',
+    // cliente_id: ficha borrador (clientes) creada al confirmar el retiro. El
+    // dashboard oculta el cuadro confirmado cuando esa ficha ya no es borrador.
+    'cliente_id',
   ],
   // Relay de consultas de "¿cuánto falta para el retiro?": el agente avisa al
   // admin y guarda el message_id de ese aviso; cuando el admin RESPONDE CITANDO

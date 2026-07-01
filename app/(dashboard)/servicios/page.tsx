@@ -1075,7 +1075,7 @@ export default function ServiciosEutanasiasPage() {
               ))}
             </select>
             <p className="text-xs text-gray-500 mt-1">
-              Si eliges uno, la cotización queda <strong>confirmada</strong> directamente, sin enviar correos automáticos.
+              Si eliges uno, se envía al veterinario el correo de <strong>coordinación con la familia</strong> y al cliente el aviso de que un vet tomó el caso. La cotización queda <strong>aceptada</strong> y sigue el flujo hasta realizarse.
             </p>
           </div>
 
@@ -1142,7 +1142,7 @@ export default function ServiciosEutanasiasPage() {
                 ))}
               </select>
               {editVetManualId && editVetManualId !== editCoti.vet_id_asignado && (
-                <p className="text-xs text-amber-700 mt-1">Al guardar, la cotización pasará a <strong>confirmada</strong> con este vet asignado.</p>
+                <p className="text-xs text-amber-700 mt-1">Al guardar, la cotización pasará a <strong>aceptada</strong> con este vet asignado y se le enviará el correo de coordinación con la familia (más el aviso al cliente).</p>
               )}
               {!editVetManualId && editCoti.vet_id_asignado && (
                 <p className="text-xs text-amber-700 mt-1">Al guardar, se quitará el vet actualmente asignado y la cotización vuelve a estado <strong>enviada</strong>.</p>

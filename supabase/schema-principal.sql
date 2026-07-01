@@ -576,7 +576,11 @@ create table if not exists "solicitudes_retiro" (
   "origen" text not null default '',
   "veterinaria_id" text not null default '',
   "vet_nombre" text not null default '',
-  "vet_email" text not null default ''
+  "vet_email" text not null default '',
+  -- cliente_id: id de la ficha borrador (clientes) creada al CONFIRMAR el retiro.
+  -- Liga la solicitud confirmada a su ficha "Por ingresar"; el dashboard oculta
+  -- el cuadro verde cuando esa ficha deja de ser borrador (ya fue registrada).
+  "cliente_id" text not null default ''
 );
 alter table "solicitudes_retiro" enable row level security;
 -- Idempotente para tablas creadas antes de estas columnas.
@@ -584,6 +588,7 @@ alter table "solicitudes_retiro" add column if not exists "origen" text not null
 alter table "solicitudes_retiro" add column if not exists "veterinaria_id" text not null default '';
 alter table "solicitudes_retiro" add column if not exists "vet_nombre" text not null default '';
 alter table "solicitudes_retiro" add column if not exists "vet_email" text not null default '';
+alter table "solicitudes_retiro" add column if not exists "cliente_id" text not null default '';
 create index if not exists "solicitudes_retiro_estado_idx" on "solicitudes_retiro" ("estado");
 create index if not exists "solicitudes_retiro_cliente_wa_id_idx" on "solicitudes_retiro" ("cliente_wa_id");
 

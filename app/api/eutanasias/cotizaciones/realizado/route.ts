@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
-import { enviarMailAgradecimiento, fechaProximoPago } from '@/lib/eutanasia-mailer'
+import { enviarMailAgradecimiento, enviarClienteAgradecimientoEutanasia, fechaProximoPago } from '@/lib/eutanasia-mailer'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
 
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Disparar correo de agradecimiento. Best-effort.
+    // Disparar correo de agradecimiento AL VETERINARIO (+ pago). Best-effort.
     const vetNombre = c.vet_nombre_asignado || ''
     const vetEmail = c.vet_email_asignado || ''
     if (vetEmail) {
@@ -97,6 +97,19 @@ export async function POST(req: NextRequest) {
         })
       } catch (e) {
         console.error('[eutanasias/realizado] error disparando mail agradecimiento:', e)
+      }
+    }
+
+    // Agradecimiento AL TUTOR + invitación a evaluar en Google. Best-effort.
+    if (c.cliente_email) {
+      try {
+        await enviarClienteAgradecimientoEutanasia({
+          clienteEmail: c.cliente_email,
+          clienteNombre: c.cliente_nombre,
+          mascotaNombre: c.mascota_nombre,
+        })
+      } catch (e) {
+        console.error('[eutanasias/realizado] error disparando agradecimiento al cliente:', e)
       }
     }
 

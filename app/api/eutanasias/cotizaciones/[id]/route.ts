@@ -5,6 +5,8 @@ import { getSheetData, updateById, deleteRow } from '@/lib/datastore'
 import { esAdmin } from '@/lib/roles'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { parsePeso } from '@/lib/numbers'
+import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarClienteAgradecimientoEutanasia } from '@/lib/eutanasia-mailer'
+import { formatDate } from '@/lib/dates'
 
 const SHEET = 'cotizaciones_eutanasia'
 
@@ -57,6 +59,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (campo in body) partial[campo] = String(body[campo] ?? '')
     }
 
+    // Vet a notificar con el correo "coordina con la familia" si esta edición
+    // asigna un vet NUEVO (se resuelve más abajo, se envía tras persistir).
+    let vetParaCoordinar: Record<string, string> | null = null
+
     // Asignación manual de vet (cambio o asignación inicial).
     // - Si viene vet_id_asignado con valor → buscamos el vet, lo asignamos,
     //   estado pasa a 'confirmada' (si no estaba 'realizada'/'cancelada'),
@@ -76,9 +82,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         partial.vet_email_asignado = v.email
         const estadoActual = partial.estado ?? rows[idx].estado
         if (estadoActual !== 'realizada' && estadoActual !== 'cancelada') {
-          partial.estado = 'confirmada'
+          // El vet asignado = aceptó: queda 'aceptada' y recibe el correo de
+          // "coordina con la familia" (el flujo sigue: confirmar → realizado).
+          partial.estado = 'aceptada'
           if (!rows[idx].fecha_aceptacion) partial.fecha_aceptacion = ahora
-          if (!rows[idx].fecha_confirmacion) partial.fecha_confirmacion = ahora
+          // Solo notificamos si es una asignación NUEVA (cambió el vet), para no
+          // reenviar correos al re-guardar la ficha con el mismo vet.
+          if (nuevoVetId !== (rows[idx].vet_id_asignado || '')) vetParaCoordinar = v
         }
       } else {
         // Desasignar
@@ -125,6 +135,40 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const updated = { ...rows[idx], ...partial }
     await updateById(SHEET, id, updated)
+
+    // ── Efectos de correo (best-effort, tras persistir) ──────────────────────
+    const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
+
+    // Asignación manual de un vet NUEVO → coordinar (vet) + aviso (cliente).
+    if (vetParaCoordinar) {
+      await enviarCoordinarConFamilia({ c: updated, vet: vetParaCoordinar, baseUrl })
+      if (updated.cliente_email) {
+        try {
+          await enviarClienteVetAsignado({
+            clienteEmail: updated.cliente_email,
+            clienteNombre: updated.cliente_nombre,
+            mascotaNombre: updated.mascota_nombre,
+            vetNombre: updated.vet_nombre_asignado,
+            vetTelefono: vetParaCoordinar.telefono || '',
+            fechaServicio: formatDate(updated.fecha_servicio),
+            horaServicio: updated.hora_servicio,
+          })
+        } catch (e) { console.warn('[cotizaciones PATCH] correo al cliente falló:', e) }
+      }
+    }
+
+    // Transición a 'realizada' desde el panel → agradecimiento + reseña al tutor
+    // (mismo correo que dispara el flujo del vet). Guardado contra reenvíos.
+    if (partial.estado === 'realizada' && rows[idx].estado !== 'realizada' && updated.cliente_email) {
+      try {
+        await enviarClienteAgradecimientoEutanasia({
+          clienteEmail: updated.cliente_email,
+          clienteNombre: updated.cliente_nombre,
+          mascotaNombre: updated.mascota_nombre,
+        })
+      } catch (e) { console.warn('[cotizaciones PATCH] agradecimiento al cliente falló:', e) }
+    }
+
     return NextResponse.json(updated)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })

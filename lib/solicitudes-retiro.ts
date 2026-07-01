@@ -1,4 +1,4 @@
-import { getSheetData, updateByIdIf } from './datastore'
+import { getSheetData, updateByIdIf, updateById } from './datastore'
 import { crearClienteBorrador } from './cliente-borrador'
 import { createBorradorToken } from './borrador-token'
 import { enviarRetiroConfirmadoVet } from './vet-cremacion-mailer'
@@ -37,6 +37,8 @@ export interface SolicitudRetiro {
   veterinaria_id: string
   vet_nombre: string
   vet_email: string
+  /** Ficha borrador (clientes) creada al confirmar. Vacío mientras esté pendiente. */
+  cliente_id: string
   fecha_creacion: string
   fecha_resolucion: string
 }
@@ -58,6 +60,7 @@ function toSolicitud(r: Record<string, string>): SolicitudRetiro {
     veterinaria_id: r.veterinaria_id || '',
     vet_nombre: r.vet_nombre || '',
     vet_email: r.vet_email || '',
+    cliente_id: r.cliente_id || '',
     fecha_creacion: r.fecha_creacion || '',
     fecha_resolucion: r.fecha_resolucion || '',
   }
@@ -73,18 +76,31 @@ export async function listarSolicitudesPendientes(): Promise<SolicitudRetiro[]> 
 }
 
 /**
- * Retiros CONFIRMADOS y todavía PRÓXIMOS (fecha de retiro hoy o a futuro). Quedan
- * visibles en el dashboard como ficha del retiro coordinado; cuando pasa la fecha,
- * dejan de mostrarse. Ordenados por fecha+hora (el más próximo primero).
+ * Retiros CONFIRMADOS que todavía están "por ingresar". Quedan visibles en el
+ * dashboard como ficha del retiro coordinado hasta que el equipo REGISTRA la
+ * ficha (la borrador deja de ser borrador → desaparece el cuadro verde).
+ *
+ * - Con `cliente_id` (link a la ficha borrador): se muestra solo mientras esa
+ *   ficha exista y siga en estado 'borrador'. Registrada o borrada → oculta.
+ * - Sin `cliente_id` (solicitudes viejas, previas a este link): se usa el criterio
+ *   anterior (fecha de retiro hoy o a futuro) como respaldo.
+ * Ordenados por fecha+hora (el más próximo primero).
  */
 export async function listarSolicitudesConfirmadas(): Promise<SolicitudRetiro[]> {
   const hoy = todayISO()
-  const rows = await getSheetData('solicitudes_retiro')
+  const [rows, clientes] = await Promise.all([
+    getSheetData('solicitudes_retiro'),
+    getSheetData('clientes'),
+  ])
+  const esBorradorVivo = (clienteId: string) => {
+    const c = clientes.find(r => String(r.id) === String(clienteId))
+    return !!c && (c.estado || '') === 'borrador'
+  }
   const isoFecha = (s: SolicitudRetiro) => formatDateForSheet(s.fecha_retiro) || s.fecha_retiro
   return rows
     .filter(r => (r.estado || '') === 'confirmada')
     .map(toSolicitud)
-    .filter(s => isoFecha(s) >= hoy)
+    .filter(s => (s.cliente_id ? esBorradorVivo(s.cliente_id) : isoFecha(s) >= hoy))
     .sort((a, b) => isoFecha(a).localeCompare(isoFecha(b)) || (a.hora_retiro || '').localeCompare(b.hora_retiro || ''))
 }
 
@@ -108,11 +124,12 @@ export async function resolverSolicitudRetiro(
 
   // Cierre ATÓMICO: solo procede quien gana el cambio pendiente→resuelta. Evita
   // doble borrador / doble aviso si el botón y el panel (o dos clics) coinciden.
+  const ahora = new Date().toISOString()
   const gano = await updateByIdIf(
     'solicitudes_retiro',
     String(solicitudId),
     { estado: 'pendiente' },
-    { estado: confirmado ? 'confirmada' : 'rechazada', fecha_resolucion: new Date().toISOString() },
+    { estado: confirmado ? 'confirmada' : 'rechazada', fecha_resolucion: ahora },
   )
   if (!gano) return { resultado: 'ya_resuelta', acuseAdmin: `La solicitud N° ${solicitudId} ya estaba resuelta.` }
 
@@ -122,6 +139,9 @@ export async function resolverSolicitudRetiro(
 
   let msgCliente: string
   let acuseAdmin: string
+  // Ficha borrador creada al confirmar; se linkea a la solicitud para que el
+  // dashboard oculte el cuadro verde cuando la ficha se registre.
+  let borradorId = ''
 
   if (confirmado && esVet) {
     // ── Retiro de VETERINARIO: borrador asociado al vet + correo de confirmación B2B.
@@ -136,7 +156,7 @@ export async function resolverSolicitudRetiro(
         nombreContacto = vrow?.nombre_contacto || ''
       } catch { /* best-effort */ }
 
-      await crearClienteBorrador({
+      borradorId = await crearClienteBorrador({
         nombre_mascota: sol.nombre_mascota,
         direccion_retiro: sol.direccion,
         comuna: sol.comuna,
@@ -170,7 +190,7 @@ export async function resolverSolicitudRetiro(
     // ── Retiro de TUTOR: confirmación SOLO por WhatsApp + link firmado para adelantar datos.
     let linkFicha = `${base}/registro-mascota`
     try {
-      const borradorId = await crearClienteBorrador({
+      borradorId = await crearClienteBorrador({
         nombre_tutor: sol.cliente_nombre,
         nombre_mascota: sol.nombre_mascota,
         telefono: waCliente,
@@ -193,6 +213,16 @@ export async function resolverSolicitudRetiro(
     // ── Rechazo (tutor o vet).
     msgCliente = `Gracias por escribirnos. Un agente de nuestro equipo se pondrá en contacto contigo a la brevedad para coordinar. 🐾`
     acuseAdmin = `❌ Retiro N° ${solicitudId} rechazado. Avisamos que un agente lo contactará.`
+  }
+
+  // Linkear la ficha borrador recién creada a la solicitud confirmada, para que el
+  // dashboard oculte el cuadro verde cuando esa ficha se registre. Best-effort.
+  if (confirmado && borradorId) {
+    try {
+      await updateById('solicitudes_retiro', String(solicitudId), {
+        ...sol, estado: 'confirmada', fecha_resolucion: ahora, cliente_id: borradorId,
+      })
+    } catch (e) { console.warn('[solicitudes-retiro] no se pudo linkear cliente_id:', e) }
   }
 
   // Avisar por WhatsApp a quien pidió el retiro + registrar en su conversación.

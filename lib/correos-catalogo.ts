@@ -6,6 +6,7 @@ import {
 import {
   renderBienvenida, renderCotizacionEmail, renderCoordinarEmail,
   renderRealizarServicio, renderAgradecimiento, renderClienteVetAsignado,
+  renderClienteAgradecimientoEutanasia,
 } from './eutanasia-mailer'
 import { renderInformeFacturacionEmail } from './informe-mailer'
 import {
@@ -201,6 +202,17 @@ export const CORREOS: CorreoDef[] = [
         cotizacion: { id: '0', mascota_nombre: m.nombreMascota, precio_snapshot: '70000' },
         fechaRealizacionISO: todayISO(),
       }, c),
+    }),
+  },
+  {
+    key: 'eutanasia_cliente_agradecimiento',
+    titulo: 'Agradecimiento + reseña al tutor (servicio realizado)',
+    modulo: 'Eutanasias',
+    audiencia: 'Tutor',
+    cuando: 'Cuando el veterinario marca el servicio como realizado (o el admin lo marca).',
+    build: (m, c) => ({
+      subject: `Gracias por confiarnos a ${m.nombreMascota}`,
+      html: renderClienteAgradecimientoEutanasia({ clienteEmail: m.email, clienteNombre: m.nombreTutor, mascotaNombre: m.nombreMascota }, c),
     }),
   },
 

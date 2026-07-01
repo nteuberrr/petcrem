@@ -6,6 +6,8 @@ import { buscarComuna } from '@/lib/comunas'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
+import { enviarCoordinarConFamilia, enviarClienteVetAsignado } from '@/lib/eutanasia-mailer'
+import { formatDate } from '@/lib/dates'
 
 const SHEET = 'cotizaciones_eutanasia'
 const COLS = [
@@ -94,8 +96,9 @@ export async function POST(req: NextRequest) {
     const tramos = await getSheetData('precios_eutanasia')
     const precio = precioParaPeso(tramos, peso)
 
-    // Asignación manual opcional: si viene vet_id_asignado, buscamos el vet
-    // y dejamos la cotización confirmada directamente.
+    // Asignación manual opcional: si viene vet_id_asignado, buscamos el vet y la
+    // cotización arranca 'aceptada' (el vet fue asignado = aceptó): se le manda el
+    // correo de "coordina con la familia" y sigue el flujo natural hasta realizada.
     let vetAsignado: Record<string, string> | null = null
     if (body.vet_id_asignado) {
       const vets = await getSheetData('vet_convenio_eutanasia')
@@ -122,7 +125,7 @@ export async function POST(req: NextRequest) {
       fecha_servicio: fecha,
       hora_servicio: hora,
       notas,
-      estado: vetAsignado ? 'confirmada' : 'creada',
+      estado: vetAsignado ? 'aceptada' : 'creada',
       vet_id_asignado: vetAsignado?.id ?? '',
       vet_nombre_asignado: vetAsignado ? `${vetAsignado.nombre || ''} ${vetAsignado.apellido || ''}`.trim() : '',
       vet_email_asignado: vetAsignado?.email ?? '',
@@ -130,12 +133,36 @@ export async function POST(req: NextRequest) {
       fecha_creacion: ahora,
       fecha_envio_cotizacion: '',
       fecha_aceptacion: vetAsignado ? ahora : '',
-      fecha_confirmacion: vetAsignado ? ahora : '',
+      fecha_confirmacion: '',
       fecha_realizacion: '',
       fecha_cancelacion: '',
       creado_por: session?.user?.name || session?.user?.email || '',
     }
     await appendRow(SHEET, row)
+
+    // Asignación manual → dispara los mismos correos que el flujo natural:
+    //  · al veterinario: "coordina con la familia" (contacto + botón confirmar);
+    //  · al tutor: aviso de que un veterinario tomó el caso (único correo al cliente).
+    // Best-effort: no bloquean la creación.
+    if (vetAsignado) {
+      const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
+      const cCorreo = { ...row, id: String(id) } as unknown as Record<string, string>
+      await enviarCoordinarConFamilia({ c: cCorreo, vet: vetAsignado, baseUrl })
+      if (cliEmail) {
+        try {
+          await enviarClienteVetAsignado({
+            clienteEmail: cliEmail,
+            clienteNombre: row.cliente_nombre,
+            mascotaNombre: row.mascota_nombre,
+            vetNombre: row.vet_nombre_asignado,
+            vetTelefono: vetAsignado.telefono || '',
+            fechaServicio: formatDate(row.fecha_servicio),
+            horaServicio: row.hora_servicio,
+          })
+        } catch (e) { console.warn('[cotizaciones POST] correo al cliente falló:', e) }
+      }
+    }
+
     return NextResponse.json({ ok: true, ...row }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })

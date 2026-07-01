@@ -3,7 +3,7 @@ import { getSheetData } from './datastore'
 import { agregarDiasHabiles } from './dias-habiles'
 import { formatDate, formatHoraDia } from './dates'
 import { fmtPrecio } from './format'
-import { createVetToken } from './eutanasia-tokens'
+import { createVetToken, createToken } from './eutanasia-tokens'
 import { renderEmailLayout, getContacto, escapeHtml, BRAND, type Contacto } from './email-layout'
 
 const CONTEXTO = 'Convenio Eutanasias'
@@ -432,6 +432,74 @@ export function renderClienteVetAsignado(args: ClienteVetAsignadoArgs, contacto:
   return renderEmailLayout({ titulo: 'Tu solicitud fue tomada', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
 }
 
+// ─── Mail al CLIENTE: agradecimiento + reseña, tras realizarse el servicio ────
+
+export interface ClienteAgradecimientoArgs {
+  clienteEmail: string
+  clienteNombre: string
+  mascotaNombre: string
+}
+
+/**
+ * Agradece al tutor una vez que el veterinario marcó el servicio como realizado,
+ * e invita a evaluar la atención en Google (si hay google_review_url configurado
+ * en empresa_config). Best-effort.
+ */
+export async function enviarClienteAgradecimientoEutanasia(args: ClienteAgradecimientoArgs): Promise<BienvenidaResult> {
+  const to = args.clienteEmail
+  if (!to) return { ok: false, estado: 'omitido_sin_resend', to }
+  if (!isResendConfigured()) {
+    console.warn('[eutanasia-mailer] Resend no configurado, salto agradecimiento al cliente', to)
+    return { ok: false, estado: 'omitido_sin_resend', to }
+  }
+  try {
+    const contacto = await getContacto()
+    const res = await sendEmail({
+      to,
+      subject: `Gracias por confiarnos a ${args.mascotaNombre}`,
+      html: renderClienteAgradecimientoEutanasia(args, contacto),
+      preview_text: `Gracias por preferirnos. Nos encantaría conocer tu opinión.`,
+      tags: [{ name: 'tipo', value: 'eutanasia_cliente_agradecimiento' }],
+      seguimiento: { tipo: 'eutanasia_cliente_agradecimiento', audiencia: 'Tutor', nombre: args.mascotaNombre },
+    })
+    return res.ok
+      ? { ok: true, estado: 'enviado', message_id: res.message_id, to }
+      : { ok: false, estado: 'error', error: res.error, to }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[eutanasia-mailer] EXC agradecimiento al cliente:', msg)
+    return { ok: false, estado: 'error', error: msg, to }
+  }
+}
+
+export function renderClienteAgradecimientoEutanasia(args: ClienteAgradecimientoArgs, contacto: Contacto): string {
+  const mascota = escapeHtml(args.mascotaNombre)
+  const saludo = args.clienteNombre ? `Hola <strong>${escapeHtml(args.clienteNombre)}</strong>,` : 'Hola,'
+  const reseña = contacto.googleReviewUrl
+    ? `<div style="text-align:center;margin:24px 0 8px">
+        <a href="${escapeHtml(contacto.googleReviewUrl)}" style="display:inline-block;background:${BRAND.amber};color:${BRAND.navy};text-decoration:none;font-weight:700;font-size:16px;padding:14px 34px;border-radius:12px">
+          Evalúa nuestra atención
+        </a>
+      </div>`
+    : ''
+  const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">${saludo}</p>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+        Queremos agradecerte por confiar en nosotros para acompañar a <strong>${mascota}</strong> en su despedida.
+        Sabemos lo difícil de este momento y esperamos que todo haya salido bien y que nuestra atención
+        haya estado a la altura.
+      </p>
+      <p style="margin:0 0 8px;font-size:14px;line-height:1.6">
+        Tu opinión nos ayuda a seguir mejorando. Si tienes un momento, nos encantaría que evalúes cómo te atendimos:
+      </p>
+      ${reseña}
+      <p style="margin:20px 0 0;font-size:13px;color:${BRAND.muted};line-height:1.55">
+        Ante cualquier consulta quedamos disponibles por los medios de contacto de abajo.
+        Gracias por permitirnos acompañarte. 🐾
+      </p>`
+  return renderEmailLayout({ titulo: 'Gracias por preferirnos', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
+}
+
 // ─── Render compartido: cotización a vet + coordina con la familia ───────────
 // Estas dos plantillas se usan desde rutas (cotizaciones/[id]/enviar y
 // cotizaciones/aceptar). Viven acá para que TODO el render de correos de
@@ -552,6 +620,43 @@ export function renderCoordinarEmail({ vetNombre, c, linkConfirmar, linkDatosPag
         </a>
       </div>` : ''}`
   return renderEmailLayout({ titulo: 'Tomaste la solicitud — siguiente paso', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
+}
+
+/**
+ * Envía al vet asignado el correo "coordina con la familia" (datos de contacto de
+ * la familia + botón "Confirma servicio aquí"). Lo comparten el flujo natural
+ * (cuando un vet acepta la cotización) y la asignación MANUAL desde el admin.
+ * Best-effort: no rompe la operación si Resend falla.
+ */
+export async function enviarCoordinarConFamilia(args: {
+  c: Record<string, string>
+  /** Fila del vet (hoja vet_convenio_eutanasia): usa id, nombre, apellido, email, datos_pago_completos. */
+  vet: Record<string, string>
+  baseUrl: string
+}): Promise<void> {
+  const { c, vet, baseUrl } = args
+  if (!vet.email || !isResendConfigured() || !baseUrl) return
+  const vetNombre = nombreCompletoVet(vet.nombre, vet.apellido)
+  const linkConfirmar = `${baseUrl}/eutanasia/confirmar/${createToken(c.id, vet.id, 'confirmar')}`
+  const tieneDatosPago = (vet.datos_pago_completos ?? '').toUpperCase() === 'TRUE'
+  const linkDatosPago = tieneDatosPago ? '' : `${baseUrl}/eutanasia/datos-pago/${createVetToken(vet.id, 'datos_pago')}`
+  try {
+    const contacto = await getContacto()
+    await sendEmail({
+      to: vet.email,
+      subject: `Coordina con la familia — Eutanasia ${c.mascota_nombre}`,
+      html: renderCoordinarEmail({ vetNombre: vetNombre || 'Dr/a.', c, linkConfirmar, linkDatosPago, contacto }),
+      preview_text: `Datos de contacto de la familia de ${c.mascota_nombre}.`,
+      tags: [
+        { name: 'tipo', value: 'eutanasia_post_aceptar' },
+        { name: 'cotizacion_id', value: String(c.id) },
+        { name: 'vet_id', value: String(vet.id) },
+      ],
+      seguimiento: { tipo: 'eutanasia_coordinar', audiencia: 'Veterinario', nombre: c.mascota_nombre },
+    })
+  } catch (e) {
+    console.warn('[eutanasia-mailer] coordinar con familia falló:', e instanceof Error ? e.message : String(e))
+  }
 }
 
 export function renderAgradecimiento(args: AgradecimientoArgs, contacto: Contacto): string {
