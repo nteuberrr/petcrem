@@ -4,7 +4,7 @@ import { createBorradorToken } from './borrador-token'
 import { enviarRetiroConfirmadoVet } from './vet-cremacion-mailer'
 import { enviarTextoWhatsapp } from './whatsapp'
 import { upsertContacto, getOrCreateConversacion, insertarMensaje } from './mensajes'
-import { formatDate } from './dates'
+import { formatDate, todayISO, formatDateForSheet } from './dates'
 
 /**
  * Solicitudes de retiro del bot de WhatsApp (tabla `solicitudes_retiro`).
@@ -70,6 +70,22 @@ export async function listarSolicitudesPendientes(): Promise<SolicitudRetiro[]> 
     .filter(r => (r.estado || '') === 'pendiente')
     .map(toSolicitud)
     .sort((a, b) => (parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0))
+}
+
+/**
+ * Retiros CONFIRMADOS y todavía PRÓXIMOS (fecha de retiro hoy o a futuro). Quedan
+ * visibles en el dashboard como ficha del retiro coordinado; cuando pasa la fecha,
+ * dejan de mostrarse. Ordenados por fecha+hora (el más próximo primero).
+ */
+export async function listarSolicitudesConfirmadas(): Promise<SolicitudRetiro[]> {
+  const hoy = todayISO()
+  const rows = await getSheetData('solicitudes_retiro')
+  const isoFecha = (s: SolicitudRetiro) => formatDateForSheet(s.fecha_retiro) || s.fecha_retiro
+  return rows
+    .filter(r => (r.estado || '') === 'confirmada')
+    .map(toSolicitud)
+    .filter(s => isoFecha(s) >= hoy)
+    .sort((a, b) => isoFecha(a).localeCompare(isoFecha(b)) || (a.hora_retiro || '').localeCompare(b.hora_retiro || ''))
 }
 
 export type ResultadoResolucion = 'confirmada' | 'rechazada' | 'ya_resuelta' | 'no_existe'

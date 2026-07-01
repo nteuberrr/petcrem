@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { esAdmin } from '@/lib/roles'
-import { listarSolicitudesPendientes, resolverSolicitudRetiro } from '@/lib/solicitudes-retiro'
+import { listarSolicitudesPendientes, listarSolicitudesConfirmadas, resolverSolicitudRetiro } from '@/lib/solicitudes-retiro'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,8 +18,11 @@ export async function GET() {
   const session = await getServerSession(authOptions)
   if (!esAdmin((session?.user as { role?: string })?.role)) return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   try {
-    const pendientes = await listarSolicitudesPendientes()
-    return NextResponse.json(pendientes, { headers: { 'Cache-Control': 'no-store' } })
+    const [pendientes, confirmadas] = await Promise.all([
+      listarSolicitudesPendientes(),
+      listarSolicitudesConfirmadas(),
+    ])
+    return NextResponse.json({ pendientes, confirmadas }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

@@ -46,8 +46,8 @@ export default function Sidebar() {
     if (!allowed?.has('mensajes')) return
     let cancel = false
     const cargar = () => fetch('/api/solicitudes-retiro', { cache: 'no-store' })
-      .then(r => (r.ok ? r.json() : []))
-      .then(d => { if (!cancel) setPendientes(Array.isArray(d) ? d.length : 0) })
+      .then(r => (r.ok ? r.json() : { pendientes: [] }))
+      .then((d: { pendientes?: unknown[] }) => { if (!cancel) setPendientes(Array.isArray(d?.pendientes) ? d.pendientes.length : 0) })
       .catch(() => {})
     cargar()
     const t = setInterval(cargar, 30000)
