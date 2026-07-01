@@ -99,6 +99,7 @@ type ClienteDetalle = {
 }
 
 type Veterinario = { id: string; nombre: string; activo: string; tipo_precios: string }
+type Especie = { id: string; nombre: string; letra: string; activo: string }
 type Producto = { id: string; nombre: string; precio: string; stock: string; categoria?: string; activo: string }
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
@@ -138,6 +139,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [tramosEspeciales, setTramosEspeciales] = useState<TramoEspecial[]>([])
   const [preciosGenerales, setPreciosGenerales] = useState<Tramo[]>([])
   const [preciosConvenio, setPreciosConvenio] = useState<Tramo[]>([])
+  const [especies, setEspecies] = useState<Especie[]>([])
 
   // Adicionales
   const [showAdicionales, setShowAdicionales] = useState(false)
@@ -241,6 +243,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     fetch('/api/precios?tipo=convenio')
       .then(r => r.json())
       .then(d => setPreciosConvenio(Array.isArray(d) ? d : []))
+    fetch('/api/especies')
+      .then(r => r.json())
+      .then(d => setEspecies(Array.isArray(d) ? d.filter((e: Especie) => e.activo === 'TRUE') : []))
     fetch('/api/descuentos')
       .then(r => r.json())
       .then(d => setDescuentosDisp(Array.isArray(d) ? d.filter((x: Descuento) => x.activo === 'TRUE') : []))
@@ -974,7 +979,26 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <Field required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
           <Field required label="Fecha de retiro" type="date" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
           <Field label="Fecha de defunción" type="date" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
-          <Field required label="Especie" value={form.especie} onChange={v => setForm(f => ({ ...f, especie: v }))} />
+          <div>
+            <label className="text-xs font-semibold text-gray-700">Especie <span className="text-red-500">*</span></label>
+            {/* Dropdown desde la tabla de especies: al elegir setea también letra_especie
+                (necesaria para generar el código). Antes era texto libre y, si no coincidía
+                con una especie conocida, el registro fallaba con "Falta la especie". */}
+            <select
+              required
+              value={especies.some(es => es.nombre === form.especie) ? (form.especie ?? '') : ''}
+              onChange={e => {
+                const esp = especies.find(es => es.nombre === e.target.value)
+                setForm(f => ({ ...f, especie: e.target.value, letra_especie: esp?.letra ?? '' }))
+              }}
+              className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${
+                especies.some(es => es.nombre === form.especie) ? 'border-gray-300' : 'border-red-300 bg-red-50'
+              }`}
+            >
+              <option value="">Selecciona una especie…</option>
+              {especies.map(e => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
+            </select>
+          </div>
           <Field required label="Peso declarado (kg)" type="number" step="0.1" value={form.peso_declarado} onChange={v => setForm(f => ({ ...f, peso_declarado: v }))} />
           <PesoIngresoField
             value={form.peso_ingreso ?? ''}
