@@ -23,6 +23,23 @@ const DIMS: Record<string, { w: number; h: number }> = {
 }
 export const FORMATOS_GRAFICO = Object.keys(DIMS)
 
+/**
+ * Dimensiones REALES del <div> raíz declaradas en el HTML. Renderizamos con estas
+ * (no con las del `formato`) para evitar el desfase formato↔HTML: si el agente elige
+ * formato "post" (1080x1080) pero diseña el root en 1200x675, forzar 1080x1080 dejaba
+ * una franja vacía (crema) abajo y recortaba el ancho. Rendereando al tamaño diseñado,
+ * la pieza sale completa siempre. Si no se puede parsear, cae al `formato`.
+ */
+function dimsDesdeHtml(html: string): { w: number; h: number } | null {
+  const m = html.match(/<div[^>]*\sstyle=["']([^"']*)["']/i)
+  if (!m) return null
+  const st = m[1]
+  const w = parseInt(st.match(/\bwidth:\s*(\d+)px/i)?.[1] || '', 10)
+  const h = parseInt(st.match(/\bheight:\s*(\d+)px/i)?.[1] || '', 10)
+  if (!w || !h || w < 200 || h < 200 || w > 4096 || h > 4096) return null
+  return { w, h }
+}
+
 export interface FotoGrafico { slot: string; prompt: string; aspect?: string; recortar?: boolean }
 
 export interface GraficoGenerado {
@@ -66,7 +83,9 @@ export async function generarGraficoMarca(args: {
   campania?: string
 }): Promise<GraficoGenerado> {
   if (!args.html?.trim()) throw new Error('Falta el HTML del gráfico')
-  const dims = DIMS[args.formato] || DIMS.post
+  // Renderizar al tamaño REAL del root del HTML (evita el desfase formato↔diseño que
+  // dejaba franjas vacías / recortes). Cae al `formato` si el root no declara px.
+  const dims = dimsDesdeHtml(args.html) || DIMS[args.formato] || DIMS.post
   const avisos: string[] = []
   let html = args.html
 
