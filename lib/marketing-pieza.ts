@@ -235,7 +235,8 @@ ${MARCA_VISUAL}
 ${MARCA_GRAFICO}
 
 IMÁGENES (campo "imagenes", EN ORDEN) — OBLIGATORIO:
-- Una pieza social SIEMPRE lleva imagen(es). Instagram NO se puede publicar sin imagen. Post simple = 1; VARIAS = 2 a ${MAX_IMGS} (carrusel en Instagram, álbum/paso a paso en Facebook). Si la idea es una serie/lista/paso a paso, devolvé VARIAS, nunca una sola.
+- Una pieza social SIEMPRE lleva imagen(es). Instagram NO se puede publicar sin imagen. POR DEFECTO un POST = UNA sola imagen (un buen diseño con título + hasta 3 bullets alcanza de sobra). Hacé un CARRUSEL (2 a ${MAX_IMGS}) SOLO si el dueño lo pidió explícitamente (carrusel / varias láminas / paso a paso) o si la idea es claramente una SERIE o secuencia de pasos. Ante la duda, UNA imagen. NO infles un pedido simple en varias láminas.
+- RESPETÁ EL ALCANCE PEDIDO: si el pedido es SIMPLE, corto o "un post", entregá UNA imagen limpia con copy BREVE; no agregues slides, ni más bullets/datos de los necesarios, ni copy largo.
 - VARIEDAD ante todo (es la queja del dueño: hoy todo sale igual, placas de puro texto). Las marcas buenas del rubro usan MUCHA foto real (mascota viva, feliz o serena) y MUCHOS layouts distintos. No hace falta foto en TODAS las piezas, pero usá fotos SEGUIDO (reutilizá el banco cuando haya una que calce) y NO repitas siempre el mismo molde. Con criterio y creatividad, no a la fuerza.
 - Modos por imagen:
   · "grafico" = tu placa/diseño de marca (escribís el HTML, ver "DISEÑO DE GRÁFICOS CON TEXTO"). PUEDE y normalmente conviene que INTEGRE una foto (FOTO:slot reutilizando el banco, o full-bleed), no ser puro texto. Sirve para portada con gancho, datos, pasos, "por qué elegirnos", cierre con CTA — variando el layout. Una placa SIN foto (cita corta, dato fuerte, cierre) está OK de vez en cuando, no como molde único.
@@ -611,7 +612,7 @@ async function qaPieza(resueltas: ImagenResuelta[], item: ItemCalendario): Promi
 - LOGO ilegible/borroso/cortado/desproporcionado o ausente;
 - CAJAS o glifos ROTOS (cuadritos, símbolos raros);
 - TEXTO cortado, encimado, ilegible o que se sale del lienzo;
-- COMPOSICIÓN vacía/desbalanceada (gran parte del lienzo en blanco sin razón) o que se ve plana/aburrida;
+- COMPOSICIÓN vacía/desbalanceada — sobre todo una FRANJA de fondo VACÍA arriba o abajo (la placa llena solo parte del lienzo, ej. la mitad superior y el resto vacío): esto es OBJETIVO y GRAVE; o que se ve plana/aburrida;
 - FOTO ausente cuando aportaría calidez (todo texto); o FOTO MAL ENCUADRADA (OBJETIVO y grave): la mascota con la CARA/CABEZA/OJOS cortados por el borde, o se ve solo un pedazo del animal (lomo, patas o cuerpo sin rostro), o recorte/calidad fea;
 - en CARRUSEL: inconsistencia entre slides (badges/logo/fondos sin sistema);
 - errores visibles en el texto.
