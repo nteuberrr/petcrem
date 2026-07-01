@@ -8,6 +8,7 @@ import {
 } from 'recharts'
 import Link from 'next/link'
 import TimelineStatus from '@/components/TimelineStatus'
+import SolicitudesPendientes from '@/components/SolicitudesPendientes'
 import { Modal } from '@/components/ui/Modal'
 import { esAdmin } from '@/lib/roles'
 
@@ -121,6 +122,9 @@ export default function DashboardPage() {
 
       {/* Timeline Status */}
       <TimelineStatus />
+
+      {/* Solicitudes de retiro del bot pendientes de confirmación (grilla de cuadrados) */}
+      {isAdmin && <SolicitudesPendientes />}
 
       {/* KPIs operativos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
