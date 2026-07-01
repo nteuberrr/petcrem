@@ -44,6 +44,9 @@ export interface RegistroArgs {
   nombreTutor: string
   codigo: string
   clienteId?: string
+  /** Código del servicio (CI/CP/SD). Si es CP (Premium), el correo pide también la
+   *  foto para el cuadro acuarela conmemorativo. */
+  codigoServicio?: string
 }
 
 /**
@@ -79,19 +82,32 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
   // omitimos el bloque.
   const base = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
   const cid = args.clienteId ? String(args.clienteId) : ''
+  // Premium (CP) incluye un cuadro acuarela conmemorativo → pedimos además una foto
+  // para el retrato (se guarda aparte, en clientes.fotos_cuadro).
+  const esPremium = (args.codigoServicio || '').toUpperCase() === 'CP'
   const linkFoto = (base && cid) ? `${base}/subir-foto?token=${encodeURIComponent(createTutorToken(cid, 'subir_foto'))}` : ''
   const linkVideo = (base && cid) ? `${base}/solicitar-video?token=${encodeURIComponent(createTutorToken(cid, 'solicitar_video'))}` : ''
+  const linkCuadro = (base && cid && esPremium) ? `${base}/subir-foto?token=${encodeURIComponent(createTutorToken(cid, 'subir_foto_cuadro'))}&tipo=cuadro` : ''
+  const btnCuadro = linkCuadro ? `
+        <div style="text-align:center;margin-top:10px">
+          <a href="${linkCuadro}" style="display:inline-block;background:${BRAND.amber};color:${BRAND.navy};text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">
+            🖼️ Foto para el cuadro
+          </a>
+        </div>` : ''
+  const introFoto = esPremium
+    ? `Como elegiste el servicio Premium, puedes subir la foto para el <strong>cuadro conmemorativo</strong> de ${mascota}, sumar una foto a su certificado y solicitar el video de su proceso:`
+    : `Puedes sumar una foto al certificado de ${mascota} y solicitar el video de su proceso:`
   const bloqueFoto = (linkFoto && linkVideo) ? `
       <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:12px;padding:20px;margin:20px 0">
         <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;color:${BRAND.navy};text-align:center">Dentro de las próximas 24 horas</p>
         <p style="margin:0 0 16px;font-size:13px;color:${BRAND.muted};text-align:center;line-height:1.5">
-          Puedes sumar una foto al certificado de ${mascota} y solicitar el video de su proceso:
+          ${introFoto}
         </p>
         <div style="text-align:center">
           <a href="${linkFoto}" style="display:inline-block;background:${BRAND.amber};color:${BRAND.navy};text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">
             📷 Foto para el certificado
           </a>
-        </div>
+        </div>${btnCuadro}
         <div style="text-align:center;margin-top:10px">
           <a href="${linkVideo}" style="display:inline-block;background:${BRAND.navy};color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">
             🎥 Quiero el video del proceso

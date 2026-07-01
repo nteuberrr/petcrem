@@ -78,6 +78,7 @@ type ClienteDetalle = {
   estado_pago: string
   omitir_evaluacion?: string
   fotos_mascota?: string
+  fotos_cuadro?: string
   videos_servicio?: string
   fotos_evidencia?: string
   ciclo?: {
@@ -631,6 +632,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const fotosEvidencia: string[] = (() => {
     try { const x = JSON.parse(cliente.fotos_evidencia || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
   })()
+  // Fotos que el tutor subió para el cuadro acuarela (servicio Premium).
+  const fotosCuadro: string[] = (() => {
+    try { const x = JSON.parse(cliente.fotos_cuadro || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
+  })()
   const estadoVariant: 'green' | 'blue' | 'yellow' =
     cliente.estado === 'cremado' ? 'green'
     : cliente.estado === 'despachado' ? 'blue'
@@ -906,6 +911,29 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           )}
         </div>
       </div>
+
+      {/* Foto(s) que el tutor subió para el cuadro acuarela (servicio Premium) */}
+      {fotosCuadro.length > 0 && (
+        <div className="bg-white rounded-xl shadow-md border-2 border-amber-200 p-6 mb-6">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <span className="text-lg">🖼️</span>
+            <h2 className="text-base font-bold text-gray-900">Foto para el cuadro conmemorativo</h2>
+            <span className="text-[11px] font-semibold text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">Premium</span>
+          </div>
+          <p className="text-xs text-gray-500 mb-3">
+            El tutor subió {fotosCuadro.length === 1 ? 'esta foto' : 'estas fotos'} para el cuadro acuarela. Toca para abrir en grande y descargarla.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {fotosCuadro.map((url, i) => (
+              <a key={url + i} href={url} target="_blank" rel="noopener noreferrer"
+                className="block w-24 h-24 rounded-lg overflow-hidden border-2 border-amber-300 hover:border-amber-500 transition-colors">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt={`Foto cuadro ${i + 1}`} className="w-full h-full object-cover" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Despacho — solo si fue despachada */}
       {cliente.estado === 'despachado' && (

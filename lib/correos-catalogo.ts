@@ -79,7 +79,15 @@ export const CORREOS: CorreoDef[] = [
     modulo: 'Clientes',
     audiencia: 'Tutor',
     cuando: 'Al crear la ficha de la mascota.',
-    build: (m, c) => pick(buildRegistro({ email: m.email, nombreMascota: m.nombreMascota, nombreTutor: m.nombreTutor, codigo: m.codigo }, c)),
+    build: (m, c) => pick(buildRegistro({ email: m.email, nombreMascota: m.nombreMascota, nombreTutor: m.nombreTutor, codigo: m.codigo, clienteId: '0' }, c)),
+  },
+  {
+    key: 'cliente_registro_premium',
+    titulo: 'Registro Premium (código + foto certificado + foto cuadro + video)',
+    modulo: 'Clientes',
+    audiencia: 'Tutor',
+    cuando: 'Al crear la ficha de un servicio Premium (CP): pide además la foto para el cuadro.',
+    build: (m, c) => pick(buildRegistro({ email: m.email, nombreMascota: m.nombreMascota, nombreTutor: m.nombreTutor, codigo: m.codigo, clienteId: '0', codigoServicio: 'CP' }, c)),
   },
   {
     key: 'cliente_inicio_cremacion',

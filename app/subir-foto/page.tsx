@@ -25,15 +25,19 @@ export default function SubirFotoPage() {
   const [error, setError] = useState('')
   const [exito, setExito] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [tipo, setTipo] = useState<'certificado' | 'cuadro'>('certificado')
+  const esCuadro = tipo === 'cuadro'
 
   useEffect(() => {
     // Diferido a un microtask: la URL solo existe en cliente y así evitamos
     // setState síncrono en el cuerpo del efecto (y mismatch de hidratación).
     queueMicrotask(() => {
-      const tok = (new URLSearchParams(window.location.search).get('token') || '').trim()
+      const params = new URLSearchParams(window.location.search)
+      const tok = (params.get('token') || '').trim()
+      const tp = params.get('tipo') === 'cuadro' ? 'cuadro' : 'certificado'
       if (!tok) { setEstadoCodigo('sin_token'); return }
-      setToken(tok)
-      fetch(`/api/clientes/foto?token=${encodeURIComponent(tok)}`)
+      setToken(tok); setTipo(tp)
+      fetch(`/api/clientes/foto?token=${encodeURIComponent(tok)}&tipo=${tp}`)
         .then(r => r.json())
         .then(d => {
           if (d?.ok) { setMascota(d.nombre_mascota); setEstadoCodigo('ok') }
@@ -58,6 +62,7 @@ export default function SubirFotoPage() {
     try {
       const fd = new FormData()
       fd.append('token', token)
+      fd.append('tipo', tipo)
       fd.append('foto', foto)
       const r = await fetch('/api/clientes/foto', { method: 'POST', body: fd })
       const d = await r.json().catch(() => ({}))
@@ -80,9 +85,11 @@ export default function SubirFotoPage() {
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
           <div>
             <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>🐾 Crematorio Alma Animal</p>
-            <h1 className="text-2xl sm:text-3xl font-bold mt-2">Foto para el certificado</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold mt-2">{esCuadro ? 'Foto para el cuadro' : 'Foto para el certificado'}</h1>
             <p className="text-base mt-3 opacity-95">
-              Sube una foto de tu mascota y la incluiremos en su certificado de cremación.
+              {esCuadro
+                ? 'Sube una foto de tu mascota para crear su cuadro conmemorativo en acuarela. Elige una foto nítida y de frente para un mejor retrato.'
+                : 'Sube una foto de tu mascota y la incluiremos en su certificado de cremación.'}
             </p>
           </div>
           <img src={LOGO} alt="Alma Animal" className="hidden sm:block h-24 w-auto shrink-0" />
@@ -112,7 +119,9 @@ export default function SubirFotoPage() {
           <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center">
             <div className="text-5xl mb-3">🐾</div>
             <p className="text-base text-gray-800">
-              Hemos recibido la foto de <strong>{mascota}</strong>. La usaremos para incluirla en su certificado de cremación.
+              Hemos recibido la foto de <strong>{mascota}</strong>. {esCuadro
+                ? 'La usaremos para crear su cuadro conmemorativo en acuarela.'
+                : 'La usaremos para incluirla en su certificado de cremación.'}
             </p>
             <p className="text-sm text-gray-500 mt-3">Gracias por confiar en nosotros.</p>
             <button

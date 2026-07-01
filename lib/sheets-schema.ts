@@ -21,6 +21,9 @@ export const SHEETS: Record<string, string[]> = {
     // JSON array de URLs (R2) de fotos que el tutor sube desde /subir-foto para
     // incluir una en el certificado de cremación.
     'fotos_mascota',
+    // JSON array de URLs (R2) de fotos que el tutor sube para el CUADRO acuarela
+    // conmemorativo (solo servicio Premium/CP): /subir-foto?tipo=cuadro.
+    'fotos_cuadro',
     // JSON array de URLs (R2) de videos del servicio que sube el operador; se
     // pueden adjuntar al correo del certificado.
     'videos_servicio',

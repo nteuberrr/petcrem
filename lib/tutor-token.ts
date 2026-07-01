@@ -10,7 +10,7 @@ import crypto from 'crypto'
  * valen solo un día (decisión del cliente).
  */
 
-export type AccionTutor = 'subir_foto' | 'solicitar_video'
+export type AccionTutor = 'subir_foto' | 'solicitar_video' | 'subir_foto_cuadro'
 
 const DEFAULT_TTL_SECONDS = 24 * 3600 // 24 horas
 

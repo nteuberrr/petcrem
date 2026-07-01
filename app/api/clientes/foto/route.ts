@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateById, ensureColumns } from '@/lib/datastore'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
-import { verifyTutorToken } from '@/lib/tutor-token'
+import { verifyTutorToken, type AccionTutor } from '@/lib/tutor-token'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Subida PÚBLICA de la foto de la mascota (auto-atención del tutor desde el link
-// del correo de registro: /subir-foto?token=XXX). La "autenticación" es un TOKEN
-// HMAC firmado por ficha (lib/tutor-token), no el código de la mascota — el código
-// era secuencial y adivinable (permitía enumerar nombres y subir a fichas ajenas).
+// Subida PÚBLICA de una foto de la mascota (auto-atención del tutor desde el link
+// del correo de registro: /subir-foto?token=XXX[&tipo=cuadro]). La "autenticación"
+// es un TOKEN HMAC firmado por ficha + acción (lib/tutor-token), no el código.
 //
-//   GET  ?token=XXX → { ok, nombre_mascota }  (para precargar el landing)
-//   POST multipart (token, foto) → sube a R2 y la agrega a clientes.fotos_mascota
+//   tipo=certificado (default) → acción 'subir_foto'        → clientes.fotos_mascota
+//   tipo=cuadro                → acción 'subir_foto_cuadro' → clientes.fotos_cuadro
+//   (el cuadro acuarela conmemorativo es exclusivo del servicio Premium/CP)
+//
+//   GET  ?token=XXX[&tipo=] → { ok, nombre_mascota }  (precarga del landing)
+//   POST multipart (token, tipo?, foto) → sube a R2 y la agrega al campo del tipo
 //
 // Ruta whitelisteada en proxy.ts (sin sesión).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -20,9 +23,14 @@ const EXT: Record<string, string> = {
 }
 const MAX_BYTES = 8 * 1024 * 1024 // 8 MB
 
-/** Resuelve la ficha del cliente a partir del token firmado, o null si no vale. */
-async function clienteDesdeToken(token: string): Promise<Record<string, string> | null> {
-  const v = verifyTutorToken(token, 'subir_foto')
+type Tipo = 'certificado' | 'cuadro'
+const ACCION: Record<Tipo, AccionTutor> = { certificado: 'subir_foto', cuadro: 'subir_foto_cuadro' }
+const CAMPO: Record<Tipo, string> = { certificado: 'fotos_mascota', cuadro: 'fotos_cuadro' }
+const parseTipo = (v: unknown): Tipo => (String(v) === 'cuadro' ? 'cuadro' : 'certificado')
+
+/** Resuelve la ficha del cliente a partir del token firmado para ESE tipo, o null. */
+async function clienteDesdeToken(token: string, tipo: Tipo): Promise<Record<string, string> | null> {
+  const v = verifyTutorToken(token, ACCION[tipo])
   if (!v.ok || !v.clienteId) return null
   const rows = await getSheetData('clientes')
   return rows.find(r => String(r.id) === v.clienteId) ?? null
@@ -30,11 +38,13 @@ async function clienteDesdeToken(token: string): Promise<Record<string, string> 
 
 export async function GET(req: NextRequest) {
   try {
-    const token = (new URL(req.url).searchParams.get('token') || '').trim()
+    const url = new URL(req.url)
+    const token = (url.searchParams.get('token') || '').trim()
+    const tipo = parseTipo(url.searchParams.get('tipo'))
     if (!token) return NextResponse.json({ ok: false, error: 'Falta el token' }, { status: 400 })
-    const cliente = await clienteDesdeToken(token)
+    const cliente = await clienteDesdeToken(token, tipo)
     if (!cliente) return NextResponse.json({ ok: false, error: 'Enlace inválido o vencido' }, { status: 404 })
-    return NextResponse.json({ ok: true, nombre_mascota: cliente.nombre_mascota })
+    return NextResponse.json({ ok: true, nombre_mascota: cliente.nombre_mascota, tipo })
   } catch (e) {
     console.error('[clientes/foto]', e)
     return NextResponse.json({ ok: false, error: 'No se pudo procesar la solicitud. Intenta nuevamente.' }, { status: 500 })
@@ -45,6 +55,7 @@ export async function POST(req: NextRequest) {
   try {
     const form = await req.formData()
     const token = String(form.get('token') || '').trim()
+    const tipo = parseTipo(form.get('tipo'))
     const foto = form.get('foto')
     if (!token) return NextResponse.json({ ok: false, error: 'Falta el token' }, { status: 400 })
     if (!(foto instanceof File) || foto.size === 0) {
@@ -56,21 +67,23 @@ export async function POST(req: NextRequest) {
     const ext = EXT[(foto.type || '').toLowerCase()]
     if (!ext) return NextResponse.json({ ok: false, error: 'Formato no soportado. Usa JPG o PNG.' }, { status: 400 })
 
-    await ensureColumns('clientes', ['fotos_mascota'])
-    const cliente = await clienteDesdeToken(token)
+    const campo = CAMPO[tipo]
+    await ensureColumns('clientes', [campo])
+    const cliente = await clienteDesdeToken(token, tipo)
     if (!cliente) return NextResponse.json({ ok: false, error: 'Enlace inválido o vencido' }, { status: 404 })
 
     const ab = await foto.arrayBuffer()
-    const key = `mascotas/fotos/${cliente.codigo || cliente.id}-${Date.now()}.${ext}`
+    const carpeta = tipo === 'cuadro' ? 'cuadro' : 'fotos'
+    const key = `mascotas/${carpeta}/${cliente.codigo || cliente.id}-${Date.now()}.${ext}`
     const up = await uploadToR2(Buffer.from(ab), key, foto.type)
 
     let fotos: string[] = []
-    try { const x = JSON.parse(cliente.fotos_mascota || '[]'); if (Array.isArray(x)) fotos = x } catch { /* */ }
+    try { const x = JSON.parse(cliente[campo] || '[]'); if (Array.isArray(x)) fotos = x } catch { /* */ }
     fotos.push(up.url)
 
-    await updateById('clientes', cliente.id, { ...cliente, fotos_mascota: JSON.stringify(fotos) })
+    await updateById('clientes', cliente.id, { ...cliente, [campo]: JSON.stringify(fotos) })
 
-    return NextResponse.json({ ok: true, nombre_mascota: cliente.nombre_mascota, url: up.url })
+    return NextResponse.json({ ok: true, nombre_mascota: cliente.nombre_mascota, url: up.url, tipo })
   } catch (e) {
     console.error('[clientes/foto]', e)
     return NextResponse.json({ ok: false, error: 'No se pudo procesar la solicitud. Intenta nuevamente.' }, { status: 500 })
