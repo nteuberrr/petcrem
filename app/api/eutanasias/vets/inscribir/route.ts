@@ -4,6 +4,7 @@ import { todayISO } from '@/lib/dates'
 import { buscarComuna } from '@/lib/comunas'
 import { enviarBienvenidaVet, enviarAvisoNuevoVetConvenio } from '@/lib/eutanasia-mailer'
 import { capitalizarNombre } from '@/lib/nombres'
+import { permitirRequest } from '@/lib/rate-limit'
 
 const SHEET = 'vet_convenio_eutanasia'
 const COLS = [
@@ -72,6 +73,10 @@ function normalizarHorarios(input: unknown): Record<string, DiaHorario> {
  */
 export async function POST(req: NextRequest) {
   try {
+    // Alta pública sin sesión → límite por IP contra spam de inscripciones.
+    if (!permitirRequest(req, 'vets-inscribir', 5, 60 * 60_000)) {
+      return NextResponse.json({ error: 'Demasiados intentos. Intenta más tarde.' }, { status: 429 })
+    }
     const body = await req.json().catch(() => ({}))
 
     // Honeypot: bots típicamente llenan TODOS los campos. Si este viene con

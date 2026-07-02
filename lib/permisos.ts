@@ -34,15 +34,18 @@ export interface Modulo {
  */
 export const MODULOS: Modulo[] = [
   { key: 'dashboard', label: 'Dashboard', pages: ['/dashboard'], apis: ['/api/dashboard'], def: { admin2: true, operador: true } },
-  { key: 'clientes', label: 'Clientes', pages: ['/clientes'], apis: ['/api/clientes', '/api/upload', '/api/places', '/api/veterinarios', '/api/precios', '/api/descuentos', '/api/especies', '/api/productos', '/api/servicios'], def: { admin2: true, operador: true } },
+  { key: 'clientes', label: 'Clientes', pages: ['/clientes'], apis: ['/api/clientes', '/api/upload', '/api/places', '/api/veterinarios', '/api/precios', '/api/descuentos', '/api/especies', '/api/productos', '/api/categorias-productos', '/api/servicios'], def: { admin2: true, operador: true } },
   { key: 'operaciones', label: 'Operaciones', pages: ['/operaciones'], apis: ['/api/ciclos', '/api/petroleo', '/api/vehiculo', '/api/despachos'], def: { admin2: true, operador: true } },
-  { key: 'asistencia', label: 'Asistencia', pages: ['/asistencia'], apis: ['/api/asistencia', '/api/jornada-config', '/api/retiros-adicionales'], def: { admin2: true, operador: true } },
+  // pagos-retiros se usa desde la página de Asistencia pero trae su propio gate
+  // interno esAdmin: el operador pasa el proxy y recibe 403 de la ruta (mismo
+  // resultado que el fallback histórico, ahora gobernado por el editor).
+  { key: 'asistencia', label: 'Asistencia', pages: ['/asistencia'], apis: ['/api/asistencia', '/api/jornada-config', '/api/retiros-adicionales', '/api/pagos-retiros'], def: { admin2: true, operador: true } },
   { key: 'mensajes', label: 'Mensajes', pages: ['/mensajes'], apis: ['/api/mensajes', '/api/solicitudes-retiro'], def: { admin2: true, operador: false } },
   { key: 'rendiciones', label: 'Rendiciones', pages: ['/rendiciones'], apis: ['/api/rendiciones'], def: { admin2: true, operador: false } },
   { key: 'bases', label: 'Veterinarios (Bases)', pages: ['/bases'], apis: ['/api/veterinarios'], def: { admin2: true, operador: false } },
   { key: 'servicios', label: 'Servicios (Eutanasias)', pages: ['/servicios'], apis: ['/api/eutanasias', '/api/servicios'], def: { admin2: true, operador: false } },
   { key: 'reportes', label: 'Reportes', pages: ['/reportes'], apis: ['/api/reportes'], def: { admin2: true, operador: false } },
-  { key: 'configuracion', label: 'Configuración (Precios, Artículos, Descuentos, Jornada)', pages: ['/configuracion'], apis: ['/api/precios', '/api/productos', '/api/especies', '/api/servicios', '/api/descuentos', '/api/tipos-servicio', '/api/jornada-config'], def: { admin2: true, operador: false } },
+  { key: 'configuracion', label: 'Configuración (Precios, Artículos, Descuentos, Jornada)', pages: ['/configuracion'], apis: ['/api/precios', '/api/productos', '/api/categorias-productos', '/api/especies', '/api/servicios', '/api/descuentos', '/api/tipos-servicio', '/api/jornada-config', '/api/empresa/informe'], def: { admin2: true, operador: false } },
   { key: 'mailing', label: 'Campañas (Mail / Instagram / Facebook)', pages: ['/mailing'], apis: ['/api/mailing'], def: { admin2: false, operador: false } },
   { key: 'eerr', label: 'Estado de Resultados', pages: ['/estado-resultados'], apis: ['/api/eerr'], def: { admin2: false, operador: false } },
 ]

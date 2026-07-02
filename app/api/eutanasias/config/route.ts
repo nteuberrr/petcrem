@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { esAdmin } from '@/lib/roles'
-import { getFijoEutanasia, setFijoEutanasia } from '@/lib/eutanasia-precios'
+import { getFijoEutanasia, setFijoEutanasia, getConsultaEutanasia, setConsultaEutanasia } from '@/lib/eutanasia-precios'
 
-// Config del módulo de eutanasias: por ahora solo el cargo fijo que se suma al
-// precio del vet para dar el precio al cliente. Admin (incl. admin2).
+// Config del módulo de eutanasias. Admin (incl. admin2):
+//  - fijo: cargo al cliente sobre el pago al vet cuando SÍ se realiza.
+//  - consulta_vet + consulta_alma: consulta cobrada cuando NO se realiza.
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
@@ -19,8 +20,8 @@ export async function GET() {
   const denied = await requireAdmin()
   if (denied) return denied
   try {
-    const fijo = await getFijoEutanasia()
-    return NextResponse.json({ fijo })
+    const [fijo, consulta] = await Promise.all([getFijoEutanasia(), getConsultaEutanasia()])
+    return NextResponse.json({ fijo, consulta_vet: consulta.vet, consulta_alma: consulta.alma, consulta_total: consulta.total })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
@@ -31,6 +32,19 @@ export async function PUT(req: NextRequest) {
   if (denied) return denied
   try {
     const body = await req.json()
+
+    // Guardado de la consulta (fijo vet + spread Alma) — cuando NO se realiza.
+    if ('consulta_vet' in body || 'consulta_alma' in body) {
+      const vet = Number(body.consulta_vet)
+      const alma = Number(body.consulta_alma)
+      if (!Number.isFinite(vet) || vet < 0 || !Number.isFinite(alma) || alma < 0) {
+        return NextResponse.json({ error: 'Valores de consulta inválidos' }, { status: 400 })
+      }
+      await setConsultaEutanasia({ vet, alma })
+      return NextResponse.json({ consulta_vet: Math.round(vet), consulta_alma: Math.round(alma), consulta_total: Math.round(vet) + Math.round(alma) })
+    }
+
+    // Guardado del cargo fijo al cliente (cuando SÍ se realiza).
     const fijo = Number(body.fijo)
     if (!Number.isFinite(fijo) || fijo < 0) {
       return NextResponse.json({ error: 'Fijo inválido' }, { status: 400 })

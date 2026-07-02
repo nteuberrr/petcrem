@@ -172,7 +172,9 @@ export async function enviarBienvenidaVet(args: {
 }
 
 export function renderBienvenida({ nombreCompleto, baseUrl, linkDatosPago, contacto }: { nombreCompleto: string; baseUrl: string; linkDatosPago: string; contacto: Contacto }): string {
-  const landingUrl = baseUrl ? `${baseUrl}/convenio-eutanasias` : 'https://crematorioalmaanimal.cl/convenio-eutanasias'
+  // Fallback a la URL real de la app (el dominio de marca redirige al sitio de
+  // marketing y da 404 en las rutas de la app).
+  const landingUrl = baseUrl ? `${baseUrl}/convenio-eutanasias` : 'https://petcrem.vercel.app/convenio-eutanasias'
   const card = (n: string, titulo: string, texto: string) => `
       <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:10px;padding:16px;margin-bottom:14px">
         <p style="margin:0;font-size:14px"><strong style="color:${BRAND.navy}">${n}. ${titulo}</strong></p>
@@ -186,16 +188,17 @@ export function renderBienvenida({ nombreCompleto, baseUrl, linkDatosPago, conta
         nos ayuda a llegar a más lugares con un servicio cercano y digno.
       </p>
       <h2 style="margin:24px 0 12px;font-size:16px;color:${BRAND.navy}">Cómo vamos a trabajar</h2>
-      ${card('1', 'Recibes cotizaciones por correo.', 'Cuando una familia nos solicite una eutanasia en alguna de tus comunas y en uno de tus horarios disponibles, te enviamos un correo con todos los datos (nombre de la mascota, dirección, fecha, hora y monto a pagar).')}
+      ${card('1', 'Recibes solicitudes por correo.', 'Cuando una familia nos solicite una eutanasia a domicilio en alguna de tus comunas y en uno de tus horarios disponibles, te enviamos un correo con todos los datos (nombre de la mascota, dirección, fecha, hora y monto a pagar).')}
       ${card('2', 'Confirmas si puedes tomarla.', 'Si te queda cómodo, presionas "Confirma que puedes aquí" en el mismo correo. La solicitud queda asignada a tu nombre y te enviamos un segundo correo con los datos de contacto de la familia para que coordines directamente.')}
-      ${card('3', 'Atiendes el caso.', 'Hablas con la familia, evalúas el caso y, si corresponde, realizas el servicio en el día y hora acordados.')}
-      ${card('4', 'Confirmas y te pagamos.', 'Cuando termines, confirmas en el correo que el servicio se realizó y recibes el pago el día hábil siguiente.')}
+      ${card('3', 'Vas, evalúas y decides.', 'Es un servicio de evaluación: visitas a la mascota, la evalúas y —si corresponde— realizas la eutanasia con el mayor respeto. Si al evaluar no corresponde, no se realiza.')}
+      ${card('4', 'Marcas el resultado y te pagamos.', 'En el correo de coordinación tienes dos botones: "Eutanasia realizada" y "Eutanasia no realizada". Marca el que corresponda al terminar la visita y recibes el pago el día hábil siguiente. Si no se realiza, igual se te paga el valor de la consulta.')}
       <h2 style="margin:26px 0 12px;font-size:16px;color:${BRAND.navy}">Cómo te pagamos</h2>
       <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:16px">
         <p style="margin:0;font-size:14px;line-height:1.55">
-          <strong>Pagamos al día hábil siguiente</strong> al que realices el servicio.
-          La tarifa depende del peso de la mascota y es la misma para todos los
-          veterinarios del convenio.
+          <strong>Pagamos al día hábil siguiente</strong> a la visita.
+          Si realizas la eutanasia, la tarifa depende del peso de la mascota (la misma para
+          todos los veterinarios del convenio). Si al evaluar no corresponde realizarla,
+          igual te pagamos el <strong>valor de la consulta</strong> por la visita.
         </p>
         <p style="margin:10px 0 0;font-size:13px">
           <a href="${landingUrl}" style="color:${BRAND.navy};font-weight:600">Ver tabla de precios →</a>
@@ -218,89 +221,6 @@ export function renderBienvenida({ nombreCompleto, baseUrl, linkDatosPago, conta
         y lo actualizamos a la brevedad.
       </p>`
   return renderEmailLayout({ titulo: '¡Bienvenido al convenio!', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
-}
-
-// ─── Mail "confirma realización del servicio" ────────────────────────────────
-
-export interface RealizarServicioArgs {
-  vetEmail: string
-  vetNombre: string
-  cotizacion: {
-    id: string
-    mascota_nombre: string
-    cliente_nombre: string
-    cliente_telefono: string
-    fecha_servicio: string
-    hora_servicio: string
-    direccion: string
-    comuna: string
-    precio_snapshot?: string
-  }
-  /** URL completa con token firmado a /eutanasia/realizado/<token>. */
-  linkRealizado: string
-}
-
-export async function enviarMailRealizarServicio(args: RealizarServicioArgs): Promise<BienvenidaResult> {
-  const to = args.vetEmail
-  if (!isResendConfigured()) {
-    console.warn('[eutanasia-mailer] Resend no configurado, salto mail realizarServicio a', to)
-    return { ok: false, estado: 'omitido_sin_resend', to }
-  }
-  const fromUsed = (() => { try { return getFromAddress() } catch { return '(no resolvable)' } })()
-  console.log(`[eutanasia-mailer] enviando realizarServicio → from=${fromUsed} to=${to} cotizacion=${args.cotizacion.id}`)
-  try {
-    const contacto = await getContacto()
-    const res = await sendEmail({
-      to,
-      subject: `Confirma cuando termines el servicio — ${args.cotizacion.mascota_nombre}`,
-      html: renderRealizarServicio(args, contacto),
-      preview_text: `Confirma la realización del servicio de ${args.cotizacion.mascota_nombre}.`,
-      tags: [
-        { name: 'tipo', value: 'eutanasia_post_confirmar' },
-        { name: 'cotizacion_id', value: String(args.cotizacion.id) },
-      ],
-      seguimiento: { tipo: 'eutanasia_realizar', audiencia: 'Veterinario', nombre: args.cotizacion.mascota_nombre },
-    })
-    if (res.ok) {
-      console.log(`[eutanasia-mailer] OK realizarServicio a ${to}, message_id=${res.message_id}`)
-      return { ok: true, estado: 'enviado', message_id: res.message_id, from_used: fromUsed, to }
-    }
-    console.error(`[eutanasia-mailer] FAIL realizarServicio a ${to}: ${res.error}`)
-    return { ok: false, estado: 'error', error: res.error, from_used: fromUsed, to }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error(`[eutanasia-mailer] EXC realizarServicio a ${to}:`, msg)
-    return { ok: false, estado: 'error', error: msg, from_used: fromUsed, to }
-  }
-}
-
-export function renderRealizarServicio(args: RealizarServicioArgs, contacto: Contacto): string {
-  const c = args.cotizacion
-  const precio = parseInt(c.precio_snapshot || '0', 10)
-  const cuerpo = `
-      <p style="margin:0 0 14px;font-size:15px">Hola <strong>${escapeHtml(args.vetNombre || 'Dr/a.')}</strong>,</p>
-      <p style="margin:0 0 16px;font-size:14px;line-height:1.55">
-        Gracias por coordinar con la familia. Una vez que termines el servicio,
-        confirma aquí para que podamos procesar tu pago.
-      </p>
-      <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:10px;padding:14px;margin:14px 0">
-        <p style="margin:0 0 4px;font-size:12px;color:${BRAND.muted}">Servicio</p>
-        <p style="margin:0;font-size:14px;font-weight:600">${escapeHtml(c.mascota_nombre)} · ${escapeHtml(c.cliente_nombre)}</p>
-        <p style="margin:4px 0 0;font-size:13px;color:${BRAND.muted}">${escapeHtml(formatDate(c.fecha_servicio))} ${escapeHtml(formatHoraDia(c.hora_servicio))} hs · ${escapeHtml(c.direccion)}, ${escapeHtml(c.comuna)}</p>
-        ${precio > 0 ? `<p style="margin:8px 0 0;font-size:13px"><strong>Pago acordado:</strong> ${escapeHtml(fmtPrecio(precio))}</p>` : ''}
-      </div>
-      <div style="text-align:center;margin:20px 0 8px">
-        <a href="${args.linkRealizado}" style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 28px;border-radius:10px">
-          Confirma aquí una vez realizado el servicio
-        </a>
-      </div>
-      <p style="margin:14px 0 0;font-size:11px;color:#94a3b8;text-align:center">
-        Presiona el botón solo después de realizar la eutanasia. Coordinaremos tu pago para el día hábil siguiente.
-      </p>
-      <p style="margin:20px 0 0;font-size:13px;color:${BRAND.muted};line-height:1.5">
-        Si surgió algún inconveniente durante el servicio o necesitas reagendar, contáctanos por los medios de abajo.
-      </p>`
-  return renderEmailLayout({ titulo: 'Confirma cuando realices el servicio', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
 }
 
 // ─── Mail de agradecimiento + datos de pago ──────────────────────────────────
@@ -543,8 +463,9 @@ export function renderCotizacionEmail({ vetNombre, c, linkAceptar, linkDatosPago
       </table>
 
       <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:10px;padding:14px;margin:20px 0">
-        <p style="margin:0;font-size:13px;color:${BRAND.muted}">Pago al veterinario por este servicio:</p>
+        <p style="margin:0;font-size:13px;color:${BRAND.muted}">Pago al veterinario si realizas la eutanasia:</p>
         <p style="margin:4px 0 0;font-size:22px;font-weight:700;color:${BRAND.navy}">${escapeHtml(fmtPrecio(precio))}</p>
+        <p style="margin:8px 0 0;font-size:12px;color:${BRAND.muted};line-height:1.5">Es un servicio de <strong>evaluación</strong>: vas, evalúas y decides. Si al evaluar no corresponde realizarla, igual se te paga el valor de la <strong>consulta</strong> por la visita.</p>
       </div>
 
       <p style="margin:20px 0 8px;font-size:14px">¿Puedes tomar esta solicitud?</p>
@@ -571,20 +492,27 @@ export function renderCotizacionEmail({ vetNombre, c, linkAceptar, linkDatosPago
 export interface CoordinarEmailArgs {
   vetNombre: string
   c: Record<string, string>
-  linkConfirmar: string
+  /** URL completa a /eutanasia/realizado/<token>. */
+  linkRealizado: string
+  /** URL completa a /eutanasia/no-realizado/<token>. */
+  linkNoRealizado: string
   /** Si está vacío, no se muestra el bloque "Aún no registras tus datos…". */
   linkDatosPago: string
   contacto: Contacto
 }
 
-/** Correo al vet que aceptó: datos de contacto de la familia + botón confirmar. */
-export function renderCoordinarEmail({ vetNombre, c, linkConfirmar, linkDatosPago, contacto }: CoordinarEmailArgs): string {
+/**
+ * Correo al vet que aceptó: datos de contacto de la familia + los DOS botones de
+ * cierre ("Eutanasia realizada" / "Eutanasia no realizada"). El vet va, evalúa y
+ * marca el resultado directamente desde acá (ya no hay paso intermedio de confirmar).
+ */
+export function renderCoordinarEmail({ vetNombre, c, linkRealizado, linkNoRealizado, linkDatosPago, contacto }: CoordinarEmailArgs): string {
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${c.direccion}, ${c.comuna}, Chile`)}`
   const fechaLeg = formatDate(c.fecha_servicio)
   const horaLeg = formatHoraDia(c.hora_servicio)
   const cuerpo = `
       <p style="margin:0 0 12px;font-size:15px">Hola <strong>${escapeHtml(vetNombre)}</strong>,</p>
-      <p style="margin:0 0 14px;font-size:14px;line-height:1.55">Gracias por confirmar tu disponibilidad. Ahora <strong>contacta directamente a la familia</strong> para evaluar el caso y coordinar.</p>
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.55">Gracias por tomar esta solicitud. Ahora <strong>contacta directamente a la familia</strong>, coordina la visita y <strong>evalúa</strong> si corresponde realizar la eutanasia.</p>
 
       <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:10px;padding:14px;margin:16px 0">
         <p style="margin:0 0 6px;font-size:12px;color:${BRAND.muted}">Contacto del cliente</p>
@@ -602,15 +530,21 @@ export function renderCoordinarEmail({ vetNombre, c, linkConfirmar, linkDatosPag
         </tbody>
       </table>
 
-      <p style="margin:20px 0 8px;font-size:14px">Una vez que hayas hablado con la familia y confirmen que vas a realizar el servicio, marca acá:</p>
+      <p style="margin:22px 0 8px;font-size:14px"><strong>Cuando termines la visita, marca el resultado:</strong></p>
 
-      <div style="text-align:center;margin:18px 0 8px">
-        <a href="${linkConfirmar}" style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 28px;border-radius:10px">
-          Confirma servicio aquí
+      <div style="text-align:center;margin:14px 0 8px">
+        <a href="${linkRealizado}" style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 26px;border-radius:10px;margin:0 6px 10px">
+          ✅ Eutanasia realizada
+        </a>
+        <a href="${linkNoRealizado}" style="display:inline-block;background:#fff;color:${BRAND.navy};text-decoration:none;font-weight:700;font-size:15px;padding:13px 25px;border-radius:10px;border:2px solid ${BRAND.navy};margin:0 6px 10px">
+          Eutanasia no realizada
         </a>
       </div>
 
-      <p style="margin:18px 0 0;font-size:12px;color:${BRAND.muted}">Si después de hablar con la familia decides que no puedes tomar el caso, simplemente ignora este correo — lo reasignaremos.</p>
+      <p style="margin:14px 0 0;font-size:12px;color:${BRAND.muted};line-height:1.5">
+        Marca <strong>"realizada"</strong> si procediste con la eutanasia, o <strong>"no realizada"</strong> si al evaluar no correspondía.
+        En ambos casos coordinamos tu pago para el día hábil siguiente. Presiona solo después de la visita.
+      </p>
 
       ${linkDatosPago ? `
       <div style="margin:24px 0 0;padding-top:18px;border-top:1px dashed ${BRAND.hairline};text-align:center">
@@ -619,14 +553,14 @@ export function renderCoordinarEmail({ vetNombre, c, linkConfirmar, linkDatosPag
           Regístralos aquí
         </a>
       </div>` : ''}`
-  return renderEmailLayout({ titulo: 'Tomaste la solicitud — siguiente paso', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
+  return renderEmailLayout({ titulo: 'Tomaste la solicitud — coordina y evalúa', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
 }
 
 /**
  * Envía al vet asignado el correo "coordina con la familia" (datos de contacto de
- * la familia + botón "Confirma servicio aquí"). Lo comparten el flujo natural
- * (cuando un vet acepta la cotización) y la asignación MANUAL desde el admin.
- * Best-effort: no rompe la operación si Resend falla.
+ * la familia + botones "Eutanasia realizada" / "Eutanasia no realizada"). Lo
+ * comparten el flujo natural (cuando un vet acepta la cotización) y la asignación
+ * MANUAL desde el admin. Best-effort: no rompe la operación si Resend falla.
  */
 export async function enviarCoordinarConFamilia(args: {
   c: Record<string, string>
@@ -637,7 +571,8 @@ export async function enviarCoordinarConFamilia(args: {
   const { c, vet, baseUrl } = args
   if (!vet.email || !isResendConfigured() || !baseUrl) return
   const vetNombre = nombreCompletoVet(vet.nombre, vet.apellido)
-  const linkConfirmar = `${baseUrl}/eutanasia/confirmar/${createToken(c.id, vet.id, 'confirmar')}`
+  const linkRealizado = `${baseUrl}/eutanasia/realizado/${createToken(c.id, vet.id, 'realizado')}`
+  const linkNoRealizado = `${baseUrl}/eutanasia/no-realizado/${createToken(c.id, vet.id, 'no_realizado')}`
   const tieneDatosPago = (vet.datos_pago_completos ?? '').toUpperCase() === 'TRUE'
   const linkDatosPago = tieneDatosPago ? '' : `${baseUrl}/eutanasia/datos-pago/${createVetToken(vet.id, 'datos_pago')}`
   try {
@@ -645,7 +580,7 @@ export async function enviarCoordinarConFamilia(args: {
     await sendEmail({
       to: vet.email,
       subject: `Coordina con la familia — Eutanasia ${c.mascota_nombre}`,
-      html: renderCoordinarEmail({ vetNombre: vetNombre || 'Dr/a.', c, linkConfirmar, linkDatosPago, contacto }),
+      html: renderCoordinarEmail({ vetNombre: vetNombre || 'Dr/a.', c, linkRealizado, linkNoRealizado, linkDatosPago, contacto }),
       preview_text: `Datos de contacto de la familia de ${c.mascota_nombre}.`,
       tags: [
         { name: 'tipo', value: 'eutanasia_post_aceptar' },
@@ -660,9 +595,9 @@ export async function enviarCoordinarConFamilia(args: {
 }
 
 export function renderAgradecimiento(args: AgradecimientoArgs, contacto: Contacto): string {
-  // Nota: precio intencionalmente NO se muestra en este correo.
   const fechaPago = fechaProximoPago(args.fechaRealizacionISO)
   const datosPago = process.env.EUTANASIA_DATOS_PAGO || ''
+  const precio = parseInt(args.cotizacion.precio_snapshot || '0', 10) || 0
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">Hola <strong>${escapeHtml(args.vetNombre || 'Dr/a.')}</strong>,</p>
       <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
@@ -675,11 +610,162 @@ export function renderAgradecimiento(args: AgradecimientoArgs, contacto: Contact
         en tus comunas y horarios.
       </p>
       <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:18px;margin:18px 0">
-        <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#047857;font-weight:600">Tu pago</p>
+        <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#047857;font-weight:600">Tu pago por este servicio</p>
+        ${precio > 0 ? `<p style="margin:0 0 6px;font-size:22px;font-weight:700;color:${BRAND.navy}">${escapeHtml(fmtPrecio(precio))}</p>` : ''}
         <p style="margin:0;font-size:14px;color:${BRAND.ink};line-height:1.5">
-          Recibirás el pago <strong>${escapeHtml(fechaPago)}</strong> (día hábil siguiente al servicio)${datosPago ? `, en la cuenta:` : '.'}
+          Lo recibirás el <strong>${escapeHtml(fechaPago)}</strong> (día hábil siguiente al servicio)${datosPago ? `, en la cuenta:` : '.'}
         </p>
         ${datosPago ? `<div style="margin:10px 0 0;padding:10px;background:#fff;border:1px solid #d1fae5;border-radius:6px;font-size:13px;color:${BRAND.ink};white-space:pre-line;line-height:1.5">${escapeHtml(datosPago)}</div>` : ''}
       </div>`
   return renderEmailLayout({ titulo: '¡Muchas gracias por tu trabajo!', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
+}
+
+// ─── Mail al TUTOR al agendar: explica el servicio de evaluación + precios ────
+
+export interface ClienteCotizacionArgs {
+  clienteEmail: string
+  clienteNombre: string
+  mascotaNombre: string
+  especie: string
+  peso: string | number
+  /** ISO 'YYYY-MM-DD'. */
+  fechaServicio: string
+  horaServicio: string
+  comuna: string
+  /** Precio al cliente si la eutanasia SÍ se realiza (según peso). */
+  precioClienteRealizada: number
+  /** Total al cliente si NO se realiza (la consulta). */
+  consultaTotal: number
+}
+
+/**
+ * Correo al tutor cuando agenda una eutanasia a domicilio: explica que es un
+ * servicio de EVALUACIÓN (un vet de la red evalúa si corresponde) y los precios
+ * de cara al tutor — sin desglose interno vet/Alma. Best-effort.
+ */
+export async function enviarClienteCotizacionEutanasia(args: ClienteCotizacionArgs): Promise<BienvenidaResult> {
+  const to = args.clienteEmail
+  if (!to) return { ok: false, estado: 'omitido_sin_resend', to }
+  if (!isResendConfigured()) {
+    console.warn('[eutanasia-mailer] Resend no configurado, salto cotización al tutor', to)
+    return { ok: false, estado: 'omitido_sin_resend', to }
+  }
+  try {
+    const contacto = await getContacto()
+    const res = await sendEmail({
+      to,
+      subject: `Recibimos tu solicitud para ${args.mascotaNombre}`,
+      html: renderClienteCotizacionEutanasia(args, contacto),
+      preview_text: `Estamos buscando un veterinario de nuestra red para ${args.mascotaNombre}.`,
+      tags: [{ name: 'tipo', value: 'eutanasia_cliente_cotizacion' }],
+      seguimiento: { tipo: 'eutanasia_cliente_cotizacion', audiencia: 'Tutor', nombre: args.mascotaNombre },
+    })
+    return res.ok
+      ? { ok: true, estado: 'enviado', message_id: res.message_id, to }
+      : { ok: false, estado: 'error', error: res.error, to }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[eutanasia-mailer] EXC cotización al tutor:', msg)
+    return { ok: false, estado: 'error', error: msg, to }
+  }
+}
+
+export function renderClienteCotizacionEutanasia(args: ClienteCotizacionArgs, contacto: Contacto): string {
+  const mascota = escapeHtml(args.mascotaNombre)
+  const saludo = args.clienteNombre ? `Hola <strong>${escapeHtml(args.clienteNombre)}</strong>,` : 'Hola,'
+  const fechaLeg = formatDate(args.fechaServicio)
+  const horaLeg = formatHoraDia(args.horaServicio)
+  const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">${saludo}</p>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+        Recibimos tu solicitud de <strong>eutanasia a domicilio</strong> para <strong>${mascota}</strong>.
+        Estamos buscando un veterinario de nuestra red que pueda asistir el
+        <strong>${escapeHtml(fechaLeg)}${horaLeg && horaLeg !== '—' ? ` a las ${escapeHtml(horaLeg)}` : ''}</strong> en <strong>${escapeHtml(args.comuna)}</strong>.
+        Apenas uno confirme, te avisamos con sus datos para coordinar.
+      </p>
+
+      <h2 style="margin:22px 0 10px;font-size:16px;color:${BRAND.navy}">Cómo funciona</h2>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+        Es un servicio de <strong>evaluación a domicilio</strong>. El veterinario visita a ${mascota},
+        la evalúa con cuidado y, si corresponde, realiza la eutanasia con el mayor respeto y acompañándote en todo momento.
+      </p>
+
+      <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:10px;padding:16px;margin:16px 0">
+        <p style="margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:${BRAND.muted};font-weight:700">Valores del servicio</p>
+        <p style="margin:0 0 6px;font-size:14px;line-height:1.5">
+          <strong>Si se realiza la eutanasia:</strong> ${escapeHtml(fmtPrecio(args.precioClienteRealizada))} <span style="color:${BRAND.muted}">(según el peso de ${mascota})</span>
+        </p>
+        <p style="margin:0;font-size:14px;line-height:1.5">
+          <strong>Si al evaluar no corresponde realizarla:</strong> se cobra solo el valor de la <strong>consulta</strong>, ${escapeHtml(fmtPrecio(args.consultaTotal))}.
+        </p>
+      </div>
+
+      <p style="margin:16px 0 0;font-size:14px;line-height:1.6">
+        Una vez realizada la eutanasia, llegaremos en nuestro vehículo a hacer el <strong>retiro</strong> de ${mascota}
+        para proceder con el <strong>servicio de cremación</strong>.
+      </p>
+      <p style="margin:14px 0 0;font-size:13px;color:${BRAND.muted};line-height:1.55">
+        Cualquier duda, respóndenos este correo o escríbenos por los medios de abajo. Estamos para acompañarte. 🐾
+      </p>`
+  return renderEmailLayout({ titulo: 'Recibimos tu solicitud', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
+}
+
+// ─── Mail al VET cuando la eutanasia NO se realiza (pago de la consulta) ──────
+
+export interface NoRealizadaArgs {
+  vetEmail: string
+  vetNombre: string
+  mascotaNombre: string
+  /** Monto a pagar al vet por la consulta (evaluación sin eutanasia). */
+  consultaVet: number
+  /** Fecha en que se cerró el caso (ISO 'YYYY-MM-DD'), para calcular el pago. */
+  fechaRealizacionISO: string
+}
+
+export async function enviarMailNoRealizada(args: NoRealizadaArgs): Promise<BienvenidaResult> {
+  const to = args.vetEmail
+  if (!to) return { ok: false, estado: 'omitido_sin_resend', to }
+  if (!isResendConfigured()) {
+    console.warn('[eutanasia-mailer] Resend no configurado, salto mail no-realizada a', to)
+    return { ok: false, estado: 'omitido_sin_resend', to }
+  }
+  try {
+    const contacto = await getContacto()
+    const res = await sendEmail({
+      to,
+      subject: `Gracias por la evaluación — coordinamos tu pago`,
+      html: renderNoRealizada(args, contacto),
+      preview_text: `Registramos la evaluación de ${args.mascotaNombre}. Coordinamos el pago de la consulta.`,
+      tags: [{ name: 'tipo', value: 'eutanasia_no_realizada_vet' }],
+      seguimiento: { tipo: 'eutanasia_no_realizada_vet', audiencia: 'Veterinario', nombre: args.mascotaNombre },
+    })
+    return res.ok
+      ? { ok: true, estado: 'enviado', message_id: res.message_id, to }
+      : { ok: false, estado: 'error', error: res.error, to }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[eutanasia-mailer] EXC no-realizada al vet:', msg)
+    return { ok: false, estado: 'error', error: msg, to }
+  }
+}
+
+export function renderNoRealizada(args: NoRealizadaArgs, contacto: Contacto): string {
+  const fechaPago = fechaProximoPago(args.fechaRealizacionISO)
+  const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">Hola <strong>${escapeHtml(args.vetNombre || 'Dr/a.')}</strong>,</p>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+        Gracias por evaluar a <strong>${escapeHtml(args.mascotaNombre)}</strong>. Registramos que, tras la evaluación,
+        <strong>no correspondía realizar la eutanasia</strong>. Igual valoramos tu visita y tu criterio profesional.
+      </p>
+      <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:18px;margin:18px 0">
+        <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#047857;font-weight:600">Tu pago por la consulta</p>
+        <p style="margin:0;font-size:20px;font-weight:700;color:${BRAND.navy}">${escapeHtml(fmtPrecio(args.consultaVet))}</p>
+        <p style="margin:8px 0 0;font-size:14px;color:${BRAND.ink};line-height:1.5">
+          Lo recibirás el <strong>${escapeHtml(fechaPago)}</strong> (día hábil siguiente).
+        </p>
+      </div>
+      <p style="margin:16px 0 0;font-size:13px;color:${BRAND.muted};line-height:1.55">
+        Nos pondremos en contacto contigo cuando alguien más necesite nuestro apoyo en tus comunas y horarios.
+      </p>`
+  return renderEmailLayout({ titulo: 'Gracias por la evaluación', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
 }

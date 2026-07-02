@@ -94,8 +94,10 @@ export async function calcularSnapshotFicha(input: SnapshotInput): Promise<Preci
       const vets = await getSheetData('veterinarios')
       const vet = vets.find(v => v.id === input.veterinaria_id)
       if (vet) tipo = vet.tipo_precios === 'precios_especiales' ? 'especial' : 'convenio'
-    } catch {
-      // si falla, dejamos 'general'
+    } catch (e) {
+      // Degradamos a 'general', pero dejamos rastro: una ficha de convenio
+      // cotizada con tarifa general sin log es indetectable después.
+      console.error(`[price-calculator] no se pudo leer veterinarios (veterinaria_id=${input.veterinaria_id}); snapshot con tarifa GENERAL:`, e)
     }
   }
 

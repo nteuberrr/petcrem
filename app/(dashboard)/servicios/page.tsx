@@ -30,6 +30,7 @@ type Cotizacion = {
   vet_nombre_asignado: string
   vet_email_asignado: string
   precio_snapshot: string
+  consulta_vet_snapshot?: string
   estado_pago?: string
   fecha_pago?: string
   fecha_realizacion?: string
@@ -37,7 +38,7 @@ type Cotizacion = {
 }
 
 interface ColumnaConfig {
-  key: 'enviadas' | 'por_confirmar' | 'por_realizar' | 'historico'
+  key: 'enviadas' | 'aceptadas' | 'historico'
   titulo: string
   descripcion: string
   /** Color del header (Tailwind class). */
@@ -55,25 +56,18 @@ const COLUMNAS_COTI: ColumnaConfig[] = [
     matches: c => c.estado === 'creada' || c.estado === 'enviada',
   },
   {
-    key: 'por_confirmar',
-    titulo: 'Por confirmar con cliente',
-    descripcion: 'Veterinario aceptó, debe llamar a la familia',
+    key: 'aceptadas',
+    titulo: 'Aceptadas / en evaluación',
+    descripcion: 'Un veterinario la tomó; coordina, evalúa y marca el resultado',
     header: 'bg-amber-50 text-amber-800 border-amber-200',
     matches: c => c.estado === 'aceptada',
   },
   {
-    key: 'por_realizar',
-    titulo: 'Por realizar',
-    descripcion: 'Cita coordinada, servicio agendado',
-    header: 'bg-blue-50 text-blue-800 border-blue-200',
-    matches: c => c.estado === 'confirmada',
-  },
-  {
     key: 'historico',
     titulo: 'Histórico',
-    descripcion: 'Servicios realizados o cancelados',
+    descripcion: 'Realizadas, no realizadas o canceladas',
     header: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-    matches: c => c.estado === 'realizada' || c.estado === 'cancelada',
+    matches: c => c.estado === 'realizada' || c.estado === 'no_realizada' || c.estado === 'cancelada',
   },
 ]
 
@@ -91,8 +85,8 @@ function estadoColor(estado: string): string {
     case 'creada': return 'bg-gray-100 text-gray-700'
     case 'enviada': return 'bg-blue-100 text-blue-700'
     case 'aceptada': return 'bg-amber-100 text-amber-700'
-    case 'confirmada': return 'bg-emerald-100 text-emerald-700'
     case 'realizada': return 'bg-green-200 text-green-800'
+    case 'no_realizada': return 'bg-slate-200 text-slate-700'
     case 'cancelada': return 'bg-red-100 text-red-700'
     default: return 'bg-gray-100 text-gray-700'
   }
@@ -256,47 +250,54 @@ export default function ServiciosEutanasiasPage() {
   const cargarTramos = useCallback(async () => {
     const r = await fetch('/api/eutanasias/precios', { cache: 'no-store' })
     const d = await r.json()
-    setTramos(Array.isArray(d) ? d : [])
+    setTramos(Array.isArray(d?.tramos) ? d.tramos : Array.isArray(d) ? d : [])
   }, [])
 
-  // Cargo fijo del cliente: precio_cliente = precio_vet (tramo) + fijo.
+  // Cargo fijo del cliente (precio al cliente = precio del vet + fijo). Ya no se
+  // edita desde la UI: la tabla de tramos muestra el total "Al cliente"; el valor
+  // se mantiene en config y se usa para calcular esa columna.
   const [fijo, setFijo] = useState<number>(0)
-  const [fijoInput, setFijoInput] = useState('')
-  const [savingFijo, setSavingFijo] = useState(false)
-  const [fijoMsg, setFijoMsg] = useState('')
+
+  // Consulta cuando la eutanasia NO se realiza: total al cliente = fijo vet + spread Alma.
+  const [consultaVetInput, setConsultaVetInput] = useState('')
+  const [consultaAlmaInput, setConsultaAlmaInput] = useState('')
+  const [savingConsulta, setSavingConsulta] = useState(false)
+  const [consultaMsg, setConsultaMsg] = useState('')
 
   const cargarFijo = useCallback(async () => {
     const r = await fetch('/api/eutanasias/config', { cache: 'no-store' })
     if (!r.ok) return
     const d = await r.json().catch(() => null)
-    if (d && typeof d.fijo === 'number') {
-      setFijo(d.fijo)
-      setFijoInput(String(d.fijo))
-    }
+    if (d && typeof d.fijo === 'number') setFijo(d.fijo)
+    if (d && typeof d.consulta_vet === 'number') setConsultaVetInput(String(d.consulta_vet))
+    if (d && typeof d.consulta_alma === 'number') setConsultaAlmaInput(String(d.consulta_alma))
   }, [])
 
-  async function guardarFijo() {
-    setSavingFijo(true)
-    setFijoMsg('')
+  const consultaTotal = (parseInt(consultaVetInput, 10) || 0) + (parseInt(consultaAlmaInput, 10) || 0)
+
+  async function guardarConsulta() {
+    setSavingConsulta(true)
+    setConsultaMsg('')
     try {
-      const valor = parseInt(fijoInput, 10)
-      if (isNaN(valor) || valor < 0) { setFijoMsg('Valor inválido'); return }
+      const vet = parseInt(consultaVetInput, 10)
+      const alma = parseInt(consultaAlmaInput, 10)
+      if (isNaN(vet) || vet < 0 || isNaN(alma) || alma < 0) { setConsultaMsg('Valores inválidos'); return }
       const r = await fetch('/api/eutanasias/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fijo: valor }),
+        body: JSON.stringify({ consulta_vet: vet, consulta_alma: alma }),
       })
       const d = await r.json().catch(() => ({}))
       if (r.ok) {
-        setFijo(d.fijo ?? valor)
-        setFijoInput(String(d.fijo ?? valor))
-        setFijoMsg('Guardado ✓')
-        setTimeout(() => setFijoMsg(''), 2500)
+        setConsultaVetInput(String(d.consulta_vet ?? vet))
+        setConsultaAlmaInput(String(d.consulta_alma ?? alma))
+        setConsultaMsg('Guardado ✓')
+        setTimeout(() => setConsultaMsg(''), 2500)
       } else {
-        setFijoMsg(d.error || 'Error al guardar')
+        setConsultaMsg(d.error || 'Error al guardar')
       }
     } finally {
-      setSavingFijo(false)
+      setSavingConsulta(false)
     }
   }
 
@@ -489,11 +490,21 @@ export default function ServiciosEutanasiasPage() {
   }
 
   async function marcarRealizada(id: string) {
-    if (!confirm('¿Marcar como realizada?')) return
+    if (!confirm('¿Marcar como realizada? Se le enviará al tutor el agradecimiento con la reseña.')) return
     await fetch(`/api/eutanasias/cotizaciones/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ estado: 'realizada' }),
+    })
+    await cargarCotis()
+  }
+
+  async function marcarNoRealizada(id: string) {
+    if (!confirm('¿Marcar como NO realizada? Se paga la consulta al veterinario y se elimina el borrador de cremación.')) return
+    await fetch(`/api/eutanasias/cotizaciones/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: 'no_realizada' }),
     })
     await cargarCotis()
   }
@@ -508,7 +519,7 @@ export default function ServiciosEutanasiasPage() {
   const cotisPorColumna = useMemo(() => {
     const sorted = [...cotis].sort((a, b) => (b.fecha_creacion || '').localeCompare(a.fecha_creacion || ''))
     const r: Record<ColumnaConfig['key'], Cotizacion[]> = {
-      enviadas: [], por_confirmar: [], por_realizar: [], historico: [],
+      enviadas: [], aceptadas: [], historico: [],
     }
     for (const c of sorted) {
       const col = COLUMNAS_COTI.find(col => col.matches(c))
@@ -897,37 +908,52 @@ export default function ServiciosEutanasiasPage() {
 
       {tab === 'Precios' && (
         <section>
-          {/* Cargo fijo al cliente */}
+          {/* Consulta cuando la eutanasia NO se realiza (evaluación a domicilio) */}
           <div className="bg-white rounded-xl shadow-md border border-gray-300 p-4 sm:p-5 mb-5 max-w-2xl">
-            <h3 className="text-sm font-semibold text-gray-900">Cargo fijo al cliente</h3>
+            <h3 className="text-sm font-semibold text-gray-900">Consulta <span className="text-gray-400 font-normal">(si la eutanasia NO se realiza)</span></h3>
             <p className="text-xs text-gray-500 mt-1">
-              Se <strong>suma</strong> al precio del tramo (lo que se paga al vet) para dar el precio que se le cobra al cliente final.
+              El veterinario va, <strong>evalúa</strong> y, si no corresponde realizar la eutanasia, se cobra el valor de la <strong>consulta</strong>.
+              El total al cliente es la suma de la comisión del veterinario y el spread de Alma Animal.
               <br />
-              <span className="text-gray-400">Precio al cliente = precio del vet + cargo fijo.</span>
+              <span className="text-gray-400">Total al cliente = fijo veterinario + spread Alma Animal.</span>
             </p>
-            <div className="flex items-center gap-2 mt-3">
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                <input
-                  type="number" min="0" step="1000"
-                  value={fijoInput}
-                  onChange={e => setFijoInput(e.target.value)}
-                  className="w-40 pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-base sm:text-sm"
-                  placeholder="0"
-                />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Fijo veterinario</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input type="number" min="0" step="1000" value={consultaVetInput}
+                    onChange={e => setConsultaVetInput(e.target.value)}
+                    className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-base sm:text-sm" placeholder="30000" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Spread Alma Animal</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input type="number" min="0" step="1000" value={consultaAlmaInput}
+                    onChange={e => setConsultaAlmaInput(e.target.value)}
+                    className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-base sm:text-sm" placeholder="10000" />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 mt-3">
+              <div className="text-sm">
+                <span className="text-gray-500">Total al cliente:</span>{' '}
+                <span className="font-semibold text-brand">{fmtPrecio(consultaTotal)}</span>
               </div>
               <button
-                onClick={guardarFijo}
-                disabled={savingFijo}
-                className="px-4 py-2 bg-brand hover:bg-brand-dark disabled:bg-brand/40 text-white text-sm font-medium rounded-lg"
+                onClick={guardarConsulta}
+                disabled={savingConsulta}
+                className="ml-auto px-4 py-2 bg-brand hover:bg-brand-dark disabled:bg-brand/40 text-white text-sm font-medium rounded-lg"
               >
-                {savingFijo ? 'Guardando…' : 'Guardar'}
+                {savingConsulta ? 'Guardando…' : 'Guardar'}
               </button>
-              {fijoMsg && <span className={`text-xs font-medium ${fijoMsg.includes('✓') ? 'text-emerald-600' : 'text-red-600'}`}>{fijoMsg}</span>}
+              {consultaMsg && <span className={`text-xs font-medium ${consultaMsg.includes('✓') ? 'text-emerald-600' : 'text-red-600'}`}>{consultaMsg}</span>}
             </div>
           </div>
 
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 mb-4 max-w-2xl">
             <div>
               <p className="text-sm text-gray-600">Precio que <strong>se paga al veterinario</strong> por servicio de eutanasia, según peso de la mascota.</p>
               <p className="text-xs text-gray-500 mt-1">Este es el precio que verán los vets en el landing del convenio. La columna <strong>“Al cliente”</strong> ya incluye el cargo fijo de {fmtPrecio(fijo)}.</p>
@@ -1215,9 +1241,9 @@ export default function ServiciosEutanasiasPage() {
                 <FichaRow label="Email" value={
                   <a href={`mailto:${detalleCoti.vet_email_asignado}`} className="text-brand hover:underline break-all">{detalleCoti.vet_email_asignado}</a>
                 } />
-                {detalleCoti.estado === 'aceptada' && <p className="text-xs text-amber-700 mt-1">⏳ Esperando que llame al cliente y confirme.</p>}
-                {detalleCoti.estado === 'confirmada' && <p className="text-xs text-blue-700 mt-1">📅 Cita coordinada con la familia. Esperando que marque el servicio como realizado.</p>}
-                {detalleCoti.estado === 'realizada' && <p className="text-xs text-emerald-700 mt-1">✓ Servicio realizado.</p>}
+                {detalleCoti.estado === 'aceptada' && <p className="text-xs text-amber-700 mt-1">⏳ Coordina con la familia, evalúa y marca el resultado (realizada / no realizada).</p>}
+                {detalleCoti.estado === 'realizada' && <p className="text-xs text-emerald-700 mt-1">✓ Eutanasia realizada.</p>}
+                {detalleCoti.estado === 'no_realizada' && <p className="text-xs text-slate-600 mt-1">✗ Evaluada: no correspondía realizarla (se paga la consulta).</p>}
               </FichaBloque>
             )}
 
@@ -1333,12 +1359,17 @@ export default function ServiciosEutanasiasPage() {
               <button onClick={() => { abrirEditarCotizacion(detalleCoti); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">
                 Editar
               </button>
-              {detalleCoti.estado === 'confirmada' && (
-                <button onClick={() => { marcarRealizada(detalleCoti.id); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium">
-                  Marcar realizada
-                </button>
+              {detalleCoti.estado === 'aceptada' && (
+                <>
+                  <button onClick={() => { marcarRealizada(detalleCoti.id); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium">
+                    Marcar realizada
+                  </button>
+                  <button onClick={() => { marcarNoRealizada(detalleCoti.id); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium">
+                    Marcar no realizada
+                  </button>
+                </>
               )}
-              {!['realizada', 'cancelada'].includes(detalleCoti.estado) && (
+              {!['realizada', 'no_realizada', 'cancelada'].includes(detalleCoti.estado) && (
                 <button onClick={() => { cancelarCotizacion(detalleCoti.id); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 border border-amber-200 rounded-lg font-medium">
                   Cancelar
                 </button>
@@ -1543,23 +1574,37 @@ function CotizacionCard({
         <span className="truncate">{c.direccion}, {c.comuna}</span>
       </p>
 
-      {/* Footer: estado de pago (solo histórico) */}
-      {showPago && c.estado === 'realizada' && (
-        <div className="mt-2 pt-2 border-t border-gray-300">
-          {c.estado_pago === 'pago_confirmado' ? (
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-1 rounded bg-emerald-100 text-emerald-700">
-              ✓ Pago confirmado
-            </span>
-          ) : (
-            <button
-              onClick={e => { e.stopPropagation(); onMarcarPagado() }}
-              className="w-full text-[11px] font-semibold uppercase px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
-            >
-              ⏱ Pendiente · marcar pagado
-            </button>
-          )}
-        </div>
-      )}
+      {/* Footer histórico: resultado + valor a pagar al vet + estado de pago */}
+      {showPago && (c.estado === 'realizada' || c.estado === 'no_realizada') && (() => {
+        const realizada = c.estado === 'realizada'
+        const pagoVet = realizada
+          ? (parseInt(c.precio_snapshot || '0', 10) || 0)
+          : (parseInt(c.consulta_vet_snapshot || '0', 10) || 0)
+        return (
+          <div className="mt-2 pt-2 border-t border-gray-300 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-1 rounded ${realizada ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
+                {realizada ? '✓ Realizada' : '✗ No realizada'}
+              </span>
+              <span className="text-[11px] text-gray-700 whitespace-nowrap">
+                Pago vet: <strong>{fmtPrecio(pagoVet)}</strong>
+              </span>
+            </div>
+            {c.estado_pago === 'pago_confirmado' ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-1 rounded bg-emerald-100 text-emerald-700">
+                ✓ Pago confirmado
+              </span>
+            ) : (
+              <button
+                onClick={e => { e.stopPropagation(); onMarcarPagado() }}
+                className="w-full text-[11px] font-semibold uppercase px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+              >
+                ⏱ Pendiente · marcar pagado
+              </button>
+            )}
+          </div>
+        )
+      })()}
       {showPago && c.estado === 'cancelada' && (
         <div className="mt-2 pt-2 border-t border-gray-300">
           <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-1 rounded bg-red-50 text-red-600">

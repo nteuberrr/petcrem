@@ -14,7 +14,7 @@ const nav: { href: string; label: string; icon: string; modulo: string }[] = [
   { href: '/asistencia', label: 'Asistencia', icon: '🕐', modulo: 'asistencia' },
   { href: '/rendiciones', label: 'Rendiciones', icon: '🧾', modulo: 'rendiciones' },
   { href: '/bases', label: 'Veterinarios', icon: '🏥', modulo: 'bases' },
-  { href: '/servicios', label: 'Servicios', icon: '🤝', modulo: 'servicios' },
+  { href: '/servicios', label: 'Eutanasias', icon: '🤝', modulo: 'servicios' },
   { href: '/mailing', label: 'Campañas', icon: '📣', modulo: 'mailing' },
   { href: '/estado-resultados', label: 'Estado de Resultados', icon: '💰', modulo: 'eerr' },
   { href: '/configuracion', label: 'Configuración', icon: '⚙️', modulo: 'configuracion' },

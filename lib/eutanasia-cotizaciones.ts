@@ -1,13 +1,15 @@
-import { getSheetData, appendRow, updateRow, getNextId, ensureSheet, ensureColumns } from './datastore'
+import { getSheetData, appendRow, updateRow, updateById, getNextId, ensureSheet, ensureColumns } from './datastore'
 import { buscarComuna } from './comunas'
 import { precioParaPeso, matchVets } from './eutanasia-matcher'
 import { sendBatch, isResendConfigured } from './resend-mailer'
 import { createToken, createVetToken } from './eutanasia-tokens'
 import { formatDate, formatHoraDia } from './dates'
-import { nombreCompletoVet, renderCotizacionEmail } from './eutanasia-mailer'
+import { nombreCompletoVet, renderCotizacionEmail, enviarClienteCotizacionEutanasia } from './eutanasia-mailer'
 import { getContacto } from './email-layout'
+import { getConsultaEutanasia, getFijoEutanasia } from './eutanasia-precios'
 import { crearClienteBorrador } from './cliente-borrador'
 import { capitalizarNombre } from './nombres'
+import { enviarTextoWhatsapp, isWhatsappConfigured, adminWhatsapp } from './whatsapp'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lógica compartida de cotizaciones de eutanasia: envío a vets + alta automática
@@ -30,7 +32,8 @@ const COLS_COTI = [
   'notas',
   'estado',
   'vet_id_asignado', 'vet_nombre_asignado', 'vet_email_asignado',
-  'precio_snapshot',
+  'precio_snapshot', 'consulta_vet_snapshot',
+  'cliente_id',
   'estado_pago', 'fecha_pago',
   'cliente_confirmo', 'fecha_cliente_confirmacion',
   'fecha_creacion', 'fecha_envio_cotizacion',
@@ -70,7 +73,7 @@ export async function enviarCotizacionAVets(opts: {
   const idxCot = cotis.findIndex(r => r.id === String(opts.cotiId))
   if (idxCot === -1) throw new Error('Cotización no encontrada')
   const c = cotis[idxCot]
-  if (c.estado === 'aceptada' || c.estado === 'confirmada' || c.estado === 'realizada') {
+  if (c.estado === 'aceptada' || c.estado === 'realizada') {
     throw new Error(`La cotización ya está en estado "${c.estado}"; no se puede reenviar.`)
   }
 
@@ -188,13 +191,16 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
   const tramos = await getSheetData('precios_eutanasia')
   const precioVet = precioParaPeso(tramos, input.peso)
 
+  // Snapshot del pago al vet si NO se realiza (la consulta), congelado al agendar.
+  const consulta = await getConsultaEutanasia()
+
   await ensureSheet(SHEET_COTI)
   await ensureColumns(SHEET_COTI, COLS_COTI)
   const id = await getNextId(SHEET_COTI)
   const ahora = new Date().toISOString()
   const cliTel = (input.cliente_telefono || '').replace(/\D/g, '').slice(-9)
 
-  await appendRow(SHEET_COTI, {
+  const row = {
     id,
     mascota_nombre: capitalizarNombre(input.mascota_nombre),
     especie: input.especie,
@@ -214,6 +220,8 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
     vet_nombre_asignado: '',
     vet_email_asignado: '',
     precio_snapshot: String(precioVet),
+    consulta_vet_snapshot: String(consulta.vet),
+    cliente_id: '',
     estado_pago: '',
     fecha_pago: '',
     cliente_confirmo: '',
@@ -225,12 +233,15 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
     fecha_realizacion: '',
     fecha_cancelacion: '',
     creado_por: 'bot_whatsapp',
-  })
+  }
+  await appendRow(SHEET_COTI, row)
 
   // Crear el cliente borrador para la CREMACIÓN posterior (queda "Por ingresar"
-  // en /clientes; se agendan ambos servicios). Best-effort: no bloquea la cotización.
+  // en /clientes; se agendan ambos servicios) y LIGARLO a la cotización (cliente_id),
+  // para el cronograma del dashboard y el borrado si la eutanasia no se realiza.
+  // Best-effort: no bloquea la cotización.
   try {
-    await crearClienteBorrador({
+    const borradorId = await crearClienteBorrador({
       nombre_tutor: input.cliente_nombre,
       nombre_mascota: input.mascota_nombre,
       telefono: input.cliente_wa_id || input.cliente_telefono,
@@ -242,8 +253,41 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
       origen: 'bot_eutanasia',
       notas: `Cremación tras eutanasia a domicilio (cotización N° ${id}).`,
     })
+    if (borradorId) await updateById(SHEET_COTI, String(id), { ...row, cliente_id: borradorId })
   } catch (e) {
     console.warn('[eutanasia-cotizaciones] no se pudo crear cliente borrador:', e)
+    // Sin borrador la cotización no aparece en el cronograma ni puede limpiarse
+    // si la eutanasia no se realiza → avisar al admin para que la ingrese a mano.
+    if (isWhatsappConfigured()) {
+      try {
+        await enviarTextoWhatsapp(
+          adminWhatsapp(),
+          `⚠️ Eutanasia N° ${id} (${input.mascota_nombre} / ${input.cliente_nombre}): no se pudo crear la ficha borrador de cremación. Revisa /clientes e ingrésala a mano.`,
+        )
+      } catch (e2) { console.warn('[eutanasia-cotizaciones] aviso al admin falló:', e2) }
+    }
+  }
+
+  // Correo al TUTOR: recibimos tu solicitud (explica la evaluación + precios).
+  // Best-effort. Precio al cliente si se realiza = tramo + cargo fijo.
+  if ((input.cliente_email || '').trim()) {
+    try {
+      const fijo = await getFijoEutanasia()
+      await enviarClienteCotizacionEutanasia({
+        clienteEmail: input.cliente_email!.trim().toLowerCase(),
+        clienteNombre: input.cliente_nombre,
+        mascotaNombre: input.mascota_nombre,
+        especie: input.especie,
+        peso: input.peso,
+        fechaServicio: input.fecha,
+        horaServicio: input.hora,
+        comuna: comunaCanon,
+        precioClienteRealizada: precioVet + fijo,
+        consultaTotal: consulta.total,
+      })
+    } catch (e) {
+      console.warn('[eutanasia-cotizaciones] no se pudo enviar el correo al tutor:', e)
+    }
   }
 
   // Matchear vets que calzan y enviarles el correo.
@@ -260,4 +304,60 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
   }
 
   return { id: String(id), precioVet, comunaCanon, matched: matched.length, enviados }
+}
+
+export interface EutanasiaCronograma {
+  id: string
+  mascota_nombre: string
+  cliente_nombre: string
+  comuna: string
+  direccion: string
+  fecha_servicio: string
+  hora_servicio: string
+  vet_nombre: string
+  /** 'esperando' (naranja: sin vet aún) | 'tomada' (verde: un vet la tomó / la realizó). */
+  estado_cronograma: 'esperando' | 'tomada'
+}
+
+/**
+ * Eutanasias activas para el cronograma del dashboard:
+ *  - 'esperando' (naranja): estado creada/enviada, aún sin veterinario.
+ *  - 'tomada' (verde): estado aceptada; o realizada mientras su ficha de cremación
+ *    (cliente_id) siga en borrador (aún no se registró el ingreso).
+ * Se excluyen no_realizada / cancelada y las realizadas cuya ficha ya se registró
+ * (o que no tienen borrador ligado). Ordenadas por fecha/hora del servicio.
+ */
+export async function listarEutanasiasCronograma(): Promise<EutanasiaCronograma[]> {
+  const [cotis, clientes] = await Promise.all([
+    getSheetData(SHEET_COTI),
+    getSheetData('clientes'),
+  ])
+  const esBorradorVivo = (clienteId: string) => {
+    if (!clienteId) return false
+    const c = clientes.find(r => String(r.id) === String(clienteId))
+    return !!c && (c.estado || '') === 'borrador'
+  }
+  const out: EutanasiaCronograma[] = []
+  for (const c of cotis) {
+    const estado = c.estado || ''
+    let cronograma: 'esperando' | 'tomada' | null = null
+    if (estado === 'creada' || estado === 'enviada') cronograma = 'esperando'
+    else if (estado === 'aceptada') cronograma = 'tomada'
+    else if (estado === 'realizada' && esBorradorVivo(c.cliente_id || '')) cronograma = 'tomada'
+    if (!cronograma) continue
+    out.push({
+      id: c.id || '',
+      mascota_nombre: c.mascota_nombre || '',
+      cliente_nombre: c.cliente_nombre || '',
+      comuna: c.comuna || '',
+      direccion: c.direccion || '',
+      fecha_servicio: c.fecha_servicio || '',
+      hora_servicio: c.hora_servicio || '',
+      vet_nombre: c.vet_nombre_asignado || '',
+      estado_cronograma: cronograma,
+    })
+  }
+  return out.sort((a, b) =>
+    (a.fecha_servicio || '').localeCompare(b.fecha_servicio || '') ||
+    (a.hora_servicio || '').localeCompare(b.hora_servicio || ''))
 }

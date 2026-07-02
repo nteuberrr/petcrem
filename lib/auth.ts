@@ -69,6 +69,25 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.role = (user as { role?: string }).role ?? 'operador'
         token.id = (user as { id?: string }).id ?? ''
+        token.rolRefrescado = Date.now()
+        return token
+      }
+      // Refresh del rol cada 10 min: un cambio de rol o la desactivación en
+      // `usuarios` aplica sin esperar a que la persona cierre sesión. Corre
+      // cuando el cliente consulta /api/auth/session (el cookie se re-firma y
+      // el proxy ve el rol nuevo). El admin por env (id '0') no está en la tabla.
+      const REFRESH_MS = 10 * 60_000
+      const last = typeof token.rolRefrescado === 'number' ? token.rolRefrescado : 0
+      if (token.id && token.id !== '0' && Date.now() - last > REFRESH_MS) {
+        try {
+          const usuarios = await getSheetData('usuarios')
+          const u = usuarios.find(x => x.id === token.id)
+          token.role = (u && u.activo === 'TRUE') ? normalizarRol(u.rol) : 'desactivado'
+          token.rolRefrescado = Date.now()
+        } catch (e) {
+          // Si la lectura falla mantenemos el rol vigente y reintentamos después.
+          console.error('[auth] refresh de rol falló:', e)
+        }
       }
       return token
     },

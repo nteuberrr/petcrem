@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buscarComuna } from '@/lib/comunas'
+import { permitirRequest } from '@/lib/rate-limit'
 
 /**
  * GET /api/eutanasias/place-details?placeId=XYZ
@@ -20,6 +21,10 @@ import { buscarComuna } from '@/lib/comunas'
  * acá derivamos también "Las Condes" canónica y el matcher hace match.
  */
 export async function GET(req: NextRequest) {
+  // Ruta pública que factura contra Google Places → límite por IP.
+  if (!permitirRequest(req, 'place-details', 30, 60_000)) {
+    return NextResponse.json({ error: 'Demasiadas solicitudes. Intenta en un momento.' }, { status: 429 })
+  }
   const url = new URL(req.url)
   const placeId = url.searchParams.get('placeId') ?? ''
   if (!placeId) return NextResponse.json({ error: 'placeId requerido' }, { status: 400 })

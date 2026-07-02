@@ -28,6 +28,7 @@ const SELLO = '/brand/sello-alma-animal.png'
 
 export default function ConvenioEutanasiasPage() {
   const [tramos, setTramos] = useState<Tramo[]>([])
+  const [consultaVet, setConsultaVet] = useState(0)
 
   // form
   const [form, setForm] = useState({
@@ -50,7 +51,10 @@ export default function ConvenioEutanasiasPage() {
   } | null>(null)
 
   useEffect(() => {
-    fetch('/api/eutanasias/precios').then(r => r.json()).then(d => setTramos(Array.isArray(d) ? d : []))
+    fetch('/api/eutanasias/precios').then(r => r.json()).then(d => {
+      setTramos(Array.isArray(d?.tramos) ? d.tramos : Array.isArray(d) ? d : [])
+      if (typeof d?.consulta_vet === 'number') setConsultaVet(d.consulta_vet)
+    }).catch(() => {})
   }, [])
 
   function toggleHorario(dia: DiaKey, slot: 'am' | 'pm') {
@@ -122,7 +126,7 @@ export default function ConvenioEutanasiasPage() {
             <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>🐾 Alma Animal · Convenio Veterinarios</p>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mt-2">Eutanasias a Domicilio</h1>
             <p className="text-base sm:text-lg mt-3 opacity-95 max-w-2xl">
-              Únete a nuestra red de veterinarios para ofrecer un acompañamiento digno y cercano en el último momento de las mascotas.
+              Únete a nuestra red de veterinarios: evaluamos a domicilio y, si corresponde, acompañamos a las familias en el último momento de sus mascotas, con un trato digno y cercano.
             </p>
           </div>
           <img src={LOGO} alt="Alma Animal" className="hidden sm:block h-24 w-auto shrink-0" />
@@ -139,14 +143,14 @@ export default function ConvenioEutanasiasPage() {
             <Card num="1" titulo="Te inscribes">
               Llenas este formulario indicando tus datos, las comunas en las que puedes atender y tus horarios de disponibilidad.
             </Card>
-            <Card num="2" titulo="Recibes cotizaciones">
-              Cuando una familia nos llama por una eutanasia en tu zona y horario, te enviamos un correo con los datos del caso.
+            <Card num="2" titulo="Recibes solicitudes">
+              Cuando una familia nos solicita una eutanasia en tu zona y horario, te enviamos un correo con los datos del caso.
             </Card>
-            <Card num="3" titulo="Confirmas y atiendes">
-              Si puedes tomar el caso, confirmas en un clic, te contactas con la familia y realizas el servicio.
+            <Card num="3" titulo="Coordinas y evalúas">
+              Si puedes tomar el caso, confirmas en un clic, te contactas con la familia, la visitas y evalúas si corresponde realizar la eutanasia.
             </Card>
-            <Card num="4" titulo="Confirmas y te pagamos">
-              Cuando termines, confirmas que el servicio se realizó y recibes el pago el día hábil siguiente.
+            <Card num="4" titulo="Marcas el resultado y te pagamos">
+              Al terminar la visita marcas "realizada" o "no realizada" desde el mismo correo. Recibes el pago el día hábil siguiente: la tarifa por peso si la realizas, o el valor de la consulta si al evaluar no correspondía.
             </Card>
           </div>
         </section>
@@ -155,8 +159,8 @@ export default function ConvenioEutanasiasPage() {
         <section>
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">Precio que pagamos por servicio</h2>
           <p className="text-sm sm:text-base text-gray-600 mb-4">
-            Estos son los montos fijos que <strong>te pagamos a ti</strong> por cada eutanasia a domicilio realizada, según el peso de la mascota.
-            Son los mismos para todos los veterinarios del convenio.
+            Es un servicio de <strong>evaluación a domicilio</strong>. Si <strong>realizas</strong> la eutanasia, estos son los montos que
+            <strong> te pagamos a ti</strong> según el peso de la mascota (los mismos para todos los veterinarios del convenio).
           </p>
           <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden max-w-xl">
             {tramos.length === 0 ? (
@@ -179,6 +183,13 @@ export default function ConvenioEutanasiasPage() {
                 </tbody>
               </table>
             )}
+          </div>
+
+          <div className="mt-4 max-w-xl rounded-xl border border-gray-300 p-4" style={{ backgroundColor: CREAM }}>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              <strong>¿Y si al evaluar no corresponde realizar la eutanasia?</strong> Igual valoramos tu visita:
+              te pagamos el <strong>valor de la consulta{consultaVet > 0 ? ` (${fmtPrecio(consultaVet)})` : ''}</strong> por la evaluación a domicilio.
+            </p>
           </div>
         </section>
 

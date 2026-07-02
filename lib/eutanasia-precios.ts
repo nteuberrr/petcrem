@@ -20,7 +20,12 @@ import { findTramo } from './tramos'
 
 const SHEET_PRECIOS = 'precios_eutanasia'
 const SHEET_CONFIG = 'config_eutanasia'
-const CONFIG_COLS = ['id', 'fijo']
+const CONFIG_COLS = ['id', 'fijo', 'consulta_vet', 'consulta_alma']
+
+// Defaults de la consulta (cuando la eutanasia NO se realiza): $30.000 al vet +
+// $10.000 spread Alma = $40.000 al cliente. Se usan si la config aún no existe.
+const CONSULTA_VET_DEFAULT = 30000
+const CONSULTA_ALMA_DEFAULT = 10000
 
 function num(v: unknown): number {
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0
@@ -46,15 +51,52 @@ export async function getFijoEutanasia(): Promise<number> {
 
 /** Persiste el cargo fijo (fila única id=1). Crea la hoja/columnas si faltan. */
 export async function setFijoEutanasia(fijo: number): Promise<void> {
+  await guardarConfig({ fijo: String(Math.max(0, Math.round(fijo))) })
+}
+
+export interface ConsultaEutanasia {
+  /** Monto que se le paga al veterinario por la evaluación si NO se realiza. */
+  vet: number
+  /** Spread de Alma Animal sobre la consulta. */
+  alma: number
+  /** Total que se le cobra al cliente si NO se realiza (vet + alma). */
+  total: number
+}
+
+/**
+ * Lee la consulta configurada (cuando la eutanasia NO se realiza). Usa los
+ * defaults ($30.000 vet + $10.000 Alma) si no hay config o la hoja no existe.
+ */
+export async function getConsultaEutanasia(): Promise<ConsultaEutanasia> {
+  try {
+    const rows = await getSheetData(SHEET_CONFIG)
+    const row = rows.find(r => r.id === '1') ?? rows[0]
+    const vet = row && row.consulta_vet !== '' && row.consulta_vet != null ? num(row.consulta_vet) : CONSULTA_VET_DEFAULT
+    const alma = row && row.consulta_alma !== '' && row.consulta_alma != null ? num(row.consulta_alma) : CONSULTA_ALMA_DEFAULT
+    return { vet, alma, total: vet + alma }
+  } catch {
+    return { vet: CONSULTA_VET_DEFAULT, alma: CONSULTA_ALMA_DEFAULT, total: CONSULTA_VET_DEFAULT + CONSULTA_ALMA_DEFAULT }
+  }
+}
+
+/** Persiste la consulta (vet + alma) en la fila única id=1. */
+export async function setConsultaEutanasia(c: { vet: number; alma: number }): Promise<void> {
+  await guardarConfig({
+    consulta_vet: String(Math.max(0, Math.round(c.vet))),
+    consulta_alma: String(Math.max(0, Math.round(c.alma))),
+  })
+}
+
+/** Upsert de la fila única de config (merge de campos). Crea hoja/columnas si faltan. */
+async function guardarConfig(campos: Record<string, string>): Promise<void> {
   await ensureSheet(SHEET_CONFIG)
   await ensureColumns(SHEET_CONFIG, CONFIG_COLS)
   const rows = await getSheetData(SHEET_CONFIG)
   const idx = rows.findIndex(r => r.id === '1')
-  const valor = { id: '1', fijo: String(Math.max(0, Math.round(fijo))) }
   if (idx === -1) {
-    await appendRow(SHEET_CONFIG, valor)
+    await appendRow(SHEET_CONFIG, { id: '1', ...campos })
   } else {
-    await updateRow(SHEET_CONFIG, idx, { ...rows[idx], ...valor })
+    await updateRow(SHEET_CONFIG, idx, { ...rows[idx], ...campos })
   }
 }
 

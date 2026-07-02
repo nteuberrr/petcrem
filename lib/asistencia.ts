@@ -32,14 +32,14 @@ export type JornadaConfig = {
 export function configVigente(configs: JornadaConfig[], fecha: string): JornadaConfig | null {
   const f = formatDateForSheet(fecha)
   if (!f) return null
-  const elegibles = configs.filter(c => {
-    const vd = formatDateForSheet(c.vigente_desde)
-    return vd && vd <= f
-  })
+  // Parsear vigente_desde UNA vez por config (el sort lo re-usaba en cada comparación).
+  const elegibles = configs
+    .map(c => ({ c, vd: formatDateForSheet(c.vigente_desde) }))
+    .filter(x => x.vd && x.vd <= f)
   if (elegibles.length === 0) return null
   // Ordenar por vigente_desde descendente y devolver la primera
-  elegibles.sort((a, b) => formatDateForSheet(b.vigente_desde).localeCompare(formatDateForSheet(a.vigente_desde)))
-  return elegibles[0]
+  elegibles.sort((a, b) => b.vd.localeCompare(a.vd))
+  return elegibles[0].c
 }
 
 /**

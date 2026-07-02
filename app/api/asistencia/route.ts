@@ -90,7 +90,10 @@ export async function POST(req: NextRequest) {
     }
     await ensure()
 
-    const usuarioId = (session.user as { id?: string })?.id ?? '0'
+    // Sin id en el JWT no se puede atribuir el registro (y '0' colisionaría con
+    // el admin por env) → obligar a re-loguear.
+    const usuarioId = (session.user as { id?: string })?.id ?? ''
+    if (!usuarioId) return NextResponse.json({ error: 'Sesión sin identificador. Cierra sesión y vuelve a entrar.' }, { status: 401 })
     const usuarioNombre = session.user?.name ?? session.user?.email ?? ''
 
     // Verificar que no haya un registro previo para este usuario+fecha
@@ -150,8 +153,8 @@ export async function PATCH(req: NextRequest) {
 
     const role = (session.user as { role?: string })?.role
     const isAdmin = esAdmin(role)
-    const myId = (session.user as { id?: string })?.id ?? '0'
-    if (!isAdmin && rows[idx].usuario_id !== myId) {
+    const myId = (session.user as { id?: string })?.id ?? ''
+    if (!isAdmin && (!myId || rows[idx].usuario_id !== myId)) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
     }
 
@@ -226,8 +229,8 @@ export async function DELETE(req: NextRequest) {
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     // El operador puede eliminar sus propios registros; admin puede eliminar cualquiera
     const role = (session.user as { role?: string })?.role
-    const myId = (session.user as { id?: string })?.id ?? '0'
-    if (!esAdmin(role) && rows[idx].usuario_id !== myId) {
+    const myId = (session.user as { id?: string })?.id ?? ''
+    if (!esAdmin(role) && (!myId || rows[idx].usuario_id !== myId)) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
     }
     await deleteRow(HOJA, idx)

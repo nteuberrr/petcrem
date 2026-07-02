@@ -138,7 +138,7 @@ export async function PATCH(
         break
       } catch (e) {
         const msg = String(e).toLowerCase()
-        const choqueCodigo = !!codigoGenerado && intentosCodigo < 3 &&
+        const choqueCodigo = !!codigoGenerado && intentosCodigo < 8 &&
           (msg.includes('duplicate') || msg.includes('unique')) && msg.includes('codigo')
         if (!choqueCodigo) throw e
         intentosCodigo++

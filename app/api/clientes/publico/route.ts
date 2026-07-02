@@ -6,6 +6,7 @@ import { enviarRegistroMascota } from '@/lib/cliente-mailer'
 import { todayISO } from '@/lib/dates'
 import { calcularSnapshotFicha } from '@/lib/price-calculator'
 import { capitalizarNombre } from '@/lib/nombres'
+import { permitirRequest } from '@/lib/rate-limit'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Registro PÚBLICO de mascota (formulario auto-atención del tutor).
@@ -56,6 +57,10 @@ const RegistroPublicoSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    // Registro público sin sesión → límite por IP contra spam de fichas.
+    if (!permitirRequest(req, 'clientes-publico', 8, 60 * 60_000)) {
+      return NextResponse.json({ error: 'Demasiados intentos. Intenta más tarde.' }, { status: 429 })
+    }
     const body = await req.json()
     const data = RegistroPublicoSchema.parse(body)
     data.nombre_mascota = capitalizarNombre(data.nombre_mascota)

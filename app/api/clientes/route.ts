@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     let parsedAdicionales: AdicionalItem[] = []
     try { parsedAdicionales = JSON.parse(data.adicionales ?? '[]') } catch { parsedAdicionales = [] }
     const snapshot = await calcularSnapshotFicha({
-      peso: data.peso_ingreso ?? data.peso_declarado,
+      peso: data.peso_ingreso || data.peso_declarado,
       codigo_servicio: data.codigo_servicio,
       veterinaria_id: data.veterinaria_id,
       adicionales: parsedAdicionales,

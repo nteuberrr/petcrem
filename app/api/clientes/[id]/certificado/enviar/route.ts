@@ -80,7 +80,10 @@ export async function POST(
       try { const x = JSON.parse(cliente.videos_servicio || '[]'); if (Array.isArray(x)) videos = x } catch { /* */ }
       const videoUrl = videos[videos.length - 1]
       if (videoUrl) {
-        const ext = (videoUrl.split('.').pop() || 'mp4').toLowerCase()
+        // Solo extensiones de video conocidas: una URL sin extensión daría
+        // "Video_x.com" (split('.').pop() devuelve el TLD del dominio).
+        const rawExt = (videoUrl.split('.').pop() || '').toLowerCase()
+        const ext = VIDEO_MIME[rawExt] ? rawExt : 'mp4'
         attachments.push({
           filename: `Video_${cliente.nombre_mascota || 'mascota'}_${cliente.codigo || cliente.id}.${ext}`,
           path: videoUrl,

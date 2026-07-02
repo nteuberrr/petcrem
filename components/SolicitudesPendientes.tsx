@@ -8,6 +8,12 @@ type Solicitud = {
   tipo_servicio: string; origen: string; vet_nombre: string; cliente_wa_id: string
 }
 
+type Eutanasia = {
+  id: string; mascota_nombre: string; cliente_nombre: string; comuna: string
+  direccion: string; fecha_servicio: string; hora_servicio: string; vet_nombre: string
+  estado_cronograma: 'esperando' | 'tomada'
+}
+
 const SERVICIO: Record<string, string> = { CI: 'Individual', CP: 'Premium', SD: 'Sin Devolución' }
 
 const GRID = 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3'
@@ -17,21 +23,34 @@ const direccion = (s: Solicitud) => [s.direccion, s.comuna].filter(Boolean).join
 const cuando = (s: Solicitud) => `${s.fecha_retiro ? fmtFecha(s.fecha_retiro) : '—'}${s.hora_retiro ? ` · ${s.hora_retiro}` : ''}`
 
 /**
- * Panel de retiros del bot en el DASHBOARD. Grilla de cuadrados que se acumulan
- * hacia la derecha (2→5 columnas). Muestra:
- *  - PENDIENTES (ámbar) con Confirmar/Rechazar — canal confiable, no depende de la
- *    ventana de 24h de WhatsApp;
- *  - CONFIRMADOS PRÓXIMOS (verde) como ficha del retiro coordinado (queda el cuadro
- *    con nombre de la mascota, tutor, fecha, hora y dirección; se retira cuando pasa
- *    la fecha).
+ * Panel del bot en el DASHBOARD. Grilla de cuadrados que se acumulan hacia la
+ * derecha (2→5 columnas). Muestra:
+ *  - RETIROS PENDIENTES (rojo) con Confirmar/Rechazar — canal confiable, no depende
+ *    de la ventana de 24h de WhatsApp;
+ *  - RETIROS CONFIRMADOS (verde) como ficha del retiro coordinado; desaparece al
+ *    registrar la ficha.
+ *  - EUTANASIAS a domicilio: NARANJA mientras esperan un veterinario, VERDE cuando
+ *    un vet la tomó; desaparecen al no realizarse o al registrarse la ficha.
  * Se refresca solo cada 30s.
  */
 export default function SolicitudesPendientes() {
   const [pendientes, setPendientes] = useState<Solicitud[]>([])
   const [confirmadas, setConfirmadas] = useState<Solicitud[]>([])
+  const [eutanasias, setEutanasias] = useState<Eutanasia[]>([])
   const [cargado, setCargado] = useState(false)
   const [resolviendo, setResolviendo] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string>('')
+  // Tope de tarjetas por sección para no inflar el dashboard; "Ver todas" expande.
+  const LIMITE = 20
+  const [expandido, setExpandido] = useState<Record<string, boolean>>({})
+  const recortar = <T,>(lista: T[], key: string): T[] => (expandido[key] ? lista : lista.slice(0, LIMITE))
+  const verTodas = (lista: { length: number }, key: string) =>
+    lista.length > LIMITE && !expandido[key] ? (
+      <button onClick={() => setExpandido(prev => ({ ...prev, [key]: true }))}
+        className="mt-2 text-xs font-semibold text-brand-soft hover:underline">
+        Ver todas ({lista.length})
+      </button>
+    ) : null
 
   const cargar = useCallback(async () => {
     try {
@@ -40,6 +59,7 @@ export default function SolicitudesPendientes() {
       const d = await r.json()
       setPendientes(Array.isArray(d?.pendientes) ? d.pendientes : [])
       setConfirmadas(Array.isArray(d?.confirmadas) ? d.confirmadas : [])
+      setEutanasias(Array.isArray(d?.eutanasias) ? d.eutanasias : [])
     } catch { /* red: reintenta en el próximo tick */ } finally { setCargado(true) }
   }, [])
 
@@ -68,7 +88,10 @@ export default function SolicitudesPendientes() {
     }
   }
 
-  if (!cargado || (pendientes.length === 0 && confirmadas.length === 0 && !feedback)) return null
+  if (!cargado || (pendientes.length === 0 && confirmadas.length === 0 && eutanasias.length === 0 && !feedback)) return null
+
+  const eutCuando = (e: Eutanasia) => `${e.fecha_servicio ? fmtFecha(e.fecha_servicio) : '—'}${e.hora_servicio ? ` · ${e.hora_servicio}` : ''}`
+  const eutDireccion = (e: Eutanasia) => [e.direccion, e.comuna].filter(Boolean).join(', ') || '—'
 
   return (
     <div className="mb-4 space-y-4">
@@ -83,7 +106,7 @@ export default function SolicitudesPendientes() {
             <h2 className="text-sm font-bold text-gray-800">Solicitudes de retiro pendientes ({pendientes.length})</h2>
           </div>
           <div className={GRID}>
-            {pendientes.map(s => (
+            {recortar(pendientes, 'pendientes').map(s => (
               <div key={s.id} className="rounded-xl border-2 border-red-300 bg-red-50 shadow-sm p-3 flex flex-col justify-between gap-2 min-h-[150px]">
                 <div className="min-w-0">
                   <div className="flex items-center justify-between gap-1">
@@ -110,6 +133,7 @@ export default function SolicitudesPendientes() {
               </div>
             ))}
           </div>
+          {verTodas(pendientes, 'pendientes')}
         </section>
       )}
 
@@ -120,7 +144,7 @@ export default function SolicitudesPendientes() {
             <h2 className="text-sm font-bold text-gray-800">Retiros confirmados ({confirmadas.length})</h2>
           </div>
           <div className={GRID}>
-            {confirmadas.map(s => (
+            {recortar(confirmadas, 'confirmadas').map(s => (
               <div key={s.id} className="rounded-xl border-2 border-emerald-300 bg-emerald-50 shadow-sm p-3 flex flex-col gap-1 min-h-[150px]">
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">✅ Confirmado</span>
@@ -135,6 +159,40 @@ export default function SolicitudesPendientes() {
               </div>
             ))}
           </div>
+          {verTodas(confirmadas, 'confirmadas')}
+        </section>
+      )}
+
+      {eutanasias.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">🩺</span>
+            <h2 className="text-sm font-bold text-gray-800">Eutanasias a domicilio ({eutanasias.length})</h2>
+          </div>
+          <div className={GRID}>
+            {recortar(eutanasias, 'eutanasias').map(e => {
+              const esperando = e.estado_cronograma === 'esperando'
+              const box = esperando ? 'border-orange-300 bg-orange-50' : 'border-emerald-300 bg-emerald-50'
+              return (
+                <div key={e.id} className={`rounded-xl border-2 ${box} shadow-sm p-3 flex flex-col gap-1 min-h-[150px]`}>
+                  <div className="flex items-center justify-between gap-1">
+                    {esperando ? (
+                      <span className="text-[10px] font-bold text-orange-800 bg-orange-100 border border-orange-200 px-1.5 py-0.5 rounded">⏳ Esperando vet</span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">✅ Tomada</span>
+                    )}
+                    <span className="text-[10px] font-semibold text-gray-600 bg-white border border-gray-200 px-1.5 py-0.5 rounded shrink-0">Eutanasia</span>
+                  </div>
+                  <p className="font-bold text-gray-900 text-sm truncate mt-1">{e.mascota_nombre || '—'}</p>
+                  <p className="text-xs text-gray-700 truncate">👤 {e.cliente_nombre || '—'}</p>
+                  {!esperando && e.vet_nombre && <p className="text-[11px] text-gray-600 truncate">🏥 {e.vet_nombre}</p>}
+                  <p className="text-[11px] text-gray-600 leading-tight mt-auto">🗓 {eutCuando(e)}</p>
+                  <p className="text-[11px] text-gray-600 leading-tight truncate">📍 {eutDireccion(e)}</p>
+                </div>
+              )
+            })}
+          </div>
+          {verTodas(eutanasias, 'eutanasias')}
         </section>
       )}
     </div>

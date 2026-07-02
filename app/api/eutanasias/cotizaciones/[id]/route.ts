@@ -4,8 +4,9 @@ import { authOptions } from '@/lib/auth'
 import { getSheetData, updateById, deleteRow } from '@/lib/datastore'
 import { esAdmin } from '@/lib/roles'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
+import { getConsultaEutanasia } from '@/lib/eutanasia-precios'
 import { parsePeso } from '@/lib/numbers'
-import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarClienteAgradecimientoEutanasia } from '@/lib/eutanasia-mailer'
+import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarClienteAgradecimientoEutanasia, enviarMailNoRealizada } from '@/lib/eutanasia-mailer'
 import { formatDate } from '@/lib/dates'
 
 const SHEET = 'cotizaciones_eutanasia'
@@ -58,6 +59,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     for (const campo of CAMPOS_EDITABLES) {
       if (campo in body) partial[campo] = String(body[campo] ?? '')
     }
+    // Teléfono siempre en formato de 9 dígitos (los correos anteponen "+56 ").
+    if (partial.cliente_telefono) partial.cliente_telefono = partial.cliente_telefono.replace(/\D/g, '').slice(-9)
 
     // Vet a notificar con el correo "coordina con la familia" si esta edición
     // asigna un vet NUEVO (se resuelve más abajo, se envía tras persistir).
@@ -65,7 +68,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Asignación manual de vet (cambio o asignación inicial).
     // - Si viene vet_id_asignado con valor → buscamos el vet, lo asignamos,
-    //   estado pasa a 'confirmada' (si no estaba 'realizada'/'cancelada'),
+    //   estado pasa a 'aceptada' (si no estaba 'realizada'/'cancelada'),
     //   y completamos los timestamps que falten.
     // - Si viene vet_id_asignado como '' (vacío explícito) → se desasigna y
     //   el estado vuelve a 'enviada' (asume que ya se había enviado al menos
@@ -83,7 +86,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const estadoActual = partial.estado ?? rows[idx].estado
         if (estadoActual !== 'realizada' && estadoActual !== 'cancelada') {
           // El vet asignado = aceptó: queda 'aceptada' y recibe el correo de
-          // "coordina con la familia" (el flujo sigue: confirmar → realizado).
+          // "coordina con la familia" (con los botones realizada/no realizada).
           partial.estado = 'aceptada'
           if (!rows[idx].fecha_aceptacion) partial.fecha_aceptacion = ahora
           // Solo notificamos si es una asignación NUEVA (cambió el vet), para no
@@ -96,7 +99,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         partial.vet_nombre_asignado = ''
         partial.vet_email_asignado = ''
         const estadoActual = partial.estado ?? rows[idx].estado
-        if (estadoActual === 'aceptada' || estadoActual === 'confirmada') {
+        if (estadoActual === 'aceptada') {
           // Volvemos al estado previo razonable
           partial.estado = rows[idx].fecha_envio_cotizacion ? 'enviada' : 'creada'
         }
@@ -113,6 +116,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (partial.estado === 'realizada' && !rows[idx].estado_pago && !partial.estado_pago) {
       partial.estado_pago = 'pendiente_pago'
     }
+    // Al pasar a 'no_realizada': sellamos la fecha de cierre (para el pago),
+    // inicializamos estado_pago y congelamos el pago al vet por la consulta.
+    if (partial.estado === 'no_realizada') {
+      if (!rows[idx].fecha_realizacion) partial.fecha_realizacion = new Date().toISOString()
+      if (!rows[idx].estado_pago && !partial.estado_pago) partial.estado_pago = 'pendiente_pago'
+      if (!rows[idx].consulta_vet_snapshot && !partial.consulta_vet_snapshot) {
+        partial.consulta_vet_snapshot = String((await getConsultaEutanasia()).vet)
+      }
+    }
     if (partial.estado === 'cancelada' && !rows[idx].fecha_cancelacion) {
       partial.fecha_cancelacion = new Date().toISOString()
     }
@@ -123,11 +135,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Si se corrige el PESO y la cotización aún no está comprometida con un vet
     // (creada/enviada), recalculamos precio_snapshot (lo que se le paga al vet) con
-    // la MISMA tabla y regla que al crearla. Una vez aceptada/confirmada/realizada,
-    // el precio queda congelado (el vet ya aceptó ese monto).
+    // la MISMA tabla y regla que al crearla. Una vez aceptada/realizada, el
+    // precio queda congelado (el vet ya aceptó ese monto).
     if ('peso' in body && partial.peso !== rows[idx].peso) {
       const estadoActual = partial.estado ?? rows[idx].estado
-      if (!['aceptada', 'confirmada', 'realizada', 'cancelada'].includes(estadoActual)) {
+      if (!['aceptada', 'realizada', 'no_realizada', 'cancelada'].includes(estadoActual)) {
         const tramos = await getSheetData('precios_eutanasia')
         partial.precio_snapshot = String(precioParaPeso(tramos, parsePeso(partial.peso)))
       }
@@ -167,6 +179,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           mascotaNombre: updated.mascota_nombre,
         })
       } catch (e) { console.warn('[cotizaciones PATCH] agradecimiento al cliente falló:', e) }
+    }
+
+    // Transición a 'no_realizada' desde el panel → elimina el borrador de cremación
+    // (la mascota sigue viva) y paga la consulta al vet. Guardado contra reenvíos.
+    if (partial.estado === 'no_realizada' && rows[idx].estado !== 'no_realizada') {
+      if (updated.cliente_id) {
+        try {
+          const clientes = await getSheetData('clientes')
+          const ci = clientes.findIndex(r => String(r.id) === String(updated.cliente_id))
+          if (ci !== -1 && (clientes[ci].estado || '') === 'borrador') await deleteRow('clientes', ci)
+        } catch (e) { console.warn('[cotizaciones PATCH] no se pudo eliminar borrador:', e) }
+      }
+      if (updated.vet_email_asignado) {
+        try {
+          await enviarMailNoRealizada({
+            vetEmail: updated.vet_email_asignado,
+            vetNombre: updated.vet_nombre_asignado || '',
+            mascotaNombre: updated.mascota_nombre,
+            consultaVet: parseInt(updated.consulta_vet_snapshot || '0', 10) || (await getConsultaEutanasia()).vet,
+            fechaRealizacionISO: (updated.fecha_realizacion || new Date().toISOString()).slice(0, 10),
+          })
+        } catch (e) { console.warn('[cotizaciones PATCH] correo no-realizada al vet falló:', e) }
+      }
     }
 
     return NextResponse.json(updated)

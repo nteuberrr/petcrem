@@ -9,10 +9,10 @@ const SHEET_COTI = 'cotizaciones_eutanasia'
  * POST /api/eutanasias/cotizaciones/realizado
  * body: { token: string }
  *
- * Endpoint público. Tercer y último paso del flujo del vet: ya confirmó la
- * cita y, una vez realizado el servicio, presiona el botón del correo para
- * marcarlo como hecho. Pasa estado 'confirmada' → 'realizada' y dispara
- * el correo de agradecimiento con la fecha del próximo día hábil de pago.
+ * Endpoint público. Último paso del flujo del vet: realizado el servicio,
+ * presiona el botón del correo "coordinar" para marcarlo como hecho. Pasa
+ * estado 'aceptada' → 'realizada' y dispara el correo de agradecimiento con
+ * la fecha del próximo día hábil de pago.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -56,21 +56,18 @@ export async function POST(req: NextRequest) {
     if (c.estado === 'cancelada') {
       return NextResponse.json({ ok: false, error: 'Esta cotización fue cancelada.' })
     }
-    if (c.estado !== 'confirmada' && c.estado !== 'aceptada') {
+    if (c.estado !== 'aceptada') {
       return NextResponse.json({ ok: false, error: `Estado inválido para marcar como realizada: ${c.estado}` })
     }
 
     const ahora = new Date().toISOString()
     const fechaRealizacionISO = ahora.slice(0, 10) // YYYY-MM-DD
-    // Flip atómico: la cotización puede llegar de 'confirmada' o 'aceptada'
-    // (el vet puede saltarse el paso confirmar). Intentamos ambas, siempre
-    // exigiendo que esté asignada a este vet. Si ninguna matchea, otro request
-    // ya la marcó → respondemos idempotente.
+    // Flip atómico desde 'aceptada', exigiendo que esté asignada a este vet.
+    // Si no matchea, otro request ya la marcó → respondemos idempotente.
     // estado_pago se inicializa para que aparezca en el histórico esperando que
     // el admin marque "pago confirmado".
     const cambiosRealizada = { estado: 'realizada', fecha_realizacion: ahora, estado_pago: 'pendiente_pago' }
-    let gano = await updateByIdIf(SHEET_COTI, cotizacion_id, { estado: 'confirmada', vet_id_asignado: vet_id }, cambiosRealizada)
-    if (!gano) gano = await updateByIdIf(SHEET_COTI, cotizacion_id, { estado: 'aceptada', vet_id_asignado: vet_id }, cambiosRealizada)
+    const gano = await updateByIdIf(SHEET_COTI, cotizacion_id, { estado: 'aceptada', vet_id_asignado: vet_id }, cambiosRealizada)
     if (!gano) {
       const fresco = (await getSheetData(SHEET_COTI)).find(r => r.id === cotizacion_id)
       const fechaPago = fresco?.fecha_realizacion ? fechaProximoPago(fresco.fecha_realizacion.slice(0, 10)) : ''

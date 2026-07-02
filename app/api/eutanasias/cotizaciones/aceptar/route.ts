@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateById, updateByIdIf, ensureSheet, ensureColumns } from '@/lib/datastore'
-import { verifyToken, createToken, createVetToken } from '@/lib/eutanasia-tokens'
-import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
-import { nombreCompletoVet, renderCoordinarEmail, enviarClienteVetAsignado } from '@/lib/eutanasia-mailer'
-import { getContacto } from '@/lib/email-layout'
+import { verifyToken, createToken } from '@/lib/eutanasia-tokens'
+import { nombreCompletoVet, enviarCoordinarConFamilia, enviarClienteVetAsignado } from '@/lib/eutanasia-mailer'
 import { enviarTextoWhatsapp, isWhatsappConfigured } from '@/lib/whatsapp'
 import { formatDate } from '@/lib/dates'
 
@@ -19,8 +17,8 @@ const COLS_ENVIOS = ['id', 'cotizacion_id', 'vet_id', 'vet_email', 'fecha_envio'
  * token firmado. Si verifica:
  *  - Marca la cotización como 'aceptada' y vet_id_asignado = vet.
  *  - Actualiza el registro de envío del vet como 'aceptada'.
- *  - Genera un nuevo token 'confirmar' y manda un mail al vet con instrucciones
- *    de contactar al cliente + link "confirma servicio aquí".
+ *  - Manda el mail "coordina con la familia" con los dos botones de cierre
+ *    (Eutanasia realizada / no realizada) — el vet marca el resultado directamente.
  *
  * Si la cotización ya fue tomada por otro vet (estado distinto a 'enviada'),
  * devuelve un mensaje informativo sin error.
@@ -49,7 +47,7 @@ export async function POST(req: NextRequest) {
     if (idx === -1) return NextResponse.json({ ok: false, error: 'Cotización no encontrada.' }, { status: 404 })
     const c = cotis[idx]
 
-    if (c.estado === 'aceptada' || c.estado === 'confirmada' || c.estado === 'realizada') {
+    if (c.estado === 'aceptada' || c.estado === 'realizada') {
       if (c.vet_id_asignado === vet_id) {
         return NextResponse.json({
           ok: true, ya_aceptada: true,
@@ -119,40 +117,10 @@ export async function POST(req: NextRequest) {
       console.warn('[aceptar] no se pudo actualizar el envío:', e)
     }
 
-    // Mandar mail de "comunícate con el cliente + link confirmar"
+    // Mandar el correo "coordina con la familia" con los 2 botones (realizada /
+    // no realizada). Helper compartido con la asignación manual del admin.
     const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
-    if (isResendConfigured() && baseUrl) {
-      const tokenConfirmar = createToken(c.id, vet.id, 'confirmar')
-      const linkConfirmar = `${baseUrl}/eutanasia/confirmar/${tokenConfirmar}`
-      // CTA de datos bancarios solo si el vet aún no los completó.
-      const tieneDatosPago = (vet.datos_pago_completos ?? '').toUpperCase() === 'TRUE'
-      const linkDatosPago = tieneDatosPago
-        ? ''
-        : `${baseUrl}/eutanasia/datos-pago/${createVetToken(vet.id, 'datos_pago')}`
-      try {
-        const contacto = await getContacto()
-        await sendEmail({
-          to: vet.email,
-          subject: `Coordina con la familia — Eutanasia ${c.mascota_nombre}`,
-          html: renderCoordinarEmail({
-            vetNombre: vetNombreCompleto || 'Dr/a.',
-            c,
-            linkConfirmar,
-            linkDatosPago,
-            contacto,
-          }),
-          preview_text: `Datos de contacto de la familia de ${c.mascota_nombre}.`,
-          tags: [
-            { name: 'tipo', value: 'eutanasia_post_aceptar' },
-            { name: 'cotizacion_id', value: String(c.id) },
-            { name: 'vet_id', value: String(vet.id) },
-          ],
-          seguimiento: { tipo: 'eutanasia_coordinar', audiencia: 'Veterinario', nombre: c.mascota_nombre },
-        })
-      } catch (e) {
-        console.warn('[aceptar] error mandando mail de confirmación:', e)
-      }
-    }
+    await enviarCoordinarConFamilia({ c, vet, baseUrl })
 
     // Avisar al CLIENTE (tutor) que un vet tomó su caso, con los datos del vet.
     // Best-effort: WhatsApp si la cotización nació del bot (cliente_wa_id) + correo.

@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Acción incorrecta para este enlace.' }, { status: 400 })
     }
 
-    const { cotizacion_id } = verif.payload
+    const { cotizacion_id, vet_id } = verif.payload
     const cotis = await getSheetData(SHEET_COTI)
     const idx = cotis.findIndex(r => r.id === cotizacion_id)
     if (idx === -1) return NextResponse.json({ ok: false, error: 'Solicitud no encontrada.' }, { status: 404 })
@@ -42,6 +42,14 @@ export async function POST(req: NextRequest) {
 
     if (c.estado === 'cancelada') {
       return NextResponse.json({ ok: false, error: 'Esta solicitud fue cancelada.' })
+    }
+    // El link se generó cuando ESE vet tomó el caso. Si la solicitud se
+    // reasignó o volvió a la red, el link viejo no debe confirmar nada.
+    if (c.estado !== 'aceptada' && c.estado !== 'realizada') {
+      return NextResponse.json({ ok: false, error: 'Esta solicitud cambió y estamos re-coordinando. Te contactaremos con la información actualizada.' })
+    }
+    if (vet_id && c.vet_id_asignado && c.vet_id_asignado !== vet_id) {
+      return NextResponse.json({ ok: false, error: 'Cambió el veterinario asignado a tu solicitud. Te enviaremos la información actualizada por WhatsApp.' })
     }
 
     const ya = (c.cliente_confirmo ?? '').toUpperCase() === 'TRUE'

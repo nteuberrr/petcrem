@@ -6,7 +6,8 @@ import { buscarComuna } from '@/lib/comunas'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
-import { enviarCoordinarConFamilia, enviarClienteVetAsignado } from '@/lib/eutanasia-mailer'
+import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarClienteCotizacionEutanasia } from '@/lib/eutanasia-mailer'
+import { getConsultaEutanasia, getFijoEutanasia } from '@/lib/eutanasia-precios'
 import { formatDate } from '@/lib/dates'
 
 const SHEET = 'cotizaciones_eutanasia'
@@ -19,7 +20,8 @@ const COLS = [
   'notas',
   'estado',
   'vet_id_asignado', 'vet_nombre_asignado', 'vet_email_asignado',
-  'precio_snapshot',
+  'precio_snapshot', 'consulta_vet_snapshot',
+  'cliente_id',
   'fecha_creacion', 'fecha_envio_cotizacion',
   'fecha_aceptacion', 'fecha_confirmacion',
   'fecha_realizacion', 'fecha_cancelacion',
@@ -95,6 +97,7 @@ export async function POST(req: NextRequest) {
     await ensureColumns('precios_eutanasia', ['id', 'peso_min', 'peso_max', 'precio'])
     const tramos = await getSheetData('precios_eutanasia')
     const precio = precioParaPeso(tramos, peso)
+    const consulta = await getConsultaEutanasia() // pago al vet si NO se realiza (congelado)
 
     // Asignación manual opcional: si viene vet_id_asignado, buscamos el vet y la
     // cotización arranca 'aceptada' (el vet fue asignado = aceptó): se le manda el
@@ -130,6 +133,8 @@ export async function POST(req: NextRequest) {
       vet_nombre_asignado: vetAsignado ? `${vetAsignado.nombre || ''} ${vetAsignado.apellido || ''}`.trim() : '',
       vet_email_asignado: vetAsignado?.email ?? '',
       precio_snapshot: String(precio),
+      consulta_vet_snapshot: String(consulta.vet),
+      cliente_id: '',
       fecha_creacion: ahora,
       fecha_envio_cotizacion: '',
       fecha_aceptacion: vetAsignado ? ahora : '',
@@ -161,6 +166,24 @@ export async function POST(req: NextRequest) {
           })
         } catch (e) { console.warn('[cotizaciones POST] correo al cliente falló:', e) }
       }
+    } else if (cliEmail) {
+      // Sin vet pre-asignado (flujo normal) → correo al tutor: recibimos tu
+      // solicitud, explica la evaluación + precios. Best-effort.
+      try {
+        const fijo = await getFijoEutanasia()
+        await enviarClienteCotizacionEutanasia({
+          clienteEmail: cliEmail,
+          clienteNombre: row.cliente_nombre,
+          mascotaNombre: row.mascota_nombre,
+          especie: row.especie,
+          peso: row.peso,
+          fechaServicio: row.fecha_servicio,
+          horaServicio: row.hora_servicio,
+          comuna: row.comuna,
+          precioClienteRealizada: precio + fijo,
+          consultaTotal: consulta.total,
+        })
+      } catch (e) { console.warn('[cotizaciones POST] correo cotización al tutor falló:', e) }
     }
 
     return NextResponse.json({ ok: true, ...row }, { status: 201 })

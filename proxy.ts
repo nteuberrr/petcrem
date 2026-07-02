@@ -47,13 +47,13 @@ export async function proxy(req: NextRequest) {
     // form del datos-pago. Sin esto, mobile sin sesión recibe HTML de /login.
     pathname === '/api/eutanasias/comunas/buscar' ||
     pathname.startsWith('/eutanasia/aceptar/') ||
-    pathname.startsWith('/eutanasia/confirmar/') ||
     pathname.startsWith('/eutanasia/realizado/') ||
+    pathname.startsWith('/eutanasia/no-realizado/') ||
     pathname.startsWith('/eutanasia/datos-pago/') ||
     pathname.startsWith('/eutanasia/cliente-confirma/') ||
     pathname === '/api/eutanasias/cotizaciones/aceptar' ||
-    pathname === '/api/eutanasias/cotizaciones/confirmar' ||
     pathname === '/api/eutanasias/cotizaciones/realizado' ||
+    pathname === '/api/eutanasias/cotizaciones/no-realizado' ||
     pathname === '/api/eutanasias/cotizaciones/cliente-confirmar' ||
     pathname === '/api/eutanasias/vets/datos-pago'
   ) {
@@ -67,6 +67,15 @@ export async function proxy(req: NextRequest) {
     const loginUrl = new URL('/login', req.url)
     loginUrl.searchParams.set('callbackUrl', pathname)
     return NextResponse.redirect(loginUrl)
+  }
+
+  // Usuario desactivado/eliminado detectado por el refresh de rol (lib/auth.ts):
+  // se corta la sesión de plano en vez de degradarlo a operador.
+  if (token.role === 'desactivado') {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Usuario desactivado' }, { status: 401 })
+    }
+    return NextResponse.redirect(new URL('/login', req.url))
   }
 
   // normalizarRol: cualquier rol vacío/desconocido cae a 'operador' (el menos

@@ -201,16 +201,14 @@ export async function DELETE(req: NextRequest) {
       const mascotasIds: string[] = parseJson<string[]>(rows[idx].mascotas_ids, [])
       const clientes = await getSheetData('clientes')
       const idxById = new Map(clientes.map((c, i) => [c.id, i]))
-      await Promise.all(
-        mascotasIds.map((mid) => {
-          const cIdx = idxById.get(mid)
-          if (cIdx === undefined) return Promise.resolve()
-          if (clientes[cIdx].estado === 'despachado' && clientes[cIdx].despacho_id === id) {
-            return updateById('clientes', clientes[cIdx].id, { ...clientes[cIdx], estado: 'cremado', despacho_id: '' })
-          }
-          return Promise.resolve()
-        })
-      )
+      // Secuencial (no Promise.all): convención del repo para updates en lote.
+      for (const mid of mascotasIds) {
+        const cIdx = idxById.get(mid)
+        if (cIdx === undefined) continue
+        if (clientes[cIdx].estado === 'despachado' && clientes[cIdx].despacho_id === id) {
+          await updateById('clientes', clientes[cIdx].id, { ...clientes[cIdx], estado: 'cremado', despacho_id: '' })
+        }
+      }
     } catch (e) { console.warn('[despachos DELETE] revert estado fallo', id, e) }
 
     await deleteRow(HOJA, idx)

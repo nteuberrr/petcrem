@@ -7,9 +7,10 @@ import crypto from 'crypto'
  * Caso de uso:
  * 1. Admin envía cotización al vet → URL `/eutanasia/aceptar/<token>` con
  *    accion='aceptar', cotizacion_id, vet_id, exp.
- * 2. Vet hace clic → backend verifica firma + expiración → marca aceptada.
- * 3. Backend manda un nuevo mail al vet con URL `/eutanasia/confirmar/<token>`
- *    con accion='confirmar' y un token NUEVO (no reusamos el de aceptar).
+ * 2. Vet hace clic → backend verifica firma + expiración → marca aceptada y le
+ *    manda el correo "coordina con la familia" con DOS botones (tokens nuevos):
+ *    `/eutanasia/realizado/<token>` (accion='realizado') y
+ *    `/eutanasia/no-realizado/<token>` (accion='no_realizado').
  *
  * El token contiene los datos mínimos necesarios (no datos sensibles), está
  * firmado con NEXTAUTH_SECRET y expira en 72h por default.
@@ -17,7 +18,10 @@ import crypto from 'crypto'
 
 const DEFAULT_TTL_SECONDS = 72 * 3600 // 72h
 
-export type AccionToken = 'aceptar' | 'confirmar' | 'realizado' | 'datos_pago' | 'cliente_confirmar'
+// Única fuente de verdad de las acciones válidas: el type se deriva de la
+// const, así verifyToken y el type nunca se desincronizan.
+export const ACCIONES_TOKEN = ['aceptar', 'realizado', 'no_realizado', 'datos_pago', 'cliente_confirmar'] as const
+export type AccionToken = typeof ACCIONES_TOKEN[number]
 
 export interface TokenPayload {
   cotizacion_id: string
@@ -110,7 +114,7 @@ export function verifyToken(token: string): VerifyResult {
   if (typeof payload.exp !== 'number' || payload.exp < Math.floor(Date.now() / 1000)) {
     return { ok: false, error: 'expired' }
   }
-  if (!payload.vet_id || !['aceptar', 'confirmar', 'realizado', 'datos_pago', 'cliente_confirmar'].includes(payload.accion)) {
+  if (!payload.vet_id || !(ACCIONES_TOKEN as readonly string[]).includes(payload.accion)) {
     return { ok: false, error: 'bad_payload' }
   }
   // cotizacion_id es opcional para 'datos_pago' (no aplica a una cotización

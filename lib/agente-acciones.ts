@@ -5,7 +5,7 @@ import { geocodeAddress, coordEnChile } from './google-maps'
 import { formatDate, formatDateForSheet, todayISO } from './dates'
 import { agregarDiasHabiles, isoFecha } from './dias-habiles'
 import { fmtPrecio } from './format'
-import { precioClienteEutanasia } from './eutanasia-precios'
+import { precioClienteEutanasia, getConsultaEutanasia } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
 import { capitalizarNombre } from './nombres'
 import type { HandlersAgente, AccionRetiro, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, AccionConsultaEstado, CtxAgente } from './agente-mensajes'
@@ -221,17 +221,21 @@ async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<s
 
 // ─── Flujo B: eutanasia a domicilio ──────────────────────────────────────────
 
-/** Cotiza el precio AL CLIENTE de la eutanasia (precio del vet + fijo). */
+/**
+ * Cotiza la eutanasia a domicilio (servicio de EVALUACIÓN). Devuelve los DOS
+ * precios de cara al cliente: el de la eutanasia si se realiza (precio al cliente
+ * por peso = vet + fijo) y el de la consulta si al evaluar no corresponde.
+ */
 async function cotizarEutanasia(a: AccionCotizarEutanasia): Promise<string> {
   const peso = Number(a.peso)
   if (!Number.isFinite(peso) || peso <= 0) {
     return 'Necesito el peso aproximado de la mascota para darte el valor de la eutanasia a domicilio.'
   }
-  const { cliente } = await precioClienteEutanasia(peso)
+  const [{ cliente }, consulta] = await Promise.all([precioClienteEutanasia(peso), getConsultaEutanasia()])
   if (cliente <= 0) {
     return 'No tengo el precio de la eutanasia a domicilio configurado para ese peso ahora mismo. Ofrécele que un miembro del equipo lo contacte para darle el valor, o escala a un humano.'
   }
-  return `El servicio de eutanasia a domicilio para una mascota de ${peso} kg tiene un valor para el cliente de ${fmtPrecio(cliente)}. Comunícale ese valor con claridad. Si decide avanzar, junta los datos y agéndala.`
+  return `Es un servicio de EVALUACIÓN a domicilio: un veterinario de la red visita a la mascota y evalúa si corresponde la eutanasia. Explícale al cliente con claridad los dos valores: si SE REALIZA la eutanasia, el valor es ${fmtPrecio(cliente)} (mascota de ${peso} kg); si al evaluar NO corresponde realizarla, se cobra solo la consulta de ${fmtPrecio(consulta.total)}. NO expliques cómo se reparte ese monto internamente. Si decide avanzar, junta los datos y agéndala.`
 }
 
 /** Crea la cotización de eutanasia, matchea la red de vets y les envía el correo. */

@@ -265,11 +265,15 @@ export const SHEETS: Record<string, string[]> = {
   precios_eutanasia: ['id', 'peso_min', 'peso_max', 'precio'],
   // Config del módulo de eutanasias (fila única id=1). 'fijo' = cargo fijo que se
   // SUMA al precio del tramo (lo que se paga al vet) para dar el precio AL CLIENTE.
-  config_eutanasia: ['id', 'fijo'],
+  // fijo = cargo al cliente sobre el pago al vet cuando la eutanasia SÍ se realiza.
+  // consulta_vet + consulta_alma = consulta cobrada cuando NO se realiza (total al cliente).
+  config_eutanasia: ['id', 'fijo', 'consulta_vet', 'consulta_alma'],
   // Cotizaciones de eutanasia que ingresa el admin desde /servicios.
-  // - estado: creada | enviada | aceptada | confirmada | realizada | cancelada
+  // - estado: creada | enviada | aceptada | realizada | no_realizada | cancelada
   // - vet_id_asignado: vacío hasta que un vet acepta; luego queda fijo.
-  // - precio_snapshot: monto que se paga al vet, congelado al momento de crear.
+  // - precio_snapshot: monto que se paga al vet si se REALIZA (tramo), congelado al crear.
+  // - consulta_vet_snapshot: monto al vet si NO se realiza, congelado al agendar.
+  // - cliente_id: ficha borrador de cremación ligada (dashboard + borrado en no_realizada).
   cotizaciones_eutanasia: [
     'id',
     'mascota_nombre', 'especie', 'peso',
@@ -285,10 +289,11 @@ export const SHEETS: Record<string, string[]> = {
     'notas',
     'estado',
     'vet_id_asignado', 'vet_nombre_asignado', 'vet_email_asignado',
-    'precio_snapshot',
-    // Estado de pago, aplicable cuando estado='realizada'. Valores:
-    // 'pendiente_pago' (default al marcar realizada) | 'pago_confirmado'
-    // (el admin lo marca después de transferir).
+    'precio_snapshot', 'consulta_vet_snapshot',
+    // Ficha borrador de cremación ligada a esta eutanasia (creada al agendar).
+    'cliente_id',
+    // Estado de pago, aplicable cuando estado='realizada' o 'no_realizada'. Valores:
+    // 'pendiente_pago' (default) | 'pago_confirmado' (el admin lo marca tras transferir).
     'estado_pago', 'fecha_pago',
     // El cliente confirmó (por su link de WhatsApp) que coordinó la visita con el vet.
     'cliente_confirmo', 'fecha_cliente_confirmacion',

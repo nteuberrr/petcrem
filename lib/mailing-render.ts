@@ -1,7 +1,9 @@
 /**
  * Render de HTML con variables {{var}} reemplazadas según los datos del veterinario.
  * Variables disponibles: nombre, primer_nombre, email, veterinaria, comuna, telefono, categoria.
+ * Los valores se escapan como HTML: un nombre con < > & no rompe el markup de la campaña.
  */
+import { escapeHtml } from './email-layout'
 
 export interface VetData {
   nombre?: string
@@ -29,13 +31,13 @@ export function deriveVars(vet: VetData): Record<string, string> {
 export function renderTemplate(html: string, vars: Record<string, string>): string {
   let out = html
   // Formato canónico: {{nombre}} con doble llave (estilo Mustache/Handlebars).
-  out = out.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => vars[key] ?? '')
+  out = out.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => escapeHtml(vars[key] ?? ''))
   // Fallback: {nombre} con llave simple. Para no romper CSS o JSON dentro del HTML,
   // solo reemplazamos cuando la key matcheea una variable conocida y las llaves NO
   // forman parte de un par doble (negative lookaround).
   const claves = new Set(Object.keys(vars))
   out = out.replace(/(?<!\{)\{\s*(\w+)\s*\}(?!\})/g, (match, key) => {
-    if (claves.has(key)) return vars[key] ?? ''
+    if (claves.has(key)) return escapeHtml(vars[key] ?? '')
     return match
   })
   return out

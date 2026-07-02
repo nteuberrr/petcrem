@@ -19,7 +19,6 @@ import {
 } from '../lib/cliente-mailer'
 import {
   enviarBienvenidaVet,
-  enviarMailRealizarServicio,
   enviarMailAgradecimiento,
   renderCotizacionEmail,
   renderCoordinarEmail,
@@ -97,7 +96,7 @@ async function main() {
   }
 
   // ── Cotización de eutanasia más avanzada (flujo vets) ──
-  const orden = ['realizada', 'confirmada', 'aceptada', 'enviada', 'creada']
+  const orden = ['realizada', 'aceptada', 'enviada', 'creada']
   const coti = [...cotis].sort((a, b) => orden.indexOf(a.estado) - orden.indexOf(b.estado) || (parseInt(b.id) || 0) - (parseInt(a.id) || 0))[0]
   const vetAsignado = coti ? vets.find(v => v.id === coti.vet_id_asignado) : undefined
   const vet = vetAsignado || vets.find(v => (v.activo || '').toUpperCase() === 'TRUE') || vets[0]
@@ -110,8 +109,8 @@ async function main() {
 
   if (coti && vet) {
     const linkAceptar = `${BASE}/eutanasia/aceptar/${createToken(coti.id, vet.id, 'aceptar')}`
-    const linkConfirmar = `${BASE}/eutanasia/confirmar/${createToken(coti.id, vet.id, 'confirmar')}`
     const linkRealizado = `${BASE}/eutanasia/realizado/${createToken(coti.id, vet.id, 'realizado')}`
+    const linkNoRealizado = `${BASE}/eutanasia/no-realizado/${createToken(coti.id, vet.id, 'no_realizado')}`
     const linkDatosPago = `${BASE}/eutanasia/datos-pago/${createVetToken(vet.id, 'datos_pago')}`
 
     await sendEmail({
@@ -125,22 +124,10 @@ async function main() {
     await sendEmail({
       to: DESTINO,
       subject: `Coordina con la familia — Eutanasia ${coti.mascota_nombre}`,
-      html: renderCoordinarEmail({ vetNombre, c: coti, linkConfirmar, linkDatosPago, contacto }),
+      html: renderCoordinarEmail({ vetNombre, c: coti, linkRealizado, linkNoRealizado, linkDatosPago, contacto }),
       preview_text: `Datos de contacto de la familia de ${coti.mascota_nombre}.`,
     })
-    log('7', 'Vet · coordina con la familia (post-aceptar)')
-
-    await enviarMailRealizarServicio({
-      vetEmail: DESTINO,
-      vetNombre,
-      cotizacion: {
-        id: coti.id, mascota_nombre: coti.mascota_nombre, cliente_nombre: coti.cliente_nombre,
-        cliente_telefono: coti.cliente_telefono, fecha_servicio: coti.fecha_servicio, hora_servicio: coti.hora_servicio,
-        direccion: coti.direccion, comuna: coti.comuna, precio_snapshot: coti.precio_snapshot,
-      },
-      linkRealizado,
-    })
-    log('8', 'Vet · confirma cuando realices el servicio')
+    log('7', 'Vet · coordina con la familia (realizada / no realizada)')
 
     await enviarMailAgradecimiento({
       vetEmail: DESTINO,

@@ -79,21 +79,21 @@ export async function POST(req: NextRequest) {
     }
     await appendRow('ciclos', row)
 
-    await Promise.all(
-      data.mascotas_ids.map((mascotaId) => {
-        const idx = idxById.get(mascotaId)
-        if (idx === undefined) return Promise.resolve()
-        // Sin Devolución (SD) no se despacha: su flujo termina en la cremación,
-        // así que pasa directo a 'despachado' (sin despacho_id ni ruta) en vez de
-        // quedar como 'cremado' pendiente de despacho.
-        const esSD = (clientes[idx].codigo_servicio || 'CI').toUpperCase() === 'SD'
-        return updateById('clientes', clientes[idx].id, {
-          ...clientes[idx],
-          estado: esSD ? 'despachado' : 'cremado',
-          ciclo_id: id,
-        })
+    // Secuencial (no Promise.all): convención del repo para updates en lote
+    // (el path Sheets no tolera escrituras paralelas).
+    for (const mascotaId of data.mascotas_ids) {
+      const idx = idxById.get(mascotaId)
+      if (idx === undefined) continue
+      // Sin Devolución (SD) no se despacha: su flujo termina en la cremación,
+      // así que pasa directo a 'despachado' (sin despacho_id ni ruta) en vez de
+      // quedar como 'cremado' pendiente de despacho.
+      const esSD = (clientes[idx].codigo_servicio || 'CI').toUpperCase() === 'SD'
+      await updateById('clientes', clientes[idx].id, {
+        ...clientes[idx],
+        estado: esSD ? 'despachado' : 'cremado',
+        ciclo_id: id,
       })
-    )
+    }
 
     // Mail a cada tutor del ciclo: se inició la cremación de su mascota
     // (best-effort, no bloquea la creación del ciclo).

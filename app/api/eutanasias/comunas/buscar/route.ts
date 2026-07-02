@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { COMUNAS, normalizar, buscarComuna } from '@/lib/comunas'
+import { permitirRequest } from '@/lib/rate-limit'
 
 /**
  * GET /api/eutanasias/comunas/buscar?q=texto
@@ -33,6 +34,12 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const q = (url.searchParams.get('q') ?? '').trim()
   if (!q || q.length < 2) return NextResponse.json([])
+
+  // Pública y con costo Google por request: si la IP se pasa del límite,
+  // degradamos a la búsqueda local (gratis) en vez de cortar el autocomplete.
+  if (!permitirRequest(req, 'comunas-buscar', 60, 60_000)) {
+    return NextResponse.json(buscarLocal(q))
+  }
 
   // Misma key que usa /api/places/autocomplete para direcciones.
   const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY

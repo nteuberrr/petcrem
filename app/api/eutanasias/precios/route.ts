@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, updateRow, deleteRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { esAdmin } from '@/lib/roles'
+import { getConsultaEutanasia } from '@/lib/eutanasia-precios'
 
 const SHEET = 'precios_eutanasia'
 const COLS = ['id', 'peso_min', 'peso_max', 'precio']
@@ -15,14 +16,18 @@ async function requireAdmin() {
   return null
 }
 
-/** GET — público (sin auth) para que el landing del convenio muestre la tabla. */
+/**
+ * GET — público (sin auth) para que el landing del convenio muestre la tabla.
+ * Devuelve { tramos, consulta_vet }: los tramos (pago al vet si SE REALIZA) y el
+ * pago al vet por la consulta cuando al evaluar NO corresponde realizarla.
+ */
 export async function GET() {
   try {
     await ensureSheet(SHEET)
     await ensureColumns(SHEET, COLS)
-    const rows = await getSheetData(SHEET)
+    const [rows, consulta] = await Promise.all([getSheetData(SHEET), getConsultaEutanasia()])
     rows.sort((a, b) => (parseFloat(a.peso_min) || 0) - (parseFloat(b.peso_min) || 0))
-    return NextResponse.json(rows)
+    return NextResponse.json({ tramos: rows, consulta_vet: consulta.vet })
   } catch (e) {
     console.error('[eutanasias/precios GET]', e)
     return NextResponse.json({ error: 'No se pudieron cargar los precios. Intenta nuevamente.' }, { status: 500 })

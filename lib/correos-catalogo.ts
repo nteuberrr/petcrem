@@ -5,8 +5,8 @@ import {
 } from './cliente-mailer'
 import {
   renderBienvenida, renderCotizacionEmail, renderCoordinarEmail,
-  renderRealizarServicio, renderAgradecimiento, renderClienteVetAsignado,
-  renderClienteAgradecimientoEutanasia,
+  renderAgradecimiento, renderClienteVetAsignado,
+  renderClienteAgradecimientoEutanasia, renderClienteCotizacionEutanasia, renderNoRealizada,
 } from './eutanasia-mailer'
 import { renderInformeFacturacionEmail } from './informe-mailer'
 import {
@@ -150,6 +150,21 @@ export const CORREOS: CorreoDef[] = [
     },
   },
   {
+    key: 'eutanasia_cliente_cotizacion',
+    titulo: 'Aviso al tutor: recibimos tu solicitud (servicio + precios)',
+    modulo: 'Eutanasias',
+    audiencia: 'Tutor',
+    cuando: 'Cuando el tutor agenda: explica la evaluación a domicilio y los valores.',
+    build: (m, c) => ({
+      subject: `Recibimos tu solicitud para ${m.nombreMascota}`,
+      html: renderClienteCotizacionEutanasia({
+        clienteEmail: m.email, clienteNombre: m.nombreTutor, mascotaNombre: m.nombreMascota,
+        especie: 'Perro', peso: '8', fechaServicio: todayISO(), horaServicio: '16:00', comuna: 'Providencia',
+        precioClienteRealizada: 110000, consultaTotal: 40000,
+      }, c),
+    }),
+  },
+  {
     key: 'eutanasia_cliente_vet_asignado',
     titulo: 'Aviso al tutor: un veterinario tomó el caso',
     modulo: 'Eutanasias',
@@ -165,42 +180,41 @@ export const CORREOS: CorreoDef[] = [
   },
   {
     key: 'eutanasia_coordinar',
-    titulo: 'Coordina con la familia (post-aceptación)',
+    titulo: 'Coordina con la familia (realizada / no realizada)',
     modulo: 'Eutanasias',
     audiencia: 'Veterinario',
-    cuando: 'Cuando el vet acepta y debe contactar a la familia.',
+    cuando: 'Cuando el vet acepta: contacta a la familia, evalúa y marca el resultado.',
     build: (m, c) => ({
       subject: `Coordina con la familia — Eutanasia ${m.nombreMascota}`,
-      html: renderCoordinarEmail({ vetNombre: VET_MUESTRA, c: cMuestra(m), linkConfirmar: '#', linkDatosPago: '#', contacto: c }),
-    }),
-  },
-  {
-    key: 'eutanasia_realizar',
-    titulo: 'Confirma cuando realices el servicio',
-    modulo: 'Eutanasias',
-    audiencia: 'Veterinario',
-    cuando: 'Tras coordinar, para que confirme la realización.',
-    build: (m, c) => ({
-      subject: `Confirma cuando termines el servicio — ${m.nombreMascota}`,
-      html: renderRealizarServicio({
-        vetEmail: m.email, vetNombre: VET_MUESTRA,
-        cotizacion: { id: '0', mascota_nombre: m.nombreMascota, cliente_nombre: m.nombreTutor, cliente_telefono: '912345678', fecha_servicio: m.fechaCremacion, hora_servicio: '16:00', direccion: 'Av. Siempre Viva 742', comuna: 'Providencia', precio_snapshot: '70000' },
-        linkRealizado: '#',
-      }, c),
+      html: renderCoordinarEmail({ vetNombre: VET_MUESTRA, c: cMuestra(m), linkRealizado: '#', linkNoRealizado: '#', linkDatosPago: '#', contacto: c }),
     }),
   },
   {
     key: 'eutanasia_agradecimiento',
-    titulo: 'Agradecimiento + pago al veterinario',
+    titulo: 'Agradecimiento + pago al veterinario (realizada)',
     modulo: 'Eutanasias',
     audiencia: 'Veterinario',
-    cuando: 'Cuando el vet marca el servicio como realizado.',
+    cuando: 'Cuando el vet marca la eutanasia como realizada.',
     build: (m, c) => ({
       subject: '¡Gracias por tu trabajo! Tu pago está coordinado',
       html: renderAgradecimiento({
         vetEmail: m.email, vetNombre: VET_MUESTRA,
         cotizacion: { id: '0', mascota_nombre: m.nombreMascota, precio_snapshot: '70000' },
         fechaRealizacionISO: todayISO(),
+      }, c),
+    }),
+  },
+  {
+    key: 'eutanasia_no_realizada_vet',
+    titulo: 'Pago de la consulta al veterinario (no realizada)',
+    modulo: 'Eutanasias',
+    audiencia: 'Veterinario',
+    cuando: 'Cuando el vet marca la eutanasia como NO realizada (se paga la consulta).',
+    build: (m, c) => ({
+      subject: 'Gracias por la evaluación — coordinamos tu pago',
+      html: renderNoRealizada({
+        vetEmail: m.email, vetNombre: VET_MUESTRA, mascotaNombre: m.nombreMascota,
+        consultaVet: 30000, fechaRealizacionISO: todayISO(),
       }, c),
     }),
   },
