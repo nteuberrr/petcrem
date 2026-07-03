@@ -33,7 +33,10 @@ export interface Modulo {
  * acceso se concede si CUALQUIER módulo concedido (de máxima especificidad) los cubre.
  */
 export const MODULOS: Modulo[] = [
-  { key: 'dashboard', label: 'Dashboard', pages: ['/dashboard'], apis: ['/api/dashboard'], def: { admin2: true, operador: true } },
+  // solicitudes-retiro también está en 'mensajes'; acá se lista para que TODOS
+  // los roles con Dashboard vean las notificaciones de eutanasias (el GET del
+  // route devuelve SOLO eutanasias a los no-admin; el POST sigue siendo admin).
+  { key: 'dashboard', label: 'Dashboard', pages: ['/dashboard'], apis: ['/api/dashboard', '/api/solicitudes-retiro'], def: { admin2: true, operador: true } },
   { key: 'clientes', label: 'Clientes', pages: ['/clientes'], apis: ['/api/clientes', '/api/upload', '/api/places', '/api/veterinarios', '/api/precios', '/api/descuentos', '/api/especies', '/api/productos', '/api/categorias-productos', '/api/servicios'], def: { admin2: true, operador: true } },
   { key: 'operaciones', label: 'Operaciones', pages: ['/operaciones'], apis: ['/api/ciclos', '/api/petroleo', '/api/vehiculo', '/api/despachos'], def: { admin2: true, operador: true } },
   // pagos-retiros se usa desde la página de Asistencia pero trae su propio gate

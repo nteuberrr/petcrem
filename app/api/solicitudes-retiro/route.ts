@@ -8,17 +8,25 @@ import { listarEutanasiasCronograma } from '@/lib/eutanasia-cotizaciones'
 export const dynamic = 'force-dynamic'
 
 /**
- * Panel de solicitudes de retiro del bot de WhatsApp (admin / admin2).
- *   GET  → lista de pendientes (para el badge + el panel).
+ * Panel de solicitudes de retiro del bot de WhatsApp.
+ *   GET  → admin/admin2: pendientes + confirmadas + eutanasias.
+ *          operador (cualquier usuario logueado): SOLO las eutanasias del
+ *          cronograma (todos deben ver esas notificaciones en el dashboard);
+ *          los retiros por confirmar/confirmados siguen siendo de admin.
  *   POST { id, accion: 'confirmar' | 'rechazar' } → mismo efecto que el botón de
  *          WhatsApp (crea la ficha borrador + avisa al cliente). Canal confiable,
- *          sin depender de la ventana de 24h de WhatsApp.
+ *          sin depender de la ventana de 24h de WhatsApp. Solo admin.
  */
 
 export async function GET() {
   const session = await getServerSession(authOptions)
-  if (!esAdmin((session?.user as { role?: string })?.role)) return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
+  if (!session) return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
+  const admin = esAdmin((session.user as { role?: string })?.role)
   try {
+    if (!admin) {
+      const eutanasias = await listarEutanasiasCronograma()
+      return NextResponse.json({ pendientes: [], confirmadas: [], eutanasias }, { headers: { 'Cache-Control': 'no-store' } })
+    }
     const [pendientes, confirmadas, eutanasias] = await Promise.all([
       listarSolicitudesPendientes(),
       listarSolicitudesConfirmadas(),
@@ -26,7 +34,8 @@ export async function GET() {
     ])
     return NextResponse.json({ pendientes, confirmadas, eutanasias }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    console.error('[solicitudes-retiro GET]', e)
+    return NextResponse.json({ error: 'No se pudieron cargar las solicitudes.' }, { status: 500 })
   }
 }
 
