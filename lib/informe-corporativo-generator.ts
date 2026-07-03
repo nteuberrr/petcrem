@@ -248,9 +248,11 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
 
   h1('Servicios de cremación')
   p('Ofrecemos cremación trazable en tres modalidades, para adaptarnos a las necesidades y posibilidades de cada familia. En todos los casos el proceso es trazable y con seguimiento documentado.')
-  defItem('Cremación Individual', 'Cremación con trazabilidad y código de seguimiento, certificado digital, nombre grabado en placa de madera, ánfora de greda incluida y una botellita con un mechón de pelo. Es la modalidad más elegida.')
-  defItem('Cremación Premium', 'Incluye todo lo de la modalidad Individual y, además, permite elegir cualquier ánfora de nuestra selección premium, más un cuadro conmemorativo estilo acuarela.')
-  defItem('Cremación Sin Devolución', 'Cremación con trazabilidad, sin devolución de cenizas. Es la alternativa más económica, manteniendo el mismo estándar de proceso y respeto.')
+  // Mantener alineado con MODALIDADES_SERVICIOS (lib/diferenciadores.ts), la
+  // fuente única de qué incluye cada servicio.
+  defItem('Cremación Individual', 'Certificado de cremación digital, ánfora de greda marmoleada, botellita con mechón de pelo, etiqueta de madera con el nombre, retiro en domicilio o clínica y entrega en 3 días hábiles.')
+  defItem('Cremación Premium', 'Incluye todo lo de la modalidad Individual y, además, un cuadro en acuarela conmemorativo y ánfora premium a elección de nuestra selección.')
+  defItem('Cremación Sin Devolución', 'Certificado de cremación y retiro en domicilio o clínica, sin devolución de cenizas. Es la alternativa más económica, manteniendo el mismo estándar de proceso y respeto.')
   p('Servicio complementario: coordinamos eutanasia a domicilio a través de una red de médicos veterinarios en convenio, que acuden al domicilio de la familia y permiten gestionar en un mismo proceso la eutanasia y la posterior cremación. Se cotiza por caso según las características del servicio.', { color: C.muted, size: 10 })
 
   h1('Tarifas vigentes')

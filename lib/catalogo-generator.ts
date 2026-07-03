@@ -148,10 +148,12 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
   // ── Modalidades ──
   tituloSeccion('Modalidades de servicio')
   const LABEL_W = 122
+  // Mantener alineado con MODALIDADES_SERVICIOS (lib/diferenciadores.ts), la
+  // fuente única de qué incluye cada servicio.
   const modalidades: [string, string][] = [
-    ['Individual', 'Cremación con trazabilidad, certificado digital, nombre grabado en placa de madera, ánfora de greda incluida y botellita con un mechón.'],
-    ['Premium', 'Todo lo de Individual y, además, puedes elegir cualquier ánfora de esta selección, más un cuadro conmemorativo.'],
-    ['Sin Devolución', 'Cremación con trazabilidad, sin devolución de cenizas (la opción más económica).'],
+    ['Individual', 'Certificado de cremación digital, ánfora de greda marmoleada, botellita con mechón de pelo, etiqueta de madera con el nombre, retiro en domicilio o clínica y entrega en 3 días hábiles.'],
+    ['Premium', 'Todo lo de Individual y, además, un cuadro en acuarela conmemorativo y ánfora premium a elección de esta selección.'],
+    ['Sin Devolución', 'Certificado de cremación y retiro en domicilio o clínica, sin devolución de cenizas (la opción más económica).'],
   ]
   for (const [t, d] of modalidades) {
     const lines = wrapText(d, f.regular, 10.5, CONTENT_W - LABEL_W - 16)

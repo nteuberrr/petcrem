@@ -3,7 +3,7 @@ import { getSheetData } from './datastore'
 import { getAgenteConfig } from './mensajes'
 import { fmtPrecio } from './format'
 import { listarImagenesWhatsapp, type ImagenBanco } from './mailing-images'
-import { DIFERENCIADORES } from './diferenciadores'
+import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 
 /**
  * Agente IA del inbox de Mensajes: redacta la respuesta de atención por
@@ -70,10 +70,7 @@ SOBRE NOSOTROS Y EL SERVICIO (usa lo que aplique para responder dudas; no lo rec
 - Propuesta de valor: transparencia total, tecnología de punta, rapidez y trazabilidad. Retiro en menos de 3 horas en vehículo habilitado. Entrega en máximo 3 días hábiles. Código de seguimiento durante todo el proceso. Certificado de cremación digital, con el video del proceso adjunto (cuando está disponible).
 - Recargo de $20.000 en comunas fuera de la zona habitual (Lampa, Buin, Colina, Calera de Tango, Paine).
 
-MODALIDADES (qué incluye cada una; los PRECIOS siempre salen de la tabla de TARIFAS VIGENTES, nunca los inventes):
-- *Cremación Individual*: retiro a domicilio, cremación trazable, certificado digital, nombre grabado en placa de madera, ánfora de greda marmoleada y botellita con mechón de pelo.
-- *Premium*: todo lo de Individual, con ánfora premium a elección y un cuadro estilo acuarela conmemorativo.
-- *Sin Devolución*: retiro y cremación trazable, pero NO se devuelven las cenizas (la opción más económica).
+${MODALIDADES_SERVICIOS}
 
 FOTOS DE ÁNFORAS / URNAS (cuando el cliente pida ver fotos de las ánforas/urnas, del servicio Premium o del cuadro). Para enviarlas usa la herramienta "enviar_fotos" con los IDs EXACTOS de la lista "FOTOS DISPONIBLES" (ahí ves el código de cada foto). Acompáñalas SIEMPRE con un mensaje breve y cálido; envía las fotos TAL CUAL están en el banco (no las modificas ni las describes inventando detalles), y no mandes fotos que no estén en esa lista:
 - "¿Qué ánfora incluye?" / "qué viene incluido": manda la foto de la *ánfora de greda marmoleada* (código i-11) y explícale que ESA es la que viene INCLUIDA, sin costo adicional.

@@ -6,7 +6,7 @@ import { listarCalendario, crearItems, actualizarItem, eliminarItem, obtenerItem
 import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
-import { DIFERENCIADORES } from './diferenciadores'
+import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { REGLAS_INVIOLABLES } from './marca-voz'
 import { lintCopy, extraerTextoHtml } from './marketing-lint'
 import { getContacto } from './email-layout'
@@ -81,10 +81,7 @@ SOBRE EL NEGOCIO Y EL SERVICIO (úsalo para que los ángulos y el copy sean conc
 - Crematorio de mascotas en Recoleta (Santiago), cobertura Región Metropolitana, de lunes a domingo, 09:00–22:00.
 - Instalaciones PROPIAS y CERTIFICADAS en Recoleta: horno certificado, cámara de refrigeración y vehículo habilitado. NO se externaliza nada → control directo y trazabilidad total.
 - Proceso (5 pasos): 1) contacto y coordinación, 2) retiro a domicilio o desde la clínica en vehículo habilitado (en menos de 3 horas), 3) la mascota se mantiene en cámara de refrigeración hasta el momento de la cremación, 4) cremación en horno certificado, con código de seguimiento, 5) entrega de cenizas + certificado digital en máximo 3 días hábiles. Hay video del proceso disponible si lo piden.
-- Modalidades (qué incluye cada una; el precio sale SIEMPRE de TARIFAS VIGENTES):
-  · Individual (la más elegida): retiro, cremación trazable, certificado digital, nombre grabado en placa de madera, ánfora de greda marmoleada y botellita con mechón de pelo.
-  · Premium: todo lo de Individual + ánfora premium a elección + un cuadro estilo acuarela conmemorativo.
-  · Sin Devolución: retiro y cremación trazable, sin devolución de cenizas (la más económica).
+${MODALIDADES_SERVICIOS}
 - Eutanasia a domicilio (RED DE CONVENIO) — es un servicio de EVALUACIÓN a domicilio: un veterinario de la red va a la casa del tutor, EVALÚA a la mascota y, si corresponde, realiza la eutanasia; si se realiza, se coordina junto con la cremación. Es un servicio aparte (precio propio, no las tarifas de cremación). Para el TUTOR hay dos precios: si SE REALIZA la eutanasia, el valor por peso; si al evaluar NO corresponde, solo el valor de la consulta. (El reparto interno vet/Alma NO se comunica a los tutores; nunca inventes montos.)
   · CÓMO FUNCIONA EL CONVENIO (úsalo para campañas que buscan SUMAR veterinarios a la red): el vet se inscribe gratis en la landing pública (crematorioalmaanimal.cl/convenio-eutanasias) indicando las comunas que cubre y sus horarios. Cuando entra una solicitud en su zona/horario, le llega un email para aceptarla (el primero que acepta se la queda); coordina con la familia, va, evalúa y marca directamente el resultado ("eutanasia realizada" o "no realizada"); carga sus datos bancarios una sola vez y se le paga por cada visita: la tarifa según el tramo de peso si la realiza, o el valor de la consulta si al evaluar no correspondía. NO tiene que loguearse a ningún sistema ni administrar nada: todo pasa por links en el correo.
   · PROPUESTA DE VALOR PARA EL VET (el ángulo de la campaña de captación): ingreso adicional por eutanasias a domicilio sin tener que buscar pacientes (le derivamos los casos de su zona), se le paga incluso cuando al evaluar no corresponde realizarla (valor de la consulta), cero burocracia (todo por email), pago claro por servicio, y un partner serio que además se encarga de la cremación con trazabilidad. Para estas campañas: objetivo=captacion_vets, audiencia=veterinarios, voz B2B (profesional, concreta, de socio).
