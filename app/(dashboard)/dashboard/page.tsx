@@ -104,10 +104,10 @@ export default function DashboardPage() {
         <p className="text-gray-600 text-xs sm:text-sm mt-0.5">Resumen operativo — {mesActual} {new Date().getFullYear()}</p>
       </div>
 
-      {/* Solicitudes del bot (encima del timeline): retiros pendientes (rojo) +
-          confirmados (verde) para admin; las EUTANASIAS (naranja/verde) las ven
-          TODOS los usuarios — el API ya filtra por rol. */}
-      <SolicitudesPendientes />
+      {/* Solicitudes del bot (encima del timeline): retiros pendientes (rojo),
+          confirmados (verde) y eutanasias (naranja/verde). Las ven TODOS los
+          usuarios; confirmar/rechazar es solo del admin. */}
+      <SolicitudesPendientes puedeResolver={isAdmin} />
 
       {/* Timeline Status */}
       <TimelineStatus />

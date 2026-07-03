@@ -32,8 +32,11 @@ const cuando = (s: Solicitud) => `${s.fecha_retiro ? fmtFecha(s.fecha_retiro) : 
  *  - EUTANASIAS a domicilio: NARANJA mientras esperan un veterinario, VERDE cuando
  *    un vet la tomó; desaparecen al no realizarse o al registrarse la ficha.
  * Se refresca solo cada 30s.
+ *
+ * Lo ven TODOS los roles; `puedeResolver` (solo admin) muestra los botones de
+ * Confirmar/Rechazar de los retiros pendientes (el POST revalida el rol igual).
  */
-export default function SolicitudesPendientes() {
+export default function SolicitudesPendientes({ puedeResolver = false }: { puedeResolver?: boolean }) {
   const [pendientes, setPendientes] = useState<Solicitud[]>([])
   const [confirmadas, setConfirmadas] = useState<Solicitud[]>([])
   const [eutanasias, setEutanasias] = useState<Eutanasia[]>([])
@@ -120,16 +123,20 @@ export default function SolicitudesPendientes() {
                   <p className="text-[11px] text-gray-500 mt-1 leading-tight truncate">📍 {direccion(s)}</p>
                   <p className="text-[11px] text-gray-500 leading-tight">🗓 {cuando(s)}</p>
                 </div>
-                <div className="flex gap-1.5">
-                  <button onClick={() => resolver(s.id, 'confirmar')} disabled={resolviendo === s.id} title="Confirmar retiro"
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-50">
-                    {resolviendo === s.id ? '…' : '✅ Confirmar'}
-                  </button>
-                  <button onClick={() => resolver(s.id, 'rechazar')} disabled={resolviendo === s.id} title="Rechazar"
-                    className="bg-white border-2 border-red-300 text-red-700 hover:bg-red-50 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-50">
-                    ❌
-                  </button>
-                </div>
+                {puedeResolver ? (
+                  <div className="flex gap-1.5">
+                    <button onClick={() => resolver(s.id, 'confirmar')} disabled={resolviendo === s.id} title="Confirmar retiro"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-50">
+                      {resolviendo === s.id ? '…' : '✅ Confirmar'}
+                    </button>
+                    <button onClick={() => resolver(s.id, 'rechazar')} disabled={resolviendo === s.id} title="Rechazar"
+                      className="bg-white border-2 border-red-300 text-red-700 hover:bg-red-50 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-50">
+                      ❌
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[10px] font-semibold text-red-800/70">Pendiente de confirmación del administrador</p>
+                )}
               </div>
             ))}
           </div>

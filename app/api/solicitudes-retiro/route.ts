@@ -9,10 +9,10 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Panel de solicitudes de retiro del bot de WhatsApp.
- *   GET  → admin/admin2: pendientes + confirmadas + eutanasias.
- *          operador (cualquier usuario logueado): SOLO las eutanasias del
- *          cronograma (todos deben ver esas notificaciones en el dashboard);
- *          los retiros por confirmar/confirmados siguen siendo de admin.
+ *   GET  → cualquier usuario logueado: pendientes + confirmadas + eutanasias
+ *          (todos deben ver las notificaciones en el dashboard). RESOLVERLAS
+ *          (confirmar/rechazar) sigue siendo solo de admin — la UI le oculta
+ *          los botones al operador y el POST revalida el rol.
  *   POST { id, accion: 'confirmar' | 'rechazar' } → mismo efecto que el botón de
  *          WhatsApp (crea la ficha borrador + avisa al cliente). Canal confiable,
  *          sin depender de la ventana de 24h de WhatsApp. Solo admin.
@@ -21,12 +21,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
-  const admin = esAdmin((session.user as { role?: string })?.role)
   try {
-    if (!admin) {
-      const eutanasias = await listarEutanasiasCronograma()
-      return NextResponse.json({ pendientes: [], confirmadas: [], eutanasias }, { headers: { 'Cache-Control': 'no-store' } })
-    }
     const [pendientes, confirmadas, eutanasias] = await Promise.all([
       listarSolicitudesPendientes(),
       listarSolicitudesConfirmadas(),
