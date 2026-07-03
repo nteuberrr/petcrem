@@ -1,4 +1,7 @@
 {
+  "git": {
+    "deploymentEnabled": { "main": false }
+  },
   "crons": [
     { "path": "/api/backup", "schedule": "0 7 * * *" }
   ]
