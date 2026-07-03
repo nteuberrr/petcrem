@@ -166,7 +166,7 @@ export interface AgendarEutInput {
   comuna: string
   fecha: string   // YYYY-MM-DD
   hora: string    // HH:MM
-  tipo_servicio_cremacion?: string  // CI | CP | SD (cremación posterior)
+  tipo_servicio_cremacion?: string  // CI | CP | SD (cremación posterior) | NINGUNA (el tutor no quiere cremación)
   notas?: string
 }
 
@@ -239,8 +239,10 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
   // Crear el cliente borrador para la CREMACIÓN posterior (queda "Por ingresar"
   // en /clientes; se agendan ambos servicios) y LIGARLO a la cotización (cliente_id),
   // para el cronograma del dashboard y el borrado si la eutanasia no se realiza.
-  // Best-effort: no bloquea la cotización.
-  try {
+  // Best-effort: no bloquea la cotización. Si el tutor NO quiere cremación
+  // (tipo 'NINGUNA'), no hay servicio posterior → no se crea borrador.
+  const sinCremacion = (input.tipo_servicio_cremacion || '').toUpperCase() === 'NINGUNA'
+  if (!sinCremacion) try {
     const borradorId = await crearClienteBorrador({
       nombre_tutor: input.cliente_nombre,
       nombre_mascota: input.mascota_nombre,
@@ -284,6 +286,7 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
         comuna: comunaCanon,
         precioClienteRealizada: precioVet + fijo,
         consultaTotal: consulta.total,
+        conCremacion: !sinCremacion,
       })
     } catch (e) {
       console.warn('[eutanasia-cotizaciones] no se pudo enviar el correo al tutor:', e)

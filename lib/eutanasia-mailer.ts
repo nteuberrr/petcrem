@@ -636,6 +636,8 @@ export interface ClienteCotizacionArgs {
   precioClienteRealizada: number
   /** Total al cliente si NO se realiza (la consulta). */
   consultaTotal: number
+  /** false cuando el tutor NO quiere cremación posterior (omite el párrafo del retiro). Default true. */
+  conCremacion?: boolean
 }
 
 /**
@@ -700,10 +702,11 @@ export function renderClienteCotizacionEutanasia(args: ClienteCotizacionArgs, co
         </p>
       </div>
 
+      ${args.conCremacion === false ? '' : `
       <p style="margin:16px 0 0;font-size:14px;line-height:1.6">
         Una vez realizada la eutanasia, llegaremos en nuestro vehículo a hacer el <strong>retiro</strong> de ${mascota}
         para proceder con el <strong>servicio de cremación</strong>.
-      </p>
+      </p>`}
       <p style="margin:14px 0 0;font-size:13px;color:${BRAND.muted};line-height:1.55">
         Cualquier duda, respóndenos este correo o escríbenos por los medios de abajo. Estamos para acompañarte. 🐾
       </p>`

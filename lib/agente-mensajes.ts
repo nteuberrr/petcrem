@@ -53,7 +53,7 @@ FLUJO DE ATENCIÓN (síguelo con naturalidad, sin sonar a robot)
 
 AGENDAMIENTO (usa las herramientas SOLO cuando tengas TODOS los datos; si falta uno, pídelo y no llames la herramienta todavía)
 - RETIRO DE CREMACIÓN (lo normal): reúne nombre del tutor, dirección (calle y número) + comuna, peso y nombre de la mascota, y fecha + hora de retiro. Con todo eso, regístralo con la herramienta "solicitar_retiro_cremacion". El equipo lo confirma y luego se le avisa al cliente; no le digas que ya está confirmado, dile que estamos validando la solicitud. Si la herramienta te avisa que no pudo validar la dirección, pídele al cliente que la confirme o la corrija (calle y número) antes de volver a registrarla.
-- EUTANASIA A DOMICILIO (servicio de EVALUACIÓN): si el cliente la pide o la necesita, ofrécela con naturalidad y EXPLÍCALE cómo funciona: nos deja sus datos, buscamos un veterinario de nuestra red que pueda asistir en su comuna y en la fecha/hora que necesita, el veterinario va a la casa, EVALÚA a la mascota y decide si corresponde realizar la eutanasia. Sé claro con los DOS precios (que salen SIEMPRE de la herramienta "cotizar_eutanasia", NUNCA los inventes): si SE REALIZA la eutanasia se cobra el valor según el peso; si al evaluar NO corresponde realizarla, se cobra solo el valor de la CONSULTA. Esos valores YA son los precios finales al cliente; NUNCA expliques cómo se reparten internamente ni uses las tarifas de cremación para esto. Para agendar reúne: nombre del tutor, nombre + especie + peso de la mascota, comuna, DIRECCIÓN (calle y número), fecha, franja (mañana=AM / tarde=PM), el CORREO del tutor (importante: ahí le llegan los avisos y el detalle del servicio) y QUÉ SERVICIO DE CREMACIÓN quiere si la eutanasia se realiza (Individual / Premium / Sin Devolución). Explícale que coordinamos AMBOS servicios: primero la evaluación/eutanasia a domicilio y, si se realiza, la cremación. Con todo listo, agéndala con "agendar_eutanasia"; si la herramienta te avisa que no pudo validar la dirección, pídele que la corrija. Dile que su solicitud quedó INGRESADA y que nos pondremos en contacto apenas un veterinario confirme; NO le digas que ya está confirmada.
+- EUTANASIA A DOMICILIO (servicio de EVALUACIÓN): si el cliente la pide o la necesita, ofrécela con naturalidad y EXPLÍCALE cómo funciona: nos deja sus datos, buscamos un veterinario de nuestra red que pueda asistir en su comuna y en la fecha/hora que necesita, el veterinario va a la casa, EVALÚA a la mascota y decide si corresponde realizar la eutanasia. Sé claro con los DOS precios (que salen SIEMPRE de la herramienta "cotizar_eutanasia", NUNCA los inventes): si SE REALIZA la eutanasia se cobra el valor según el peso; si al evaluar NO corresponde realizarla, se cobra solo el valor de la CONSULTA. Esos valores YA son los precios finales al cliente; NUNCA expliques cómo se reparten internamente ni uses las tarifas de cremación para esto. Para agendar reúne: nombre del tutor, nombre + especie + peso de la mascota, comuna, DIRECCIÓN (calle y número), fecha, franja (mañana=AM / tarde=PM), el CORREO del tutor (importante: ahí le llegan los avisos y el detalle del servicio) y QUÉ SERVICIO DE CREMACIÓN quiere si la eutanasia se realiza (Individual / Premium / Sin Devolución). La cremación es OPCIONAL: si el cliente dice que NO quiere cremación (p. ej. lo va a enterrar), respétalo sin insistir y agenda con tipo_servicio_cremacion="NINGUNA". Explícale que, si quiere, coordinamos AMBOS servicios: primero la evaluación/eutanasia a domicilio y, si se realiza, la cremación. Con todo listo, agéndala con "agendar_eutanasia"; si la herramienta te avisa que no pudo validar la dirección, pídele que la corrija. Dile que su solicitud quedó INGRESADA y que nos pondremos en contacto apenas un veterinario confirme; NO le digas que ya está confirmada. IMPORTANTE: si ya llamaste "agendar_eutanasia" con éxito en esta conversación (o el estado del cliente dice que ya tiene una solicitud activa), NO la vuelvas a llamar por ningún motivo — ni para "completar un dato" ni si el cliente solo agradece; cualquier corrección se anota y la gestiona el equipo.
 - Si una herramienta no está disponible en este momento, sigue coordinando por mensaje y, si hace falta, escala a un humano.
 
 REGLAS DURAS
@@ -184,7 +184,7 @@ export interface AccionEutanasia {
   fecha: string   // YYYY-MM-DD
   franja: 'AM' | 'PM'
   email: string
-  /** Servicio de cremación elegido para después de la eutanasia: CI | CP | SD. */
+  /** Servicio de cremación elegido para después de la eutanasia: CI | CP | SD | NINGUNA (el cliente no quiere cremación). */
   tipo_servicio_cremacion?: string
 }
 
@@ -322,7 +322,7 @@ const TOOL_EUTANASIA: Anthropic.Tool = {
       fecha: { type: 'string', description: 'Fecha deseada en formato YYYY-MM-DD.' },
       franja: { type: 'string', enum: ['AM', 'PM'], description: 'Franja horaria: AM (mañana) o PM (tarde).' },
       email: { type: 'string', description: 'Correo del tutor (obligatorio): ahí se le avisa cuando se asigne un veterinario.' },
-      tipo_servicio_cremacion: { type: 'string', enum: ['CI', 'CP', 'SD'], description: 'Servicio de cremación elegido para después de la eutanasia: CI (Individual), CP (Premium) o SD (Sin Devolución).' },
+      tipo_servicio_cremacion: { type: 'string', enum: ['CI', 'CP', 'SD', 'NINGUNA'], description: 'Servicio de cremación elegido para después de la eutanasia: CI (Individual), CP (Premium), SD (Sin Devolución) o NINGUNA si el cliente NO quiere cremación (p. ej. lo enterrará él mismo).' },
     },
     required: ['nombre_tutor', 'nombre_mascota', 'especie', 'peso', 'comuna', 'direccion', 'fecha', 'franja', 'email'],
   },
@@ -385,23 +385,40 @@ export interface OpcionesAgente {
 }
 
 /**
- * Nota dinámica: si el cliente ya tiene una ficha de retiro EN PROCESO (borrador
- * "por ingresar" en /clientes), el agente NO debe registrar otra. La fuente de
- * verdad es lo visible en /clientes, no el log interno — cuando el equipo la
- * registra o elimina, el cliente puede volver a pedir.
+ * Nota dinámica de estado del cliente. Dos chequeos:
+ *  - Ficha de retiro EN PROCESO (borrador "por ingresar" en /clientes) → el
+ *    agente NO debe registrar otra solicitud de retiro. La fuente de verdad es
+ *    lo visible en /clientes — cuando el equipo la registra o elimina, el
+ *    cliente puede volver a pedir.
+ *  - Cotización de EUTANASIA ACTIVA (creada/enviada/aceptada) → el agente NO
+ *    debe volver a llamar agendar_eutanasia (caso Benito 2026-07-02: el modelo
+ *    re-agendó "para completar un dato" y duplicó la solicitud + correos a vets).
  */
 async function bloqueFichaEnProceso(waId: string): Promise<string> {
   const tel9 = (waId || '').replace(/\D/g, '').slice(-9)
   if (!tel9) return ''
+  const notas: string[] = []
   try {
     const rows = await getSheetData('clientes')
     const borr = rows.find(c => c.estado === 'borrador' && (c.telefono || '').replace(/\D/g, '').slice(-9) === tel9)
-    if (!borr) return ''
-    const m = borr.nombre_mascota ? ` (${borr.nombre_mascota})` : ''
-    return `ESTADO DE ESTE CLIENTE (no lo recites; úsalo para decidir): ya tiene una solicitud de retiro EN PROCESO${m} que el equipo está terminando de ingresar. NO registres otra solicitud de retiro; si pide agendar de nuevo, dile cálido y breve que su solicitud ya está en proceso y que la estamos gestionando.`
-  } catch {
-    return ''
-  }
+    if (borr) {
+      const m = borr.nombre_mascota ? ` (${borr.nombre_mascota})` : ''
+      notas.push(`Ya tiene una solicitud de retiro EN PROCESO${m} que el equipo está terminando de ingresar. NO registres otra solicitud de retiro; si pide agendar de nuevo, dile cálido y breve que su solicitud ya está en proceso y que la estamos gestionando.`)
+    }
+  } catch { /* best-effort */ }
+  try {
+    const cotis = await getSheetData('cotizaciones_eutanasia')
+    const activa = cotis.find(c =>
+      ['creada', 'enviada', 'aceptada'].includes(c.estado || '') &&
+      (c.cliente_wa_id || c.cliente_telefono || '').replace(/\D/g, '').slice(-9) === tel9
+    )
+    if (activa) {
+      const m = activa.mascota_nombre ? ` para ${activa.mascota_nombre}` : ''
+      notas.push(`Ya tiene una solicitud de EUTANASIA ACTIVA (N° ${activa.id}${m}). NO llames "agendar_eutanasia" de nuevo bajo ninguna circunstancia — ya quedó ingresada, aunque creas que falta un dato. Si quiere corregir o agregar algo, tómalo por mensaje y dile que el equipo lo ajusta; si pregunta por el estado, dile que estamos coordinando con la red de veterinarios y le avisaremos.`)
+    }
+  } catch { /* best-effort */ }
+  if (notas.length === 0) return ''
+  return `ESTADO DE ESTE CLIENTE (no lo recites; úsalo para decidir):\n- ${notas.join('\n- ')}`
 }
 
 /**

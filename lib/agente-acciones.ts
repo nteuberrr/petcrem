@@ -250,11 +250,33 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
     return `No pude validar la dirección "${a.direccion}, ${a.comuna}". Pídele al cliente que la confirme o la corrija (calle y número) y vuelve a agendar. NO la agendes aún.`
   }
   const waCliente = (ctx.waId || '').replace(/\D/g, '')
+
+  // DEDUP DURO: si este número ya tiene una cotización de eutanasia ACTIVA
+  // (creada/enviada/aceptada), NO se agenda otra — espejo del dedup de retiros.
+  // Caso real (Benito, 2026-07-02): el modelo re-llamó la herramienta "para
+  // completar un dato" y duplicó la cotización + los correos a las veterinarias.
+  const tel9 = waCliente.slice(-9)
+  if (tel9) {
+    try {
+      const cotis = await getSheetData('cotizaciones_eutanasia')
+      const activa = cotis.find(c =>
+        ['creada', 'enviada', 'aceptada'].includes(c.estado || '') &&
+        (c.cliente_wa_id || c.cliente_telefono || '').replace(/\D/g, '').slice(-9) === tel9
+      )
+      if (activa) {
+        return `Este cliente YA tiene una solicitud de eutanasia ACTIVA (N° ${activa.id}${activa.mascota_nombre ? `, ${activa.mascota_nombre}` : ''}). NO agendes otra. Dile, cálido y breve, que su solicitud ya quedó ingresada y que estamos coordinando con la red de veterinarios; si quiere corregir algún dato, tómalo por mensaje y responde que el equipo lo ajustará.`
+      }
+    } catch (e) {
+      console.warn('[agente-acciones] dedup eutanasia falló (no bloquea):', e)
+    }
+  }
+
   // Franja → hora representativa para el matcher (AM=mañana, PM=tarde).
   const franja = (a.franja || '').toUpperCase() === 'PM' ? 'PM' : 'AM'
   const hora = franja === 'PM' ? '16:00' : '10:00'
+  const sinCremacion = (a.tipo_servicio_cremacion || '').toUpperCase() === 'NINGUNA'
   const notas = `Solicitud vía WhatsApp (bot). Franja preferida: ${franja === 'PM' ? 'tarde' : 'mañana'}.` +
-    (a.tipo_servicio_cremacion ? ` Cremación elegida: ${a.tipo_servicio_cremacion}.` : '')
+    (sinCremacion ? ' SIN cremación (el tutor no la quiere).' : (a.tipo_servicio_cremacion ? ` Cremación elegida: ${a.tipo_servicio_cremacion}.` : ''))
 
   const { cliente } = await precioClienteEutanasia(peso)
 
@@ -282,7 +304,8 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
 
   // Avisar al admin (FYI, sin botones): la eutanasia no requiere su confirmación,
   // se busca vet en paralelo. Best-effort.
-  const cremTxt = a.tipo_servicio_cremacion ? `Cremación: ${a.tipo_servicio_cremacion}\n` : ''
+  const cremTxt = sinCremacion ? 'Cremación: NO (el tutor no la quiere)\n'
+    : (a.tipo_servicio_cremacion ? `Cremación: ${a.tipo_servicio_cremacion}\n` : '')
   const avisoAdmin =
     `🐾 *Nueva solicitud de EUTANASIA a domicilio* (N° ${res.id})\n\n` +
     `Tutor: ${a.nombre_tutor}\n` +
