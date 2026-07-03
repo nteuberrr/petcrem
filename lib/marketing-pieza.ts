@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { BRAND, getContacto } from './email-layout'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
-import { DIFERENCIADORES } from './diferenciadores'
+import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { REGLAS_INVIOLABLES } from './marca-voz'
 import { lintCopy, extraerTextoHtml } from './marketing-lint'
 import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, reducirParaVision, type ImagenBanco } from './mailing-images'
@@ -260,6 +260,7 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
     { type: 'text', text: REGLAS_INVIOLABLES },
     { type: 'text', text: system },
     { type: 'text', text: DIFERENCIADORES },
+    { type: 'text', text: MODALIDADES_SERVICIOS },
     { type: 'text', text: bancoBloque(banco) },
     ...(bloqueLogosPieza(banco) ? [{ type: 'text' as const, text: bloqueLogosPieza(banco) }] : []),
     { type: 'text', text: REGLAS_INVIOLABLES },

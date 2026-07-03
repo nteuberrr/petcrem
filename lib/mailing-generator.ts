@@ -3,7 +3,7 @@ import { BRAND, LOGO_URL, getContacto, type Contacto } from './email-layout'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { listarImagenes, generarYGuardarImagen, reducirParaVision, type ImagenBanco } from './mailing-images'
 import { MARCA_VISUAL } from './marca-visual'
-import { DIFERENCIADORES } from './diferenciadores'
+import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 
 /**
  * Generador IA de campañas de mailing (B2B a la base de veterinarios).
@@ -240,6 +240,7 @@ export async function generarCampana(opts: GenerarOpts): Promise<CampanaGenerada
   const system: Anthropic.TextBlockParam[] = [
     { type: 'text', text: systemPrompt(contacto, puedeGenerar) },
     { type: 'text', text: DIFERENCIADORES },
+    { type: 'text', text: MODALIDADES_SERVICIOS },
     { type: 'text', text: bloqueBanco(banco) },
   ]
 

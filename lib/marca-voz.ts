@@ -17,6 +17,8 @@ export const REGLAS_INVIOLABLES = `REGLAS INVIOLABLES DE MARCA (NO las rompas �
 - Español neutro de Chile; NUNCA voseo argentino.
 - Lo CERTIFICADO es el HORNO. La cámara es de REFRIGERACIÓN: NUNCA escribas "cámara certificada" ni "sala certificada". NO menciones "ISO" (solo "horno certificado").
 - NUNCA digas "cada cremación es individual": "Cremación Individual" es SOLO el nombre de una de las modalidades.
+- Qué INCLUYE cada modalidad sale SOLO del bloque "MODALIDADES DE CREMACIÓN" que se te entrega: en tablas/comparativas usa EXACTAMENTE esos ítems, sin inventar ni omitir (ojo: Sin Devolución SÍ incluye certificado de cremación).
+- Decí "ánfora", NUNCA "urna" (vocabulario de marca).
 - NUNCA inventes precios, promociones ni datos. Plazos: SOLO los oficiales (entrega en 3 días hábiles; retiro habitualmente en menos de 3 horas). Ningún otro plazo.
 - Teléfono y web: usá EXACTAMENTE los datos de contacto que se te entregan; no los reescribas de memoria.
 - En PLACAS/gráficos (motor satori): NO uses flechas (→), emojis (🐾 ✅) ni símbolos Unicode raros — el motor los dibuja como cajas rotas. Reemplazalos por texto.`
@@ -41,4 +43,5 @@ export const TERMINOS_PROHIBIDOS: ReglaCopy[] = [
   { patron: /c[áa]mara certificada|sala certificada/i, mensaje: 'Dato falso: la cámara es de REFRIGERACIÓN, no "certificada". Lo certificado es el horno.' },
   { patron: /\bISO\b/, mensaje: 'No menciones "ISO": decí solo "horno certificado".' },
   { patron: /cada cremaci[óo]n es individual|todas las cremaciones son individuales/i, mensaje: '"Cremación Individual" es solo el nombre de una modalidad, no una garantía general.' },
+  { patron: /\burnas?\b/i, mensaje: 'Vocabulario de marca: decí "ánfora", no "urna".' },
 ]
