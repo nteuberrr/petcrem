@@ -32,6 +32,13 @@ export interface BorradorInput {
   notas?: string
 }
 
+/** Nombre legible de cada tipo de servicio — el que se persiste en clientes.tipo_servicio. */
+export const NOMBRE_SERVICIO: Record<string, string> = {
+  CI: 'Cremación Individual',
+  CP: 'Cremación Premium',
+  SD: 'Cremación Sin Devolución',
+}
+
 /** Crea un cliente borrador (sin código) y devuelve su id. */
 export async function crearClienteBorrador(d: BorradorInput): Promise<string> {
   await ensureColumns('clientes', ['email', 'telefono', 'origen', 'notas', 'tipo_precios', 'estado_pago', 'veterinaria_id'])
@@ -55,7 +62,7 @@ export async function crearClienteBorrador(d: BorradorInput): Promise<string> {
     comuna: d.comuna ?? '',
     fecha_retiro: d.fecha_retiro ?? '',
     peso_declarado: d.peso_declarado != null && d.peso_declarado !== '' ? String(d.peso_declarado) : '',
-    tipo_servicio: d.codigo_servicio ?? '',
+    tipo_servicio: NOMBRE_SERVICIO[(d.codigo_servicio || '').toUpperCase()] ?? '',
     codigo_servicio: d.codigo_servicio ?? '',
     estado: 'borrador',
     veterinaria_id: d.veterinaria_id ?? '',

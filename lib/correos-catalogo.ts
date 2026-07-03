@@ -2,6 +2,7 @@ import { type Contacto } from './email-layout'
 import { todayISO, formatDate } from './dates'
 import {
   buildRegistro, buildCremacion, buildDespacho, buildEntrega, buildCertificado,
+  buildCobroDiferencia,
 } from './cliente-mailer'
 import {
   renderBienvenida, renderCotizacionEmail, renderCoordinarEmail,
@@ -121,6 +122,18 @@ export const CORREOS: CorreoDef[] = [
     audiencia: 'Tutor',
     cuando: 'Al enviar el certificado por correo.',
     build: (m, c) => pick(buildCertificado({ email: m.email, nombreMascota: m.nombreMascota, nombreTutor: m.nombreTutor, fechaCremacion: m.fechaCremacion, conVideo: false }, c)),
+  },
+  {
+    key: 'cliente_cobro_diferencia',
+    titulo: 'Cobro por diferencia de peso (foto de respaldo adjunta)',
+    modulo: 'Clientes',
+    audiencia: 'Tutor',
+    cuando: 'Al presionar "Enviar cobro de la diferencia" en la ficha (peso real en tramo superior). Adjunta la foto de evidencia.',
+    build: (m, c) => pick(buildCobroDiferencia({
+      email: m.email, nombreMascota: m.nombreMascota, nombreTutor: m.nombreTutor,
+      pesoDeclarado: 8, pesoIngreso: 11.4, monto: 15000,
+      transferencia: { titular: 'Crematorio Alma Animal', rut: '78.144.186-0', banco: 'Banco de Chile', tipoCuenta: 'Cuenta Corriente', numeroCuenta: '00-000-00000-00', correo: 'contacto@crematorioalmaanimal.cl' },
+    }, c)),
   },
 
   // ── Eutanasias a domicilio (en orden del flujo) ──────────────────────────────

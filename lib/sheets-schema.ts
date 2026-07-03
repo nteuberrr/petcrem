@@ -30,6 +30,9 @@ export const SHEETS: Record<string, string[]> = {
     // JSON array de URLs (R2) de fotos de EVIDENCIA del peso real, que sube el
     // operador cuando hay diferencia de tramo (peso_ingreso > peso_declarado).
     'fotos_evidencia',
+    // Correo de cobro por diferencia de peso: fecha de envío + monto cobrado
+    // (vacío = no enviado). Lo setea /api/clientes/[id]/cobro-diferencia.
+    'correo_diferencia_fecha', 'correo_diferencia_monto',
     'origen', 'fecha_creacion',
   ],
   ciclos: [
@@ -142,6 +145,8 @@ export const SHEETS: Record<string, string[]> = {
     // seguimiento_tipos: JSON {key_correo: bool} para activar/desactivar la copia
     // de seguimiento POR TIPO de correo (vacío = todos los tipos copian).
     'seguimiento_tipos',
+    // Datos de transferencia bancaria (correo de cobro de diferencia de peso).
+    'banco', 'tipo_cuenta', 'numero_cuenta',
     'fecha_actualizacion',
   ],
   mailing_veterinarios: [

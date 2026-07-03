@@ -631,11 +631,11 @@ export default function ClientesPage() {
               <PreviewField label="Comuna" value={selected.comuna || '—'} />
               <PreviewField label="Tipo de pago" value={selected.tipo_pago || '—'} />
               <PreviewField label="Estado de pago" value={selected.estado_pago || 'pendiente'} />
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <PreviewField label="Dirección de retiro" value={selected.direccion_retiro || '—'} />
               </div>
               {selected.direccion_despacho && selected.direccion_despacho !== selected.direccion_retiro && (
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <PreviewField label="Dirección de despacho" value={selected.direccion_despacho} />
                 </div>
               )}

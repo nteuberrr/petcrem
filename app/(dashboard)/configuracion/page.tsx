@@ -1670,6 +1670,7 @@ type EmpresaCfg = {
   telefono: string; correo: string
   web: string; instagram: string; facebook: string
   google_review_url: string
+  banco: string; tipo_cuenta: string; numero_cuenta: string
   fecha_actualizacion?: string
 }
 
@@ -1679,6 +1680,7 @@ const EMPRESA_EMPTY: EmpresaCfg = {
   telefono: '', correo: '',
   web: '', instagram: '', facebook: '',
   google_review_url: '',
+  banco: '', tipo_cuenta: '', numero_cuenta: '',
 }
 
 function DatosPersonalesPanel() {
@@ -1699,6 +1701,7 @@ function DatosPersonalesPanel() {
           telefono: d.telefono || '', correo: d.correo || '',
           web: d.web || '', instagram: d.instagram || '', facebook: d.facebook || '',
           google_review_url: d.google_review_url || '',
+          banco: d.banco || '', tipo_cuenta: d.tipo_cuenta || '', numero_cuenta: d.numero_cuenta || '',
           fecha_actualizacion: d.fecha_actualizacion || '',
         })
       }
@@ -1795,6 +1798,15 @@ function DatosPersonalesPanel() {
           placeholder="https://g.page/r/…/review"
         />
         <p className="text-[11px] text-gray-500">Se usa en el botón “Evalúanos aquí” del correo de entrega. Pégalo desde tu Perfil de Empresa de Google → Pedir reseñas.</p>
+      </Section>
+
+      <Section title="Datos de transferencia">
+        <Row>
+          <Field label="Banco" value={form.banco} onChange={v => setForm(f => ({ ...f, banco: v }))} placeholder="Banco de Chile" />
+          <Field label="Tipo de cuenta" value={form.tipo_cuenta} onChange={v => setForm(f => ({ ...f, tipo_cuenta: v }))} placeholder="Cuenta Corriente" />
+        </Row>
+        <Field label="N° de cuenta" value={form.numero_cuenta} onChange={v => setForm(f => ({ ...f, numero_cuenta: v }))} placeholder="00-000-00000-00" />
+        <p className="text-[11px] text-gray-500">Se incluyen (junto con la razón social, el RUT y el correo) en el correo de cobro por diferencia de peso. El titular es la razón social de arriba.</p>
       </Section>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{error}</div>}

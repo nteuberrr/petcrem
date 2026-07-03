@@ -347,6 +347,67 @@ export function buildCertificado(args: CertificadoEmailArgs, contacto: Contacto)
   }
 }
 
+// ─── 6. Cobro por diferencia de peso (peso real > tramo declarado) ────────────
+
+export interface CobroDiferenciaArgs {
+  email: string
+  nombreMascota: string
+  nombreTutor: string
+  clienteId?: string
+  pesoDeclarado: number
+  pesoIngreso: number
+  /** Diferencia a pagar (CLP), calculada server-side con la tabla del cliente. */
+  monto: number
+  /** Datos de transferencia (empresa_config). Los vacíos se omiten. */
+  transferencia: { titular: string; rut: string; banco: string; tipoCuenta: string; numeroCuenta: string; correo: string }
+}
+
+/**
+ * Arma el correo que solicita el pago de la diferencia por peso real mayor al
+ * declarado. La FOTO de evidencia la adjunta la ruta que lo envía
+ * (/api/clientes/[id]/cobro-diferencia); acá solo va el cuerpo.
+ */
+export function buildCobroDiferencia(args: CobroDiferenciaArgs, contacto: Contacto): SendOpts {
+  const mascota = escapeHtml(args.nombreMascota)
+  const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
+  const t = args.transferencia
+  const fila = (label: string, valor: string) => valor ? `
+        <tr>
+          <td style="padding:3px 12px 3px 0;font-size:13px;color:${BRAND.muted};white-space:nowrap">${label}</td>
+          <td style="padding:3px 0;font-size:13px;font-weight:600;color:${BRAND.ink}">${escapeHtml(valor)}</td>
+        </tr>` : ''
+  const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">${saludo(args.nombreTutor)}</p>
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.6">
+        Al recibir a <strong>${mascota}</strong> registramos su peso real en nuestra balanza:
+        <strong>${args.pesoIngreso} kg</strong>, mayor al peso declarado al agendar el servicio
+        (${args.pesoDeclarado} kg). Con esto, el servicio corresponde a un tramo superior de la tarifa.
+      </p>
+      <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:12px;padding:18px;margin:18px 0;text-align:center">
+        <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;color:${BRAND.navy}">Diferencia a pagar</p>
+        <p style="margin:0;font-size:24px;font-weight:700;color:${BRAND.navy}">${fmt(args.monto)}</p>
+      </div>
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.6">
+        Adjuntamos una <strong>fotografía del pesaje</strong> como respaldo. Puedes pagar la diferencia
+        por transferencia a la siguiente cuenta:
+      </p>
+      <div style="border:1px solid ${BRAND.hairline};border-radius:12px;padding:14px 18px;margin:0 0 16px">
+        <table style="border-collapse:collapse">${fila('Titular', t.titular)}${fila('RUT', t.rut)}${fila('Banco', t.banco)}${fila('Tipo de cuenta', t.tipoCuenta)}${fila('N° de cuenta', t.numeroCuenta)}${fila('Correo', t.correo)}</table>
+      </div>
+      <p style="margin:0;font-size:14px;line-height:1.6">
+        Una vez realizada la transferencia, envíanos el comprobante respondiendo este correo o por WhatsApp.
+        Cualquier duda sobre el pesaje o el cobro, escríbenos — estamos para ayudarte. 🐾
+      </p>`
+  return {
+    to: args.email,
+    subject: `Diferencia de peso en el ingreso de ${args.nombreMascota}`,
+    html: renderEmailLayout({ titulo: `Cobro adicional por diferencia de peso`, bodyHtml: cuerpo, contacto }),
+    preview_text: `El peso real de ${args.nombreMascota} corresponde a un tramo superior — diferencia a pagar.`,
+    tags: [{ name: 'tipo', value: 'cliente_cobro_diferencia' }],
+    seguimiento: { tipo: 'cliente_cobro_diferencia', audiencia: 'Tutor', nombre: args.nombreMascota, clienteId: args.clienteId },
+  }
+}
+
 /**
  * Envía en lotes de 100 (límite de sendBatch) y REGISTRA cada destinatario en
  * correos_cliente (con su message_id) para el historial de la ficha. Loggea un

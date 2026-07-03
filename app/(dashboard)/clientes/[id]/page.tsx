@@ -81,6 +81,8 @@ type ClienteDetalle = {
   fotos_cuadro?: string
   videos_servicio?: string
   fotos_evidencia?: string
+  correo_diferencia_fecha?: string
+  correo_diferencia_monto?: string
   ciclo?: {
     id: string
     fecha: string
@@ -127,6 +129,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const fotoEvidenciaInputRef = useRef<HTMLInputElement>(null)
   const [subiendoFoto, setSubiendoFoto] = useState(false)
   const [fotoError, setFotoError] = useState('')
+  // Correo de cobro por la diferencia de peso (con la foto de respaldo adjunta).
+  const [enviandoCobro, setEnviandoCobro] = useState(false)
+  const [cobroError, setCobroError] = useState('')
   // Menú "Documentos" (certificados + archivos).
   const [docsOpen, setDocsOpen] = useState(false)
   const docsMenuRef = useRef<HTMLDivElement>(null)
@@ -423,6 +428,22 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     await recargarCliente()
   }
 
+  async function enviarCobroDiferencia() {
+    if (!confirm('¿Enviar al tutor el correo (y WhatsApp) solicitando el pago de la diferencia de peso, con la foto de respaldo adjunta?')) return
+    setCobroError('')
+    setEnviandoCobro(true)
+    try {
+      const r = await fetch(`/api/clientes/${id}/cobro-diferencia`, { method: 'POST' })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { setCobroError(d.error || 'No se pudo enviar el cobro.'); return }
+      await recargarCliente()
+    } catch {
+      setCobroError('Error de red. Intenta de nuevo.')
+    } finally {
+      setEnviandoCobro(false)
+    }
+  }
+
   function intentarEnviarCertificado() {
     // Si la versión actual ya fue enviada al menos una vez, pedimos confirmación
     // explícita antes de reenviar (evita doble-envío accidental).
@@ -641,6 +662,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const fotosCuadro: string[] = (() => {
     try { const x = JSON.parse(cliente.fotos_cuadro || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
   })()
+  // Fotos que el tutor subió desde el link del correo para el certificado.
+  const fotosMascota: string[] = (() => {
+    try { const x = JSON.parse(cliente.fotos_mascota || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
+  })()
   const estadoVariant: 'green' | 'blue' | 'yellow' =
     cliente.estado === 'cremado' ? 'green'
     : cliente.estado === 'despachado' ? 'blue'
@@ -774,7 +799,13 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                           <button onClick={() => eliminarFotoEvidencia(url)} className="text-[11px] text-red-600 hover:text-red-800 shrink-0">Eliminar</button>
                         </div>
                       ))}
-                      {videosServicio.length === 0 && fotosEvidencia.length === 0 && (
+                      {/* Fotos que el tutor subió desde el link del correo (certificado) */}
+                      {fotosMascota.map((url, i) => (
+                        <div key={`fmasc-${i}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 text-gray-700">
+                          🐾 <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Foto del tutor (certificado) {i + 1}</a>
+                        </div>
+                      ))}
+                      {videosServicio.length === 0 && fotosEvidencia.length === 0 && fotosMascota.length === 0 && (
                         <p className="px-2 py-2 text-xs text-gray-400">Aún no hay videos ni fotos guardados.</p>
                       )}
                     </div>
@@ -878,6 +909,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   { tipo: 'inicio_despacho', label: 'Vamos en camino (ruta)' },
                   { tipo: 'entrega', label: 'Entrega confirmada' },
                   { tipo: 'certificado', label: 'Certificado de cremación' },
+                  { tipo: 'cobro_diferencia', label: 'Cobro diferencia de peso' },
                 ] as const).map(et => {
                   const c = correosPorTipo[et.tipo]
                   return (
@@ -917,25 +949,73 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      {/* Foto(s) que el tutor subió para el cuadro acuarela (servicio Premium) */}
-      {fotosCuadro.length > 0 && (
+      {/* Archivos del cliente: todo lo que subió el tutor (certificado + cuadro) y
+          el equipo (videos del servicio, evidencia del peso), en una sola sección. */}
+      {(fotosMascota.length > 0 || fotosCuadro.length > 0 || videosServicio.length > 0 || fotosEvidencia.length > 0) && (
         <div className="bg-white rounded-xl shadow-md border-2 border-amber-200 p-6 mb-6">
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className="text-lg">🖼️</span>
-            <h2 className="text-base font-bold text-gray-900">Foto para el cuadro conmemorativo</h2>
-            <span className="text-[11px] font-semibold text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">Premium</span>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">🗂️</span>
+            <h2 className="text-base font-bold text-gray-900">Archivos</h2>
           </div>
-          <p className="text-xs text-gray-500 mb-3">
-            El tutor subió {fotosCuadro.length === 1 ? 'esta foto' : 'estas fotos'} para el cuadro acuarela. Toca para abrir en grande y descargarla.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {fotosCuadro.map((url, i) => (
-              <a key={url + i} href={url} target="_blank" rel="noopener noreferrer"
-                className="block w-24 h-24 rounded-lg overflow-hidden border-2 border-amber-300 hover:border-amber-500 transition-colors">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={`Foto cuadro ${i + 1}`} className="w-full h-full object-cover" />
-              </a>
-            ))}
+          <div className="space-y-4">
+            {fotosMascota.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-2">📷 Fotos del tutor para el certificado</p>
+                <div className="flex flex-wrap gap-3">
+                  {fotosMascota.map((url, i) => (
+                    <a key={url + i} href={url} target="_blank" rel="noopener noreferrer"
+                      className="block w-24 h-24 rounded-lg overflow-hidden border-2 border-gray-300 hover:border-brand transition-colors">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`Foto certificado ${i + 1}`} className="w-full h-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            {fotosCuadro.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-2">
+                  🖼️ Foto para el cuadro conmemorativo
+                  <span className="ml-2 text-[11px] font-semibold text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">Premium</span>
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {fotosCuadro.map((url, i) => (
+                    <a key={url + i} href={url} target="_blank" rel="noopener noreferrer"
+                      className="block w-24 h-24 rounded-lg overflow-hidden border-2 border-amber-300 hover:border-amber-500 transition-colors">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`Foto cuadro ${i + 1}`} className="w-full h-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            {fotosEvidencia.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-2">⚖️ Evidencia del peso real</p>
+                <div className="flex flex-wrap gap-3">
+                  {fotosEvidencia.map((url, i) => (
+                    <a key={url + i} href={url} target="_blank" rel="noopener noreferrer"
+                      className="block w-24 h-24 rounded-lg overflow-hidden border-2 border-amber-300 hover:border-amber-500 transition-colors">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`Evidencia peso ${i + 1}`} className="w-full h-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            {videosServicio.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-2">🎬 Videos del servicio</p>
+                <div className="space-y-1">
+                  {videosServicio.map((url, i) => (
+                    <a key={url + i} href={url} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm text-brand-soft hover:underline mr-4">
+                      🎬 Video {i + 1}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1012,7 +1092,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               más caro (o si ya hay fotos cargadas). La foto se guarda junto a los
               demás archivos del cliente y se ve en Documentos → Archivos. */}
           {(hayDiferenciaPeso || fotosEvidencia.length > 0) && (
-            <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
+            <div className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <p className="text-xs font-semibold text-amber-900">
                   📷 Evidencia del peso real{fotosEvidencia.length > 0 ? ` (${fotosEvidencia.length})` : ''}
@@ -1048,9 +1128,37 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   ))}
                 </div>
               )}
+              {/* Con la foto cargada: solicitar el pago de la diferencia por correo
+                  (foto adjunta + datos de transferencia) y WhatsApp. Una sola vez. */}
+              {fotosEvidencia.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-amber-200">
+                  {cliente.correo_diferencia_fecha ? (
+                    <p className="text-xs font-semibold text-emerald-700">
+                      ✅ Correo enviado el {fmtFecha(cliente.correo_diferencia_fecha.slice(0, 10))}
+                      {cliente.correo_diferencia_monto ? ` — diferencia cobrada: ${fmtPrecio(parseInt(cliente.correo_diferencia_monto, 10) || 0)}` : ''}
+                    </p>
+                  ) : (
+                    <>
+                      {String(form.peso_ingreso ?? '') !== String(cliente.peso_ingreso ?? '') || String(form.peso_declarado ?? '') !== String(cliente.peso_declarado ?? '') ? (
+                        <p className="text-[11px] text-amber-800">💾 Guarda la ficha para poder enviar el cobro (el monto se calcula con los pesos guardados).</p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={enviarCobroDiferencia}
+                          disabled={enviandoCobro}
+                          className="inline-flex items-center gap-1.5 bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-md text-xs font-semibold transition-colors disabled:opacity-50"
+                        >
+                          {enviandoCobro ? '⌛ Enviando…' : '✉️ Enviar correo al cliente solicitando pago de la diferencia'}
+                        </button>
+                      )}
+                      {cobroError && <p className="text-[11px] text-red-600 mt-1">{cobroError}</p>}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <label className="text-xs font-semibold text-gray-700">
               Tipo de servicio <span className="text-red-500">*</span>
             </label>
@@ -1058,8 +1166,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               value={form.codigo_servicio}
               required
               onChange={e => setForm(f => ({ ...f, codigo_servicio: e.target.value }))}
-              className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+              className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${form.codigo_servicio ? 'border-gray-300' : 'border-red-300 bg-red-50'}`}
             >
+              {/* Sin esta opción, un valor vacío MOSTRABA "Cremación Individual"
+                  sin estar seleccionado (el navegador pinta la primera opción). */}
+              {!form.codigo_servicio && <option value="">— Selecciona el servicio —</option>}
               <option value="CI">Cremación Individual (CI)</option>
               <option value="CP">Cremación Premium (CP)</option>
               <option value="SD">Cremación Sin Devolución (SD)</option>

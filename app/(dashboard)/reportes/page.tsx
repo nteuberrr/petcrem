@@ -392,7 +392,7 @@ export default function ReportesPage() {
               <h2 className="font-semibold text-gray-900">Cremaciones del período</h2>
               <button onClick={() => descargarExcel('cremaciones')} className="text-sm text-brand hover:text-brand font-medium">↓ Excel</button>
             </div>
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Por especie</p>
                 <div className="space-y-2">
@@ -763,7 +763,7 @@ function ConfiguracionesTab({ data, fmt }: { data: ConfigData; fmt: (n: number |
   return (
     <div className="space-y-6">
       {/* Resumen vets */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5 text-center">
           <p className="text-3xl font-bold text-brand">{data.resumen.total_vets}</p>
           <p className="text-xs text-gray-500 mt-1">Veterinarias activas</p>

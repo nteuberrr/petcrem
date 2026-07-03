@@ -9,6 +9,7 @@ import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota } from '@/lib/cliente-mailer'
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
+import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
 
 export async function GET(
   _req: NextRequest,
@@ -111,6 +112,12 @@ export async function PATCH(
       descuento_monto: String(snapshot.descuento_monto),
     }
 
+    // Mantener tipo_servicio (nombre legible) sincronizado con codigo_servicio.
+    // Antes quedaba desincronizado (o con el código corto 'CI' que escribía el
+    // borrador del bot) y la ficha mostraba "Cremación ()" — caso Princesa.
+    const nombreServicio = NOMBRE_SERVICIO[String(candidate.codigo_servicio || '').toUpperCase()]
+    if (nombreServicio) updated.tipo_servicio = nombreServicio
+
     // "Registrar" un borrador: cuando la ficha aún no tiene código (cliente
     // creado por el bot, estado 'borrador') y el front pide registrar, genera el
     // código, pasa a 'pendiente' y manda el correo de bienvenida al tutor.
@@ -121,7 +128,13 @@ export async function PATCH(
       if (!letra) {
         return NextResponse.json({ error: 'Falta la especie: es necesaria para generar el código.' }, { status: 400 })
       }
-      codigoGenerado = await generarCodigo(letra, String(candidate.codigo_servicio || 'CI'))
+      // El tipo de servicio debe elegirse EXPLÍCITAMENTE antes de registrar: si
+      // quedara vacío, el código saldría con el fallback 'CI' pero la ficha
+      // persistiría sin servicio (código P133-CI con tipo_servicio vacío).
+      if (!String(candidate.codigo_servicio || '').trim()) {
+        return NextResponse.json({ error: 'Selecciona el tipo de servicio antes de registrar la ficha.' }, { status: 400 })
+      }
+      codigoGenerado = await generarCodigo(letra, String(candidate.codigo_servicio))
       updated.codigo = codigoGenerado
       if (!updated.estado || updated.estado === 'borrador') updated.estado = 'pendiente'
     }
