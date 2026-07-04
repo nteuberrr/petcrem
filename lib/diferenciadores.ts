@@ -20,6 +20,13 @@ export const DIFERENCIADORES = `VALOR AGREGADO Y DIFERENCIADORES (oficiales — 
 - Retiro directo a domicilio o desde la clínica, habitualmente en menos de 3 horas.
 - Precios convenientes, con variedad de productos y servicios adicionales.
 
+PARA CLÍNICAS / VETERINARIOS (B2B) — cuando la pieza o el mensaje es para clínicas, ESTE es el valor agregado que manda (definido por el dueño, en este orden; construí el argumento de venta alrededor de estos puntos):
+1. Retiro en menos de 3 horas (habitualmente).
+2. Operamos de lunes a domingo (09:00–22:00 h).
+3. Entrega en 3 días hábiles.
+4. Precios convenientes.
+5. Trazabilidad total (código de seguimiento + certificado de cremación).
+
 PRECISIONES (para no cometer errores de marca):
 - Lo CERTIFICADO es el HORNO. La cámara es de REFRIGERACIÓN: NO la llames "cámara certificada" ni "sala certificada".
 - NO digas "cada cremación es individual": "Cremación Individual" es solo el nombre de una de las modalidades.

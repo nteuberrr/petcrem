@@ -51,6 +51,48 @@ export function sanitizarGlifos(texto: string): string {
   return out
 }
 
+/**
+ * Palabras que en este copy SIEMPRE llevan tilde/ñ (alta confianza, sin dobles
+ * sentidos). El modelo a veces las escribe peladas y en una placa renderizada se
+ * nota feo ("Asi funciona", "cremacion"). Sobre el caption se chequean SIN los
+ * hashtags (ahí escribir sin tilde es convención de redes).
+ */
+const SIN_TILDE: { patron: RegExp; correcta: string }[] = [
+  // Toda palabra terminada en "-cion" (singular) lleva tilde: cremación, información,
+  // atención… (el plural "-ciones" no la lleva, y el patrón no lo toca).
+  { patron: /\b\p{L}*[a-z]cion\b/iu, correcta: 'terminación -ción (cremación, información, atención…)' },
+  { patron: /\basi\b/i, correcta: 'así' },
+  { patron: /\bdias\b/i, correcta: 'días' },
+  { patron: /\bhabiles\b/i, correcta: 'hábiles' },
+  { patron: /\bclinicas?\b/i, correcta: 'clínica' },
+  { patron: /\btelefonos?\b/i, correcta: 'teléfono' },
+  { patron: /\banforas?\b/i, correcta: 'ánfora' },
+  { patron: /\bcodigos?\b/i, correcta: 'código' },
+  { patron: /\bcamaras?\b/i, correcta: 'cámara' },
+  { patron: /\btramites?\b/i, correcta: 'trámite' },
+  { patron: /\bgarantias?\b/i, correcta: 'garantía' },
+  { patron: /\brapid[oa]s?\b/i, correcta: 'rápido/a' },
+  { patron: /\bfacil(es)?\b/i, correcta: 'fácil' },
+  { patron: /\bcalid[oa]s?\b/i, correcta: 'cálido/a' },
+  { patron: /\bultim[oa]s?\b/i, correcta: 'último/a' },
+  { patron: /\bmedic[oa]s?\b/i, correcta: 'médico/a' },
+  { patron: /\bacompan/i, correcta: 'acompañ… (con ñ: acompañamos, acompañándote)' },
+  { patron: /\bescribenos\b/i, correcta: 'escríbenos' },
+  { patron: /\bllamanos\b/i, correcta: 'llámanos' },
+]
+
+/** Detecta palabras sin tilde/ñ de la lista de alta confianza. */
+function lintTildes(texto: string): string | null {
+  const mal: string[] = []
+  for (const r of SIN_TILDE) {
+    const m = r.patron.exec(texto)
+    if (m) mal.push(`"${m[0]}" → ${r.correcta}`)
+  }
+  return mal.length
+    ? `Faltan tildes/ñ: ${mal.join('; ')}. Escribí el español con TODAS sus tildes (las fuentes de marca las dibujan bien).`
+    : null
+}
+
 const digitos = (s: string): string => (s || '').replace(/\D/g, '')
 
 /** Detecta un teléfono escrito que NO coincide con el oficial (incluye truncados). */
@@ -85,6 +127,10 @@ export function lintCopy(args: { caption?: string; placas?: string[]; telefono?:
     terminos(args.caption, 'caption')
     const tel = lintTelefono(args.caption, args.telefono)
     if (tel) out.push({ campo: 'caption', problema: tel })
+    // Tildes: sin los hashtags (#cremacion es convención de redes) ni URLs.
+    const capLimpio = args.caption.replace(/#[\p{L}\p{N}_]+/gu, ' ').replace(/https?:\/\/\S+/gi, ' ')
+    const tildes = lintTildes(capLimpio)
+    if (tildes) out.push({ campo: 'caption', problema: tildes })
   }
   ;(args.placas || []).forEach((p, i) => {
     if (!p || !p.trim()) return
@@ -92,6 +138,8 @@ export function lintCopy(args: { caption?: string; placas?: string[]; telefono?:
     terminos(p, campo)
     const tel = lintTelefono(p, args.telefono)
     if (tel) out.push({ campo, problema: tel })
+    const tildes = lintTildes(p)
+    if (tildes) out.push({ campo, problema: tildes })
     const glifos = glifosRotos(p)
     if (glifos.length) out.push({ campo, problema: `Caracteres que el motor de placas NO puede dibujar (saldrían como cajas rotas): ${glifos.join(' ')}. Sacá flechas/emojis/símbolos; usá texto.` })
   })

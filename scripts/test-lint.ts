@@ -37,6 +37,26 @@ const casos: { nombre: string; args: Parameters<typeof lintCopy>[0]; esperaHalla
     args: { placas: ['Estamos para acompañarte. Si necesitas acompañamiento, escríbenos.'] },
     esperaHallazgo: false,
   },
+  {
+    nombre: 'placa sin tildes reales ("Asi funciona" / "cremacion" / "Te acompanamos")',
+    args: { placas: ['Asi funciona el proceso de cremacion. Te acompanamos en cada paso.'] },
+    esperaHallazgo: true,
+  },
+  {
+    nombre: 'caption sin tilde en palabra (no hashtag) debe marcar',
+    args: { caption: 'Toda la informacion para elegir con calma.' },
+    esperaHallazgo: true,
+  },
+  {
+    nombre: 'caption con hashtags sin tilde NO debe marcar (convención de redes)',
+    args: { caption: 'Conoce nuestras modalidades y elige con calma. #cremacion #mascotas #informacion' },
+    esperaHallazgo: false,
+  },
+  {
+    nombre: 'plural "-ciones" y palabras bien tildadas NO deben marcar',
+    args: { placas: ['Cremaciones con trazabilidad total. Así de fácil: entrega rápida y cálida, con información clara y ánfora incluida.'] },
+    esperaHallazgo: false,
+  },
 ]
 
 let ok = 0

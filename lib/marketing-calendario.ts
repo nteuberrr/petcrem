@@ -32,6 +32,9 @@ export interface ItemCalendario {
   imagen_url: string
   /** JSON array de {url, alt} para carruseles (la 1ª = imagen_url). '' si no aplica. */
   imagenes_json: string
+  /** JSON {portada, fondos[], fotos[]} de la pieza generada — memoria de variedad:
+   *  el generador lee el estilo de las últimas piezas para NO repetir layout/fondo/fotos. */
+  estilo: string
   campana_id: string
   post_externo_id: string
   post_url: string
@@ -52,7 +55,7 @@ function toItem(r: Record<string, string>): ItemCalendario {
     favorita: r.favorita || 'FALSE',
     objetivo: r.objetivo || '', audiencia: r.audiencia || '', idea: r.idea || '',
     titulo: r.titulo || '', cuerpo: r.cuerpo || '',
-    imagen_id: r.imagen_id || '', imagen_url: r.imagen_url || '', imagenes_json: r.imagenes_json || '',
+    imagen_id: r.imagen_id || '', imagen_url: r.imagen_url || '', imagenes_json: r.imagenes_json || '', estilo: r.estilo || '',
     campana_id: r.campana_id || '', post_externo_id: r.post_externo_id || '', post_url: r.post_url || '',
     estado_publicacion: r.estado_publicacion || '', error_publicacion: r.error_publicacion || '',
     generado_por: r.generado_por || '', aprobado_por: r.aprobado_por || '', fecha_publicacion: r.fecha_publicacion || '',
@@ -116,7 +119,7 @@ function filaDesde(n: NuevoItem, id: string): Record<string, string> {
     idea: (n.idea || '').trim(),
     titulo: (n.titulo || '').trim(),
     cuerpo: (n.cuerpo || '').trim(),
-    imagen_id: '', imagen_url: '', imagenes_json: '',
+    imagen_id: '', imagen_url: '', imagenes_json: '', estilo: '',
     campana_id: '', post_externo_id: '', post_url: '',
     estado_publicacion: '', error_publicacion: '',
     generado_por: (n.generado_por || 'ia').trim(),
@@ -205,6 +208,7 @@ export async function reutilizarItem(
     imagen_id: orig.imagen_id,
     imagen_url: orig.imagen_url,
     imagenes_json: orig.imagenes_json,
+    estilo: orig.estilo,
     campana_id: orig.campana_id,
     // Campos de publicación RESET → la copia puede publicarse de nuevo.
     post_externo_id: '', post_url: '', estado_publicacion: '', error_publicacion: '',

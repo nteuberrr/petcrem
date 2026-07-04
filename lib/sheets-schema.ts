@@ -237,7 +237,7 @@ export const SHEETS: Record<string, string[]> = {
   campaign_calendar: [
     'id', 'fecha', 'hora', 'canal', 'estado', 'activa', 'favorita',
     'objetivo', 'audiencia', 'idea', 'titulo', 'cuerpo',
-    'imagen_id', 'imagen_url', 'imagenes_json',
+    'imagen_id', 'imagen_url', 'imagenes_json', 'estilo',
     'campana_id', 'post_externo_id', 'post_url',
     'estado_publicacion', 'error_publicacion',
     'generado_por', 'aprobado_por', 'fecha_publicacion',

@@ -836,6 +836,7 @@ create table if not exists "campaign_calendar" (
   "imagen_id" text not null default '',
   "imagen_url" text not null default '',
   "imagenes_json" text not null default '',
+  "estilo" text not null default '',
   "campana_id" text not null default '',
   "post_externo_id" text not null default '',
   "post_url" text not null default '',
@@ -855,6 +856,8 @@ alter table "campaign_calendar" add column if not exists "imagenes_json" text no
 alter table "campaign_calendar" add column if not exists "activa" text not null default 'TRUE';
 alter table "campaign_calendar" add column if not exists "hora" text not null default '';
 alter table "campaign_calendar" add column if not exists "favorita" text not null default 'FALSE';
+-- Memoria de variedad del generador de piezas (JSON {portada, fondos[], fotos[]}).
+alter table "campaign_calendar" add column if not exists "estilo" text not null default '';
 
 -- Config editable del agente de marketing (una sola fila, id=1).
 create table if not exists "marketing_config" (
