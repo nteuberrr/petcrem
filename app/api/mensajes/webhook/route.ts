@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { NextRequest, NextResponse, after } from 'next/server'
-import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, enviarMediaWhatsapp, isWhatsappConfigured, adminWhatsapp } from '@/lib/whatsapp'
+import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, enviarMediaWhatsapp, isWhatsappConfigured, esAdminWhatsapp, avisarAdminsWhatsapp } from '@/lib/whatsapp'
 import {
   upsertContacto, getOrCreateConversacion, insertarMensaje, getMensajes,
   actualizarConversacion, existeMensajePorProvider, marcarEstadoMensaje, getConversacion,
@@ -85,7 +85,7 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
         `Cliente: ${nombre}\nWhatsApp: +${destino}\n` +
         (ultimoCliente ? `Último mensaje: "${ultimoCliente.slice(0, 220)}"\n` : '') +
         `\nLa pauso para que la retomes tú desde el inbox.`
-      await enviarTextoWhatsapp(adminWhatsapp(), aviso)
+      await avisarAdminsWhatsapp(aviso)
     } catch (e) { console.warn('[agente] aviso de escalamiento al admin falló:', e) }
   }
 }
@@ -142,14 +142,14 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
   if (!br?.id) return false
   const m = /^retiro_(ok|no):(\d+)$/.exec(br.id)
   if (!m) return false
-  // Solo el número admin puede confirmar/rechazar.
-  if (msg.from.replace(/\D/g, '') !== adminWhatsapp()) return true
+  // Solo un número del equipo admin puede confirmar/rechazar.
+  if (!esAdminWhatsapp(msg.from)) return true
 
   // La lógica de confirmar/rechazar (cierre atómico + efectos + avisos) vive en
-  // lib/solicitudes-retiro y la comparte el PANEL de la app. Acá solo mandamos el
-  // acuse al admin por WhatsApp.
+  // lib/solicitudes-retiro y la comparte el PANEL de la app. El acuse va a TODOS
+  // los admins (así el resto del equipo ve quién/qué se resolvió).
   const { acuseAdmin } = await resolverSolicitudRetiro(m[2], m[1] === 'ok')
-  await enviarTextoWhatsapp(adminWhatsapp(), acuseAdmin)
+  await avisarAdminsWhatsapp(acuseAdmin)
   return true
 }
 
@@ -160,7 +160,7 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
  * consumió el mensaje.
  */
 async function procesarRelayAdmin(msg: MetaMsg): Promise<boolean> {
-  if (msg.from.replace(/\D/g, '') !== adminWhatsapp()) return false
+  if (!esAdminWhatsapp(msg.from)) return false
   const texto = msg.text?.body?.trim()
   if (!texto) return false
   // Si citó el aviso, match exacto; si no, solo si hay UNA sola consulta pendiente
@@ -200,8 +200,7 @@ async function procesarRelayAdmin(msg: MetaMsg): Promise<boolean> {
     })
   } catch (e) { console.warn('[webhook] no se pudo registrar el relay al cliente:', e) }
 
-  await enviarTextoWhatsapp(
-    adminWhatsapp(),
+  await avisarAdminsWhatsapp(
     env.ok
       ? `✅ Le reenvié tu respuesta a ${relay.cliente_nombre || 'el cliente'}.`
       : `⚠ No pude reenviar al cliente (${env.fuera_de_ventana ? 'pasaron más de 24h y WhatsApp no permite escribirle' : env.error}).`,
@@ -315,7 +314,7 @@ async function avisarCoexistence(field: string) {
   const txt = field === 'account_offboarded'
     ? '⚠️ *WhatsApp Coexistence*: el número se DESCONECTÓ del sistema (account_offboarded). El bot dejó de recibir/responder. Hay que reconectarlo.'
     : '✅ *WhatsApp Coexistence*: el número se reconectó al sistema (account_reconnected). El bot vuelve a operar.'
-  try { await enviarTextoWhatsapp(adminWhatsapp(), txt) } catch (e) { console.warn('[webhook] aviso coexistence falló:', e) }
+  try { await avisarAdminsWhatsapp(txt) } catch (e) { console.warn('[webhook] aviso coexistence falló:', e) }
 }
 
 /** Recepción de eventos (mensajes entrantes + cambios de estado). */

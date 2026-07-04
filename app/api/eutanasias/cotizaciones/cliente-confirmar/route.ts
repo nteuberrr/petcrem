@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateRow } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
-import { enviarTextoWhatsapp, isWhatsappConfigured, adminWhatsapp } from '@/lib/whatsapp'
+import { isWhatsappConfigured, avisarAdminsWhatsapp } from '@/lib/whatsapp'
 import { formatDate, formatHoraDia } from '@/lib/dates'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
           `Tutor: ${c.cliente_nombre}${c.cliente_telefono ? ` · +56 ${c.cliente_telefono}` : ''}\n` +
           `Veterinario: ${c.vet_nombre_asignado || '—'}\n` +
           `Fecha: ${formatDate(c.fecha_servicio)} a las ${formatHoraDia(c.hora_servicio)} · ${c.comuna}`
-        try { await enviarTextoWhatsapp(adminWhatsapp(), msg) } catch (e) { console.warn('[cliente-confirmar] aviso admin falló:', e) }
+        try { await avisarAdminsWhatsapp(msg) } catch (e) { console.warn('[cliente-confirmar] aviso admin falló:', e) }
       }
     }
 

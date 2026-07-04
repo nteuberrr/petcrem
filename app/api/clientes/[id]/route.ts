@@ -69,6 +69,19 @@ export async function PATCH(
 
     // Normalizar pesos: aceptar coma decimal y guardar como number
     const normalizedBody = { ...body }
+    // CAMPOS DE SISTEMA: los administran flujos propios (registrar, uploads de
+    // fotos/videos, ciclos, despachos, cobro-diferencia) — se ELIMINAN del body
+    // para que un "Guardar" de la ficha con el form desactualizado no los pise.
+    // Bug real (2026-07-04): el form guardaba codigo:'' + estado:'borrador'
+    // capturados al abrir la página → un Guardar posterior al "Registrar ficha"
+    // revertía la ficha a borrador → se re-registraba con el MISMO código y el
+    // correo de bienvenida salía 2-3 veces al tutor.
+    const CAMPOS_SISTEMA = [
+      'id', 'codigo', 'estado', 'ciclo_id', 'despacho_id', 'origen', 'fecha_creacion',
+      'fotos_mascota', 'fotos_cuadro', 'videos_servicio', 'fotos_evidencia',
+      'correo_diferencia_fecha', 'correo_diferencia_monto',
+    ]
+    for (const k of CAMPOS_SISTEMA) delete normalizedBody[k]
     for (const k of ['peso_declarado', 'peso_ingreso']) {
       if (normalizedBody[k] !== undefined && normalizedBody[k] !== '') {
         const n = parseDecimal(normalizedBody[k])

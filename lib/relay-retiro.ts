@@ -49,11 +49,15 @@ export async function crearRelayPendiente(input: {
   return String(id)
 }
 
-/** Busca un relay pendiente por el message_id del aviso al admin (context.id de la cita). */
+/**
+ * Busca un relay pendiente por el message_id del aviso al admin (context.id de la
+ * cita). `admin_msg_id` puede traer VARIOS ids separados por coma (cuando el aviso
+ * salió a más de un admin): matchea si el id citado es cualquiera de ellos.
+ */
 export async function buscarRelayPendientePorMsg(adminMsgId: string): Promise<RelayRetiroRow | null> {
   if (!adminMsgId) return null
   const rows = await getSheetData(TABLE)
-  const row = rows.find(r => r.admin_msg_id === adminMsgId && r.estado === 'pendiente')
+  const row = rows.find(r => r.estado === 'pendiente' && (r.admin_msg_id || '').split(',').map(s => s.trim()).includes(adminMsgId))
   return (row as RelayRetiroRow | undefined) ?? null
 }
 

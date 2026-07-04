@@ -9,7 +9,7 @@ import { getContacto } from './email-layout'
 import { getConsultaEutanasia, getFijoEutanasia } from './eutanasia-precios'
 import { crearClienteBorrador } from './cliente-borrador'
 import { capitalizarNombre } from './nombres'
-import { enviarTextoWhatsapp, isWhatsappConfigured, adminWhatsapp } from './whatsapp'
+import { enviarTextoWhatsapp, isWhatsappConfigured, avisarAdminsWhatsapp } from './whatsapp'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lógica compartida de cotizaciones de eutanasia: envío a vets + alta automática
@@ -262,8 +262,7 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
     // si la eutanasia no se realiza → avisar al admin para que la ingrese a mano.
     if (isWhatsappConfigured()) {
       try {
-        await enviarTextoWhatsapp(
-          adminWhatsapp(),
+        await avisarAdminsWhatsapp(
           `⚠️ Eutanasia N° ${id} (${input.mascota_nombre} / ${input.cliente_nombre}): no se pudo crear la ficha borrador de cremación. Revisa /clientes e ingrésala a mano.`,
         )
       } catch (e2) { console.warn('[eutanasia-cotizaciones] aviso al admin falló:', e2) }

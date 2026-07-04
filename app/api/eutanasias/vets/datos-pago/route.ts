@@ -3,7 +3,7 @@ import { getSheetData, updateRow } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
 import { bancoValido, tipoCuentaValido } from '@/lib/bancos-cl'
 import { todayISO } from '@/lib/dates'
-import { enviarTextoWhatsapp, isWhatsappConfigured, adminWhatsapp } from '@/lib/whatsapp'
+import { isWhatsappConfigured, avisarAdminsWhatsapp } from '@/lib/whatsapp'
 
 const SHEET = 'vet_convenio_eutanasia'
 
@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
         `${nombre}${v.apellido ? ' ' + v.apellido : ''} (${email})\n` +
         `Banco: ${banco} · ${tipoCuenta} · cuenta ${cuentaEnmascarada}\n\n` +
         `Si no reconoces este movimiento, revísalo en Servicios → Veterinarios.`
-      try { await enviarTextoWhatsapp(adminWhatsapp(), aviso) } catch (e) { console.warn('[datos-pago] aviso admin falló:', e) }
+      try { await avisarAdminsWhatsapp(aviso) } catch (e) { console.warn('[datos-pago] aviso admin falló:', e) }
     }
 
     return NextResponse.json({

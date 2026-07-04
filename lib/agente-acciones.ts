@@ -1,5 +1,5 @@
 import { ensureSheet, ensureColumns, appendRow, getNextId, getSheetData } from './datastore'
-import { enviarBotonesWhatsapp, enviarTextoWhatsapp, adminWhatsapp } from './whatsapp'
+import { enviarBotonesWhatsapp, adminsWhatsapp, avisarAdminsWhatsapp, type BotonWa, type EnvioResult } from './whatsapp'
 import { crearRelayPendiente } from './relay-retiro'
 import { geocodeAddress, coordEnChile } from './google-maps'
 import { formatDate, formatDateForSheet, todayISO } from './dates'
@@ -25,6 +25,23 @@ async function direccionValida(direccion: string, comuna: string): Promise<boole
     console.warn('[agente-acciones] geocoding falló (no bloquea):', e)
     return true
   }
+}
+
+/**
+ * Botones interactivos a TODOS los admins (equipo, ver adminsWhatsapp). ok si al
+ * menos uno los recibió; la resolución es atómica, así que el primero que toque
+ * ✅/❌ gana y el resto recibe el acuse.
+ */
+async function botonesATodosLosAdmins(body: string, botones: BotonWa[]): Promise<{ ok: boolean; error?: string }> {
+  let ok = false
+  let error = ''
+  for (const num of adminsWhatsapp()) {
+    let env: EnvioResult
+    try { env = await enviarBotonesWhatsapp(num, body, botones) } catch (e) { env = { ok: false, error: e instanceof Error ? e.message : String(e) } }
+    if (env.ok) ok = true
+    else error = env.error || error
+  }
+  return { ok, error: error || undefined }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,7 +124,7 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
     (waCliente ? `Cliente: +${waCliente}\n` : '') +
     `\n¿Confirmas este retiro?`
 
-  const env = await enviarBotonesWhatsapp(adminWhatsapp(), resumen, [
+  const env = await botonesATodosLosAdmins(resumen, [
     { id: `retiro_ok:${id}`, title: '✅ Confirmar' },
     { id: `retiro_no:${id}`, title: '❌ Rechazar' },
   ])
@@ -204,7 +221,7 @@ async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<s
     (waVet ? `Contacto: +${waVet}\n` : '') +
     `\n¿Confirmas este retiro?`
 
-  const env = await enviarBotonesWhatsapp(adminWhatsapp(), resumen, [
+  const env = await botonesATodosLosAdmins(resumen, [
     { id: `retiro_ok:${id}`, title: '✅ Confirmar' },
     { id: `retiro_no:${id}`, title: '❌ Rechazar' },
   ])
@@ -317,7 +334,7 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
     (res.matched > 0
       ? `Se envió a ${res.enviados} veterinario${res.enviados === 1 ? '' : 's'} de la red en ${res.comunaCanon}.`
       : `⚠ Sin veterinarios disponibles para ${res.comunaCanon} en esa fecha/franja — requiere gestión manual.`)
-  try { await enviarTextoWhatsapp(adminWhatsapp(), avisoAdmin) } catch (e) { console.warn('[agente-acciones] FYI admin eutanasia falló:', e) }
+  try { await avisarAdminsWhatsapp(avisoAdmin) } catch (e) { console.warn('[agente-acciones] FYI admin eutanasia falló:', e) }
 
   const precioTxt = cliente > 0 ? ` El valor del servicio para el cliente es ${fmtPrecio(cliente)}.` : ''
 
@@ -361,13 +378,16 @@ async function consultarEtaRetiro(a: AccionConsultaEta, ctx: CtxAgente): Promise
     `👉 Respóndeme por aquí con la hora/estado estimado y le escribo al cliente con tus palabras. ` +
     `(Si tienes varias consultas abiertas a la vez, responde citando la que corresponde.)`
 
-  const env = await enviarTextoWhatsapp(adminWhatsapp(), aviso)
-  if (!env.ok || !env.message_id) {
-    console.warn('[agente-acciones] no se pudo avisar al admin (ETA):', env.error)
+  // A TODOS los admins; el relay guarda TODOS los message_ids (separados por coma)
+  // para que cualquiera pueda responder citando SU copia del aviso.
+  const envs = await avisarAdminsWhatsapp(aviso)
+  const msgIds = envs.filter(e => e.ok && e.message_id).map(e => String(e.message_id))
+  if (msgIds.length === 0) {
+    console.warn('[agente-acciones] no se pudo avisar al admin (ETA):', envs.map(e => e.error).filter(Boolean).join('; '))
     return 'Dile al cliente, cálido y breve, que estás confirmando con el equipo el horario de retiro y que en un momento le confirmas por aquí. NO inventes una hora.'
   }
   try {
-    await crearRelayPendiente({ adminMsgId: env.message_id, clienteWaId: waCliente, clienteNombre: nombre, mascota, pregunta: 'ETA de retiro' })
+    await crearRelayPendiente({ adminMsgId: msgIds.join(','), clienteWaId: waCliente, clienteNombre: nombre, mascota, pregunta: 'ETA de retiro' })
   } catch (e) { console.warn('[agente-acciones] no se pudo guardar relay pendiente:', e) }
 
   return 'Avisé al equipo para que confirme el horario. Dile al cliente, cálido y breve, que estás confirmando cuánto falta para el retiro y que apenas el equipo responda se lo avisas por aquí. NO inventes una hora.'

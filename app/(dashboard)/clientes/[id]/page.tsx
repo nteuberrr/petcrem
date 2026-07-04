@@ -519,7 +519,17 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     })
     if (res.ok) {
       const updated = await res.json()
-      setCliente(updated)
+      const norm = {
+        ...updated,
+        fecha_retiro: formatDateForSheet(updated.fecha_retiro) || updated.fecha_retiro || '',
+        fecha_defuncion: formatDateForSheet(updated.fecha_defuncion) || updated.fecha_defuncion || '',
+        fecha_creacion: formatDateForSheet(updated.fecha_creacion) || updated.fecha_creacion || '',
+      }
+      setCliente(norm)
+      // Sincronizar TAMBIÉN el form con lo persistido: si queda desactualizado
+      // (p. ej. sin el código recién generado), el próximo Guardar mandaría esos
+      // valores viejos (así se duplicaba el correo de bienvenida).
+      setForm(norm)
       if (registrar) alert(`Ficha registrada. Código generado: ${updated.codigo}. Le enviamos el correo al tutor.`)
     } else {
       const e = await res.json().catch(() => ({}))

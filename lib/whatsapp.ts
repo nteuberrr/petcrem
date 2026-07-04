@@ -58,9 +58,39 @@ export async function enviarTextoWhatsapp(to: string, body: string): Promise<Env
   return postMensaje({ to: to.replace(/[^\d]/g, ''), type: 'text', text: { preview_url: false, body } })
 }
 
-/** Número de WhatsApp del admin que confirma/rechaza solicitudes (solo dígitos). */
+/**
+ * Números de WhatsApp del EQUIPO admin (dueño + socios) que reciben los avisos
+ * del bot y pueden confirmar/rechazar/responder. `ADMIN_WHATSAPP` acepta VARIOS
+ * números separados por coma (el Cloud API de Meta NO permite escribir a grupos,
+ * así que la "grupalidad" se logra avisando a todos los admins a la vez; las
+ * resoluciones son atómicas → el primero que actúa gana y el resto ve el acuse).
+ */
+export function adminsWhatsapp(): string[] {
+  const raw = process.env.ADMIN_WHATSAPP || '56978640811'
+  const nums = raw.split(/[,;\s]+/).map(n => n.replace(/\D/g, '')).filter(n => n.length >= 9)
+  return [...new Set(nums.length ? nums : ['56978640811'])]
+}
+
+/** Primer número admin (compatibilidad con el uso histórico de un solo admin). */
 export function adminWhatsapp(): string {
-  return (process.env.ADMIN_WHATSAPP || '56978640811').replace(/\D/g, '')
+  return adminsWhatsapp()[0]
+}
+
+/** ¿El número pertenece al equipo admin? (para gatear botones/respuestas). */
+export function esAdminWhatsapp(num: string): boolean {
+  return adminsWhatsapp().includes((num || '').replace(/\D/g, ''))
+}
+
+/**
+ * Envía un texto a TODOS los admins (best-effort por número: si uno falla, los
+ * demás igual reciben). Devuelve los resultados en el mismo orden que adminsWhatsapp().
+ */
+export async function avisarAdminsWhatsapp(body: string): Promise<EnvioResult[]> {
+  const out: EnvioResult[] = []
+  for (const num of adminsWhatsapp()) {
+    try { out.push(await enviarTextoWhatsapp(num, body)) } catch (e) { out.push({ ok: false, error: e instanceof Error ? e.message : String(e) }) }
+  }
+  return out
 }
 
 export interface BotonWa { id: string; title: string }

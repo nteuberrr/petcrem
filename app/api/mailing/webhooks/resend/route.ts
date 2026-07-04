@@ -55,10 +55,16 @@ export async function POST(req: NextRequest) {
     if (secret) {
       try {
         const wh = new Webhook(secret)
+        // Resend firma con el estándar Standard Webhooks. Los nombres de header
+        // CAMBIARON de svix-* a webhook-* (~2026-06-04): ese cambio dejó todos los
+        // eventos rebotando 401 "Missing required headers" hasta que Resend
+        // deshabilitó el endpoint. Aceptamos AMBAS familias (la lib
+        // standardwebhooks solo lee las claves webhook-*).
+        const h = (n: string) => req.headers.get(n) || ''
         const headers = {
-          'svix-id': req.headers.get('svix-id') || '',
-          'svix-timestamp': req.headers.get('svix-timestamp') || '',
-          'svix-signature': req.headers.get('svix-signature') || '',
+          'webhook-id': h('webhook-id') || h('svix-id'),
+          'webhook-timestamp': h('webhook-timestamp') || h('svix-timestamp'),
+          'webhook-signature': h('webhook-signature') || h('svix-signature'),
         }
         evt = wh.verify(rawBody, headers) as ResendEvent
         firmaValida = true
