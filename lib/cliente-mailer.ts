@@ -128,7 +128,12 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
       <p style="margin:0;font-size:14px;line-height:1.6">
         Guarda este código: nos permite identificar a ${mascota} durante todo el proceso.
       </p>
-      ${bloqueFoto}`
+      ${bloqueFoto}
+      <p style="margin:18px 0 0;padding-top:14px;border-top:1px solid ${BRAND.hairline};font-size:12px;line-height:1.6;color:${BRAND.muted}">
+        <strong>Sobre el peso:</strong> al recibir a ${mascota} verificamos su peso en balanza. Si resultara mayor al
+        declarado, el valor se ajusta al tramo que corresponda — te avisaríamos con el detalle y el respaldo, para que
+        no haya sorpresas.
+      </p>`
   return {
     to: args.email,
     subject: `Gracias por confiar en nosotros — ${args.nombreMascota}`,

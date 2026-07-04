@@ -10,6 +10,7 @@ import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { REGLAS_INVIOLABLES } from './marca-voz'
 import { lintCopy, extraerTextoHtml } from './marketing-lint'
 import { getContacto } from './email-layout'
+import { LINKS_PUBLICOS } from './links-publicos'
 import { esLogo } from './marca-logo'
 import { generarPieza, editarImagenPieza, setImagenesPieza } from './marketing-pieza'
 import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
@@ -87,6 +88,9 @@ ${MODALIDADES_SERVICIOS}
   · PROPUESTA DE VALOR PARA EL VET (el ángulo de la campaña de captación): ingreso adicional por eutanasias a domicilio sin tener que buscar pacientes (le derivamos los casos de su zona), se le paga incluso cuando al evaluar no corresponde realizarla (valor de la consulta), cero burocracia (todo por email), pago claro por servicio, y un partner serio que además se encarga de la cremación con trazabilidad. Para estas campañas: objetivo=captacion_vets, audiencia=veterinarios, voz B2B (profesional, concreta, de socio).
 - Recargo de $20.000 en comunas fuera de la zona habitual (Lampa, Buin, Colina, Calera de Tango, Paine).
 - Diferenciadores para comunicar: instalaciones propias, trazabilidad total con código de seguimiento, retiro a domicilio/clínica, entrega en 3 días hábiles, certificado digital, tecnología de punta, red de eutanasia a domicilio para clínicas.
+
+${LINKS_PUBLICOS()}
+(Usalos como CTA cuando el objetivo calce — ej. campaña de captación de clínicas → botón/link a la inscripción del convenio de cremación. No inventes otras URLs.)
 
 REGLAS DURAS
 - NUNCA inventes precios: cuando hables de valores usa SOLO la sección TARIFAS VIGENTES de abajo (son de cremación; la eutanasia tiene precio aparte). Si no la tienes, dilo y no inventes.

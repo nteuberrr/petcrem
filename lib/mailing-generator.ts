@@ -4,6 +4,7 @@ import { isNanoBananaConfigurado } from './nano-banana'
 import { listarImagenes, generarYGuardarImagen, reducirParaVision, type ImagenBanco } from './mailing-images'
 import { MARCA_VISUAL } from './marca-visual'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
+import { LINKS_PUBLICOS } from './links-publicos'
 
 /**
  * Generador IA de campañas de mailing (B2B a la base de veterinarios).
@@ -123,7 +124,9 @@ CONTACTO (inclúyelo en el pie y/o en los CTA, con enlaces reales):
   - Sitio web: ${web}
   - Correo: ${contacto.correo} (mailto:${contacto.correo})
   - Teléfono: ${contacto.telefono} (tel:${tel})
-  No inventes otros enlaces ni formularios.
+
+${LINKS_PUBLICOS()}
+  Úsalos como BOTÓN principal cuando el objetivo de la campaña calce (ej. campaña de captación → botón "Inscribe tu clínica al convenio" apuntando al link de inscripción). Fuera de estos links y el contacto, no inventes otros enlaces ni formularios.
 
 asunto: claro y específico, máx ~60 caracteres, sin emojis llamativos.
 preview_text: una frase que complementa el asunto (no lo repite), máx ~110 caracteres.

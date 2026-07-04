@@ -4,6 +4,7 @@ import { getSheetData, appendRow, updateRow, getNextId, deleteRow } from '@/lib/
 import { todayISO } from '@/lib/dates'
 import { capitalizarNombre } from '@/lib/nombres'
 import { enviarBienvenidaConvenioVet } from '@/lib/vet-cremacion-mailer'
+import { sincronizarMailingCliente } from '@/lib/mailing-vet-sync'
 
 const VetSchema = z.object({
   nombre: z.string().min(1),
@@ -43,6 +44,13 @@ export async function POST(req: NextRequest) {
     const now = todayISO()
     const row = { id, ...data, activo: 'TRUE', fecha_creacion: now }
     await appendRow('veterinarios', row)
+
+    // Regla automática: todo vet del convenio queda como CLIENTE en la base de
+    // Mailing (upsert por email; best-effort).
+    await sincronizarMailingCliente({
+      correo: data.correo, nombre: data.nombre,
+      nombre_contacto: data.nombre_contacto, comuna: data.comuna, telefono: data.telefono,
+    })
 
     // Correo de bienvenida al convenio (best-effort: no bloquea el alta).
     if (data.correo && /\S+@\S+\.\S+/.test(data.correo)) {

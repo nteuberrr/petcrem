@@ -29,6 +29,10 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith('/api/mailing/pixel/') ||
     pathname.startsWith('/api/mailing/click/') ||
     pathname === '/convenio-eutanasias' ||
+    // Autoinscripción pública de clínicas al convenio de CREMACIÓN (hoja
+    // veterinarios, tarifas de convenio automáticas).
+    pathname === '/convenio-veterinarias' ||
+    pathname === '/api/veterinarios/inscribir' ||
     // Registro público de mascota (auto-atención del tutor) + su endpoint de
     // metadata/creación. Cliente general "sin veterinaria", sin sesión.
     pathname === '/registro-mascota' ||
