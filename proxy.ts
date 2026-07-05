@@ -29,6 +29,9 @@ export async function proxy(req: NextRequest) {
     // Cron diario que archiva conversaciones inactivas (Vercel Cron; auth Bearer
     // CRON_SECRET o sesión admin dentro de la ruta).
     pathname === '/api/mensajes/cron-archivar' ||
+    // Seguimiento automático de leads tibios (se dispara desde el cron diario o
+    // a mano para pruebas; auth Bearer CRON_SECRET o sesión admin dentro de la ruta).
+    pathname === '/api/mensajes/cron-seguimiento' ||
     pathname.startsWith('/api/mailing/pixel/') ||
     pathname.startsWith('/api/mailing/click/') ||
     pathname === '/convenio-eutanasias' ||

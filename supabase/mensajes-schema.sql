@@ -35,6 +35,9 @@ create index if not exists idx_mconv_contacto on mensajes_conversaciones(contact
 create index if not exists idx_mconv_ultimo    on mensajes_conversaciones(ultimo_mensaje_at desc nulls last);
 -- Idempotente para entornos ya creados:
 alter table mensajes_conversaciones add column if not exists no_leido boolean not null default false;
+-- Cuándo se envió el seguimiento automático al lead (null = nunca). Idempotencia
+-- del barrido diario de seguimiento (lib/seguimiento-leads).
+alter table mensajes_conversaciones add column if not exists seguimiento_at timestamptz;
 
 create table if not exists mensajes_mensajes (
   id                  bigint generated always as identity primary key,

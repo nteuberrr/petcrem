@@ -55,6 +55,8 @@ export interface Conversacion {
   ultimo_mensaje_at: string | null
   /** true si llegó un mensaje entrante que aún no se abrió en el inbox. */
   no_leido: boolean
+  /** Cuándo se le envió el mensaje de seguimiento automático (null = nunca). */
+  seguimiento_at: string | null
   created_at: string
 }
 
@@ -172,6 +174,13 @@ export async function contarNoLeidos(): Promise<number> {
     const { count } = await sb.from(T_CONV).select('id', { count: 'exact', head: true }).eq('no_leido', true)
     return count ?? 0
   } catch { return 0 }
+}
+
+/** Marca que ya se envió el seguimiento automático (idempotencia del barrido). */
+export async function marcarSeguimientoEnviado(id: number): Promise<void> {
+  const sb = getMensajesSupabase()
+  const { error } = await sb.from(T_CONV).update({ seguimiento_at: new Date().toISOString() }).eq('id', id)
+  if (error) throw new Error(error.message)
 }
 
 export async function vincularCliente(contactoId: number, clienteId: string | null): Promise<void> {
