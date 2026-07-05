@@ -550,10 +550,10 @@ export function renderCoordinarEmail({ vetNombre, c, linkRealizado, linkNoRealiz
 
       ${linkHoraRetiro ? `
       <div style="margin:22px 0 0;padding-top:18px;border-top:1px dashed ${BRAND.hairline}">
-        <p style="margin:0 0 10px;font-size:13px;color:${BRAND.ink};line-height:1.5">Cuando acuerdes con el cliente la hora, avísanos para coordinar el <strong>retiro del crematorio</strong>:</p>
+        <p style="margin:0 0 12px;font-size:13px;color:${BRAND.ink};line-height:1.55">Cuando acuerdes la hora con el cliente, avísanos para coordinar el <strong>retiro del crematorio</strong>:</p>
         <div style="text-align:center">
-          <a href="${linkHoraRetiro}" style="display:inline-block;background:${BRAND.amber};color:${BRAND.navy};text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">
-            🕒 Infórmanos la hora acordada con el cliente para coordinar el retiro del crematorio
+          <a href="${linkHoraRetiro}" style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 30px;border-radius:12px;box-shadow:0 4px 12px rgba(20,60,100,.28)">
+            🕒 Informar la hora del servicio&nbsp;&nbsp;→
           </a>
         </div>
       </div>` : ''}

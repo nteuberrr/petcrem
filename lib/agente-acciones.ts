@@ -12,6 +12,7 @@ import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional } from './cobros'
 import { generarCatalogoPdf } from './catalogo-generator'
 import { uploadToR2 } from './cloudflare-r2'
+import { upsertContacto, getOrCreateConversacion, insertarMensaje } from './mensajes'
 import type { HandlersAgente, AccionRetiro, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, AccionConsultaEstado, AccionAgregarAdicional, CtxAgente } from './agente-mensajes'
 
 /**
@@ -482,6 +483,16 @@ async function enviarCatalogo(ctx: CtxAgente): Promise<string> {
       console.warn('[agente-acciones] enviarCatalogo whatsapp falló:', env.error)
       return 'No pude enviar el catálogo en este momento. Dile al cliente que el equipo se lo hará llegar, y continúa la conversación con normalidad.'
     }
+    // Registrar el envío en el inbox (queda visible como documento). Best-effort.
+    try {
+      const cont = await upsertContacto({ wa_id: ctx.waId || `56${tel9}`, telefono: `56${tel9}`, audiencia: 'A' })
+      const conv = await getOrCreateConversacion(cont.id, 'whatsapp', cont.audiencia, 'whatsapp')
+      await insertarMensaje({
+        conversacion_id: conv.id, direccion: 'saliente', cuerpo: 'Catálogo de productos (PDF)',
+        tipo: 'documento', media_url: up.url, enviado_por: 'agente', estado: 'enviado',
+        provider_message_id: env.message_id ?? null,
+      })
+    } catch (e) { console.warn('[agente-acciones] no se pudo registrar el catálogo en el inbox:', e) }
     return 'Listo, se le envió el catálogo de productos en PDF al cliente. Acompáñalo con un mensaje breve y cálido invitándolo a revisarlo y a decirte si quiere agregar algo al servicio.'
   } catch (e) {
     console.warn('[agente-acciones] enviarCatalogo error:', e)

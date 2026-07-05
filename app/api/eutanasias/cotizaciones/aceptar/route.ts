@@ -3,6 +3,7 @@ import { getSheetData, updateById, updateByIdIf, ensureSheet, ensureColumns } fr
 import { verifyToken, createToken } from '@/lib/eutanasia-tokens'
 import { nombreCompletoVet, enviarCoordinarConFamilia, enviarClienteVetAsignado } from '@/lib/eutanasia-mailer'
 import { enviarTextoWhatsapp, isWhatsappConfigured } from '@/lib/whatsapp'
+import { marcarConversacionPorTelefono } from '@/lib/mensajes'
 import { formatDate } from '@/lib/dates'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
@@ -99,6 +100,12 @@ export async function POST(req: NextRequest) {
         error: 'Otro veterinario ya tomó esta solicitud. Gracias por tu interés.',
       })
     }
+
+    // Un vet CONFIRMÓ: la conversación del tutor pasa a 'cliente' (servicio en
+    // curso). Hasta acá estaba en 'activo' mientras se gestionaba. Best-effort.
+    try {
+      await marcarConversacionPorTelefono(c.cliente_wa_id || c.cliente_telefono || '', 'cliente', { soloSi: ['activo', 'archivado', 'cerrado'] })
+    } catch (e) { console.warn('[aceptar] marcar conversación cliente falló:', e) }
 
     // Marcar el envío correspondiente como 'aceptada'
     try {

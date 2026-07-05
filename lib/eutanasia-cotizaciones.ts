@@ -10,7 +10,6 @@ import { getConsultaEutanasia, getFijoEutanasia } from './eutanasia-precios'
 import { crearClienteBorrador } from './cliente-borrador'
 import { capitalizarNombre } from './nombres'
 import { enviarTextoWhatsapp, isWhatsappConfigured, avisarAdminsWhatsapp } from './whatsapp'
-import { marcarConversacionPorTelefono } from './mensajes'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lógica compartida de cotizaciones de eutanasia: envío a vets + alta automática
@@ -309,8 +308,10 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
     }
   }
 
-  // Al AGENDAR la eutanasia, la conversación del tutor pasa a 'cliente'.
-  await marcarConversacionPorTelefono(input.cliente_wa_id || input.cliente_telefono || '', 'cliente', { soloSi: ['activo', 'archivado', 'cerrado'] })
+  // La conversación del tutor NO pasa a 'cliente' todavía: queda en 'activo'
+  // mientras se gestiona (buscando/esperando que un vet acepte). Pasa a 'cliente'
+  // recién cuando un veterinario CONFIRMA (acepta la cotización) — ver la ruta
+  // /api/eutanasias/cotizaciones/aceptar.
 
   return { id: String(id), precioVet, comunaCanon, matched: matched.length, enviados }
 }
