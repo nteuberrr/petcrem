@@ -9,6 +9,7 @@ type Conversacion = {
   id: number; contacto_id: number; canal: Canal; audiencia: string
   estado: string; etiquetas: string[]; fuente: string
   ultimo_mensaje_at: string | null; contacto: Contacto | null
+  no_leido?: boolean
 }
 // Valores legacy → nuevos.
 const normEstado = (e: string): EstadoConv =>
@@ -85,6 +86,8 @@ export default function MensajesView() {
     pausaRef.current++
     try {
       setSel(id); setConv(null); setMsgs([])
+      // Al abrir, la marcamos leída localmente (el GET la marca en el server).
+      setConvs(prev => prev.map(c => (c.id === id ? { ...c, no_leido: false } : c)))
       const r = await fetch(`/api/mensajes/${id}`, { cache: 'no-store' })
       const j = await r.json()
       if (r.ok) { setConv(j.conversacion); setMsgs(j.mensajes || []) }
@@ -215,16 +218,25 @@ export default function MensajesView() {
           {cargando ? <p className="p-4 text-sm text-gray-400">Cargando…</p>
             : error ? <p className="p-4 text-sm text-red-600">{error}</p>
             : convs.length === 0 ? <p className="p-4 text-sm text-gray-400">Sin conversaciones</p>
-            : convs.map(c => (
+            : convs.map(c => {
+              const noLeido = !!c.no_leido && sel !== c.id
+              return (
               <button key={c.id} onClick={() => abrir(c.id)}
-                className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 ${sel === c.id ? 'bg-brand/10' : ''}`}>
+                className={`w-full text-left px-3 py-2.5 border-l-4 ${
+                  sel === c.id ? 'bg-brand/10 border-brand'
+                  : noLeido ? 'bg-slate-200 hover:bg-slate-300 border-brand'
+                  : 'hover:bg-gray-50 border-transparent'
+                }`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-sm text-gray-900 truncate">{c.contacto?.nombre || c.contacto?.telefono || 'Contacto'}</span>
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    {noLeido && <span className="w-2 h-2 rounded-full bg-brand shrink-0" aria-label="No leído" />}
+                    <span className={`text-sm truncate ${noLeido ? 'font-bold text-gray-900' : 'font-medium text-gray-900'}`}>{c.contacto?.nombre || c.contacto?.telefono || 'Contacto'}</span>
+                  </span>
                   <span className={`text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${CANAL_CLS[c.canal]}`}>{CANAL_LABEL[c.canal]}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2 mt-0.5">
-                  <span className="text-[11px] text-gray-400 truncate">{c.contacto?.telefono || ''}</span>
-                  <span className="text-[10px] text-gray-400 shrink-0">{fecha(c.ultimo_mensaje_at)}</span>
+                  <span className={`text-[11px] truncate ${noLeido ? 'text-gray-600' : 'text-gray-400'}`}>{c.contacto?.telefono || ''}</span>
+                  <span className={`text-[10px] shrink-0 ${noLeido ? 'text-gray-600 font-semibold' : 'text-gray-400'}`}>{fecha(c.ultimo_mensaje_at)}</span>
                 </div>
                 {c.etiquetas.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
@@ -232,7 +244,8 @@ export default function MensajesView() {
                   </div>
                 )}
               </button>
-            ))}
+              )
+            })}
         </div>
       </div>
 
