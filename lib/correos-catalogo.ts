@@ -2,7 +2,7 @@ import { type Contacto } from './email-layout'
 import { todayISO, formatDate } from './dates'
 import {
   buildRegistro, buildCremacion, buildDespacho, buildEntrega, buildCertificado,
-  buildCobroDiferencia,
+  buildCobroDiferencia, buildCobroAdicional,
 } from './cliente-mailer'
 import {
   renderBienvenida, renderCotizacionEmail, renderCoordinarEmail,
@@ -133,6 +133,21 @@ export const CORREOS: CorreoDef[] = [
       email: m.email, nombreMascota: m.nombreMascota, nombreTutor: m.nombreTutor,
       pesoDeclarado: 8, pesoIngreso: 11.4, monto: 15000,
       transferencia: { titular: 'Crematorio Alma Animal', rut: '78.144.186-0', banco: 'Banco de Chile', tipoCuenta: 'Cuenta Corriente', numeroCuenta: '00-000-00000-00', correo: 'contacto@crematorioalmaanimal.cl' },
+      linkConfirma: baseUrl() + '/pago/confirma/demo',
+    }, c)),
+  },
+  {
+    key: 'cliente_cobro_adicional',
+    titulo: 'Cobro por productos adicionales agregados al servicio',
+    modulo: 'Clientes',
+    audiencia: 'Tutor',
+    cuando: 'Cuando se agrega un producto/servicio adicional a una ficha ya registrada (manual o vía el bot con confirmación del cliente).',
+    build: (m, c) => pick(buildCobroAdicional({
+      email: m.email, nombreMascota: m.nombreMascota, nombreTutor: m.nombreTutor,
+      items: [{ nombre: 'Ánfora premium de madera', precio: 35000, qty: 1 }, { nombre: 'Relicario con huella', precio: 18000, qty: 1 }],
+      monto: 53000,
+      transferencia: { titular: 'Crematorio Alma Animal', rut: '78.144.186-0', banco: 'Banco de Chile', tipoCuenta: 'Cuenta Corriente', numeroCuenta: '00-000-00000-00', correo: 'contacto@crematorioalmaanimal.cl' },
+      linkConfirma: baseUrl() + '/pago/confirma/demo',
     }, c)),
   },
 
@@ -199,7 +214,7 @@ export const CORREOS: CorreoDef[] = [
     cuando: 'Cuando el vet acepta: contacta a la familia, evalúa y marca el resultado.',
     build: (m, c) => ({
       subject: `Coordina con la familia — Eutanasia ${m.nombreMascota}`,
-      html: renderCoordinarEmail({ vetNombre: VET_MUESTRA, c: cMuestra(m), linkRealizado: '#', linkNoRealizado: '#', linkDatosPago: '#', contacto: c }),
+      html: renderCoordinarEmail({ vetNombre: VET_MUESTRA, c: cMuestra(m), linkRealizado: '#', linkNoRealizado: '#', linkDatosPago: '#', linkHoraRetiro: '#', contacto: c }),
     }),
   },
   {

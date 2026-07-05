@@ -8,6 +8,9 @@ import { buildCobroDiferencia } from '@/lib/cliente-mailer'
 import { sendEmail, isResendConfigured } from '@/lib/resend-mailer'
 import { getContacto } from '@/lib/email-layout'
 import { registrarEnvio } from '@/lib/correos-log'
+import { crearCobro, obtenerCobro } from '@/lib/cobros'
+import { createCobroToken } from '@/lib/cobro-token'
+import { updateById as updateCobroById } from '@/lib/datastore'
 import { enviarTextoWhatsapp, isWhatsappConfigured } from '@/lib/whatsapp'
 import { fmtPrecio } from '@/lib/format'
 
@@ -79,6 +82,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const cfg = cfgRows.find(r => r.id === '1') || cfgRows[0] || {}
     const contacto = await getContacto()
 
+    // Cobro en la tabla `cobros` → banner "cobro pendiente" + botón "confirma tu
+    // transferencia" (token firmado). Se crea ANTES del envío para tener el id.
+    const cobroId = await crearCobro(id, 'diferencia', `Diferencia de peso (${pesoDeclarado}→${pesoIngreso} kg)`, monto)
+    const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://petcrem.vercel.app').replace(/\/+$/, '')
+
     const opts = buildCobroDiferencia({
       email,
       nombreMascota: c.nombre_mascota || 'tu mascota',
@@ -88,13 +96,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       pesoIngreso,
       monto,
       transferencia: {
-        titular: cfg.nombre || '',
+        titular: cfg.titular_cuenta || cfg.nombre || '',
         rut: cfg.rut || '',
         banco: cfg.banco || '',
         tipoCuenta: cfg.tipo_cuenta || '',
         numeroCuenta: cfg.numero_cuenta || '',
         correo: cfg.correo || '',
       },
+      linkConfirma: `${baseUrl}/pago/confirma/${encodeURIComponent(createCobroToken(cobroId))}`,
     }, contacto)
 
     // Adjuntar la ÚLTIMA foto de evidencia como respaldo del pesaje.
@@ -112,6 +121,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     if (!res.ok) {
       return NextResponse.json({ error: `No se pudo enviar el correo: ${res.error || 'error de Resend'}` }, { status: 502 })
     }
+    if (res.message_id) { const cb = await obtenerCobro(cobroId); if (cb) await updateCobroById('cobros', cobroId, { ...cb, message_id: res.message_id }) }
 
     // Persistir el estado ANTES de los efectos secundarios (evita doble envío).
     const ahora = new Date().toISOString()

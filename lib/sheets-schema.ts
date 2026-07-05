@@ -102,6 +102,9 @@ export const SHEETS: Record<string, string[]> = {
   especies: ['id', 'nombre', 'letra', 'activo'],
   tipos_servicio: ['id', 'nombre', 'codigo', 'plazo_entrega_dias', 'activo'],
   otros_servicios: ['id', 'nombre', 'precio', 'activo', 'fecha_creacion'],
+  // Cobros que perseguimos por ficha: producto ADICIONAL agregado o DIFERENCIA
+  // de peso. estado: pendiente → cliente_confirmo → pagado.
+  cobros: ['id', 'cliente_id', 'tipo', 'detalle', 'monto', 'estado', 'message_id', 'fecha_creacion', 'fecha_cliente_confirmo', 'fecha_pagado'],
   descuentos: ['id', 'nombre', 'tipo', 'valor', 'activo', 'fecha_creacion'],
   usuarios: ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion'],
   asistencia: [
@@ -146,7 +149,7 @@ export const SHEETS: Record<string, string[]> = {
     // de seguimiento POR TIPO de correo (vacío = todos los tipos copian).
     'seguimiento_tipos',
     // Datos de transferencia bancaria (correo de cobro de diferencia de peso).
-    'banco', 'tipo_cuenta', 'numero_cuenta',
+    'titular_cuenta', 'banco', 'tipo_cuenta', 'numero_cuenta',
     'fecha_actualizacion',
   ],
   mailing_veterinarios: [

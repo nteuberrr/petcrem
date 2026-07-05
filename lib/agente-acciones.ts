@@ -1,5 +1,5 @@
-import { ensureSheet, ensureColumns, appendRow, getNextId, getSheetData } from './datastore'
-import { enviarBotonesWhatsapp, adminsWhatsapp, avisarAdminsWhatsapp, type BotonWa, type EnvioResult } from './whatsapp'
+import { ensureSheet, ensureColumns, appendRow, getNextId, getSheetData, updateById } from './datastore'
+import { enviarBotonesWhatsapp, adminsWhatsapp, avisarAdminsWhatsapp, enviarMediaWhatsapp, type BotonWa, type EnvioResult } from './whatsapp'
 import { crearRelayPendiente } from './relay-retiro'
 import { geocodeAddress, coordEnChile } from './google-maps'
 import { formatDate, formatDateForSheet, todayISO } from './dates'
@@ -8,7 +8,11 @@ import { fmtPrecio } from './format'
 import { precioClienteEutanasia, getConsultaEutanasia } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
 import { capitalizarNombre } from './nombres'
-import type { HandlersAgente, AccionRetiro, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, AccionConsultaEstado, CtxAgente } from './agente-mensajes'
+import { calcularSnapshotFicha } from './price-calculator'
+import { dispararCobroAdicional } from './cobros'
+import { generarCatalogoPdf } from './catalogo-generator'
+import { uploadToR2 } from './cloudflare-r2'
+import type { HandlersAgente, AccionRetiro, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, AccionConsultaEstado, AccionAgregarAdicional, CtxAgente } from './agente-mensajes'
 
 /**
  * Valida que una dirección + comuna exista y caiga dentro de Chile (geocoding).
@@ -449,7 +453,113 @@ async function consultarEstadoMascota(a: AccionConsultaEstado): Promise<string> 
     `Usá SOLO estos datos; no inventes fechas ni estados.`
 }
 
+/** Busca la ficha del cliente por su WhatsApp (últimos 9 dígitos). Prefiere una
+ *  ficha REGISTRADA (con código); si no hay, cae al borrador más reciente. */
+async function fichaPorWaId(waId?: string): Promise<Record<string, string> | null> {
+  const tel9 = (waId || '').replace(/\D/g, '').slice(-9)
+  if (!tel9) return null
+  const rows = await getSheetData('clientes')
+  const propias = rows.filter(c => (c.telefono || '').replace(/\D/g, '').slice(-9) === tel9)
+  if (propias.length === 0) return null
+  propias.sort((a, b) => (parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0))
+  return propias.find(c => String(c.codigo || '').trim()) || propias[0]
+}
+
+/**
+ * Envía el catálogo de productos (PDF) al cliente por WhatsApp. Genera el PDF
+ * con los datos vigentes, lo sube a R2 y manda el documento.
+ */
+async function enviarCatalogo(ctx: CtxAgente): Promise<string> {
+  const tel9 = (ctx.waId || '').replace(/\D/g, '').slice(-9)
+  if (tel9.length !== 9) {
+    return 'No pude identificar el WhatsApp del cliente para enviarle el catálogo. Ofrécele que el equipo se lo mande y sigue la conversación.'
+  }
+  try {
+    const pdf = await generarCatalogoPdf()
+    const up = await uploadToR2(pdf, 'catalogos/catalogo-productos-alma-animal.pdf', 'application/pdf')
+    const env = await enviarMediaWhatsapp(`56${tel9}`, { tipo: 'document', link: up.url, filename: 'Catálogo de productos - Alma Animal.pdf' })
+    if (!env.ok) {
+      console.warn('[agente-acciones] enviarCatalogo whatsapp falló:', env.error)
+      return 'No pude enviar el catálogo en este momento. Dile al cliente que el equipo se lo hará llegar, y continúa la conversación con normalidad.'
+    }
+    return 'Listo, se le envió el catálogo de productos en PDF al cliente. Acompáñalo con un mensaje breve y cálido invitándolo a revisarlo y a decirte si quiere agregar algo al servicio.'
+  } catch (e) {
+    console.warn('[agente-acciones] enviarCatalogo error:', e)
+    return 'No pude generar el catálogo ahora. Dile al cliente que el equipo se lo enviará a la brevedad.'
+  }
+}
+
+/**
+ * Agrega productos/servicios adicionales a la ficha del cliente (que YA confirmó
+ * agregarlos) y dispara el correo + WhatsApp de cobro con los datos de pago.
+ * Recalcula el snapshot de la ficha. Requiere una ficha del cliente.
+ */
+async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Promise<string> {
+  const items = Array.isArray(a.items) ? a.items : []
+  if (items.length === 0) return 'No indicaste qué producto agregar. Pregúntale al cliente qué quiere agregar y confírmalo antes de llamar esta herramienta.'
+
+  const ficha = await fichaPorWaId(ctx.waId)
+  if (!ficha) {
+    return 'ESTE CLIENTE AÚN NO TIENE FICHA registrada, así que no puedo agregar el producto a un servicio. NO agregues nada: escala al equipo (escalar_a_humano) para que lo gestionen, y dile al cliente que un miembro del equipo coordinará el adicional.'
+  }
+
+  const [prods, otros] = await Promise.all([
+    getSheetData('productos').catch(() => [] as Record<string, string>[]),
+    getSheetData('otros_servicios').catch(() => [] as Record<string, string>[]),
+  ])
+  const resueltos: { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }[] = []
+  for (const it of items) {
+    const tipo = it.tipo === 'servicio' ? 'servicio' : 'producto'
+    const fuente = tipo === 'producto' ? prods : otros
+    const row = fuente.find(r => String(r.id) === String(it.id))
+    if (!row) continue
+    resueltos.push({ tipo, id: String(row.id), nombre: row.nombre || '', precio: parseInt(row.precio, 10) || 0, qty: Math.max(1, Number(it.qty) || 1) })
+  }
+  if (resueltos.length === 0) {
+    return 'No reconocí esos productos en el catálogo. Revisa los IDs de la lista PRODUCTOS ADICIONALES DISPONIBLES y vuelve a intentarlo, o escala al equipo.'
+  }
+
+  // Agregar a los adicionales existentes de la ficha + recalcular snapshot.
+  let adicionales: Array<{ tipo: string; id: string; nombre: string; precio: number; qty: number }> = []
+  try { const x = JSON.parse(ficha.adicionales || '[]'); if (Array.isArray(x)) adicionales = x } catch { /* */ }
+  for (const r of resueltos) adicionales.push({ tipo: r.tipo, id: r.id, nombre: r.nombre, precio: r.precio, qty: r.qty })
+
+  try {
+    const snapshot = await calcularSnapshotFicha({
+      peso: parseFloat(ficha.peso_ingreso || ficha.peso_declarado || '0') || 0,
+      codigo_servicio: ficha.codigo_servicio || 'CI',
+      veterinaria_id: ficha.veterinaria_id || undefined,
+      tipo_precios: ficha.tipo_precios || undefined,
+      adicionales: adicionales.map(x => ({ tipo: x.tipo as 'producto' | 'servicio', id: x.id, qty: x.qty })),
+    })
+    await updateById('clientes', String(ficha.id), {
+      ...ficha,
+      adicionales: JSON.stringify(adicionales),
+      precio_servicio: snapshot.precio_servicio,
+      precio_adicionales: snapshot.precio_adicionales,
+      precio_total: snapshot.precio_total,
+    })
+  } catch (e) {
+    console.warn('[agente-acciones] agregarAdicional: no se pudo actualizar la ficha:', e)
+    return 'No pude agregar el producto a la ficha en este momento. Discúlpate brevemente y dile al cliente que el equipo lo coordina en seguida (escala a un humano).'
+  }
+
+  // Cobro: correo (con datos de transferencia + botón confirmar) + WhatsApp.
+  const monto = resueltos.reduce((s, r) => s + r.precio * r.qty, 0)
+  try {
+    await dispararCobroAdicional(
+      { id: String(ficha.id), email: ficha.email || '', nombre_tutor: ficha.nombre_tutor || '', nombre_mascota: ficha.nombre_mascota || '', telefono: ficha.telefono || '' },
+      resueltos.map(r => ({ nombre: r.nombre, precio: r.precio, qty: r.qty })),
+    )
+  } catch (e) { console.warn('[agente-acciones] agregarAdicional: cobro falló:', e) }
+
+  const detalle = resueltos.map(r => `${r.qty > 1 ? `${r.qty}× ` : ''}${r.nombre}`).join(', ')
+  return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'} (total ${fmtPrecio(monto)}). ` +
+    `Le enviamos al cliente un correo con el detalle y los datos de transferencia (y un aviso por WhatsApp). ` +
+    `Confírmale de forma cálida y breve que quedó agregado y que le llegó el correo con los datos para pagar.`
+}
+
 /** Handlers disponibles para el agente (Flujo A: retiro · Flujo B: eutanasia). */
 export function handlersAgente(): HandlersAgente {
-  return { solicitarRetiro, solicitarRetiroVet, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro, consultarEstadoMascota }
+  return { solicitarRetiro, solicitarRetiroVet, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro, consultarEstadoMascota, enviarCatalogo, agregarAdicional }
 }

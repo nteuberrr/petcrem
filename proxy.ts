@@ -45,6 +45,10 @@ export async function proxy(req: NextRequest) {
     pathname === '/api/clientes/foto' ||
     pathname === '/solicitar-video' ||
     pathname === '/api/clientes/video' ||
+    // Confirmación pública de transferencia (botón del correo de cobro). Auth =
+    // token HMAC firmado; el endpoint es idempotente.
+    pathname.startsWith('/pago/confirma/') ||
+    pathname === '/api/pago/confirmar' ||
     pathname === '/api/eutanasias/precios' ||
     pathname === '/api/eutanasias/vets/inscribir' ||
     // Autocomplete de comunas usado tanto en el landing público como en el
@@ -55,6 +59,8 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith('/eutanasia/no-realizado/') ||
     pathname.startsWith('/eutanasia/datos-pago/') ||
     pathname.startsWith('/eutanasia/cliente-confirma/') ||
+    pathname.startsWith('/eutanasia/hora-retiro/') ||
+    pathname === '/api/eutanasias/cotizaciones/hora-retiro' ||
     pathname === '/api/eutanasias/cotizaciones/aceptar' ||
     pathname === '/api/eutanasias/cotizaciones/realizado' ||
     pathname === '/api/eutanasias/cotizaciones/no-realizado' ||

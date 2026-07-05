@@ -28,6 +28,9 @@ const COLS_COTI = [
   'cliente_nombre', 'cliente_telefono', 'cliente_email', 'cliente_wa_id',
   'direccion', 'comuna',
   'fecha_servicio', 'hora_servicio',
+  // Hora que el VET informa (coordinada con el cliente) para que el crematorio
+  // pase a retirar tras la eutanasia. En blanco hasta que la informe.
+  'hora_retiro_crematorio',
   'tipo_servicio_cremacion',
   'notas',
   'estado',
@@ -312,11 +315,16 @@ export interface EutanasiaCronograma {
   id: string
   mascota_nombre: string
   cliente_nombre: string
+  peso: string
   comuna: string
   direccion: string
   fecha_servicio: string
   hora_servicio: string
+  /** Hora que el vet informó para el retiro del crematorio ('' si aún no la informa). */
+  hora_retiro_crematorio: string
   vet_nombre: string
+  /** Ficha borrador asociada (para abrirla desde el dashboard). '' si no tiene. */
+  cliente_id: string
   /** 'esperando' (naranja: sin vet aún) | 'tomada' (verde: un vet la tomó / la realizó). */
   estado_cronograma: 'esperando' | 'tomada'
 }
@@ -351,11 +359,14 @@ export async function listarEutanasiasCronograma(): Promise<EutanasiaCronograma[
       id: c.id || '',
       mascota_nombre: c.mascota_nombre || '',
       cliente_nombre: c.cliente_nombre || '',
+      peso: c.peso || '',
       comuna: c.comuna || '',
       direccion: c.direccion || '',
       fecha_servicio: c.fecha_servicio || '',
       hora_servicio: c.hora_servicio || '',
+      hora_retiro_crematorio: c.hora_retiro_crematorio || '',
       vet_nombre: c.vet_nombre_asignado || '',
+      cliente_id: c.cliente_id || '',
       estado_cronograma: cronograma,
     })
   }

@@ -40,6 +40,8 @@ type CorreoCliente = {
 
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
 
+type Cobro = { id: string; cliente_id: string; tipo: string; detalle: string; monto: string; estado: string; fecha_creacion: string }
+
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
 
 type ClienteDetalle = {
@@ -83,6 +85,7 @@ type ClienteDetalle = {
   fotos_evidencia?: string
   correo_diferencia_fecha?: string
   correo_diferencia_monto?: string
+  cobros?: Cobro[]
   ciclo?: {
     id: string
     fecha: string
@@ -132,6 +135,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   // Correo de cobro por la diferencia de peso (con la foto de respaldo adjunta).
   const [enviandoCobro, setEnviandoCobro] = useState(false)
   const [cobroError, setCobroError] = useState('')
+  // Confirmar pago de un cobro pendiente (adicional / diferencia) desde el banner.
+  const [pagandoCobroId, setPagandoCobroId] = useState('')
   // Menú "Documentos" (certificados + archivos).
   const [docsOpen, setDocsOpen] = useState(false)
   const docsMenuRef = useRef<HTMLDivElement>(null)
@@ -551,6 +556,18 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     setAdicionales(prev => prev.map(a => a.tipo === tipo && a.id === itemId ? { ...a, qty: Math.max(1, qty) } : a))
   }
 
+  async function confirmarPago(cobroId: string) {
+    if (!confirm('¿Confirmar que recibimos este pago? Se cerrará la cobranza.')) return
+    setPagandoCobroId(cobroId)
+    try {
+      const r = await fetch(`/api/cobros/${cobroId}`, { method: 'PATCH' })
+      if (r.ok) await recargarCliente()
+      else alert('No se pudo confirmar el pago.')
+    } finally {
+      setPagandoCobroId('')
+    }
+  }
+
   if (loading) return <div className="p-8 text-gray-400 text-sm">Cargando...</div>
   if (!cliente) return <div className="p-8 text-gray-400 text-sm">Cliente no encontrado</div>
 
@@ -697,6 +714,39 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             Esta ficha la creó el bot al agendar. Completa los datos que falten (especie, peso, fechas, datos de pago)
             y presiona <strong>Registrar ficha</strong> para generar el código y enviarle el correo al tutor.
           </p>
+        </div>
+      )}
+
+      {/* COBROS PENDIENTES (adicional / diferencia de peso). Rojo si el cliente
+          aún no confirma; verde-aviso cuando confirmó su transferencia (a revisar). */}
+      {(cliente.cobros || []).length > 0 && (
+        <div className="mb-4 space-y-2">
+          {(cliente.cobros || []).map(cb => {
+            const confirmado = cb.estado === 'cliente_confirmo'
+            return (
+              <div key={cb.id} className={`rounded-xl border-2 px-4 py-3 flex flex-wrap items-center justify-between gap-3 ${confirmado ? 'border-emerald-300 bg-emerald-50' : 'border-red-300 bg-red-50'}`}>
+                <div className="min-w-[220px]">
+                  <p className={`text-sm font-bold ${confirmado ? 'text-emerald-900' : 'text-red-900'}`}>
+                    {confirmado ? '✅ Cliente confirmó el pago — revisar' : '⚠️ Cobro pendiente'}
+                    {' · '}{fmtPrecio(parseInt(cb.monto, 10) || 0)}
+                  </p>
+                  <p className={`text-xs mt-0.5 ${confirmado ? 'text-emerald-800' : 'text-red-800'}`}>
+                    {cb.tipo === 'diferencia' ? 'Diferencia de peso' : 'Productos adicionales'}
+                    {cb.detalle ? ` — ${cb.detalle}` : ''}
+                    {confirmado ? '. El cliente marcó que ya transfirió; verifica y confirma.' : '. Enviado al cliente; a la espera de la transferencia.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => confirmarPago(cb.id)}
+                  disabled={pagandoCobroId === cb.id}
+                  className="shrink-0 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-60"
+                  style={{ backgroundColor: confirmado ? '#059669' : '#143C64' }}
+                >
+                  {pagandoCobroId === cb.id ? '⌛…' : '✓ Confirmar pago'}
+                </button>
+              </div>
+            )
+          })}
         </div>
       )}
 

@@ -1,16 +1,19 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { fmtFecha } from '@/lib/format'
 
 type Solicitud = {
   id: string; cliente_nombre: string; nombre_mascota: string; peso: string
   direccion: string; comuna: string; fecha_retiro: string; hora_retiro: string
   tipo_servicio: string; origen: string; vet_nombre: string; cliente_wa_id: string
+  cliente_id: string
 }
 
 type Eutanasia = {
-  id: string; mascota_nombre: string; cliente_nombre: string; comuna: string
-  direccion: string; fecha_servicio: string; hora_servicio: string; vet_nombre: string
+  id: string; mascota_nombre: string; cliente_nombre: string; peso: string; comuna: string
+  direccion: string; fecha_servicio: string; hora_servicio: string
+  hora_retiro_crematorio: string; vet_nombre: string; cliente_id: string
   estado_cronograma: 'esperando' | 'tomada'
 }
 
@@ -37,6 +40,9 @@ const cuando = (s: Solicitud) => `${s.fecha_retiro ? fmtFecha(s.fecha_retiro) : 
  * Confirmar/Rechazar de los retiros pendientes (el POST revalida el rol igual).
  */
 export default function SolicitudesPendientes({ puedeResolver = false }: { puedeResolver?: boolean }) {
+  const router = useRouter()
+  // Abre la ficha borrador del cliente (si la solicitud/eutanasia ya la tiene).
+  const abrirFicha = (clienteId?: string) => { if (clienteId) router.push(`/clientes/${clienteId}`) }
   const [pendientes, setPendientes] = useState<Solicitud[]>([])
   const [confirmadas, setConfirmadas] = useState<Solicitud[]>([])
   const [eutanasias, setEutanasias] = useState<Eutanasia[]>([])
@@ -152,7 +158,11 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
           </div>
           <div className={GRID}>
             {recortar(confirmadas, 'confirmadas').map(s => (
-              <div key={s.id} className="rounded-xl border-2 border-emerald-300 bg-emerald-50 shadow-sm p-3 flex flex-col gap-1 min-h-[150px]">
+              <div key={s.id}
+                onClick={() => abrirFicha(s.cliente_id)}
+                role={s.cliente_id ? 'button' : undefined}
+                title={s.cliente_id ? 'Abrir ficha del cliente' : undefined}
+                className={`rounded-xl border-2 border-emerald-300 bg-emerald-50 shadow-sm p-3 flex flex-col gap-1 min-h-[150px] ${s.cliente_id ? 'cursor-pointer hover:bg-emerald-100 transition-colors' : ''}`}>
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">✅ Confirmado</span>
                   {s.tipo_servicio && (
@@ -161,6 +171,7 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
                 </div>
                 <p className="font-bold text-gray-900 text-sm truncate mt-1">{s.nombre_mascota || '—'}</p>
                 <p className="text-xs text-gray-700 truncate">{esVet(s) ? '🏥 ' : '👤 '}{quien(s)}</p>
+                {s.peso && <p className="text-[11px] text-gray-500">{s.peso} kg</p>}
                 <p className="text-[11px] text-gray-600 leading-tight mt-auto">🗓 {cuando(s)}</p>
                 <p className="text-[11px] text-gray-600 leading-tight truncate">📍 {direccion(s)}</p>
               </div>
@@ -180,8 +191,13 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
             {recortar(eutanasias, 'eutanasias').map(e => {
               const esperando = e.estado_cronograma === 'esperando'
               const box = esperando ? 'border-orange-300 bg-orange-50' : 'border-emerald-300 bg-emerald-50'
+              const hoverBox = esperando ? 'hover:bg-orange-100' : 'hover:bg-emerald-100'
               return (
-                <div key={e.id} className={`rounded-xl border-2 ${box} shadow-sm p-3 flex flex-col gap-1 min-h-[150px]`}>
+                <div key={e.id}
+                  onClick={() => abrirFicha(e.cliente_id)}
+                  role={e.cliente_id ? 'button' : undefined}
+                  title={e.cliente_id ? 'Abrir ficha del cliente' : undefined}
+                  className={`rounded-xl border-2 ${box} shadow-sm p-3 flex flex-col gap-1 min-h-[150px] ${e.cliente_id ? `cursor-pointer ${hoverBox} transition-colors` : ''}`}>
                   <div className="flex items-center justify-between gap-1">
                     {esperando ? (
                       <span className="text-[10px] font-bold text-orange-800 bg-orange-100 border border-orange-200 px-1.5 py-0.5 rounded">⏳ Esperando vet</span>
@@ -192,8 +208,14 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
                   </div>
                   <p className="font-bold text-gray-900 text-sm truncate mt-1">{e.mascota_nombre || '—'}</p>
                   <p className="text-xs text-gray-700 truncate">👤 {e.cliente_nombre || '—'}</p>
+                  {e.peso && <p className="text-[11px] text-gray-500">{e.peso} kg</p>}
                   {!esperando && e.vet_nombre && <p className="text-[11px] text-gray-600 truncate">🏥 {e.vet_nombre}</p>}
-                  <p className="text-[11px] text-gray-600 leading-tight mt-auto">🗓 {eutCuando(e)}</p>
+                  <p className="text-[11px] text-gray-600 leading-tight mt-auto">🩺 Eutanasia: {eutCuando(e)}</p>
+                  <p className="text-[11px] leading-tight truncate">
+                    🚚 Retiro: {e.hora_retiro_crematorio
+                      ? <span className="text-gray-700 font-semibold">{e.hora_retiro_crematorio}</span>
+                      : <span className="text-gray-400 italic">por informar</span>}
+                  </p>
                   <p className="text-[11px] text-gray-600 leading-tight truncate">📍 {eutDireccion(e)}</p>
                 </div>
               )

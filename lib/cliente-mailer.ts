@@ -354,6 +354,36 @@ export function buildCertificado(args: CertificadoEmailArgs, contacto: Contacto)
 
 // ─── 6. Cobro por diferencia de peso (peso real > tramo declarado) ────────────
 
+/** Un producto/servicio adicional cobrado. */
+export interface CobroItem { nombre: string; precio: number; qty?: number }
+
+/** Datos de la cuenta de transferencia (los vacíos se omiten del correo). */
+export interface DatosTransferencia { titular: string; rut: string; banco: string; tipoCuenta: string; numeroCuenta: string; correo: string }
+
+/** Fila de la tabla de datos de transferencia (vacía si el valor no está). */
+function filaTransf(label: string, valor: string): string {
+  return valor ? `
+        <tr>
+          <td style="padding:3px 12px 3px 0;font-size:13px;color:${BRAND.muted};white-space:nowrap">${label}</td>
+          <td style="padding:3px 0;font-size:13px;font-weight:600;color:${BRAND.ink}">${escapeHtml(valor)}</td>
+        </tr>` : ''
+}
+function tablaTransferencia(t: DatosTransferencia): string {
+  return `<div style="border:1px solid ${BRAND.hairline};border-radius:12px;padding:14px 18px;margin:0 0 16px">
+        <table style="border-collapse:collapse">${filaTransf('Titular', t.titular)}${filaTransf('RUT', t.rut)}${filaTransf('Banco', t.banco)}${filaTransf('Tipo de cuenta', t.tipoCuenta)}${filaTransf('N° de cuenta', t.numeroCuenta)}${filaTransf('Correo', t.correo)}</table>
+      </div>`
+}
+/** Botón "Confirma tu transferencia aquí" (bulletproof-ish para email). */
+function botonConfirmaTransferencia(link: string): string {
+  if (!link) return ''
+  return `<div style="text-align:center;margin:6px 0 18px">
+        <a href="${link}" style="display:inline-block;background:${BRAND.navy};color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 28px;border-radius:10px">
+          ✅ Confirma tu transferencia aquí
+        </a>
+        <p style="margin:8px 0 0;font-size:11px;color:${BRAND.muted}">Aprieta el botón una vez que hayas transferido, así lo dejamos registrado.</p>
+      </div>`
+}
+
 export interface CobroDiferenciaArgs {
   email: string
   nombreMascota: string
@@ -364,7 +394,9 @@ export interface CobroDiferenciaArgs {
   /** Diferencia a pagar (CLP), calculada server-side con la tabla del cliente. */
   monto: number
   /** Datos de transferencia (empresa_config). Los vacíos se omiten. */
-  transferencia: { titular: string; rut: string; banco: string; tipoCuenta: string; numeroCuenta: string; correo: string }
+  transferencia: DatosTransferencia
+  /** Link firmado para el botón "confirma tu transferencia" (opcional). */
+  linkConfirma?: string
 }
 
 /**
@@ -375,12 +407,6 @@ export interface CobroDiferenciaArgs {
 export function buildCobroDiferencia(args: CobroDiferenciaArgs, contacto: Contacto): SendOpts {
   const mascota = escapeHtml(args.nombreMascota)
   const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
-  const t = args.transferencia
-  const fila = (label: string, valor: string) => valor ? `
-        <tr>
-          <td style="padding:3px 12px 3px 0;font-size:13px;color:${BRAND.muted};white-space:nowrap">${label}</td>
-          <td style="padding:3px 0;font-size:13px;font-weight:600;color:${BRAND.ink}">${escapeHtml(valor)}</td>
-        </tr>` : ''
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">${saludo(args.nombreTutor)}</p>
       <p style="margin:0 0 14px;font-size:14px;line-height:1.6">
@@ -396,11 +422,9 @@ export function buildCobroDiferencia(args: CobroDiferenciaArgs, contacto: Contac
         Adjuntamos una <strong>fotografía del pesaje</strong> como respaldo. Puedes pagar la diferencia
         por transferencia a la siguiente cuenta:
       </p>
-      <div style="border:1px solid ${BRAND.hairline};border-radius:12px;padding:14px 18px;margin:0 0 16px">
-        <table style="border-collapse:collapse">${fila('Titular', t.titular)}${fila('RUT', t.rut)}${fila('Banco', t.banco)}${fila('Tipo de cuenta', t.tipoCuenta)}${fila('N° de cuenta', t.numeroCuenta)}${fila('Correo', t.correo)}</table>
-      </div>
+      ${tablaTransferencia(args.transferencia)}
+      ${botonConfirmaTransferencia(args.linkConfirma || '')}
       <p style="margin:0;font-size:14px;line-height:1.6">
-        Una vez realizada la transferencia, envíanos el comprobante respondiendo este correo o por WhatsApp.
         Cualquier duda sobre el pesaje o el cobro, escríbenos — estamos para ayudarte. 🐾
       </p>`
   return {
@@ -410,6 +434,67 @@ export function buildCobroDiferencia(args: CobroDiferenciaArgs, contacto: Contac
     preview_text: `El peso real de ${args.nombreMascota} corresponde a un tramo superior — diferencia a pagar.`,
     tags: [{ name: 'tipo', value: 'cliente_cobro_diferencia' }],
     seguimiento: { tipo: 'cliente_cobro_diferencia', audiencia: 'Tutor', nombre: args.nombreMascota, clienteId: args.clienteId },
+  }
+}
+
+// ─── 7. Cobro por productos adicionales agregados al servicio ─────────────────
+
+export interface CobroAdicionalArgs {
+  email: string
+  nombreMascota: string
+  nombreTutor: string
+  clienteId?: string
+  /** Productos/servicios agregados. */
+  items: CobroItem[]
+  /** Total a pagar (CLP). */
+  monto: number
+  transferencia: DatosTransferencia
+  /** Link firmado para el botón "confirma tu transferencia". */
+  linkConfirma?: string
+}
+
+/**
+ * Correo "según lo solicitado" cuando se agrega uno o más productos adicionales
+ * al servicio: detalle de lo agregado + datos de transferencia + botón para
+ * confirmar el pago. Lo dispara lib/cobros.ts (alta manual en la ficha o el bot).
+ */
+export function buildCobroAdicional(args: CobroAdicionalArgs, contacto: Contacto): SendOpts {
+  const mascota = escapeHtml(args.nombreMascota)
+  const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
+  const filas = args.items.map(i => `
+        <tr>
+          <td style="padding:6px 0;font-size:14px;color:${BRAND.ink}">${i.qty && i.qty > 1 ? `${i.qty}× ` : ''}${escapeHtml(i.nombre)}</td>
+          <td style="padding:6px 0;font-size:14px;font-weight:600;color:${BRAND.ink};text-align:right;white-space:nowrap">${fmt((i.precio || 0) * (i.qty || 1))}</td>
+        </tr>`).join('')
+  const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">${saludo(args.nombreTutor)}</p>
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.6">
+        Según lo solicitado, agregamos al servicio de <strong>${mascota}</strong> el siguiente detalle:
+      </p>
+      <div style="border:1px solid ${BRAND.hairline};border-radius:12px;padding:12px 18px;margin:0 0 16px">
+        <table style="width:100%;border-collapse:collapse">${filas}
+          <tr><td colspan="2" style="border-top:1px solid ${BRAND.hairline};padding-top:8px"></td></tr>
+          <tr>
+            <td style="padding:2px 0;font-size:14px;font-weight:700;color:${BRAND.navy}">Total a pagar</td>
+            <td style="padding:2px 0;font-size:16px;font-weight:700;color:${BRAND.navy};text-align:right">${fmt(args.monto)}</td>
+          </tr>
+        </table>
+      </div>
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.6">
+        Puedes pagarlo por transferencia a la siguiente cuenta:
+      </p>
+      ${tablaTransferencia(args.transferencia)}
+      ${botonConfirmaTransferencia(args.linkConfirma || '')}
+      <p style="margin:0;font-size:14px;line-height:1.6">
+        Cualquier duda, escríbenos — estamos para ayudarte. 🐾
+      </p>`
+  return {
+    to: args.email,
+    subject: `Detalle de lo agregado al servicio de ${args.nombreMascota}`,
+    html: renderEmailLayout({ titulo: 'Detalle de productos adicionales', bodyHtml: cuerpo, contacto }),
+    preview_text: `Según lo solicitado, agregamos ${args.items.map(i => i.nombre).join(', ')} al servicio de ${args.nombreMascota}.`,
+    tags: [{ name: 'tipo', value: 'cliente_cobro_adicional' }],
+    seguimiento: { tipo: 'cliente_cobro_adicional', audiencia: 'Tutor', nombre: args.nombreMascota, clienteId: args.clienteId },
   }
 }
 

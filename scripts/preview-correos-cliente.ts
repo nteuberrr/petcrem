@@ -124,7 +124,7 @@ async function main() {
     await sendEmail({
       to: DESTINO,
       subject: `Coordina con la familia — Eutanasia ${coti.mascota_nombre}`,
-      html: renderCoordinarEmail({ vetNombre, c: coti, linkRealizado, linkNoRealizado, linkDatosPago, contacto }),
+      html: renderCoordinarEmail({ vetNombre, c: coti, linkRealizado, linkNoRealizado, linkDatosPago, linkHoraRetiro: '#', contacto }),
       preview_text: `Datos de contacto de la familia de ${coti.mascota_nombre}.`,
     })
     log('7', 'Vet · coordina con la familia (realizada / no realizada)')

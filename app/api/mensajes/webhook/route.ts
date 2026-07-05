@@ -13,6 +13,13 @@ import { resolverSolicitudRetiro } from '@/lib/solicitudes-retiro'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 
 export const dynamic = 'force-dynamic'
+// Cubre el debounce anti-ráfaga (abajo) + la generación del agente en after().
+export const maxDuration = 60
+
+/** Debounce anti-ráfaga: al llegar un mensaje esperamos un poco; si el cliente
+ *  manda más mensajes seguidos, solo el ÚLTIMO responde (con todo el contexto),
+ *  evitando varias respuestas a una tanda de preguntas. Ver autoResponder. */
+const DEBOUNCE_MS = 5000
 
 /**
  * Auto-respuesta del agente IA (corre en after(), tras devolver 200 a Meta).
@@ -27,7 +34,24 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
   const destino = (contacto.wa_id || contacto.telefono || '').replace(/\D/g, '')
   if (!destino) return
 
-  const historial = (await getMensajes(conv.id))
+  // ── Debounce anti-ráfaga ──────────────────────────────────────────────────
+  // El cliente suele mandar varias preguntas en mensajes separados y seguidos;
+  // cada uno dispara este webhook. Sin esto, el bot respondía UNA VEZ POR
+  // MENSAJE. Solución: marcamos el ts del último mensaje ENTRANTE, esperamos
+  // DEBOUNCE_MS y volvemos a mirar. Si en ese lapso llegó otro mensaje entrante
+  // MÁS NUEVO, este turno se abandona (lo responderá el webhook de ese mensaje,
+  // ya con el contexto completo). Así una tanda de preguntas → UNA respuesta.
+  const tsUltimoEntrante = (msgs: Awaited<ReturnType<typeof getMensajes>>) =>
+    msgs.filter(m => m.direccion === 'entrante').reduce((mx, m) => Math.max(mx, new Date(m.ts as string).getTime() || 0), 0)
+  const t0 = tsUltimoEntrante(await getMensajes(conv.id))
+  await new Promise(r => setTimeout(r, DEBOUNCE_MS))
+  const msgsFrescos = await getMensajes(conv.id)
+  if (tsUltimoEntrante(msgsFrescos) > t0) {
+    console.log('[agente] llegó otro mensaje durante el debounce — este turno se salta:', conv.id)
+    return
+  }
+
+  const historial = msgsFrescos
     .filter(m => m.cuerpo)
     .map(m => ({ rol: (m.direccion === 'entrante' ? 'cliente' : 'nosotros') as 'cliente' | 'nosotros', texto: m.cuerpo as string }))
   if (historial.length === 0) return

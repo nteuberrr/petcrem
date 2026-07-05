@@ -10,6 +10,7 @@ import { enviarRegistroMascota } from '@/lib/cliente-mailer'
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
 import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
+import { dispararCobroAdicional, cobrosPendientesPorCliente } from '@/lib/cobros'
 
 export async function GET(
   _req: NextRequest,
@@ -34,7 +35,10 @@ export async function GET(
       despacho = despachos.find((d) => d.id === cliente.despacho_id) ?? null
     }
 
-    return NextResponse.json({ ...cliente, ciclo, despacho })
+    // Cobros pendientes (adicional / diferencia) → banner "cobro pendiente".
+    const cobros = await cobrosPendientesPorCliente(id).catch(() => [])
+
+    return NextResponse.json({ ...cliente, ciclo, despacho, cobros })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
@@ -186,6 +190,27 @@ export async function PATCH(
         })
       } catch (e) {
         console.warn('[clientes PATCH] fallo mail registro (no bloqueante):', e)
+      }
+    }
+
+    // COBRO por productos adicionales AGREGADOS a una ficha YA registrada (NO al
+    // registrar: ahí los adicionales son parte de la cotización inicial). Diff
+    // old-vs-new: cada adicional nuevo dispara el correo + WhatsApp de cobro y
+    // crea un "cobro pendiente". Best-effort. Mismo camino que usa el bot.
+    if (body.adicionales !== undefined && !body.registrar && String(rows[idx].codigo || '').trim()) {
+      try {
+        type AdRaw = { tipo?: string; id?: string; nombre?: string; precio?: number; qty?: number }
+        const keyOf = (a: AdRaw) => `${a.tipo || ''}:${a.id || ''}:${a.nombre || ''}`
+        const antes = new Set((parseAdicionales(rows[idx].adicionales) as AdRaw[]).map(keyOf))
+        const nuevos = (parseAdicionales(body.adicionales) as AdRaw[]).filter(a => !antes.has(keyOf(a)))
+        if (nuevos.length > 0) {
+          await dispararCobroAdicional(
+            { id: String(updated.id), email: String(updated.email || ''), nombre_tutor: String(updated.nombre_tutor || ''), nombre_mascota: String(updated.nombre_mascota || ''), telefono: String(updated.telefono || '') },
+            nuevos.map(a => ({ nombre: String(a.nombre || ''), precio: Number(a.precio) || 0, qty: Number(a.qty) || 1 })),
+          )
+        }
+      } catch (e) {
+        console.warn('[clientes PATCH] fallo cobro adicional (no bloqueante):', e)
       }
     }
 

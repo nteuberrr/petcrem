@@ -498,6 +498,8 @@ export interface CoordinarEmailArgs {
   linkNoRealizado: string
   /** Si está vacío, no se muestra el bloque "Aún no registras tus datos…". */
   linkDatosPago: string
+  /** URL a /eutanasia/hora-retiro/<token> — el vet informa la hora del retiro del crematorio. */
+  linkHoraRetiro: string
   contacto: Contacto
 }
 
@@ -506,7 +508,7 @@ export interface CoordinarEmailArgs {
  * cierre ("Eutanasia realizada" / "Eutanasia no realizada"). El vet va, evalúa y
  * marca el resultado directamente desde acá (ya no hay paso intermedio de confirmar).
  */
-export function renderCoordinarEmail({ vetNombre, c, linkRealizado, linkNoRealizado, linkDatosPago, contacto }: CoordinarEmailArgs): string {
+export function renderCoordinarEmail({ vetNombre, c, linkRealizado, linkNoRealizado, linkDatosPago, linkHoraRetiro, contacto }: CoordinarEmailArgs): string {
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${c.direccion}, ${c.comuna}, Chile`)}`
   const fechaLeg = formatDate(c.fecha_servicio)
   const horaLeg = formatHoraDia(c.hora_servicio)
@@ -546,6 +548,16 @@ export function renderCoordinarEmail({ vetNombre, c, linkRealizado, linkNoRealiz
         En ambos casos coordinamos tu pago para el día hábil siguiente. Presiona solo después de la visita.
       </p>
 
+      ${linkHoraRetiro ? `
+      <div style="margin:22px 0 0;padding-top:18px;border-top:1px dashed ${BRAND.hairline}">
+        <p style="margin:0 0 10px;font-size:13px;color:${BRAND.ink};line-height:1.5">Cuando acuerdes con el cliente la hora, avísanos para coordinar el <strong>retiro del crematorio</strong>:</p>
+        <div style="text-align:center">
+          <a href="${linkHoraRetiro}" style="display:inline-block;background:${BRAND.amber};color:${BRAND.navy};text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">
+            🕒 Infórmanos la hora acordada con el cliente para coordinar el retiro del crematorio
+          </a>
+        </div>
+      </div>` : ''}
+
       ${linkDatosPago ? `
       <div style="margin:24px 0 0;padding-top:18px;border-top:1px dashed ${BRAND.hairline};text-align:center">
         <p style="margin:0 0 10px;font-size:13px;color:${BRAND.muted}">¿Aún no registras tus datos para transferirte los pagos?</p>
@@ -575,12 +587,13 @@ export async function enviarCoordinarConFamilia(args: {
   const linkNoRealizado = `${baseUrl}/eutanasia/no-realizado/${createToken(c.id, vet.id, 'no_realizado')}`
   const tieneDatosPago = (vet.datos_pago_completos ?? '').toUpperCase() === 'TRUE'
   const linkDatosPago = tieneDatosPago ? '' : `${baseUrl}/eutanasia/datos-pago/${createVetToken(vet.id, 'datos_pago')}`
+  const linkHoraRetiro = `${baseUrl}/eutanasia/hora-retiro/${createToken(c.id, vet.id, 'informar_hora_retiro')}`
   try {
     const contacto = await getContacto()
     await sendEmail({
       to: vet.email,
       subject: `Coordina con la familia — Eutanasia ${c.mascota_nombre}`,
-      html: renderCoordinarEmail({ vetNombre: vetNombre || 'Dr/a.', c, linkRealizado, linkNoRealizado, linkDatosPago, contacto }),
+      html: renderCoordinarEmail({ vetNombre: vetNombre || 'Dr/a.', c, linkRealizado, linkNoRealizado, linkDatosPago, linkHoraRetiro, contacto }),
       preview_text: `Datos de contacto de la familia de ${c.mascota_nombre}.`,
       tags: [
         { name: 'tipo', value: 'eutanasia_post_aceptar' },

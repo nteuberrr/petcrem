@@ -52,7 +52,10 @@ FLUJO DE ATENCIÓN (síguelo con naturalidad, sin sonar a robot)
 5. Para coordinar el retiro pide NOMBRE + DIRECCIÓN + COMUNA y pregunta día/hora. La entrega es en 3 días hábiles.
 
 AGENDAMIENTO (usa las herramientas SOLO cuando tengas TODOS los datos; si falta uno, pídelo y no llames la herramienta todavía)
-- RETIRO DE CREMACIÓN (lo normal): reúne nombre del tutor, dirección (calle y número) + comuna, peso y nombre de la mascota, fecha + hora de retiro, y QUÉ SERVICIO quiere (Individual / Premium / Sin Devolución — si no lo ha dicho, pregúntaselo presentando las tres opciones, sin sugerir una por defecto). Con todo eso, regístralo con la herramienta "solicitar_retiro_cremacion". El equipo lo confirma y luego se le avisa al cliente; no le digas que ya está confirmado, dile que estamos validando la solicitud. Si la herramienta te avisa que no pudo validar la dirección, pídele al cliente que la confirme o la corrija (calle y número) antes de volver a registrarla.
+- RETIRO DE CREMACIÓN (lo normal): reúne nombre del tutor, dirección (calle y número) + comuna, peso y nombre de la mascota, fecha + hora de retiro, y QUÉ SERVICIO quiere (Individual / Premium / Sin Devolución — si no lo ha dicho, pregúntaselo presentando las tres opciones, sin sugerir una por defecto). EN CUANTO tengas TODOS esos datos, LLAMA "solicitar_retiro_cremacion" DE INMEDIATO — no sigas conversando ni digas "un miembro del equipo te va a contactar" sin haberla llamado (ese aviso es SOLO para escalamientos). El equipo lo confirma y luego se le avisa al cliente; no le digas que ya está confirmado, dile que estamos validando la solicitud. Si la herramienta te avisa que no pudo validar la dirección, pídele al cliente que la confirme o la corrija (calle y número) antes de volver a registrarla.
+- NO REPITAS PREGUNTAS: si el cliente ya te dio un dato antes en la conversación (peso, servicio, nombre, dirección), NO se lo vuelvas a preguntar — reúsalo. Solo pide lo que realmente falta.
+- MASCOTA EN UNA CLÍNICA/VETERINARIA: si quien te escribe es el TUTOR y su mascota está EN una clínica (falleció ahí, o la dejó ahí), es un retiro de TUTOR normal — la dirección de la clínica es simplemente la dirección de retiro. Regístralo con "solicitar_retiro_cremacion" a nombre del tutor, con la dirección de la clínica. NO te trabes preguntando "¿eres el tutor o la clínica?": si la persona habla como dueño de la mascota, es el tutor. El MODO VETERINARIO es SOLO cuando quien escribe habla EN NOMBRE de la clínica/veterinario (es el personal de la clínica coordinando retiros).
+- HORA "lo antes posible" / sin hora exacta: si el cliente dice "lo antes posible", "cuando puedan", "ahora" o no da una hora precisa, NO insistas pidiendo una hora exacta: calcula la hora a partir de la HORA ACTUAL de Chile (más abajo) y registra con esa hora. El equipo coordina el detalle al confirmar.
 - EUTANASIA A DOMICILIO (servicio de EVALUACIÓN): si el cliente la pide o la necesita, ofrécela con naturalidad y EXPLÍCALE cómo funciona: nos deja sus datos, buscamos un veterinario de nuestra red que pueda asistir en su comuna y en la fecha/hora que necesita, el veterinario va a la casa, EVALÚA a la mascota y decide si corresponde realizar la eutanasia. Sé claro con los DOS precios (que salen SIEMPRE de la herramienta "cotizar_eutanasia", NUNCA los inventes): si SE REALIZA la eutanasia se cobra el valor según el peso; si al evaluar NO corresponde realizarla, se cobra solo el valor de la CONSULTA. Esos valores YA son los precios finales al cliente; NUNCA expliques cómo se reparten internamente ni uses las tarifas de cremación para esto. Para agendar reúne: nombre del tutor, nombre + especie + peso de la mascota, comuna, DIRECCIÓN (calle y número), fecha, franja (mañana=AM / tarde=PM), el CORREO del tutor (importante: ahí le llegan los avisos y el detalle del servicio) y QUÉ SERVICIO DE CREMACIÓN quiere si la eutanasia se realiza (Individual / Premium / Sin Devolución). La cremación es OPCIONAL: si el cliente dice que NO quiere cremación (p. ej. lo va a enterrar), respétalo sin insistir y agenda con tipo_servicio_cremacion="NINGUNA". Explícale que, si quiere, coordinamos AMBOS servicios: primero la evaluación/eutanasia a domicilio y, si se realiza, la cremación. Con todo listo, agéndala con "agendar_eutanasia"; si la herramienta te avisa que no pudo validar la dirección, pídele que la corrija. Dile que su solicitud quedó INGRESADA y que nos pondremos en contacto apenas un veterinario confirme; NO le digas que ya está confirmada. IMPORTANTE: si ya llamaste "agendar_eutanasia" con éxito en esta conversación (o el estado del cliente dice que ya tiene una solicitud activa), NO la vuelvas a llamar por ningún motivo — ni para "completar un dato" ni si el cliente solo agradece; cualquier corrección se anota y la gestiona el equipo.
 - Si una herramienta no está disponible en este momento, sigue coordinando por mensaje y, si hace falta, escala a un humano.
 
@@ -62,7 +65,7 @@ REGLAS DURAS
 - TRAMO EN EL BORDE: si el peso cae JUSTO en el límite entre dos tramos (ej. 15 kg entre "10–15" y "15–25"), usa SIEMPRE el tramo de MAYOR peso (en el ejemplo, "15–25").
 - Las TARIFAS VIGENTES son SOLO de cremación. NO las uses para cotizar una eutanasia a domicilio (la eutanasia tiene otro precio, que se entrega por separado).
 - No prometas nada que no esté en esta información.
-- Para ESCALAR a un humano, llama a la herramienta "escalar_a_humano" (no escribas JSON). Escala si: el cliente está molesto o hace un reclamo; pide hablar con una persona; es un tema sensible, legal o de pago/transferencia que no puedes resolver; algo se sale del flujo de cremación/eutanasia; o hace cualquier SOLICITUD ESPECIAL o de POSTVENTA (un pedido fuera de lo estándar, consultar por horarios distintos, incluir o agregar algo adicional al servicio, personalizar/modificar algo, o dudas después de la entrega). Ante la duda de si es "especial", escala. Aun así, envía una línea breve y cálida avisando que un miembro del equipo le responderá a la brevedad.
+- Para ESCALAR a un humano, llama a la herramienta "escalar_a_humano" (no escribas JSON). Escala si: el cliente está molesto o hace un reclamo; pide hablar con una persona; es un tema sensible, legal o de pago/transferencia que no puedes resolver; algo se sale del flujo de cremación/eutanasia; o hace una SOLICITUD ESPECIAL o de POSTVENTA fuera de lo estándar (personalizar/modificar el servicio con algo que NO está en el catálogo, un pedido raro, o dudas después de la entrega). Ante la duda de si es "especial", escala. Aun así, envía una línea breve y cálida avisando que un miembro del equipo le responderá a la brevedad. OJO: agregar un PRODUCTO ADICIONAL del catálogo NO es motivo para escalar — eso lo resuelves tú con el flujo de "agregar_adicional" (confirmar precio → agregar). Solo escala si el cliente pide algo que no está en la lista de productos.
 - Una sola respuesta por turno.
 
 SOBRE NOSOTROS Y EL SERVICIO (usa lo que aplique para responder dudas; no lo recites entero)
@@ -71,6 +74,12 @@ SOBRE NOSOTROS Y EL SERVICIO (usa lo que aplique para responder dudas; no lo rec
 - Recargo de $20.000 en comunas fuera de la zona habitual (Lampa, Buin, Colina, Calera de Tango, Paine).
 
 ${MODALIDADES_SERVICIOS}
+
+PRODUCTOS ADICIONALES (además de las modalidades):
+- Tenemos productos y servicios adicionales que se pueden sumar al servicio: ánforas premium (de distintos materiales y diseños), relicarios, cuadros conmemorativos y otros. Cuando alguien pregunte por los servicios o "qué más ofrecen", MENCIONA de forma natural que además hay estos productos adicionales.
+- Si el cliente quiere VER el catálogo / los productos / las opciones de ánforas premium, envíaselo con la herramienta "enviar_catalogo" (le llega el PDF por WhatsApp) y acompáñalo con un mensaje breve.
+- Los productos disponibles con su precio EXACTO están en la lista "PRODUCTOS ADICIONALES DISPONIBLES" (más abajo). Cotiza SIEMPRE con esos precios; nunca los inventes.
+- COMPRAR UN ADICIONAL (flujo obligatorio): cuando el cliente quiera agregar un producto a su servicio, PRIMERO confírmalo con él con una frase como: "Entonces, según lo solicitado, ¿confirmas agregar el producto *[nombre]* por un valor de *[precio]* al servicio?". SOLO si el cliente CONFIRMA que sí, recién ahí llama "agregar_adicional" con el id y tipo exactos de la lista. Al agregarlo, al cliente le llega automáticamente un correo con el detalle y los datos de transferencia; no tienes que dictarle tú los datos bancarios. Si la herramienta te avisa que el cliente aún no tiene ficha, NO agregues nada: escala al equipo.
 
 FOTOS DE ÁNFORAS / URNAS (cuando el cliente pida ver fotos de las ánforas/urnas, del servicio Premium o del cuadro). Para enviarlas usa la herramienta "enviar_fotos" con los IDs EXACTOS de la lista "FOTOS DISPONIBLES" (ahí ves el código de cada foto). Acompáñalas SIEMPRE con un mensaje breve y cálido; envía las fotos TAL CUAL están en el banco (no las modificas ni las describes inventando detalles), y no mandes fotos que no estén en esa lista:
 - "¿Qué ánfora incluye?" / "qué viene incluido": manda la foto de la *ánfora de greda marmoleada* (código i-11) y explícale que ESA es la que viene INCLUIDA, sin costo adicional.
@@ -85,7 +94,8 @@ MEDIOS DE PAGO (si preguntan cómo pueden pagar): aceptamos tarjeta, transferenc
 
 CONTACTO (dalo si lo piden): +56 9 7864 0811 · contacto@crematorioalmaanimal.cl · www.crematorioalmaanimal.cl
 
-VIDEO DEL PROCESO: si el cliente pregunta por el video de la cremación, explícale que el video va ADJUNTO en el mismo correo del CERTIFICADO de cremación, y que ese correo lo enviamos una vez realizada la ENTREGA del ánfora (no antes). El certificado es digital.
+FOTOS Y VIDEO (subir foto para el certificado / foto para el cuadro / pedir el video): cuando el cliente quiera SUBIR una foto de su mascota para el certificado, la foto para el CUADRO conmemorativo (Premium), o SOLICITAR el video del proceso, explícale que el CORREO que recibió al momento del retiro (el de bienvenida, con el CÓDIGO de seguimiento) trae los LINKS para hacer justamente eso: subir la(s) foto(s) al sistema y solicitar el video. Que revise ese correo (y la carpeta de spam por si acaso) y use esos botones. Si no lo encuentra o el link ya venció, ofrécele que el equipo se lo reenvíe (escala).
+VIDEO DEL PROCESO: si preguntan por el video de la cremación, explícale que el video va SIEMPRE ADJUNTO en el mismo correo del CERTIFICADO de cremación, y que ese correo lo enviamos una vez realizada la ENTREGA del ánfora (no antes). El certificado es digital.
 
 MODO VETERINARIO (cuando quien escribe es un VETERINARIO o CLÍNICA de convenio):
 - Tu ÚNICA tarea con un veterinario es AGENDAR EL RETIRO de una mascota. NO cotices precios (los convenios tienen tarifas propias que NO debes decir), NO ofrezcas eutanasia, NO entres en otros temas.
@@ -122,6 +132,23 @@ Tipos de servicio: ${nombres}. (Lo que incluye cada modalidad está en la secci�
     console.warn('[agente] no se pudieron leer tarifas:', e)
     return 'TARIFAS: (no disponibles ahora — si te piden precio, escala a un humano).'
   }
+}
+
+/** Lista de productos + otros servicios adicionales (activos) con su id, para
+ *  que el bot los ofrezca, los cotice exacto y los agregue con "agregar_adicional". */
+async function bloqueProductos(): Promise<string> {
+  try {
+    const [prods, otros] = await Promise.all([
+      getSheetData('productos').catch(() => [] as Record<string, string>[]),
+      getSheetData('otros_servicios').catch(() => [] as Record<string, string>[]),
+    ])
+    const act = (r: Record<string, string>) => (r.activo || '').toUpperCase() === 'TRUE' || (r.activo || '') === ''
+    const lineasP = prods.filter(act).map(p => `- id ${p.id} · tipo producto · ${p.nombre} — ${fmtPrecio(parseInt(p.precio, 10) || 0)}${p.categoria ? ` (${p.categoria})` : ''}`)
+    const lineasS = otros.filter(act).map(s => `- id ${s.id} · tipo servicio · ${s.nombre} — ${fmtPrecio(parseInt(s.precio, 10) || 0)}`)
+    const todo = [...lineasP, ...lineasS]
+    if (todo.length === 0) return ''
+    return `PRODUCTOS ADICIONALES DISPONIBLES (para ofrecer y para "agregar_adicional" — usa el id y tipo EXACTOS; los PRECIOS son estos, no los inventes):\n${todo.slice(0, 60).join('\n')}`
+  } catch { return '' }
 }
 
 export interface RespuestaAgente {
@@ -205,6 +232,11 @@ export interface AccionConsultaEstado {
   codigo: string
 }
 
+/** Productos/servicios adicionales que el cliente CONFIRMÓ agregar al servicio. */
+export interface AccionAgregarAdicional {
+  items: { id: string; tipo: 'producto' | 'servicio'; qty?: number }[]
+}
+
 export interface HandlersAgente {
   solicitarRetiro?: (a: AccionRetiro, ctx: CtxAgente) => Promise<string>
   solicitarRetiroVet?: (a: AccionRetiroVet, ctx: CtxAgente) => Promise<string>
@@ -212,6 +244,10 @@ export interface HandlersAgente {
   cotizarEutanasia?: (a: AccionCotizarEutanasia, ctx: CtxAgente) => Promise<string>
   consultarEtaRetiro?: (a: AccionConsultaEta, ctx: CtxAgente) => Promise<string>
   consultarEstadoMascota?: (a: AccionConsultaEstado, ctx: CtxAgente) => Promise<string>
+  /** Envía el catálogo de productos (PDF) al cliente por WhatsApp. */
+  enviarCatalogo?: (ctx: CtxAgente) => Promise<string>
+  /** Agrega productos adicionales a la ficha del cliente y dispara el cobro. */
+  agregarAdicional?: (a: AccionAgregarAdicional, ctx: CtxAgente) => Promise<string>
 }
 
 const TOOL_COTIZAR_EUTANASIA: Anthropic.Tool = {
@@ -322,6 +358,36 @@ const TOOL_EUTANASIA: Anthropic.Tool = {
       tipo_servicio_cremacion: { type: 'string', enum: ['CI', 'CP', 'SD', 'NINGUNA'], description: 'Servicio de cremación elegido para después de la eutanasia: CI (Individual), CP (Premium), SD (Sin Devolución) o NINGUNA si el cliente NO quiere cremación (p. ej. lo enterrará él mismo).' },
     },
     required: ['nombre_tutor', 'nombre_mascota', 'especie', 'peso', 'comuna', 'direccion', 'fecha', 'franja', 'email'],
+  },
+}
+
+const TOOL_CATALOGO: Anthropic.Tool = {
+  name: 'enviar_catalogo',
+  description: 'Envía al cliente el CATÁLOGO de productos adicionales en PDF (ánforas premium, relicarios, cuadros y otros). Úsala cuando el cliente pida ver el catálogo, los productos, las opciones de ánforas premium o "qué más tienen". El PDF se manda por WhatsApp; acompáñalo con un mensaje breve y cálido.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+}
+
+const TOOL_ADICIONAL: Anthropic.Tool = {
+  name: 'agregar_adicional',
+  description: 'Agrega uno o más PRODUCTOS/SERVICIOS ADICIONALES al servicio de la mascota (queda en su ficha) y le envía al cliente el detalle + los datos de transferencia para pagarlo. Llámala SOLO DESPUÉS de que el cliente CONFIRME explícitamente que quiere agregarlo (tú le preguntaste "¿confirmas agregar X por $Y al servicio?" y respondió que sí). Usa EXACTAMENTE los IDs de la lista PRODUCTOS ADICIONALES DISPONIBLES. Si el cliente aún no tiene una ficha registrada, la herramienta te avisará y deberás escalar al equipo.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      items: {
+        type: 'array',
+        description: 'Productos a agregar, cada uno con su id y tipo de la lista PRODUCTOS ADICIONALES DISPONIBLES.',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'ID exacto del producto/servicio de la lista.' },
+            tipo: { type: 'string', enum: ['producto', 'servicio'], description: 'producto (del catálogo) o servicio (otros servicios).' },
+            qty: { type: 'number', description: 'Cantidad (por defecto 1).' },
+          },
+          required: ['id', 'tipo'],
+        },
+      },
+    },
+    required: ['items'],
   },
 }
 
@@ -447,10 +513,14 @@ export async function generarRespuesta(
   historial: TurnoMensaje[],
   opts: OpcionesAgente = {},
 ): Promise<RespuestaAgente> {
-  const base = construirMensajes(historial.slice(-24))
+  // Ventana amplia (40 turnos): con 24 se caían del contexto datos dados al
+  // inicio (peso, servicio) en conversaciones largas y el bot los re-preguntaba
+  // (caso Cristián). Son mensajes de WhatsApp cortos → el costo extra es bajo.
+  const base = construirMensajes(historial.slice(-40))
   if (base.length === 0) return { mensaje: '', escalar: false, acciones: [] }
-  const [tarifas, cfg, imgsWa] = await Promise.all([
+  const [tarifas, productos, cfg, imgsWa] = await Promise.all([
     bloqueTarifas(),
+    bloqueProductos(),
     getAgenteConfig().catch(() => null),
     listarImagenesWhatsapp().catch(() => [] as ImagenBanco[]),
   ])
@@ -470,6 +540,8 @@ ${cfg.instrucciones.trim()}`,
   if (ajustes) system.push({ type: 'text', text: ajustes })
   // Fecha actual (dinámica, sin caché) → para resolver "mañana", "el viernes", etc.
   system.push({ type: 'text', text: bloqueFechaChile() })
+  // Productos adicionales disponibles (para ofrecer/cotizar/agregar).
+  if (productos) system.push({ type: 'text', text: productos })
   // Si el cliente ya tiene una ficha de retiro en proceso (borrador visible en
   // /clientes), evita que el agente registre otra.
   if (opts.ctx?.waId) {
@@ -487,6 +559,8 @@ ${cfg.instrucciones.trim()}`,
   if (opts.handlers?.agendarEutanasia) tools.push(TOOL_EUTANASIA)
   if (opts.handlers?.consultarEtaRetiro) tools.push(TOOL_ETA)
   if (opts.handlers?.consultarEstadoMascota) tools.push(TOOL_ESTADO)
+  if (opts.handlers?.enviarCatalogo) tools.push(TOOL_CATALOGO)
+  if (opts.handlers?.agregarAdicional && productos) tools.push(TOOL_ADICIONAL)
   if (imgsWa.length > 0) tools.push(TOOL_FOTOS)
 
   const convo: Anthropic.MessageParam[] = [...base]
@@ -540,6 +614,10 @@ ${cfg.instrucciones.trim()}`,
           resultText = await opts.handlers.consultarEtaRetiro(tu.input as unknown as AccionConsultaEta, opts.ctx ?? {})
         } else if (tu.name === 'consultar_estado_mascota' && opts.handlers?.consultarEstadoMascota) {
           resultText = await opts.handlers.consultarEstadoMascota(tu.input as unknown as AccionConsultaEstado, opts.ctx ?? {})
+        } else if (tu.name === 'enviar_catalogo' && opts.handlers?.enviarCatalogo) {
+          resultText = await opts.handlers.enviarCatalogo(opts.ctx ?? {})
+        } else if (tu.name === 'agregar_adicional' && opts.handlers?.agregarAdicional) {
+          resultText = await opts.handlers.agregarAdicional(tu.input as unknown as AccionAgregarAdicional, opts.ctx ?? {})
         } else {
           resultText = 'Esa herramienta no está disponible ahora. Continúa la coordinación por mensaje o escala a un humano.'
         }

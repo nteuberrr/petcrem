@@ -20,7 +20,7 @@ const DEFAULT_TTL_SECONDS = 72 * 3600 // 72h
 
 // Única fuente de verdad de las acciones válidas: el type se deriva de la
 // const, así verifyToken y el type nunca se desincronizan.
-export const ACCIONES_TOKEN = ['aceptar', 'realizado', 'no_realizado', 'datos_pago', 'cliente_confirmar'] as const
+export const ACCIONES_TOKEN = ['aceptar', 'realizado', 'no_realizado', 'datos_pago', 'cliente_confirmar', 'informar_hora_retiro'] as const
 export type AccionToken = typeof ACCIONES_TOKEN[number]
 
 export interface TokenPayload {
