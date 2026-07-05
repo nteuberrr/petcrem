@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { esAdminTotal } from '@/lib/roles'
 import { listarCalendario, claimPublicacion, finalizarPublicacion, marcarErrorPublicacion, type ItemCalendario } from '@/lib/marketing-calendario'
 import { publicarEnCanal, isFacebookConfigurado, isInstagramConfigurado } from '@/lib/meta-publish'
+import { barridoOportunidadSeguimiento } from '@/lib/seguimiento-leads'
 import { todayISO } from '@/lib/dates'
 
 /** URLs de imagen del ítem: del carrusel (imagenes_json) o, si no, la principal. */
@@ -85,7 +86,13 @@ async function ejecutar(req: NextRequest) {
       resultados.push({ id: it.id, canal: it.canal, ok: false, error: msg })
     }
   }
-  return NextResponse.json({ revisados: pendientes.length, publicados: resultados.filter(r => r.ok).length, resultados })
+  // De paso (este endpoint lo llama el cron externo cada ~10 min): barrido de
+  // seguimiento a leads tibios del inbox. Throttleado y best-effort — no afecta
+  // la publicación de campañas si algo falla.
+  let seguimiento = null
+  try { seguimiento = await barridoOportunidadSeguimiento() } catch (e) { console.error('[cron-publicar] seguimiento', e) }
+
+  return NextResponse.json({ revisados: pendientes.length, publicados: resultados.filter(r => r.ok).length, resultados, seguimiento })
 }
 
 export async function GET(req: NextRequest) { return ejecutar(req) }

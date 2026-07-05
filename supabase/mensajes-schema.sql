@@ -67,6 +67,9 @@ create table if not exists agente_config (
   constraint agente_config_singleton check (id = 1)
 );
 insert into agente_config (id) values (1) on conflict (id) do nothing;
+-- Marca de tiempo del último barrido de seguimiento a leads tibios (throttle del
+-- barrido oportunista que cuelga del cron de 10 min). Idempotente:
+alter table agente_config add column if not exists seguimiento_barrido_at timestamptz not null default '1970-01-01T00:00:00Z';
 
 alter table mensajes_contactos      enable row level security;
 alter table mensajes_conversaciones enable row level security;

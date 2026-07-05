@@ -1,4 +1,4 @@
-import { listConversaciones, getMensajes, marcarSeguimientoEnviado, insertarMensaje, type ConversacionConContacto, type Mensaje } from './mensajes'
+import { listConversaciones, getMensajes, marcarSeguimientoEnviado, reclamarBarridoSeguimiento, insertarMensaje, type Mensaje } from './mensajes'
 import { redactarSeguimiento, type TurnoMensaje } from './agente-mensajes'
 import { enviarTextoWhatsapp } from './whatsapp'
 import { getSheetData } from './datastore'
@@ -44,18 +44,18 @@ export interface ResultadoSeguimiento {
  * Recorre las conversaciones activas de WhatsApp (tutores) y envía seguimiento
  * a las que califican. Best-effort en cada lead: un fallo no corta el barrido.
  */
-export async function enviarSeguimientosPendientes(): Promise<ResultadoSeguimiento> {
+export async function enviarSeguimientosPendientes(opts: { maxEnvios?: number } = {}): Promise<ResultadoSeguimiento> {
   const out: ResultadoSeguimiento = { activo: true, revisadas: 0, enviados: 0, saltados: 0, detalle: [] }
 
   if ((process.env.SEGUIMIENTO_AUTO || 'true').toLowerCase() === 'false') {
     return { ...out, activo: false, motivo: 'SEGUIMIENTO_AUTO=false' }
   }
 
-  const MIN_HORAS = num(process.env.SEGUIMIENTO_MIN_HORAS, 3)      // debe llevar frío al menos esto
+  const MIN_HORAS = num(process.env.SEGUIMIENTO_MIN_HORAS, 2)      // debe llevar frío al menos esto (horas desde que se cortó)
   const MAX_HORAS = num(process.env.SEGUIMIENTO_MAX_HORAS, 22)     // ventana de 24h: margen bajo 24
   const HORA_MIN = num(process.env.SEGUIMIENTO_HORA_MIN, 10)       // no escribir antes de esta hora (Chile)
   const HORA_MAX = num(process.env.SEGUIMIENTO_HORA_MAX, 21)       // ni después de esta
-  const MAX_ENVIOS = num(process.env.SEGUIMIENTO_MAX_ENVIOS, 40)   // tope de seguridad por corrida
+  const MAX_ENVIOS = opts.maxEnvios ?? num(process.env.SEGUIMIENTO_MAX_ENVIOS, 40)   // tope de seguridad por corrida
 
   const h = horaChile()
   if (h < HORA_MIN || h > HORA_MAX) {
@@ -141,4 +141,22 @@ export async function enviarSeguimientosPendientes(): Promise<ResultadoSeguimien
   }
 
   return out
+}
+
+/**
+ * Barrido "oportunista" con throttle: pensado para colgarse del cron externo de
+ * 10 min (el de publicar campañas) y así hacer el seguimiento cerca de las 2h de
+ * enfriado, sin depender solo del cron diario. Reclama el slot (corre a lo más
+ * cada ~8 min aunque lo disparen varias veces) y usa un cap chico por corrida.
+ * Best-effort: nunca lanza.
+ */
+export async function barridoOportunidadSeguimiento(): Promise<ResultadoSeguimiento | { activo: boolean; motivo: string }> {
+  try {
+    if ((process.env.SEGUIMIENTO_AUTO || 'true').toLowerCase() === 'false') return { activo: false, motivo: 'SEGUIMIENTO_AUTO=false' }
+    const gano = await reclamarBarridoSeguimiento(num(process.env.SEGUIMIENTO_THROTTLE_MIN, 8))
+    if (!gano) return { activo: true, motivo: 'throttle: otro barrido corrió hace poco' } as { activo: boolean; motivo: string }
+    return await enviarSeguimientosPendientes({ maxEnvios: num(process.env.SEGUIMIENTO_MAX_ENVIOS_OPORTUNO, 15) })
+  } catch (e) {
+    return { activo: false, motivo: `error: ${e instanceof Error ? e.message : String(e)}` }
+  }
 }

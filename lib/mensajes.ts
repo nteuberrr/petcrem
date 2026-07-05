@@ -183,6 +183,27 @@ export async function marcarSeguimientoEnviado(id: number): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+/**
+ * Reclamo ATÓMICO del barrido de seguimiento: pone `seguimiento_barrido_at=now()`
+ * en la fila única de agente_config SOLO si el último barrido fue hace más de
+ * `intervalMin`. Devuelve true si este proceso ganó el slot (debe correr el
+ * barrido), false si otro ya lo hizo hace poco. Evita barridos redundantes cuando
+ * el endpoint de 10 min y el botón manual disparan casi a la vez. Best-effort.
+ */
+export async function reclamarBarridoSeguimiento(intervalMin = 8): Promise<boolean> {
+  try {
+    const sb = getMensajesSupabase()
+    const cutoff = new Date(Date.now() - intervalMin * 60000).toISOString()
+    const { data, error } = await sb.from(T_AGENTE)
+      .update({ seguimiento_barrido_at: new Date().toISOString() })
+      .eq('id', 1)
+      .lt('seguimiento_barrido_at', cutoff)
+      .select('id')
+    if (error) { console.warn('[mensajes] reclamarBarrido:', error.message); return false }
+    return (data ?? []).length > 0
+  } catch { return false }
+}
+
 export async function vincularCliente(contactoId: number, clienteId: string | null): Promise<void> {
   const sb = getMensajesSupabase()
   const { error } = await sb.from(T_CONTACTOS).update({ cliente_id: clienteId, updated_at: new Date().toISOString() }).eq('id', contactoId)
