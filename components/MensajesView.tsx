@@ -4,11 +4,23 @@ import { formatDateTime } from '@/lib/dates'
 
 type Canal = 'whatsapp' | 'instagram' | 'facebook'
 type Contacto = { id: number; nombre: string | null; telefono: string | null; audiencia: string; cliente_id: string | null }
+type EstadoConv = 'activo' | 'cliente' | 'veterinario' | 'archivado' | 'cerrado'
 type Conversacion = {
   id: number; contacto_id: number; canal: Canal; audiencia: string
-  estado: 'abierta' | 'cerrada'; etiquetas: string[]; fuente: string
+  estado: string; etiquetas: string[]; fuente: string
   ultimo_mensaje_at: string | null; contacto: Contacto | null
 }
+// Valores legacy → nuevos.
+const normEstado = (e: string): EstadoConv =>
+  e === 'abierta' ? 'activo' : e === 'cerrada' ? 'cerrado' : (['activo', 'cliente', 'veterinario', 'archivado', 'cerrado'].includes(e) ? e as EstadoConv : 'activo')
+const CATEGORIAS: { v: EstadoConv; label: string }[] = [
+  { v: 'activo', label: 'Activos' },
+  { v: 'cliente', label: 'Clientes' },
+  { v: 'veterinario', label: 'Veterinarios' },
+  { v: 'archivado', label: 'Archivados' },
+  { v: 'cerrado', label: 'Cerrados' },
+]
+const CAT_LABEL: Record<string, string> = Object.fromEntries(CATEGORIAS.map(c => [c.v, c.label]))
 type Mensaje = {
   id: number; direccion: 'entrante' | 'saliente'; cuerpo: string | null
   tipo: string; estado: string | null; enviado_por: string | null; ts: string
@@ -38,7 +50,7 @@ function fecha(iso: string | null): string {
 
 export default function MensajesView() {
   const [convs, setConvs] = useState<Conversacion[]>([])
-  const [estado, setEstado] = useState<'abierta' | 'cerrada' | ''>('abierta')
+  const [estado, setEstado] = useState<EstadoConv | ''>('activo')
   const [buscar, setBuscar] = useState('')
   const [sel, setSel] = useState<number | null>(null)
   const [conv, setConv] = useState<Conversacion | null>(null)
@@ -190,11 +202,11 @@ export default function MensajesView() {
         <div className="p-3 border-b border-gray-300 space-y-2">
           <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar por nombre o teléfono…"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-          <div className="flex gap-1 text-xs">
-            {(['abierta', 'cerrada', ''] as const).map(s => (
+          <div className="flex flex-wrap gap-1 text-xs">
+            {([...CATEGORIAS.map(c => c.v), ''] as const).map(s => (
               <button key={s || 'todas'} onClick={() => setEstado(s)}
                 className={`px-2.5 py-1 rounded-md font-medium ${estado === s ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-                {s === '' ? 'Todas' : s === 'abierta' ? 'Abiertas' : 'Cerradas'}
+                {s === '' ? 'Todas' : CAT_LABEL[s]}
               </button>
             ))}
           </div>
@@ -247,10 +259,13 @@ export default function MensajesView() {
                     className={`text-xs font-semibold rounded-lg px-3 py-1.5 ${conv.etiquetas.includes('pausado') ? 'bg-gray-200 text-gray-600' : 'bg-emerald-600 text-white'}`}>
                     {conv.etiquetas.includes('pausado') ? '🤖 Agente en pausa' : '🤖 Agente activo'}
                   </button>
-                  <button onClick={() => patch({ estado: conv.estado === 'abierta' ? 'cerrada' : 'abierta' })}
-                    className="text-xs font-semibold rounded-lg px-3 py-1.5 bg-slate-700 text-white">
-                    {conv.estado === 'abierta' ? 'Cerrar' : 'Reabrir'}
-                  </button>
+                  <select
+                    value={normEstado(conv.estado)}
+                    onChange={e => patch({ estado: e.target.value })}
+                    title="Categoría de la conversación"
+                    className="text-xs font-semibold rounded-lg px-2 py-1.5 bg-slate-700 text-white border-0 cursor-pointer">
+                    {CATEGORIAS.map(c => <option key={c.v} value={c.v} className="bg-white text-gray-900">{c.label}</option>)}
+                  </select>
                   <button onClick={eliminar} title="Eliminar conversación y todos sus mensajes"
                     className="text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50">
                     🗑

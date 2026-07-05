@@ -10,6 +10,7 @@ import { getConsultaEutanasia, getFijoEutanasia } from './eutanasia-precios'
 import { crearClienteBorrador } from './cliente-borrador'
 import { capitalizarNombre } from './nombres'
 import { enviarTextoWhatsapp, isWhatsappConfigured, avisarAdminsWhatsapp } from './whatsapp'
+import { marcarConversacionPorTelefono } from './mensajes'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lógica compartida de cotizaciones de eutanasia: envío a vets + alta automática
@@ -308,7 +309,20 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
     }
   }
 
+  // Al AGENDAR la eutanasia, la conversación del tutor pasa a 'cliente'.
+  await marcarConversacionPorTelefono(input.cliente_wa_id || input.cliente_telefono || '', 'cliente', { soloSi: ['activo', 'archivado', 'cerrado'] })
+
   return { id: String(id), precioVet, comunaCanon, matched: matched.length, enviados }
+}
+
+/**
+ * Cuenta las eutanasias "sobre la marcha": NO canceladas y que aún NO están con
+ * el pago confirmado (incluye las en curso creada/enviada/aceptada y las
+ * realizada/no_realizada pendientes de pago). Para el badge del sidebar.
+ */
+export async function contarEutanasiasAbiertas(): Promise<number> {
+  const cotis = await getSheetData(SHEET_COTI)
+  return cotis.filter(c => (c.estado || '') !== 'cancelada' && (c.estado_pago || '') !== 'pago_confirmado').length
 }
 
 export interface EutanasiaCronograma {

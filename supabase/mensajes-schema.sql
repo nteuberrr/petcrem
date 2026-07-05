@@ -24,7 +24,7 @@ create table if not exists mensajes_conversaciones (
   contacto_id              bigint not null references mensajes_contactos(id) on delete cascade,
   canal                    text not null,                    -- whatsapp | instagram | facebook
   audiencia                text not null default 'A',
-  estado                   text not null default 'abierta',  -- abierta | cerrada
+  estado                   text not null default 'activo',   -- activo|cliente|veterinario|archivado|cerrado (legacy: abierta/cerrada)
   etiquetas                text[] not null default '{}',
   fuente                   text not null default 'whatsapp', -- historico | whatsapp
   provider_conversation_id text,

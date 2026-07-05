@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getConversacion, getMensajes, actualizarConversacion, vincularCliente, eliminarConversacion, type EstadoConv } from '@/lib/mensajes'
+import { getConversacion, getMensajes, actualizarConversacion, vincularCliente, eliminarConversacion, ESTADOS_CONV, type EstadoConv } from '@/lib/mensajes'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -26,7 +26,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!conv) return NextResponse.json({ error: 'Conversación no encontrada' }, { status: 404 })
 
     const patch: { estado?: EstadoConv; etiquetas?: string[]; audiencia?: 'A' | 'B' | 'mixed' } = {}
-    if (body.estado === 'abierta' || body.estado === 'cerrada') patch.estado = body.estado
+    if (ESTADOS_CONV.includes(body.estado)) patch.estado = body.estado as EstadoConv
     if (Array.isArray(body.etiquetas)) patch.etiquetas = body.etiquetas.map(String)
     if (body.audiencia === 'A' || body.audiencia === 'B' || body.audiencia === 'mixed') patch.audiencia = body.audiencia
     if (Object.keys(patch).length > 0) await actualizarConversacion(conv.id, patch)

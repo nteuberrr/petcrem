@@ -9,7 +9,25 @@ import { getMensajesSupabase } from './supabase'
 export type Canal = 'whatsapp' | 'instagram' | 'facebook'
 export type Audiencia = 'A' | 'B' | 'mixed'
 export type Direccion = 'entrante' | 'saliente'
-export type EstadoConv = 'abierta' | 'cerrada'
+/**
+ * Categorías del inbox (ciclo de vida de una conversación):
+ *  - activo: entra acá cuando alguien escribe (default).
+ *  - cliente: automático al AGENDAR un servicio (retiro de cremación o eutanasia).
+ *  - cerrado: automático al hacer la ENTREGA (negocio cerrado, cliente histórico).
+ *  - archivado: automático cuando una conversación ACTIVA lleva +2 días sin contacto.
+ *  - veterinario: número que está en nuestra base de veterinarios (auto + manual).
+ * (Valores legacy 'abierta'/'cerrada' se normalizan a 'activo'/'cerrado'.)
+ */
+export type EstadoConv = 'activo' | 'cliente' | 'cerrado' | 'archivado' | 'veterinario'
+export const ESTADOS_CONV: EstadoConv[] = ['activo', 'cliente', 'veterinario', 'archivado', 'cerrado']
+
+/** Normaliza los estados legacy a los nuevos. */
+export function normalizarEstado(e: string | null | undefined): EstadoConv {
+  if (e === 'abierta') return 'activo'
+  if (e === 'cerrada') return 'cerrado'
+  if (e && (ESTADOS_CONV as string[]).includes(e)) return e as EstadoConv
+  return 'activo'
+}
 
 export interface Contacto {
   id: number
@@ -70,7 +88,10 @@ export async function listConversaciones(opts: {
 } = {}): Promise<ConversacionConContacto[]> {
   const sb = getMensajesSupabase()
   let q = sb.from(T_CONV).select('*, contacto:mensajes_contactos(*)').order('ultimo_mensaje_at', { ascending: false, nullsFirst: false }).limit(opts.limit ?? 300)
-  if (opts.estado) q = q.eq('estado', opts.estado)
+  // Filtro tolerante a los valores legacy: 'activo' incluye 'abierta', 'cerrado' incluye 'cerrada'.
+  if (opts.estado === 'activo') q = q.in('estado', ['activo', 'abierta'])
+  else if (opts.estado === 'cerrado') q = q.in('estado', ['cerrado', 'cerrada'])
+  else if (opts.estado) q = q.eq('estado', opts.estado)
   if (opts.canal) q = q.eq('canal', opts.canal)
   if (opts.audiencia) q = q.eq('audiencia', opts.audiencia)
   const { data, error } = await q
@@ -112,6 +133,26 @@ export async function actualizarConversacion(id: number, patch: Partial<Pick<Con
   const sb = getMensajesSupabase()
   const { error } = await sb.from(T_CONV).update(patch).eq('id', id)
   if (error) throw new Error(error.message)
+}
+
+/**
+ * Archiva las conversaciones ACTIVAS de WhatsApp con más de `dias` sin actividad
+ * (último mensaje anterior al corte). Las que se volvieron negocio ya están en
+ * 'cliente'/'cerrado', y las de vets en 'veterinario' → no se tocan. Devuelve
+ * cuántas archivó. Lo llama el cron diario.
+ */
+export async function archivarConversacionesInactivas(dias = 2): Promise<number> {
+  const sb = getMensajesSupabase()
+  const corte = new Date(Date.now() - dias * 86400000).toISOString()
+  // Incluye el valor legacy 'abierta' además de 'activo'.
+  const { data, error } = await sb.from(T_CONV)
+    .update({ estado: 'archivado' })
+    .eq('canal', 'whatsapp')
+    .in('estado', ['activo', 'abierta'])
+    .lt('ultimo_mensaje_at', corte)
+    .select('id')
+  if (error) { console.warn('[mensajes] archivar inactivas:', error.message); return 0 }
+  return (data ?? []).length
 }
 
 export async function vincularCliente(contactoId: number, clienteId: string | null): Promise<void> {
@@ -259,7 +300,35 @@ export async function getOrCreateConversacion(contactoId: number, canal: Canal, 
   const sb = getMensajesSupabase()
   const { data } = await sb.from(T_CONV).select('*').eq('contacto_id', contactoId).eq('canal', canal).maybeSingle()
   if (data) return data as Conversacion
-  const { data: nueva, error } = await sb.from(T_CONV).insert({ contacto_id: contactoId, canal, audiencia, fuente }).select('*').single()
+  const { data: nueva, error } = await sb.from(T_CONV).insert({ contacto_id: contactoId, canal, audiencia, fuente, estado: 'activo' }).select('*').single()
   if (error) throw new Error(error.message)
   return nueva as Conversacion
+}
+
+/**
+ * Mueve a un estado la(s) conversación(es) de WhatsApp del contacto con ese
+ * teléfono (match por últimos 9 dígitos). `soloSi` acota a estados de partida
+ * (para no pisar 'veterinario' o 'cerrado' al agendar, p. ej.). Best-effort.
+ */
+export async function marcarConversacionPorTelefono(
+  telefono: string,
+  estado: EstadoConv,
+  opts: { soloSi?: EstadoConv[] } = {},
+): Promise<void> {
+  const tel9 = (telefono || '').replace(/\D/g, '').slice(-9)
+  if (tel9.length !== 9) return
+  try {
+    const sb = getMensajesSupabase()
+    const { data: contactos } = await sb.from(T_CONTACTOS).select('id')
+      .or(`wa_id.eq.56${tel9},wa_id.eq.${tel9},telefono.ilike.%${tel9}`)
+    for (const c of (contactos ?? []) as { id: number }[]) {
+      const { data: convs } = await sb.from(T_CONV).select('id, estado').eq('contacto_id', c.id).eq('canal', 'whatsapp')
+      for (const cv of (convs ?? []) as { id: number; estado: string }[]) {
+        if (opts.soloSi && !opts.soloSi.includes(normalizarEstado(cv.estado))) continue
+        await sb.from(T_CONV).update({ estado }).eq('id', cv.id)
+      }
+    }
+  } catch (e) {
+    console.warn('[mensajes] marcarConversacionPorTelefono falló:', e instanceof Error ? e.message : e)
+  }
 }

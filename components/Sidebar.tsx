@@ -32,6 +32,8 @@ export default function Sidebar() {
   const [allowed, setAllowed] = useState<Set<string> | null>(null)
   // Solicitudes de retiro del bot pendientes (badge en "Mensajes"). Se refresca solo.
   const [pendientes, setPendientes] = useState(0)
+  // Eutanasias "sobre la marcha" (no cerradas / no pagadas) → badge en "Eutanasias".
+  const [eutanasias, setEutanasias] = useState(0)
 
   useEffect(() => {
     let cancel = false
@@ -48,6 +50,18 @@ export default function Sidebar() {
     const cargar = () => fetch('/api/solicitudes-retiro', { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : { pendientes: [] }))
       .then((d: { pendientes?: unknown[] }) => { if (!cancel) setPendientes(Array.isArray(d?.pendientes) ? d.pendientes.length : 0) })
+      .catch(() => {})
+    cargar()
+    const t = setInterval(cargar, 30000)
+    return () => { cancel = true; clearInterval(t) }
+  }, [allowed])
+
+  useEffect(() => {
+    if (!allowed?.has('servicios')) return
+    let cancel = false
+    const cargar = () => fetch('/api/eutanasias/pendientes-count', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : { count: 0 }))
+      .then((d: { count?: number }) => { if (!cancel) setEutanasias(typeof d?.count === 'number' ? d.count : 0) })
       .catch(() => {})
     cargar()
     const t = setInterval(cargar, 30000)
@@ -118,6 +132,11 @@ export default function Sidebar() {
                 {href === '/mensajes' && pendientes > 0 && (
                   <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
                     {pendientes}
+                  </span>
+                )}
+                {href === '/servicios' && eutanasias > 0 && (
+                  <span className="min-w-5 h-5 px-1.5 rounded-full bg-orange-500 text-white text-[11px] font-bold flex items-center justify-center shrink-0" title="Eutanasias sobre la marcha (no cerradas / no pagadas)">
+                    {eutanasias}
                   </span>
                 )}
               </Link>

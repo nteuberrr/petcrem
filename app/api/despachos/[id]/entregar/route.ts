@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateById, updateByIdIf } from '@/lib/datastore'
 import { enviarEntregaConfirmada } from '@/lib/cliente-mailer'
 import { resolverVet, enviarEntregaVet } from '@/lib/vet-cremacion-mailer'
+import { marcarConversacionPorTelefono } from '@/lib/mensajes'
 import { todayISO } from '@/lib/dates'
 
 export const dynamic = 'force-dynamic'
@@ -136,6 +137,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       } catch (e) {
         console.warn('[despachos/entregar] fallo correo entrega al vet (no bloqueante):', e)
       }
+      // Con la ENTREGA se cierra el negocio → su conversación de WhatsApp pasa a
+      // 'cerrado' (cliente histórico). No pisa una conversación de veterinario.
+      try {
+        await marcarConversacionPorTelefono(cliente.telefono || '', 'cerrado', { soloSi: ['activo', 'cliente', 'archivado'] })
+      } catch (e) { console.warn('[despachos/entregar] no se pudo cerrar la conversación:', e) }
     }
 
     return NextResponse.json({ ok: true, entregada: true, fecha_hora: now, ruta_terminada: aplicado.ruta_terminada })

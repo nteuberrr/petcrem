@@ -10,13 +10,6 @@ type Solicitud = {
   cliente_id: string
 }
 
-type Eutanasia = {
-  id: string; mascota_nombre: string; cliente_nombre: string; peso: string; comuna: string
-  direccion: string; fecha_servicio: string; hora_servicio: string
-  hora_retiro_crematorio: string; vet_nombre: string; cliente_id: string
-  estado_cronograma: 'esperando' | 'tomada'
-}
-
 const SERVICIO: Record<string, string> = { CI: 'Individual', CP: 'Premium', SD: 'Sin Devolución' }
 
 const GRID = 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3'
@@ -41,11 +34,10 @@ const cuando = (s: Solicitud) => `${s.fecha_retiro ? fmtFecha(s.fecha_retiro) : 
  */
 export default function SolicitudesPendientes({ puedeResolver = false }: { puedeResolver?: boolean }) {
   const router = useRouter()
-  // Abre la ficha borrador del cliente (si la solicitud/eutanasia ya la tiene).
+  // Abre la ficha borrador del cliente (si la solicitud ya la tiene).
   const abrirFicha = (clienteId?: string) => { if (clienteId) router.push(`/clientes/${clienteId}`) }
   const [pendientes, setPendientes] = useState<Solicitud[]>([])
   const [confirmadas, setConfirmadas] = useState<Solicitud[]>([])
-  const [eutanasias, setEutanasias] = useState<Eutanasia[]>([])
   const [cargado, setCargado] = useState(false)
   const [resolviendo, setResolviendo] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string>('')
@@ -68,7 +60,6 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
       const d = await r.json()
       setPendientes(Array.isArray(d?.pendientes) ? d.pendientes : [])
       setConfirmadas(Array.isArray(d?.confirmadas) ? d.confirmadas : [])
-      setEutanasias(Array.isArray(d?.eutanasias) ? d.eutanasias : [])
     } catch { /* red: reintenta en el próximo tick */ } finally { setCargado(true) }
   }, [])
 
@@ -97,10 +88,7 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
     }
   }
 
-  if (!cargado || (pendientes.length === 0 && confirmadas.length === 0 && eutanasias.length === 0 && !feedback)) return null
-
-  const eutCuando = (e: Eutanasia) => `${e.fecha_servicio ? fmtFecha(e.fecha_servicio) : '—'}${e.hora_servicio ? ` · ${e.hora_servicio}` : ''}`
-  const eutDireccion = (e: Eutanasia) => [e.direccion, e.comuna].filter(Boolean).join(', ') || '—'
+  if (!cargado || (pendientes.length === 0 && confirmadas.length === 0 && !feedback)) return null
 
   return (
     <div className="mb-4 space-y-4">
@@ -178,50 +166,6 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
             ))}
           </div>
           {verTodas(confirmadas, 'confirmadas')}
-        </section>
-      )}
-
-      {eutanasias.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">🩺</span>
-            <h2 className="text-sm font-bold text-gray-800">Eutanasias a domicilio ({eutanasias.length})</h2>
-          </div>
-          <div className={GRID}>
-            {recortar(eutanasias, 'eutanasias').map(e => {
-              const esperando = e.estado_cronograma === 'esperando'
-              const box = esperando ? 'border-orange-300 bg-orange-50' : 'border-emerald-300 bg-emerald-50'
-              const hoverBox = esperando ? 'hover:bg-orange-100' : 'hover:bg-emerald-100'
-              return (
-                <div key={e.id}
-                  onClick={() => abrirFicha(e.cliente_id)}
-                  role={e.cliente_id ? 'button' : undefined}
-                  title={e.cliente_id ? 'Abrir ficha del cliente' : undefined}
-                  className={`rounded-xl border-2 ${box} shadow-sm p-3 flex flex-col gap-1 min-h-[150px] ${e.cliente_id ? `cursor-pointer ${hoverBox} transition-colors` : ''}`}>
-                  <div className="flex items-center justify-between gap-1">
-                    {esperando ? (
-                      <span className="text-[10px] font-bold text-orange-800 bg-orange-100 border border-orange-200 px-1.5 py-0.5 rounded">⏳ Esperando vet</span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">✅ Tomada</span>
-                    )}
-                    <span className="text-[10px] font-semibold text-gray-600 bg-white border border-gray-200 px-1.5 py-0.5 rounded shrink-0">Eutanasia</span>
-                  </div>
-                  <p className="font-bold text-gray-900 text-sm truncate mt-1">{e.mascota_nombre || '—'}</p>
-                  <p className="text-xs text-gray-700 truncate">👤 {e.cliente_nombre || '—'}</p>
-                  {e.peso && <p className="text-[11px] text-gray-500">{e.peso} kg</p>}
-                  {!esperando && e.vet_nombre && <p className="text-[11px] text-gray-600 truncate">🏥 {e.vet_nombre}</p>}
-                  <p className="text-[11px] text-gray-600 leading-tight mt-auto">🩺 Eutanasia: {eutCuando(e)}</p>
-                  <p className="text-[11px] leading-tight truncate">
-                    🚚 Retiro: {e.hora_retiro_crematorio
-                      ? <span className="text-gray-700 font-semibold">{e.hora_retiro_crematorio}</span>
-                      : <span className="text-gray-400 italic">por informar</span>}
-                  </p>
-                  <p className="text-[11px] text-gray-600 leading-tight truncate">📍 {eutDireccion(e)}</p>
-                </div>
-              )
-            })}
-          </div>
-          {verTodas(eutanasias, 'eutanasias')}
         </section>
       )}
     </div>

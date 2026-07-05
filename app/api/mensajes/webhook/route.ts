@@ -4,8 +4,9 @@ import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp
 import {
   upsertContacto, getOrCreateConversacion, insertarMensaje, getMensajes,
   actualizarConversacion, existeMensajePorProvider, marcarEstadoMensaje, getConversacion,
-  type Conversacion, type Contacto,
+  normalizarEstado, type Conversacion, type Contacto,
 } from '@/lib/mensajes'
+import { esTelefonoVet } from '@/lib/vet-lookup'
 import { isAgenteConfigurado, generarRespuesta, redactarRelayCliente } from '@/lib/agente-mensajes'
 import { handlersAgente } from '@/lib/agente-acciones'
 import { buscarRelayPendientePorMsg, buscarRelayPendienteUnico, marcarRelayRespondida } from '@/lib/relay-retiro'
@@ -240,7 +241,18 @@ async function procesarEntrante(value: Record<string, unknown>, msg: MetaMsg) {
 
   const contacto = await upsertContacto({ wa_id: msg.from, telefono: msg.from, nombre, audiencia: 'A' })
   const conv = await getOrCreateConversacion(contacto.id, 'whatsapp', contacto.audiencia, 'whatsapp')
-  if (conv.estado === 'cerrada') await actualizarConversacion(conv.id, { estado: 'abierta' })
+  // Auto-clasificación de la conversación al llegar un mensaje:
+  //  - si el número es de un VETERINARIO → 'veterinario';
+  //  - si estaba 'archivado' o 'cerrado' (histórico) y vuelve a escribir → reactivar a 'activo'.
+  // No pisa 'cliente' (servicio en curso) ni 'veterinario'.
+  try {
+    const estadoActual = normalizarEstado(conv.estado)
+    if (await esTelefonoVet(msg.from)) {
+      if (estadoActual !== 'veterinario') await actualizarConversacion(conv.id, { estado: 'veterinario' })
+    } else if (estadoActual === 'archivado' || estadoActual === 'cerrado') {
+      await actualizarConversacion(conv.id, { estado: 'activo' })
+    }
+  } catch (e) { console.warn('[webhook] auto-clasificación falló:', e) }
 
   const tipo = tipoInterno(msg.type)
   let cuerpo: string | null = null

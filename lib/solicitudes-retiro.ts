@@ -3,7 +3,7 @@ import { crearClienteBorrador } from './cliente-borrador'
 import { createBorradorToken } from './borrador-token'
 import { enviarRetiroConfirmadoVet } from './vet-cremacion-mailer'
 import { enviarTextoWhatsapp } from './whatsapp'
-import { upsertContacto, getOrCreateConversacion, insertarMensaje } from './mensajes'
+import { upsertContacto, getOrCreateConversacion, insertarMensaje, marcarConversacionPorTelefono } from './mensajes'
 import { formatDate, todayISO, formatDateForSheet } from './dates'
 
 /**
@@ -236,6 +236,12 @@ export async function resolverSolicitudRetiro(
         tipo: 'texto', estado: env.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
       })
     } catch (e) { console.warn('[solicitudes-retiro] no se pudo registrar aviso al cliente:', e) }
+  }
+
+  // Al AGENDAR (confirmar) un retiro de TUTOR, su conversación pasa a 'cliente'.
+  // En retiros de VET la conversación es la del veterinario → se deja como está.
+  if (confirmado && !esVet && waCliente) {
+    await marcarConversacionPorTelefono(waCliente, 'cliente', { soloSi: ['activo', 'archivado', 'cerrado'] })
   }
 
   return { resultado: confirmado ? 'confirmada' : 'rechazada', acuseAdmin }

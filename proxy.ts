@@ -26,6 +26,9 @@ export async function proxy(req: NextRequest) {
     // Publicación programada de campañas sociales (Vercel Cron; auth Bearer CRON_SECRET
     // o sesión admin dentro de la ruta)
     pathname === '/api/mailing/cron-publicar' ||
+    // Cron diario que archiva conversaciones inactivas (Vercel Cron; auth Bearer
+    // CRON_SECRET o sesión admin dentro de la ruta).
+    pathname === '/api/mensajes/cron-archivar' ||
     pathname.startsWith('/api/mailing/pixel/') ||
     pathname.startsWith('/api/mailing/click/') ||
     pathname === '/convenio-eutanasias' ||
