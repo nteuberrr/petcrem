@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getConversacion, getMensajes, actualizarConversacion, vincularCliente, eliminarConversacion, ESTADOS_CONV, type EstadoConv } from '@/lib/mensajes'
+import { getConversacion, getMensajes, actualizarConversacion, vincularCliente, eliminarConversacion, marcarLeida, ESTADOS_CONV, type EstadoConv } from '@/lib/mensajes'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -11,6 +11,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const conv = await getConversacion(Number(id))
     if (!conv) return NextResponse.json({ error: 'Conversación no encontrada' }, { status: 404 })
     const mensajes = await getMensajes(conv.id)
+    // Abrir la conversación la marca como leída (baja el contador del sidebar).
+    if (conv.no_leido) await marcarLeida(conv.id)
     return NextResponse.json({ conversacion: conv, mensajes })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })

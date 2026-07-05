@@ -34,6 +34,8 @@ export default function Sidebar() {
   const [pendientes, setPendientes] = useState(0)
   // Eutanasias "sobre la marcha" (no cerradas / no pagadas) → badge en "Eutanasias".
   const [eutanasias, setEutanasias] = useState(0)
+  // Chats sin leer → "(N)" en el ítem "Mensajes".
+  const [noLeidos, setNoLeidos] = useState(0)
 
   useEffect(() => {
     let cancel = false
@@ -47,10 +49,16 @@ export default function Sidebar() {
   useEffect(() => {
     if (!allowed?.has('mensajes')) return
     let cancel = false
-    const cargar = () => fetch('/api/solicitudes-retiro', { cache: 'no-store' })
-      .then(r => (r.ok ? r.json() : { pendientes: [] }))
-      .then((d: { pendientes?: unknown[] }) => { if (!cancel) setPendientes(Array.isArray(d?.pendientes) ? d.pendientes.length : 0) })
-      .catch(() => {})
+    const cargar = () => {
+      fetch('/api/solicitudes-retiro', { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : { pendientes: [] }))
+        .then((d: { pendientes?: unknown[] }) => { if (!cancel) setPendientes(Array.isArray(d?.pendientes) ? d.pendientes.length : 0) })
+        .catch(() => {})
+      fetch('/api/mensajes/no-leidos-count', { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : { count: 0 }))
+        .then((d: { count?: number }) => { if (!cancel) setNoLeidos(typeof d?.count === 'number' ? d.count : 0) })
+        .catch(() => {})
+    }
     cargar()
     const t = setInterval(cargar, 30000)
     return () => { cancel = true; clearInterval(t) }
@@ -128,7 +136,7 @@ export default function Sidebar() {
                 }`}
               >
                 <span className="text-lg">{icon}</span>
-                <span className="flex-1">{label}</span>
+                <span className="flex-1">{label}{href === '/mensajes' && noLeidos > 0 ? ` (${noLeidos})` : ''}</span>
                 {href === '/mensajes' && pendientes > 0 && (
                   <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
                     {pendientes}

@@ -53,6 +53,8 @@ export interface Conversacion {
   fuente: string
   provider_conversation_id: string | null
   ultimo_mensaje_at: string | null
+  /** true si llegó un mensaje entrante que aún no se abrió en el inbox. */
+  no_leido: boolean
   created_at: string
 }
 
@@ -155,6 +157,23 @@ export async function archivarConversacionesInactivas(dias = 2): Promise<number>
   return (data ?? []).length
 }
 
+/** Marca una conversación como leída (al abrirla en el inbox). Best-effort. */
+export async function marcarLeida(id: number): Promise<void> {
+  try {
+    const sb = getMensajesSupabase()
+    await sb.from(T_CONV).update({ no_leido: false }).eq('id', id)
+  } catch (e) { console.warn('[mensajes] marcarLeida:', e instanceof Error ? e.message : e) }
+}
+
+/** Cuenta las conversaciones con mensajes sin leer (para el badge del sidebar). */
+export async function contarNoLeidos(): Promise<number> {
+  try {
+    const sb = getMensajesSupabase()
+    const { count } = await sb.from(T_CONV).select('id', { count: 'exact', head: true }).eq('no_leido', true)
+    return count ?? 0
+  } catch { return 0 }
+}
+
 export async function vincularCliente(contactoId: number, clienteId: string | null): Promise<void> {
   const sb = getMensajesSupabase()
   const { error } = await sb.from(T_CONTACTOS).update({ cliente_id: clienteId, updated_at: new Date().toISOString() }).eq('id', contactoId)
@@ -187,7 +206,10 @@ export async function insertarMensaje(m: {
     ts,
   }).select('*').single()
   if (error) throw new Error(error.message)
-  await sb.from(T_CONV).update({ ultimo_mensaje_at: ts }).eq('id', m.conversacion_id)
+  // Un mensaje ENTRANTE marca la conversación como NO leída (badge del sidebar).
+  const patch: Record<string, unknown> = { ultimo_mensaje_at: ts }
+  if (m.direccion === 'entrante') patch.no_leido = true
+  await sb.from(T_CONV).update(patch).eq('id', m.conversacion_id)
   return data as Mensaje
 }
 

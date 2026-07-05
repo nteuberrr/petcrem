@@ -33,6 +33,8 @@ create table if not exists mensajes_conversaciones (
 );
 create index if not exists idx_mconv_contacto on mensajes_conversaciones(contacto_id);
 create index if not exists idx_mconv_ultimo    on mensajes_conversaciones(ultimo_mensaje_at desc nulls last);
+-- Idempotente para entornos ya creados:
+alter table mensajes_conversaciones add column if not exists no_leido boolean not null default false;
 
 create table if not exists mensajes_mensajes (
   id                  bigint generated always as identity primary key,
