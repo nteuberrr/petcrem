@@ -2,13 +2,14 @@
 import { useEffect, useState } from 'react'
 import { fmtNumero, fmtPrecio } from '@/lib/format'
 import { todayISO, formatDate } from '@/lib/dates'
+import BalanceView from './BalanceView'
 
 interface Fila { nombre: string; valores: number[]; subgrupo: string; sgOrden: number; partida_id: string; tipo: string; clave: string }
 interface Data { periodos: { key: string; label: string }[]; ingresos: Fila[]; costos: Fila[]; gastos: Fila[]; impuestos: Fila[] }
 type Drill = { partida_id: string; nombre: string; periodo: string; label: string }
 
 export default function EerrIntegralTab() {
-  const [modo, setModo] = useState<'meses12' | 'mes' | 'anio'>('meses12')
+  const [modo, setModo] = useState<'meses12' | 'mes' | 'anio' | 'balance'>('meses12')
   const [mes, setMes] = useState(todayISO().slice(0, 7))
   const [anio, setAnio] = useState(todayISO().slice(0, 4))
   const [data, setData] = useState<Data | null>(null)
@@ -17,6 +18,7 @@ export default function EerrIntegralTab() {
   const [drill, setDrill] = useState<Drill | null>(null)
 
   async function cargar() {
+    if (modo === 'balance') { setLoading(false); return }
     try {
       const q = new URLSearchParams()
       if (modo === 'mes' && mes) q.set('mes', mes)
@@ -37,7 +39,7 @@ export default function EerrIntegralTab() {
       {/* Filtros */}
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex gap-2 flex-wrap">
-          {([['meses12', 'Últimos 12 meses'], ['mes', 'Mes'], ['anio', 'Año']] as const).map(([k, label]) => (
+          {([['meses12', 'Últimos 12 meses'], ['mes', 'Mes'], ['anio', 'Año'], ['balance', 'Balance']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setModo(k)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${modo === k ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
               {label}
@@ -51,6 +53,8 @@ export default function EerrIntegralTab() {
           <input type="number" value={anio} onChange={e => setAnio(e.target.value)} min="2020" max="2100" className="border border-gray-300 rounded px-2 py-1.5 text-sm w-24" />
         )}
       </div>
+
+      {modo === 'balance' ? <BalanceView /> : (<>
 
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</p>}
 
@@ -160,6 +164,7 @@ export default function EerrIntegralTab() {
       </p>
 
       {drill && <MovimientosPanel drill={drill} onClose={() => setDrill(null)} />}
+      </>)}
     </div>
   )
 }
