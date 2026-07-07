@@ -1,7 +1,7 @@
 import { getSheetData } from '@/lib/datastore'
 import { formatDateForSheet, todayISO } from '@/lib/dates'
-import { parseDecimalOr0, parsePeso, parseMonto } from '@/lib/numbers'
-import { findTramo, precioDelTramo } from '@/lib/tramos'
+import { parsePeso } from '@/lib/numbers'
+import { calcularPrecioFicha, type Tramo as TramoPrecio } from '@/lib/ficha-precio'
 
 /**
  * Genera los datos consolidados de un informe de facturación para una veterinaria.
@@ -16,16 +16,7 @@ import { findTramo, precioDelTramo } from '@/lib/tramos'
  *  - Semanas: 4 buckets fijos por mes (1-7, 8-14, 15-21, 22-fin).
  */
 
-type Tramo = {
-  id?: string
-  peso_min: string
-  peso_max: string
-  precio_ci: string
-  precio_cp: string
-  precio_sd: string
-  veterinaria_id?: string
-}
-type AdicionalItem = { tipo: string; id: string; nombre?: string; precio?: number; qty?: number }
+type Tramo = TramoPrecio
 
 export interface InformeRow {
   id: string
@@ -151,49 +142,8 @@ export async function generarInformeVeterinaria(vetId: string): Promise<InformeV
 
   const fichas = clientes.filter(c => c.veterinaria_id === vetId)
 
-  function calcularPrecioCliente(c: Record<string, string>): {
-    servicio: number; adicionales: number; descuento: number; total: number; adicionalesLabel: string
-  } {
-    const snapTotal = parseDecimalOr0(c.precio_total)
-    const snapServ = parseDecimalOr0(c.precio_servicio)
-    const snapAdi = parseDecimalOr0(c.precio_adicionales)
-    const snapDesc = parseDecimalOr0(c.descuento_monto)
-    let items: AdicionalItem[] = []
-    try { items = JSON.parse(c.adicionales || '[]') } catch { items = [] }
-    const adicionalesLabel = items
-      .map(a => `${a.nombre ?? a.id}${(a.qty ?? 1) > 1 ? ' × ' + (a.qty ?? 1) : ''}`)
-      .join(', ')
-
-    if (snapTotal > 0 || snapServ > 0 || snapAdi > 0) {
-      return { servicio: snapServ, adicionales: snapAdi, descuento: snapDesc, total: snapTotal, adicionalesLabel }
-    }
-
-    // Fallback en vivo
-    const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
-    const codigo = c.codigo_servicio || 'CI'
-    let tabla: Tramo[] = tramosC
-    const explicit = c.tipo_precios
-    if (explicit === 'especial') tabla = tramosEDeEstaVet
-    else if (explicit === 'general') tabla = tramosG
-    else if (vet.tipo_precios === 'precios_especiales') tabla = tramosEDeEstaVet
-    const tramo = findTramo(tabla, peso)
-    const servicio = precioDelTramo(tramo, codigo)
-    const adi = items.reduce((s, a) => s + Math.max(0, parseMonto(a.precio)) * Math.max(0, a.qty ?? 1), 0)
-    const subtotal = servicio + adi
-    let descuento = 0
-    const dVal = parseMonto(c.descuento_valor)
-    if (dVal > 0) {
-      if (c.descuento_tipo === 'fijo') descuento = Math.min(dVal, subtotal)
-      else if (c.descuento_tipo === 'variable') descuento = Math.round(subtotal * dVal / 100)
-    }
-    return {
-      servicio: Math.round(servicio),
-      adicionales: Math.round(adi),
-      descuento: Math.round(descuento),
-      total: Math.round(Math.max(0, subtotal - descuento)),
-      adicionalesLabel,
-    }
-  }
+  const tablas = { generales: tramosG, convenio: tramosC, especialesDeVet: tramosEDeEstaVet }
+  const calcularPrecioCliente = (c: Record<string, string>) => calcularPrecioFicha(c, vet.tipo_precios, tablas)
 
   const mesesMap = new Map<string, MesBucket>()
   const porEspecie = new Map<string, { count: number; monto: number }>()

@@ -33,6 +33,9 @@ export const SHEETS: Record<string, string[]> = {
     // Correo de cobro por diferencia de peso: fecha de envío + monto cobrado
     // (vacío = no enviado). Lo setea /api/clientes/[id]/cobro-diferencia.
     'correo_diferencia_fecha', 'correo_diferencia_monto',
+    // id del documento_tributarios (factura al veterinario) que ya cubrió esta
+    // ficha; vacío = no facturada aún (la excluye de la próxima propuesta mensual).
+    'factura_vet_id',
     'origen', 'fecha_creacion',
   ],
   ciclos: [
@@ -133,6 +136,16 @@ export const SHEETS: Record<string, string[]> = {
     'sin_foto', 'pdf_key', 'pdf_url',
     'enviado_ultima_fecha', 'enviado_ultima_hora', 'enviado_cantidad', 'enviado_a',
     'fecha_creacion',
+  ],
+  documentos_tributarios: [
+    'id', 'tipo_dte', 'folio', 'estado', 'ambiente', 'fecha_emision',
+    'receptor_tipo', 'receptor_id', 'receptor_rut', 'receptor_razon_social',
+    'receptor_giro', 'receptor_direccion', 'receptor_comuna', 'receptor_correo',
+    'monto_neto', 'monto_iva', 'monto_total',
+    'detalle_json', 'resumen', 'mes_facturado', 'fichas_json',
+    'openfactura_url', 'pdf_key', 'pdf_url',
+    'documento_anulado_id', 'nc_id', 'motivo_anulacion', 'warnings_json',
+    'creado_por_id', 'creado_por_nombre', 'fecha_creacion',
   ],
   geocoding_cache: [
     'id', 'direccion_normalizada', 'direccion_original',

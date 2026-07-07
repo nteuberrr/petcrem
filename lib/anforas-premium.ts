@@ -37,3 +37,33 @@ export function anforaPremiumIncluida(
 ): boolean {
   return servicioIncluyeAnforaPremium(codigoServicio) && esCategoriaAnforaPremium(categoria)
 }
+
+export interface ItemParaCobro {
+  tipo?: string
+  id?: string
+  precio?: number
+}
+
+/**
+ * Filtra de una lista de ítems (los que van a COBRARSE por adicional) los que
+ * en realidad vienen INCLUIDOS gratis por ser ánfora premium de un servicio CP.
+ *
+ * Bug real (2026-07): el disparador de cobro tomaba el precio de catálogo del
+ * ítem tal cual, sin chequear `anforaPremiumIncluida` — se envió un correo
+ * cobrando $25.000 por un ánfora que venía incluida en la Cremación Premium.
+ * El total/snapshot de la ficha SIEMPRE la excluyó bien (calcularSnapshotFicha);
+ * el bug estaba solo en el camino de cobro (route de clientes + bot), que lee
+ * el precio de catálogo directo del ítem sin pasar por esa lógica.
+ *
+ * `categoriaPorProductoId` = Map<id, categoria> de la tabla `productos`.
+ */
+export function excluirIncluidos<T extends ItemParaCobro>(
+  codigoServicio: string | null | undefined,
+  items: T[],
+  categoriaPorProductoId: Map<string, string>,
+): T[] {
+  return items.filter(it => {
+    if (it.tipo !== 'producto' || !it.id) return true
+    return !anforaPremiumIncluida(codigoServicio, categoriaPorProductoId.get(String(it.id)))
+  })
+}

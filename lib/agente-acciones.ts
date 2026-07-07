@@ -11,6 +11,7 @@ import { evaluarSlotRetiro } from './agenda'
 import { capitalizarNombre } from './nombres'
 import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional } from './cobros'
+import { anforaPremiumIncluida } from './anforas-premium'
 import { generarCatalogoPdf } from './catalogo-generator'
 import { uploadToR2 } from './cloudflare-r2'
 import { upsertContacto, getOrCreateConversacion, insertarMensaje } from './mensajes'
@@ -531,13 +532,13 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
     getSheetData('productos').catch(() => [] as Record<string, string>[]),
     getSheetData('otros_servicios').catch(() => [] as Record<string, string>[]),
   ])
-  const resueltos: { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }[] = []
+  const resueltos: { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number; categoria?: string }[] = []
   for (const it of items) {
     const tipo = it.tipo === 'servicio' ? 'servicio' : 'producto'
     const fuente = tipo === 'producto' ? prods : otros
     const row = fuente.find(r => String(r.id) === String(it.id))
     if (!row) continue
-    resueltos.push({ tipo, id: String(row.id), nombre: row.nombre || '', precio: parseInt(row.precio, 10) || 0, qty: Math.max(1, Number(it.qty) || 1) })
+    resueltos.push({ tipo, id: String(row.id), nombre: row.nombre || '', precio: parseInt(row.precio, 10) || 0, qty: Math.max(1, Number(it.qty) || 1), categoria: row.categoria || '' })
   }
   if (resueltos.length === 0) {
     return 'No reconocí esos productos en el catálogo. Revisa los IDs de la lista PRODUCTOS ADICIONALES DISPONIBLES y vuelve a intentarlo, o escala al equipo.'
@@ -569,16 +570,27 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
   }
 
   // Cobro: correo (con datos de transferencia + botón confirmar) + WhatsApp.
-  const monto = resueltos.reduce((s, r) => s + r.precio * r.qty, 0)
-  try {
-    await dispararCobroAdicional(
-      { id: String(ficha.id), email: ficha.email || '', nombre_tutor: ficha.nombre_tutor || '', nombre_mascota: ficha.nombre_mascota || '', telefono: ficha.telefono || '' },
-      resueltos.map(r => ({ nombre: r.nombre, precio: r.precio, qty: r.qty })),
-    )
-  } catch (e) { console.warn('[agente-acciones] agregarAdicional: cobro falló:', e) }
+  // No cobrar ánforas premium INCLUIDAS en Cremación Premium (bug real: se llegó
+  // a cobrar un ánfora incluida por su precio de catálogo).
+  const cobrables = resueltos.filter(r => !(r.tipo === 'producto' && anforaPremiumIncluida(ficha.codigo_servicio, r.categoria)))
+  const monto = cobrables.reduce((s, r) => s + r.precio * r.qty, 0)
+  if (cobrables.length > 0) {
+    try {
+      await dispararCobroAdicional(
+        { id: String(ficha.id), email: ficha.email || '', nombre_tutor: ficha.nombre_tutor || '', nombre_mascota: ficha.nombre_mascota || '', telefono: ficha.telefono || '' },
+        cobrables.map(r => ({ nombre: r.nombre, precio: r.precio, qty: r.qty })),
+      )
+    } catch (e) { console.warn('[agente-acciones] agregarAdicional: cobro falló:', e) }
+  }
 
   const detalle = resueltos.map(r => `${r.qty > 1 ? `${r.qty}× ` : ''}${r.nombre}`).join(', ')
-  return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'} (total ${fmtPrecio(monto)}). ` +
+  if (cobrables.length === 0) {
+    // Todo lo agregado venía incluido gratis (ej. ánfora premium de una Cremación
+    // Premium): no se cobró nada, así que NO se envió correo de pago.
+    return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'}, sin costo adicional (viene incluido en el servicio). ` +
+      `Confírmale de forma cálida y breve que quedó agregado, sin necesidad de pago adicional.`
+  }
+  return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'} (total a pagar ${fmtPrecio(monto)}). ` +
     `Le enviamos al cliente un correo con el detalle y los datos de transferencia (y un aviso por WhatsApp). ` +
     `Confírmale de forma cálida y breve que quedó agregado y que le llegó el correo con los datos para pagar.`
 }

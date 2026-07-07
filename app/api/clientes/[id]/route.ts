@@ -11,6 +11,7 @@ import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
 import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
 import { dispararCobroAdicional, cobrosPendientesPorCliente } from '@/lib/cobros'
+import { excluirIncluidos } from '@/lib/anforas-premium'
 
 export async function GET(
   _req: NextRequest,
@@ -202,7 +203,14 @@ export async function PATCH(
         type AdRaw = { tipo?: string; id?: string; nombre?: string; precio?: number; qty?: number }
         const keyOf = (a: AdRaw) => `${a.tipo || ''}:${a.id || ''}:${a.nombre || ''}`
         const antes = new Set((parseAdicionales(rows[idx].adicionales) as AdRaw[]).map(keyOf))
-        const nuevos = (parseAdicionales(body.adicionales) as AdRaw[]).filter(a => !antes.has(keyOf(a)))
+        let nuevos = (parseAdicionales(body.adicionales) as AdRaw[]).filter(a => !antes.has(keyOf(a)))
+        if (nuevos.length > 0) {
+          // No cobrar ánforas premium INCLUIDAS en Cremación Premium (bug real:
+          // se llegó a cobrar un ánfora incluida por su precio de catálogo).
+          const productos = await getSheetData('productos').catch(() => [] as Record<string, string>[])
+          const categoriaPorProductoId = new Map(productos.map(p => [String(p.id), String(p.categoria ?? '')]))
+          nuevos = excluirIncluidos(codigoServSnap, nuevos, categoriaPorProductoId)
+        }
         if (nuevos.length > 0) {
           await dispararCobroAdicional(
             { id: String(updated.id), email: String(updated.email || ''), nombre_tutor: String(updated.nombre_tutor || ''), nombre_mascota: String(updated.nombre_mascota || ''), telefono: String(updated.telefono || '') },

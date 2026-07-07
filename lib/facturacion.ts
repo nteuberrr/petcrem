@@ -1,0 +1,285 @@
+import { getSheetData, appendRow, updateByIdIf, getNextId } from './datastore'
+import { todayISO } from './dates'
+import { uploadToR2 } from './cloudflare-r2'
+import {
+  emitirDTE, construirDtePayload, construirNcPayload, desglosarIvaIncluido,
+  DTE_NOTA_CREDITO, type DteEmisor, type DteReceptor, type LineaItem,
+} from './openfactura'
+
+/**
+ * Capa de negocio de Facturación manual (OpenFactura/Haulmer). Persiste cada
+ * documento emitido en `documentos_tributarios` + guarda una copia PROPIA del
+ * PDF en R2 (no depende de que el link self-service de Haulmer siga vivo).
+ *
+ * ⚠️ Todas las escrituras a `clientes`/`documentos_tributarios` acá usan
+ * `updateByIdIf` (PARCIAL) — nunca `updateById` (ese reescribe la fila COMPLETA
+ * y blanquea cualquier columna no pasada explícitamente; ver rowForWrite en
+ * lib/datastore.ts). Usar `updateById` acá borraría datos de la ficha/documento.
+ */
+
+const SHEET = 'documentos_tributarios'
+
+export type EmisorInfo = DteEmisor
+
+let emisorCache: { ts: number; data: EmisorInfo } | null = null
+
+/** Emisor (Alma Animal) desde empresa_config. Acteco es config técnica rara vez editada → env. */
+export async function getEmisor(): Promise<EmisorInfo> {
+  if (emisorCache && Date.now() - emisorCache.ts < 60_000) return emisorCache.data
+  const rows = await getSheetData('empresa_config')
+  const row = rows.find(r => r.id === '1') || rows[0] || {}
+  const data: EmisorInfo = {
+    RUTEmisor: row.rut || '',
+    RznSocEmisor: row.nombre || '',
+    GiroEmisor: row.giro || '',
+    DirOrigen: row.direccion || '',
+    CmnaOrigen: row.comuna || '',
+    Acteco: parseInt(process.env.OPENFACTURA_ACTECO || '382100', 10),
+  }
+  emisorCache = { ts: Date.now(), data }
+  return data
+}
+
+export interface DocumentoRow {
+  id: string
+  tipo_dte: string
+  folio: string
+  estado: 'emitido' | 'anulado' | string
+  ambiente: string
+  fecha_emision: string
+  receptor_tipo: 'tutor' | 'veterinaria' | 'manual' | string
+  receptor_id: string
+  receptor_rut: string
+  receptor_razon_social: string
+  receptor_giro: string
+  receptor_direccion: string
+  receptor_comuna: string
+  receptor_correo: string
+  monto_neto: string
+  monto_iva: string
+  monto_total: string
+  detalle_json: string
+  resumen: string
+  mes_facturado: string
+  fichas_json: string
+  openfactura_url: string
+  pdf_key: string
+  pdf_url: string
+  documento_anulado_id: string
+  nc_id: string
+  motivo_anulacion: string
+  warnings_json: string
+  creado_por_id: string
+  creado_por_nombre: string
+  fecha_creacion: string
+  [k: string]: string
+}
+
+export interface EmitirDocOpts {
+  tipo: number // 39 boleta · 33 factura
+  fecha?: string
+  receptorTipo: 'tutor' | 'veterinaria' | 'manual'
+  receptorId?: string
+  receptor?: DteReceptor
+  lineas: LineaItem[]
+  resumen: string
+  mesFacturado?: string
+  fichasJson?: Array<{ id: string; codigo: string }>
+  cliente?: { nombre?: string; email?: string }
+  permitirFactura?: boolean
+  /** true = ambiente de PRUEBAS (sandbox, no emite documentos reales). */
+  dev?: boolean
+  creadoPorId?: string
+  creadoPorNombre?: string
+}
+
+export interface EmitirDocResultado {
+  ok: boolean
+  documento?: DocumentoRow
+  error?: string
+  warnings?: string[]
+}
+
+function montoBrutoDeLineas(lineas: LineaItem[]): number {
+  return lineas.reduce((s, l) => s + Math.round(l.montoBruto * (l.cantidad ?? 1)), 0)
+}
+
+/** Emite una boleta (39) o factura (33), la persiste y guarda copia del PDF en R2. */
+export async function emitirDocumento(o: EmitirDocOpts): Promise<EmitirDocResultado> {
+  const emisor = await getEmisor()
+  const fecha = o.fecha || todayISO()
+  // El id se reserva ANTES de emitir: sirve como ID numérico de documentReference
+  // (OpenFactura exige un ID numérico) y como Idempotency-Key estable.
+  const id = await getNextId(SHEET)
+  const payload = construirDtePayload({
+    tipo: o.tipo,
+    fecha,
+    emisor,
+    receptor: o.receptor,
+    lineas: o.lineas,
+    cliente: o.cliente,
+    referenciaId: id,
+    permitirFactura: o.permitirFactura,
+  })
+  const r = await emitirDTE(payload, { dev: o.dev, idempotencyKey: `DOC_${id}` })
+  if (!r.ok) return { ok: false, error: r.error }
+
+  let pdf_key = '', pdf_url = ''
+  if (r.pdfBuffer) {
+    try {
+      const up = await uploadToR2(r.pdfBuffer, `facturacion/${o.tipo}-${r.folio ?? id}-${id}.pdf`, 'application/pdf')
+      pdf_key = up.key; pdf_url = up.url
+    } catch (e) {
+      console.error('[facturacion] error subiendo PDF a R2:', e)
+    }
+  }
+
+  const { neto, iva, total } = desglosarIvaIncluido(montoBrutoDeLineas(o.lineas))
+
+  const row: DocumentoRow = {
+    id,
+    tipo_dte: String(o.tipo),
+    folio: String(r.folio ?? ''),
+    estado: 'emitido',
+    ambiente: o.dev ? 'pruebas' : 'produccion',
+    fecha_emision: fecha,
+    receptor_tipo: o.receptorTipo,
+    receptor_id: o.receptorId || '',
+    receptor_rut: o.receptor?.RUTRecep || '',
+    receptor_razon_social: o.receptor?.RznSocRecep || o.cliente?.nombre || '',
+    receptor_giro: o.receptor?.GiroRecep || '',
+    receptor_direccion: o.receptor?.DirRecep || '',
+    receptor_comuna: o.receptor?.CmnaRecep || '',
+    receptor_correo: o.receptor?.CorreoRecep || o.cliente?.email || '',
+    monto_neto: String(neto),
+    monto_iva: String(iva),
+    monto_total: String(total),
+    detalle_json: JSON.stringify(o.lineas),
+    resumen: o.resumen,
+    mes_facturado: o.mesFacturado || '',
+    fichas_json: JSON.stringify(o.fichasJson || []),
+    openfactura_url: r.selfServiceUrl || '',
+    pdf_key,
+    pdf_url,
+    documento_anulado_id: '',
+    nc_id: '',
+    motivo_anulacion: '',
+    warnings_json: JSON.stringify(r.warnings || []),
+    creado_por_id: o.creadoPorId || '',
+    creado_por_nombre: o.creadoPorNombre || '',
+    fecha_creacion: todayISO(),
+  }
+  await appendRow(SHEET, row)
+
+  // Marcar las fichas facturadas al vet (partial update — nunca updateById acá).
+  if (o.fichasJson && o.fichasJson.length > 0) {
+    for (const f of o.fichasJson) {
+      await updateByIdIf('clientes', f.id, {}, { factura_vet_id: id })
+    }
+  }
+
+  return { ok: true, documento: row, warnings: r.warnings }
+}
+
+export interface AnularOpts {
+  documentoId: string
+  motivo?: string
+  dev?: boolean
+  creadoPorId?: string
+  creadoPorNombre?: string
+}
+
+/** Anula un documento emitido: genera una NC (61) que lo referencia y lo marca 'anulado'. */
+export async function anularDocumento(o: AnularOpts): Promise<EmitirDocResultado> {
+  const rows = await getSheetData(SHEET)
+  const doc = rows.find(r => r.id === o.documentoId)
+  if (!doc) return { ok: false, error: 'Documento no encontrado' }
+  if (doc.estado === 'anulado') return { ok: false, error: 'Este documento ya fue anulado.' }
+  if (doc.tipo_dte === String(DTE_NOTA_CREDITO)) return { ok: false, error: 'Una Nota de Crédito no se puede anular.' }
+  if (!doc.folio) return { ok: false, error: 'El documento no tiene folio (no se emitió correctamente).' }
+
+  const emisor = await getEmisor()
+  let detalle: LineaItem[] = []
+  try { detalle = JSON.parse(doc.detalle_json || '[]') } catch { /* deja detalle vacío */ }
+  const receptor: DteReceptor | undefined = doc.receptor_rut ? {
+    RUTRecep: doc.receptor_rut,
+    RznSocRecep: doc.receptor_razon_social || undefined,
+    GiroRecep: doc.receptor_giro || undefined,
+    DirRecep: doc.receptor_direccion || undefined,
+    CmnaRecep: doc.receptor_comuna || undefined,
+  } : undefined
+
+  const ncId = await getNextId(SHEET)
+  const payload = construirNcPayload({
+    fecha: todayISO(),
+    emisor,
+    receptor,
+    lineas: detalle,
+    tipoDocumentoOriginal: parseInt(doc.tipo_dte, 10),
+    folioOriginal: doc.folio,
+    fechaOriginal: doc.fecha_emision,
+  })
+  const r = await emitirDTE(payload, { dev: o.dev, idempotencyKey: `NC_${ncId}` })
+  if (!r.ok) return { ok: false, error: r.error }
+
+  let pdf_key = '', pdf_url = ''
+  if (r.pdfBuffer) {
+    try {
+      const up = await uploadToR2(r.pdfBuffer, `facturacion/61-${r.folio ?? ncId}-${ncId}.pdf`, 'application/pdf')
+      pdf_key = up.key; pdf_url = up.url
+    } catch (e) {
+      console.error('[facturacion] error subiendo PDF de NC a R2:', e)
+    }
+  }
+
+  const { neto, iva, total } = desglosarIvaIncluido(montoBrutoDeLineas(detalle))
+  const etiquetaOriginal = doc.tipo_dte === '39' ? 'Boleta' : 'Factura'
+
+  const ncRow: DocumentoRow = {
+    id: ncId,
+    tipo_dte: String(DTE_NOTA_CREDITO),
+    folio: String(r.folio ?? ''),
+    estado: 'emitido',
+    ambiente: o.dev ? 'pruebas' : 'produccion',
+    fecha_emision: todayISO(),
+    receptor_tipo: doc.receptor_tipo,
+    receptor_id: doc.receptor_id,
+    receptor_rut: doc.receptor_rut,
+    receptor_razon_social: doc.receptor_razon_social,
+    receptor_giro: doc.receptor_giro,
+    receptor_direccion: doc.receptor_direccion,
+    receptor_comuna: doc.receptor_comuna,
+    receptor_correo: doc.receptor_correo,
+    monto_neto: String(neto),
+    monto_iva: String(iva),
+    monto_total: String(total),
+    detalle_json: doc.detalle_json,
+    resumen: `Anula ${etiquetaOriginal} folio ${doc.folio}`,
+    mes_facturado: '',
+    fichas_json: '[]',
+    openfactura_url: r.selfServiceUrl || '',
+    pdf_key,
+    pdf_url,
+    documento_anulado_id: doc.id,
+    nc_id: '',
+    motivo_anulacion: o.motivo || '',
+    warnings_json: JSON.stringify(r.warnings || []),
+    creado_por_id: o.creadoPorId || '',
+    creado_por_nombre: o.creadoPorNombre || '',
+    fecha_creacion: todayISO(),
+  }
+  await appendRow(SHEET, ncRow)
+  await updateByIdIf(SHEET, doc.id, {}, { estado: 'anulado', nc_id: ncId })
+
+  // Si el documento anulado facturaba fichas a un vet, liberarlas (vuelven a la
+  // próxima propuesta mensual en vez de quedar invisibles para siempre).
+  if (doc.fichas_json && doc.fichas_json !== '[]') {
+    let fichas: Array<{ id: string }> = []
+    try { fichas = JSON.parse(doc.fichas_json) } catch { /* nada que liberar */ }
+    for (const f of fichas) {
+      await updateByIdIf('clientes', f.id, {}, { factura_vet_id: '' })
+    }
+  }
+
+  return { ok: true, documento: ncRow }
+}
