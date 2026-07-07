@@ -394,12 +394,14 @@ function GestionCampanas() {
 
 // ── Google Ads (solo lectura): campañas + keywords + términos de búsqueda ──
 type CampGoogle = { id: string; nombre: string; status: string; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number; conversiones: number }
-type KeywordGoogle = { texto: string; matchType: string; campana: string; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number }
-type TerminoGoogle = { termino: string; campana: string; gasto: number; impresiones: number; clicks: number; conversiones: number }
+type KeywordGoogle = { resourceName: string; status: string; texto: string; matchType: string; campana: string; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number }
+type TerminoGoogle = { termino: string; campana: string; campanaId: string; gasto: number; impresiones: number; clicks: number; conversiones: number }
+type CampanaGestionGoogle = { id: string; nombre: string; status: string; presupuestoResourceName: string; presupuestoClp: number; compartido: boolean }
 type GoogleAdsResp = {
   ads?: { moneda: string; cuenta: Omit<CampGoogle, 'id' | 'nombre' | 'status'>; campanas: CampGoogle[] }
   keywords?: KeywordGoogle[]
   terminos?: TerminoGoogle[]
+  gestion?: CampanaGestionGoogle[]
   error?: string
 }
 
@@ -413,6 +415,9 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
   const [data, setData] = useState<GoogleAdsResp | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
+  const [busyId, setBusyId] = useState('')
+  const [editId, setEditId] = useState('')
+  const [editVal, setEditVal] = useState('')
 
   const cargar = useCallback(async () => {
     setLoading(true); setErr('')
@@ -441,6 +446,70 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
     { l: 'Conversiones', v: ads.cuenta.conversiones.toLocaleString('es-CL') },
   ] : []
 
+  async function accionCampana(id: string, nombre: string, accion: 'pausar_campana' | 'activar_campana') {
+    const msg = accion === 'pausar_campana' ? `¿Pausar "${nombre}"? Deja de gastar hasta que la reactives.` : `¿Activar "${nombre}"? Vuelve a gastar presupuesto.`
+    if (!window.confirm(msg)) return
+    setBusyId(id)
+    try {
+      const r = await fetch('/api/mailing/google-ads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion, campaignId: id }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) alert(d.error || 'No se pudo aplicar el cambio.')
+      await cargar()
+    } catch { alert('Error de red') }
+    setBusyId('')
+  }
+
+  async function guardarPresupuesto(id: string, nombre: string) {
+    const monto = parseInt(editVal.replace(/\D/g, ''), 10)
+    if (!monto || monto <= 0) { alert('Ingresá un monto válido en pesos.'); return }
+    if (!window.confirm(`¿Poner el presupuesto diario de "${nombre}" en $${monto.toLocaleString('es-CL')}?`)) return
+    setBusyId(id)
+    try {
+      const r = await fetch('/api/mailing/google-ads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'presupuesto_campana', campaignId: id, montoClp: monto }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) alert(d.error || 'No se pudo ajustar el presupuesto.')
+      else { setEditId(''); setEditVal('') }
+      await cargar()
+    } catch { alert('Error de red') }
+    setBusyId('')
+  }
+
+  async function toggleKeyword(k: KeywordGoogle) {
+    const activa = k.status === 'ENABLED'
+    const msg = activa ? `¿Pausar la palabra clave "${k.texto}"?` : `¿Reactivar la palabra clave "${k.texto}"?`
+    if (!window.confirm(msg)) return
+    setBusyId(k.resourceName)
+    try {
+      const r = await fetch('/api/mailing/google-ads', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: activa ? 'pausar_keyword' : 'activar_keyword', resourceName: k.resourceName }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) alert(d.error || 'No se pudo aplicar el cambio.')
+      await cargar()
+    } catch { alert('Error de red') }
+    setBusyId('')
+  }
+
+  async function agregarNegativa(t: TerminoGoogle) {
+    if (!t.campanaId) { alert('No se pudo identificar la campaña de este término.'); return }
+    if (!window.confirm(`¿Bloquear "${t.termino}" como palabra clave negativa en "${t.campana}"? Ya no vas a gastar en búsquedas que coincidan con este término.`)) return
+    const key = `neg-${t.termino}`
+    setBusyId(key)
+    try {
+      const r = await fetch('/api/mailing/google-ads', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'negativa', campaignId: t.campanaId, texto: t.termino, matchType: 'PHRASE' }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) alert(d.error || 'No se pudo agregar la negativa.')
+      else alert('Listo — agregada como palabra clave negativa.')
+    } catch { alert('Error de red') }
+    setBusyId('')
+  }
+
+  const gestionPorId = new Map((data?.gestion || []).map(g => [g.id, g]))
+
   return (
     <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
       <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Anuncios pagados (Google Ads)</h3>
@@ -461,7 +530,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
 
           {ads.campanas.length > 0 ? (
             <div className="overflow-x-auto rounded-xl border border-gray-200">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full min-w-[820px] text-sm">
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                   <tr>
                     <th className="text-left px-3 py-2">Campaña</th>
@@ -470,19 +539,50 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                     <th className="text-right px-3 py-2">Clics</th>
                     <th className="text-right px-3 py-2">CTR</th>
                     <th className="text-right px-3 py-2">CPC</th>
+                    <th className="text-left px-3 py-2">Presupuesto/día</th>
+                    <th className="text-right px-3 py-2">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {ads.campanas.map(c => {
                     const b = ESTADO_GOOGLE[c.status] || { label: c.status || '—', cls: 'bg-gray-100 text-gray-600 border-gray-200' }
+                    const g = gestionPorId.get(c.id)
+                    const editando = editId === c.id
+                    const busy = busyId === c.id
+                    const activa = c.status === 'ENABLED'
                     return (
-                      <tr key={c.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-gray-800 max-w-[260px] truncate">{c.nombre}</td>
+                      <tr key={c.id} className="hover:bg-gray-50 align-middle">
+                        <td className="px-3 py-2 text-gray-800 max-w-[220px] truncate">{c.nombre}</td>
                         <td className="px-3 py-2"><span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded border ${b.cls}`}>{b.label}</span></td>
                         <td className="px-3 py-2 text-right">{money(c.gasto)}</td>
                         <td className="px-3 py-2 text-right">{fmt(c.clicks)}</td>
                         <td className="px-3 py-2 text-right">{c.ctr.toFixed(2)}%</td>
                         <td className="px-3 py-2 text-right">{money(c.cpc)}</td>
+                        <td className="px-3 py-2">
+                          {!g ? <span className="text-gray-400 text-xs">—</span> : editando ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-gray-400">$</span>
+                              <input value={editVal} onChange={e => setEditVal(e.target.value.replace(/\D/g, ''))} className="w-24 border-2 border-gray-300 rounded-lg px-2 py-1 text-sm" autoFocus />
+                              <button disabled={busy} onClick={() => guardarPresupuesto(c.id, c.nombre)} className="text-xs font-semibold text-white bg-[#143C64] rounded-lg px-2.5 py-1 disabled:opacity-50">Guardar</button>
+                              <button onClick={() => { setEditId(''); setEditVal('') }} className="text-xs text-gray-500 hover:underline">Cancelar</button>
+                            </div>
+                          ) : g.compartido ? (
+                            <span className="text-gray-400 text-xs" title="Presupuesto compartido con otra campaña — editalo desde Google Ads">${fmt(g.presupuestoClp)} (compartido)</span>
+                          ) : (
+                            <button disabled={busy} onClick={() => { setEditId(c.id); setEditVal(String(g.presupuestoClp || '')) }} className="text-gray-800 hover:underline disabled:opacity-50">
+                              ${fmt(g.presupuestoClp)}
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-end gap-2">
+                            {activa ? (
+                              <button disabled={busy} onClick={() => accionCampana(c.id, c.nombre, 'pausar_campana')} className="text-xs font-semibold text-amber-800 border border-amber-300 bg-amber-50 rounded-lg px-2.5 py-1 hover:bg-amber-100 disabled:opacity-50">Pausar</button>
+                            ) : c.status === 'PAUSED' ? (
+                              <button disabled={busy} onClick={() => accionCampana(c.id, c.nombre, 'activar_campana')} className="text-xs font-semibold text-emerald-800 border border-emerald-300 bg-emerald-50 rounded-lg px-2.5 py-1 hover:bg-emerald-100 disabled:opacity-50">Activar</button>
+                            ) : null}
+                          </div>
+                        </td>
                       </tr>
                     )
                   })}
@@ -495,7 +595,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Palabras clave (top {data.keywords.length} por gasto)</p>
               <div className="overflow-x-auto rounded-xl border border-gray-200">
-                <table className="w-full min-w-[640px] text-sm">
+                <table className="w-full min-w-[720px] text-sm">
                   <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                     <tr>
                       <th className="text-left px-3 py-2">Palabra clave</th>
@@ -504,19 +604,34 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                       <th className="text-right px-3 py-2">Clics</th>
                       <th className="text-right px-3 py-2">CTR</th>
                       <th className="text-right px-3 py-2">CPC</th>
+                      <th className="text-right px-3 py-2">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {data.keywords.map((k, i) => (
-                      <tr key={i} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-gray-800">{k.texto} <span className="text-gray-400 text-xs">({k.matchType?.toLowerCase()})</span></td>
-                        <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{k.campana}</td>
-                        <td className="px-3 py-2 text-right">{money(k.gasto)}</td>
-                        <td className="px-3 py-2 text-right">{fmt(k.clicks)}</td>
-                        <td className="px-3 py-2 text-right">{k.ctr.toFixed(2)}%</td>
-                        <td className="px-3 py-2 text-right">{money(k.cpc)}</td>
-                      </tr>
-                    ))}
+                    {data.keywords.map((k, i) => {
+                      const activa = k.status === 'ENABLED'
+                      const busy = busyId === k.resourceName
+                      return (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 text-gray-800">
+                            {k.texto} <span className="text-gray-400 text-xs">({k.matchType?.toLowerCase()})</span>
+                            {!activa && <span className="ml-1.5 text-[10px] font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">pausada</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{k.campana}</td>
+                          <td className="px-3 py-2 text-right">{money(k.gasto)}</td>
+                          <td className="px-3 py-2 text-right">{fmt(k.clicks)}</td>
+                          <td className="px-3 py-2 text-right">{k.ctr.toFixed(2)}%</td>
+                          <td className="px-3 py-2 text-right">{money(k.cpc)}</td>
+                          <td className="px-3 py-2 text-right">
+                            {activa ? (
+                              <button disabled={busy} onClick={() => toggleKeyword(k)} className="text-xs font-semibold text-amber-800 border border-amber-300 bg-amber-50 rounded-lg px-2.5 py-1 hover:bg-amber-100 disabled:opacity-50">Pausar</button>
+                            ) : (
+                              <button disabled={busy} onClick={() => toggleKeyword(k)} className="text-xs font-semibold text-emerald-800 border border-emerald-300 bg-emerald-50 rounded-lg px-2.5 py-1 hover:bg-emerald-100 disabled:opacity-50">Activar</button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -527,10 +642,10 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                 Términos de búsqueda reales (top {data.terminos.length} por gasto)
-                <span className="normal-case font-normal text-gray-400"> — lo que la gente escribió en Google; sirve para sumar keywords nuevas o negativas</span>
+                <span className="normal-case font-normal text-gray-400"> — lo que la gente escribió en Google; bloqueá los que no sirvan como negativa</span>
               </p>
               <div className="overflow-x-auto rounded-xl border border-gray-200">
-                <table className="w-full min-w-[640px] text-sm">
+                <table className="w-full min-w-[720px] text-sm">
                   <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                     <tr>
                       <th className="text-left px-3 py-2">Término buscado</th>
@@ -538,6 +653,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                       <th className="text-right px-3 py-2">Gasto</th>
                       <th className="text-right px-3 py-2">Clics</th>
                       <th className="text-right px-3 py-2">Conversiones</th>
+                      <th className="text-right px-3 py-2">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -548,6 +664,9 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                         <td className="px-3 py-2 text-right">{money(t.gasto)}</td>
                         <td className="px-3 py-2 text-right">{fmt(t.clicks)}</td>
                         <td className="px-3 py-2 text-right">{t.conversiones.toLocaleString('es-CL')}</td>
+                        <td className="px-3 py-2 text-right">
+                          <button disabled={busyId === `neg-${t.termino}`} onClick={() => agregarNegativa(t)} className="text-xs font-semibold text-red-700 border border-red-200 bg-red-50 rounded-lg px-2.5 py-1 hover:bg-red-100 disabled:opacity-50">🚫 Negativa</button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

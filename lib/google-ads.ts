@@ -74,6 +74,35 @@ async function gaqlSearch(query: string): Promise<GaqlRow[]> {
   return json.results || []
 }
 
+/**
+ * Mutación genérica (POST {resource}:mutate). `validateOnly` valida la operación
+ * SIN aplicarla (dry-run real de la API) — se usa para probar sin tocar datos.
+ */
+async function gaqlMutate(resource: string, operations: unknown[], validateOnly = false): Promise<void> {
+  const token = await getAccessToken()
+  const customerId = process.env.GOOGLE_ADS_CUSTOMER_ID || ''
+  const loginCustomerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || customerId
+  const res = await fetch(`${BASE}/customers/${customerId}/${resource}:mutate`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'developer-token': process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '',
+      'login-customer-id': loginCustomerId,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ operations, validateOnly }),
+  })
+  const json = await res.json().catch(() => ({})) as { error?: { message?: string; details?: unknown } }
+  if (!res.ok) {
+    console.error('[google-ads] mutate error:', JSON.stringify(json.error || json))
+    const detalle = json.error?.details as Array<{ errors?: Array<{ message?: string }> }> | undefined
+    const msgDetalle = detalle?.[0]?.errors?.[0]?.message
+    throw new Error(msgDetalle || json.error?.message || `Google Ads API: HTTP ${res.status}`)
+  }
+}
+
+function customerRN(): string { return `customers/${process.env.GOOGLE_ADS_CUSTOMER_ID || ''}` }
+
 // ─── Rango de fechas: mismos presets que usa el panel de Meta ────────────────
 const DURING_MAP: Record<string, string> = {
   last_7d: 'LAST_7_DAYS',
@@ -172,6 +201,8 @@ export async function resumenCampanas(periodo: string): Promise<ResumenGoogleAds
 
 // ─── Keywords ─────────────────────────────────────────────────────────────────
 export interface KeywordGoogle {
+  resourceName: string
+  status: string
   texto: string
   matchType: string
   campana: string
@@ -182,14 +213,16 @@ export interface KeywordGoogle {
   cpc: number
 }
 
+/** Por defecto trae ENABLED + PAUSED (para poder reactivar desde el panel). */
 export async function listarKeywords(periodo: string, limite = 30): Promise<{ moneda: string; keywords: KeywordGoogle[] }> {
   const where = whereFecha(periodo)
   const [rows, moneda] = await Promise.all([
     gaqlSearch(`
-      SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, campaign.name,
+      SELECT ad_group_criterion.resource_name, ad_group_criterion.status,
+             ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, campaign.name,
              metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.average_cpc
       FROM keyword_view
-      WHERE ${where} AND ad_group_criterion.status = 'ENABLED'
+      WHERE ${where} AND ad_group_criterion.status IN ('ENABLED', 'PAUSED')
     `),
     monedaCuenta(),
   ])
@@ -198,6 +231,8 @@ export async function listarKeywords(periodo: string, limite = 30): Promise<{ mo
     const kw = (crit.keyword || {}) as Record<string, unknown>
     const m = (r.metrics || {}) as Record<string, unknown>
     return {
+      resourceName: String(crit.resourceName || ''),
+      status: String(crit.status || ''),
       texto: String(kw.text || ''),
       matchType: String(kw.matchType || ''),
       campana: String(r.campaign?.name || ''),
@@ -211,10 +246,18 @@ export async function listarKeywords(periodo: string, limite = 30): Promise<{ mo
   return { moneda, keywords }
 }
 
+export async function pausarKeywordGoogle(resourceName: string): Promise<void> {
+  await gaqlMutate('adGroupCriteria', [{ update: { resourceName, status: 'PAUSED' }, updateMask: 'status' }])
+}
+export async function activarKeywordGoogle(resourceName: string): Promise<void> {
+  await gaqlMutate('adGroupCriteria', [{ update: { resourceName, status: 'ENABLED' }, updateMask: 'status' }])
+}
+
 // ─── Términos de búsqueda (lo que la gente escribió de verdad en Google) ─────
 export interface TerminoBusqueda {
   termino: string
   campana: string
+  campanaId: string
   gasto: number
   impresiones: number
   clicks: number
@@ -225,7 +268,7 @@ export async function terminosBusqueda(periodo: string, limite = 30): Promise<{ 
   const where = whereFecha(periodo)
   const [rows, moneda] = await Promise.all([
     gaqlSearch(`
-      SELECT search_term_view.search_term, campaign.name,
+      SELECT search_term_view.search_term, campaign.id, campaign.name,
              metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions
       FROM search_term_view
       WHERE ${where}
@@ -238,6 +281,7 @@ export async function terminosBusqueda(periodo: string, limite = 30): Promise<{ 
     return {
       termino: String(stv.searchTerm || ''),
       campana: String(r.campaign?.name || ''),
+      campanaId: String(r.campaign?.id || ''),
       gasto: clp(m.costMicros),
       impresiones: num(m.impressions),
       clicks: num(m.clicks),
@@ -245,4 +289,84 @@ export async function terminosBusqueda(periodo: string, limite = 30): Promise<{ 
     }
   }).sort((a, b) => b.gasto - a.gasto).slice(0, limite)
   return { moneda, terminos }
+}
+
+/** Agrega el término como palabra clave NEGATIVA a nivel de campaña (bloquea que se vuelva a gastar en ella). */
+export async function agregarNegativaCampana(
+  campaignId: string,
+  texto: string,
+  matchType: 'EXACT' | 'PHRASE' | 'BROAD' = 'PHRASE',
+): Promise<void> {
+  if (!campaignId || !texto.trim()) throw new Error('Faltan datos para agregar la negativa.')
+  await gaqlMutate('campaignCriteria', [{
+    create: {
+      campaign: `${customerRN()}/campaigns/${campaignId}`,
+      negative: true,
+      keyword: { text: texto.trim(), matchType },
+    },
+  }])
+}
+
+// ─── Gestión de campañas (pausar/activar/presupuesto) ─────────────────────────
+export interface CampanaGestion {
+  id: string
+  nombre: string
+  status: string
+  presupuestoResourceName: string
+  presupuestoClp: number
+  /** true = el presupuesto es usado por MÁS de una campaña — editarlo acá afectaría a las demás. */
+  compartido: boolean
+}
+
+export async function listarCampanasGestion(): Promise<{ moneda: string; campanas: CampanaGestion[] }> {
+  const [rows, moneda] = await Promise.all([
+    gaqlSearch(`
+      SELECT campaign.id, campaign.name, campaign.status, campaign.campaign_budget,
+             campaign_budget.amount_micros
+      FROM campaign
+      WHERE campaign.status IN ('ENABLED', 'PAUSED')
+    `),
+    monedaCuenta(),
+  ])
+  const porPresupuesto = new Map<string, number>()
+  for (const r of rows) {
+    const rn = String(r.campaign?.campaignBudget || '')
+    porPresupuesto.set(rn, (porPresupuesto.get(rn) || 0) + 1)
+  }
+  const campanas: CampanaGestion[] = rows.map(r => {
+    const rn = String(r.campaign?.campaignBudget || '')
+    const budget = (r.campaignBudget || {}) as Record<string, unknown>
+    return {
+      id: String(r.campaign?.id || ''),
+      nombre: String(r.campaign?.name || 'Campaña'),
+      status: String(r.campaign?.status || ''),
+      presupuestoResourceName: rn,
+      presupuestoClp: clp(budget.amountMicros),
+      compartido: (porPresupuesto.get(rn) || 0) > 1,
+    }
+  }).sort((a, b) => a.nombre.localeCompare(b.nombre))
+  return { moneda, campanas }
+}
+
+async function setStatusCampana(campaignId: string, status: 'ENABLED' | 'PAUSED'): Promise<void> {
+  await gaqlMutate('campaigns', [{
+    update: { resourceName: `${customerRN()}/campaigns/${campaignId}`, status },
+    updateMask: 'status',
+  }])
+}
+export async function pausarCampanaGoogle(campaignId: string): Promise<void> { await setStatusCampana(campaignId, 'PAUSED') }
+export async function activarCampanaGoogle(campaignId: string): Promise<void> { await setStatusCampana(campaignId, 'ENABLED') }
+
+/** Ajusta el presupuesto DIARIO de una campaña (monto en CLP). Bloquea presupuestos compartidos. */
+export async function ajustarPresupuestoGoogle(campaignId: string, montoClp: number): Promise<void> {
+  if (!(montoClp > 0)) throw new Error('El presupuesto debe ser mayor a 0.')
+  const { campanas } = await listarCampanasGestion()
+  const c = campanas.find(x => x.id === campaignId)
+  if (!c) throw new Error('Campaña no encontrada.')
+  if (!c.presupuestoResourceName) throw new Error('No se encontró el presupuesto de esta campaña.')
+  if (c.compartido) throw new Error('Esta campaña usa un presupuesto COMPARTIDO con otras campañas — cambiarlo acá afectaría a las demás. Editalo desde Google Ads directamente.')
+  await gaqlMutate('campaignBudgets', [{
+    update: { resourceName: c.presupuestoResourceName, amountMicros: String(Math.round(montoClp * 1_000_000)) },
+    updateMask: 'amount_micros',
+  }])
 }
