@@ -39,6 +39,8 @@ export async function proxy(req: NextRequest) {
     // veterinarios, tarifas de convenio automáticas).
     pathname === '/convenio-veterinarias' ||
     pathname === '/api/veterinarios/inscribir' ||
+    // Tabla de tarifas de convenio para el landing (solo lectura de precios_convenio).
+    pathname === '/api/veterinarios/precios-convenio' ||
     // Registro público de mascota (auto-atención del tutor) + su endpoint de
     // metadata/creación. Cliente general "sin veterinaria", sin sesión.
     pathname === '/registro-mascota' ||

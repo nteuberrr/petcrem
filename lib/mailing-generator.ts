@@ -88,6 +88,8 @@ function systemPrompt(contacto: Contacto, puedeGenerar: boolean): string {
 IMÁGENES NUEVAS (cuando ninguna del banco sirve):
   - En el HTML escribe el <img> con su tamaño/estilo y pon en el src un marcador: src="GEN:slot1" (slot2, slot3…). El sistema generará cada imagen y reemplazará el marcador por la URL real.
   - Por CADA marcador agrega una entrada en "nuevas" con: slot (ej. "slot1"), prompt (descripción FOTOGRÁFICA detallada de la escena, en español o inglés), alt (texto alternativo), aspect (ej. "16:9", "1:1", "4:5"), descripcion (1 línea para el banco), tags (palabras clave separadas por coma) y grupo (uno de: mascotas, personas, productos, otro).
+  - PROPORCIÓN (CRÍTICO): el "aspect" de cada imagen DEBE coincidir con la FORMA del recuadro donde la pones en el HTML. Si la usas como banner/hero de ancho completo (ancho 600, alto bajo), pide una imagen HORIZONTAL ancha ("16:9" o "3:2") — NUNCA vertical. Si va como retrato en una columna angosta, usa vertical ("4:5"/"3:4"); si es cuadrada, "1:1". Una foto vertical metida en una banda ancha se recorta y CORTA AL SUJETO (cabezas, caras). Regla de oro: la forma de la foto = la forma de su recuadro.
+  - RECORTE: si usas object-fit:cover con altura fija, usa object-position:center. NUNCA "center top" ni "bottom" (decapita al sujeto).
   - TODAS las imágenes son FOTORREALISTAS: personas y mascotas REALES, luz natural, como una foto editorial. Nada de ilustración, cartoon, 3D ni texto incrustado en la imagen.
   - PROHIBIDO generar fotos de INSTALACIONES, locales, hornos, salas, fachada, vehículos o cualquier dependencia del crematorio. Esas fotos SOLO se muestran reutilizando imágenes del banco con grupo "instalaciones" (las sube el equipo). Si el correo necesitaría mostrar instalaciones y no hay ninguna en el banco, omite esa imagen — NO la inventes.
   - Máximo ${MAX_NUEVAS} imágenes nuevas por campaña. PRIORIZA reutilizar del banco cuando haya una imagen que CALCE de verdad (reutilizar es gratis; generar cuesta) — pero con VARIEDAD: no repitas siempre las mismas fotos entre campañas, rotá entre las disponibles. Generá una nueva solo si ninguna del banco encaja o si vendrías repitiendo lo ya usado.`
@@ -237,6 +239,67 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+// ─── Encaje foto ↔ recuadro (fix determinista del recorte) ───────────────────
+// El modelo elige el `aspect` de cada imagen por su cuenta y a veces no coincide
+// con la FORMA del recuadro donde la pone en el HTML (ej. pidió una vertical 3:4
+// y la usó como hero horizontal 600×260 → object-fit:cover recorta y corta al
+// sujeto). Acá derivamos el aspecto REAL del slot para generar la foto con esa
+// forma, así entra sin recortar. Es la fuente de verdad: la imagen debe caber en
+// su caja de despliegue.
+
+// Relaciones que nano-banana conoce (ASPECT_HINT). La imagen se snapea a la más cercana.
+const RATIOS: Array<{ s: string; r: number }> = [
+  { s: '16:9', r: 16 / 9 }, { s: '3:2', r: 3 / 2 }, { s: '4:3', r: 4 / 3 },
+  { s: '1:1', r: 1 }, { s: '4:5', r: 4 / 5 }, { s: '3:4', r: 3 / 4 }, { s: '9:16', r: 9 / 16 },
+]
+export function snapAspect(ratio: number): string {
+  let best = RATIOS[0]
+  for (const x of RATIOS) if (Math.abs(x.r - ratio) < Math.abs(best.r - ratio)) best = x
+  return best.s
+}
+
+function numDe(re: RegExp, s: string): number | null {
+  const m = s.match(re)
+  const n = m ? parseInt(m[1], 10) : NaN
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/**
+ * Deriva el aspecto de generación desde el recuadro real del slot `GEN:slotN` en
+ * el HTML. Si el slot fija ancho Y alto → devuelve el ratio snappeado (para que la
+ * foto ENTRE sin recortar al sujeto). Si el alto es auto/desconocido → null (no hay
+ * riesgo de recorte, se respeta el aspect que pidió el modelo).
+ */
+export function aspectoDelSlot(html: string, slot: string): string | null {
+  const tagM = html.match(new RegExp(`<img\\b[^>]*\\bsrc=["']GEN:${escapeRegex(slot)}["'][^>]*>`, 'i'))
+  if (!tagM) return null
+  const tag = tagM[0]
+  const style = (tag.match(/\bstyle=["']([^"']*)["']/i) || [])[1] || ''
+  const h = numDe(/height\s*:\s*(\d+)\s*px/i, style) ?? numDe(/\bheight=["'](\d+)["']/i, tag)
+  const w = numDe(/max-width\s*:\s*(\d+)\s*px/i, style)
+    ?? numDe(/\bwidth\s*:\s*(\d+)\s*px/i, style)
+    ?? numDe(/\bwidth=["'](\d+)["']/i, tag)
+  if (!h || !w) return null // sin alto fijo → no fuerza recorte, no override
+  return snapAspect(w / h)
+}
+
+/**
+ * Segunda red: para las fotos de contenido con object-fit:cover, centra el recorte
+ * (object-position:center). Evita "center top"/"bottom" que corta cabezas/caras.
+ */
+export function centrarRecorteAI(html: string, urls: string[]): string {
+  if (!urls.length) return html
+  const set = new Set(urls)
+  return html.replace(/<img\b[^>]*>/gi, tag => {
+    const src = (tag.match(/\bsrc=["']([^"']+)["']/i) || [])[1]
+    if (!src || !set.has(src)) return tag
+    if (!/object-fit\s*:\s*cover/i.test(tag)) return tag
+    return /object-position\s*:/i.test(tag)
+      ? tag.replace(/object-position\s*:\s*[^;"']*/i, 'object-position:center')
+      : tag
+  })
+}
+
 /** Genera (o ajusta) una campaña: Claude dirige, Nano Banana genera las imágenes. */
 export async function generarCampana(opts: GenerarOpts): Promise<CampanaGenerada> {
   if (!opts.instruccion?.trim()) throw new Error('Falta la instrucción de la campaña')
@@ -291,6 +354,18 @@ export async function generarCampana(opts: GenerarOpts): Promise<CampanaGenerada
 
   // Imágenes NUEVAS: generar con Nano Banana (en paralelo, acotadas) y reemplazar marcadores.
   const nuevas = pedidas.filter(n => (n.grupo || '').toLowerCase() !== 'instalaciones').slice(0, MAX_NUEVAS)
+
+  // FIX DE ENCAJE: antes de generar, forzamos el aspecto de cada imagen al de su
+  // recuadro real en el HTML (si el slot fija ancho×alto). Así la foto entra sin
+  // recortar al sujeto, aunque el modelo haya pedido otra proporción.
+  for (const n of nuevas) {
+    const a = aspectoDelSlot(html, n.slot)
+    if (a && a !== n.aspect) {
+      avisos.push(`Ajusté la foto ${n.slot} a proporción ${a} para que entre en su recuadro sin recortarse.`)
+      n.aspect = a
+    }
+  }
+
   const genBuffers: { label: string; buffer: Buffer; mime: string }[] = []
   if (nuevas.length > 0 && puedeGenerar) {
     const resultados = await Promise.all(nuevas.map(async n => {
@@ -344,6 +419,10 @@ export async function generarCampana(opts: GenerarOpts): Promise<CampanaGenerada
     console.warn('[mailing-generator] revisión final falló:', e)
   }
 
+  // Red final: centrar el recorte de las fotos de contenido (por si el revisor dejó
+  // un object-position:top/bottom que corta caras).
+  html = centrarRecorteAI(html, imagenes.map(i => i.url))
+
   return { asunto, preview_text, html, imagenes, avisos }
 }
 
@@ -360,6 +439,8 @@ Revisa y CORRIGE en el HTML:
 NO cambies: el copy/mensaje, las variables {{...}}, ni las URLs de las imágenes (atributo src). Solo ajusta el markup/estilos para que quede impecable.
 
 Si te paso imágenes generadas, verifica que sean FOTORREALISTAS y CONSISTENTES entre sí y con el correo. Si alguna NO calza (estilo distinto, no realista, mal recortada), NO la quites: anótala en "avisos" para que el equipo la regenere.
+
+ENCAJE FOTO ↔ RECUADRO (importante — este es el error más común): revisá cada <img> contra el tamaño del recuadro donde va. Si una foto es claramente VERTICAL (retrato) pero se usa como banner/hero de ancho completo con object-fit:cover y poca altura, se va a recortar y CORTAR AL SUJETO (mostrará pared/techo en vez de la persona). En ese caso corregí el recuadro: dale height:auto (que se vea la foto completa) o una altura acorde a su proporción; y usa object-position:center (nunca "top"/"bottom"). Cada banner ancho necesita una foto horizontal; cada retrato, un recuadro vertical o cuadrado.
 
 Verificá TAMBIÉN contra la guía de email (asunto/preheader, 600px, UN solo CTA botón, nada de email 100% imagen, alt text, footer con baja):
 ${GUIA_EMAIL}

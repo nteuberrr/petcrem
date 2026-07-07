@@ -33,7 +33,7 @@ async function graphGet(path: string, params: Record<string, string>): Promise<R
 
 // ─── Cuenta publicitaria ──────────────────────────────────────────────────────
 let adAccountCache: string | null = null
-async function getAdAccountId(): Promise<string> {
+export async function getAdAccountId(): Promise<string> {
   if (adAccountCache) return adAccountCache
   const env = process.env.META_AD_ACCOUNT_ID
   if (env) { adAccountCache = env.startsWith('act_') ? env : `act_${env}`; return adAccountCache }

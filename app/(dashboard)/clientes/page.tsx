@@ -652,9 +652,17 @@ export default function ClientesPage() {
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-gray-500">{c.especie || (c.estado === 'borrador' ? 'falta especie' : '')}</span>
                 <span className="text-gray-300">·</span>
-                <span className="text-xs text-gray-500">{fmtKg(parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado))}</span>
-                <span className="text-gray-300">·</span>
                 <span className="text-xs font-semibold text-gray-700">{c.codigo_servicio}</span>
+              </div>
+              <div className="mt-2 flex items-center gap-3 flex-wrap text-xs text-gray-500">
+                <span>
+                  <span className="font-semibold text-gray-600">Retiro:</span>{' '}
+                  {c.fecha_retiro ? fmtFecha(c.fecha_retiro) : <span className="text-gray-400 italic">sin fecha</span>}
+                </span>
+                <span>
+                  <span className="font-semibold text-gray-600">Peso:</span>{' '}
+                  {fmtKg(parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado))}
+                </span>
               </div>
               {(esPremiumCuadro(c) || solicitoVideo(c)) && (
                 <div className="mt-2 flex items-center gap-1.5">

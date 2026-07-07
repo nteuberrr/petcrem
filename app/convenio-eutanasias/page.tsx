@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import ComunaPicker from '@/components/ui/ComunaPicker'
 import { Modal } from '@/components/ui/Modal'
 import { fmtPrecio } from '@/lib/format'
+import { COMUNAS_METROPOLITANA } from '@/lib/comunas'
 
 type Tramo = { id: string; peso_min: string; peso_max: string; precio: string }
 
@@ -269,6 +270,25 @@ export default function ConvenioEutanasiasPage() {
                 Comunas donde puedes atender <span className="text-red-500">*</span>
               </label>
               <p className="text-xs text-gray-500 mb-2">Toca <strong>+ Agregar comuna</strong> y escribe el nombre. Se sugerirán mientras tipees. Puedes agregar tantas como quieras.</p>
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setComunas(prev => Array.from(new Set([...prev, ...COMUNAS_METROPOLITANA])))}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full text-white hover:opacity-90 transition-opacity"
+                  style={{ backgroundColor: COLOR }}
+                >
+                  + Agregar todas las comunas de Santiago (RM)
+                </button>
+                {comunas.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setComunas([])}
+                    className="text-xs font-medium text-gray-500 hover:text-gray-800 hover:underline"
+                  >
+                    Quitar todas
+                  </button>
+                )}
+              </div>
               <ComunaPicker value={comunas} onChange={setComunas} color={COLOR} />
             </div>
 

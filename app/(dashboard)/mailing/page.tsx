@@ -239,6 +239,159 @@ const PERIODOS: { key: string; label: string }[] = [
   { key: 'last_month', label: 'Mes pasado' },
 ]
 
+// ── Gestión de campañas de Meta Ads (Fase 1): pausar/activar + ajustar presupuesto ──
+type CampAds = { id: string; nombre: string; status: string; effective_status: string; objective: string; tipo_presupuesto: 'diario' | 'total' | 'adset' | 'ninguno'; presupuesto_clp: number; moneda: string }
+
+const ESTADO_ADS: Record<string, { label: string; cls: string }> = {
+  ACTIVE: { label: 'Activa', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  PAUSED: { label: 'Pausada', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  CAMPAIGN_PAUSED: { label: 'Pausada', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  ADSET_PAUSED: { label: 'Pausada (ad set)', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  IN_PROCESS: { label: 'Procesando', cls: 'bg-amber-100 text-amber-800 border-amber-200' },
+  PENDING_REVIEW: { label: 'En revisión', cls: 'bg-amber-100 text-amber-800 border-amber-200' },
+  PENDING_BILLING_INFO: { label: 'Falta pago', cls: 'bg-red-100 text-red-800 border-red-200' },
+  WITH_ISSUES: { label: 'Con problemas', cls: 'bg-red-100 text-red-800 border-red-200' },
+  DISAPPROVED: { label: 'Rechazada', cls: 'bg-red-100 text-red-800 border-red-200' },
+  ARCHIVED: { label: 'Archivada', cls: 'bg-gray-100 text-gray-500 border-gray-200' },
+}
+
+function GestionCampanas() {
+  const [camps, setCamps] = useState<CampAds[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+  const [busyId, setBusyId] = useState('')
+  const [editId, setEditId] = useState('')
+  const [editVal, setEditVal] = useState('')
+
+  const cargar = useCallback(async () => {
+    setLoading(true); setErr('')
+    try {
+      const r = await fetch('/api/mailing/ads', { cache: 'no-store' })
+      const d = await r.json()
+      if (!r.ok) { setErr(d.error || 'Error'); setCamps(null) } else setCamps(d.campanas || [])
+    } catch { setErr('Error de red'); setCamps(null) }
+    setLoading(false)
+  }, [])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargar()
+  }, [cargar])
+
+  const fmt = (n: number) => Math.round(n || 0).toLocaleString('es-CL')
+
+  async function cambiarEstado(c: CampAds, accion: 'pausar' | 'activar') {
+    const msg = accion === 'pausar'
+      ? `¿Pausar "${c.nombre}"? Dejará de gastar hasta que la reactives.`
+      : `¿Activar "${c.nombre}"? Volverá a gastar presupuesto.`
+    if (!window.confirm(msg)) return
+    setBusyId(c.id)
+    try {
+      const r = await fetch('/api/mailing/ads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion, campana_id: c.id }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) alert(d.error || 'No se pudo aplicar el cambio.')
+      await cargar()
+    } catch { alert('Error de red') }
+    setBusyId('')
+  }
+
+  async function guardarPresupuesto(c: CampAds) {
+    const monto = parseInt(editVal.replace(/\D/g, ''), 10)
+    if (!monto || monto <= 0) { alert('Ingresá un monto válido en pesos.'); return }
+    const etiqueta = c.tipo_presupuesto === 'diario' ? 'diario' : 'total'
+    if (!window.confirm(`¿Poner el presupuesto ${etiqueta} de "${c.nombre}" en $${monto.toLocaleString('es-CL')} CLP?`)) return
+    setBusyId(c.id)
+    try {
+      const r = await fetch('/api/mailing/ads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'presupuesto', campana_id: c.id, monto_clp: monto }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) alert(d.error || 'No se pudo ajustar el presupuesto.')
+      else { setEditId(''); setEditVal('') }
+      await cargar()
+    } catch { alert('Error de red') }
+    setBusyId('')
+  }
+
+  const badge = (c: CampAds) => ESTADO_ADS[c.effective_status] || { label: c.effective_status || c.status || '—', cls: 'bg-gray-100 text-gray-600 border-gray-200' }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Gestión de campañas (Meta Ads)</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Pausá o reactivá campañas y ajustá su presupuesto. Los cambios se aplican en Meta al instante.</p>
+        </div>
+        <button onClick={cargar} className="text-sm border-2 border-gray-300 rounded-lg px-3 py-1.5 font-semibold hover:bg-gray-50">Actualizar</button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-400">Cargando campañas…</p>
+      ) : err ? (
+        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{err}</p>
+      ) : !camps || camps.length === 0 ? (
+        <p className="text-sm text-gray-400">No hay campañas en la cuenta.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+              <tr>
+                <th className="text-left px-3 py-2">Campaña</th>
+                <th className="text-left px-3 py-2">Estado</th>
+                <th className="text-left px-3 py-2">Presupuesto</th>
+                <th className="text-right px-3 py-2">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {camps.map(c => {
+                const b = badge(c)
+                const activa = c.status === 'ACTIVE'
+                const editando = editId === c.id
+                const editable = c.tipo_presupuesto === 'diario' || c.tipo_presupuesto === 'total'
+                const busy = busyId === c.id
+                return (
+                  <tr key={c.id} className="hover:bg-gray-50 align-middle">
+                    <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate" title={c.nombre}>{c.nombre}</td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded border ${b.cls}`}>{b.label}</span>
+                    </td>
+                    <td className="px-3 py-2">
+                      {editando ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-gray-400">$</span>
+                          <input value={editVal} onChange={e => setEditVal(e.target.value.replace(/\D/g, ''))}
+                            className="w-24 border-2 border-gray-300 rounded-lg px-2 py-1 text-sm" autoFocus />
+                          <button disabled={busy} onClick={() => guardarPresupuesto(c)} className="text-xs font-semibold text-white bg-[#143C64] rounded-lg px-2.5 py-1 disabled:opacity-50">Guardar</button>
+                          <button onClick={() => { setEditId(''); setEditVal('') }} className="text-xs text-gray-500 hover:underline">Cancelar</button>
+                        </div>
+                      ) : editable ? (
+                        <span className="text-gray-800">
+                          ${fmt(c.presupuesto_clp)} <span className="text-gray-400 text-xs">CLP {c.tipo_presupuesto === 'diario' ? '/ día' : 'total'}</span>
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">a nivel ad set</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-end gap-2">
+                        {editable && !editando && (
+                          <button disabled={busy} onClick={() => { setEditId(c.id); setEditVal(String(c.presupuesto_clp || '')) }} className="text-xs font-semibold text-[#143C64] border border-gray-300 rounded-lg px-2.5 py-1 hover:bg-gray-50 disabled:opacity-50">Presupuesto</button>
+                        )}
+                        {activa ? (
+                          <button disabled={busy} onClick={() => cambiarEstado(c, 'pausar')} className="text-xs font-semibold text-amber-800 border border-amber-300 bg-amber-50 rounded-lg px-2.5 py-1 hover:bg-amber-100 disabled:opacity-50">Pausar</button>
+                        ) : c.status === 'PAUSED' ? (
+                          <button disabled={busy} onClick={() => cambiarEstado(c, 'activar')} className="text-xs font-semibold text-emerald-800 border border-emerald-300 bg-emerald-50 rounded-lg px-2.5 py-1 hover:bg-emerald-100 disabled:opacity-50">Activar</button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MetricasPanel() {
   const [periodo, setPeriodo] = useState('last_30d')
   const [data, setData] = useState<MetResp | null>(null)
@@ -337,6 +490,8 @@ function MetricasPanel() {
               </>
             ) : <p className="text-sm text-gray-400">Sin datos de Ads.</p>}
           </div>
+
+          <GestionCampanas />
 
           <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-3">
             <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Orgánico (Facebook)</h3>

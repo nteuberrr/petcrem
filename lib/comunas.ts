@@ -401,6 +401,16 @@ export const COMUNAS_NOMBRES: string[] = COMUNAS
   .map(c => c.nombre)
   .sort((a, b) => a.localeCompare(b, 'es'))
 
+/**
+ * Nombres de las comunas de la Región Metropolitana (Santiago), en orden
+ * alfabético. Usado por el botón "Agregar todas las comunas de Santiago" del
+ * formulario de inscripción al convenio de eutanasias.
+ */
+export const COMUNAS_METROPOLITANA: string[] = COMUNAS
+  .filter(c => c.region === 'Metropolitana')
+  .map(c => c.nombre)
+  .sort((a, b) => a.localeCompare(b, 'es'))
+
 /** Lookup: nombre normalizado → entrada. Para validación al recibir un valor. */
 const lookup = new Map<string, ComunaEntry>()
 for (const c of COMUNAS) {

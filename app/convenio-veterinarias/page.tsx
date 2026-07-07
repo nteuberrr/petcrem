@@ -1,7 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ComunaPicker from '@/components/ui/ComunaPicker'
 import { Modal } from '@/components/ui/Modal'
+import { fmtPrecio } from '@/lib/format'
 
 // Landing PÚBLICA de autoinscripción de clínicas/veterinarias al convenio de
 // CREMACIÓN (hoja `veterinarios`). Postea a /api/veterinarios/inscribir, que
@@ -16,6 +17,17 @@ const LOGO = '/brand/logo-alma-animal.png'
 const SELLO = '/brand/sello-alma-animal.png'
 
 const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#143C64]/40'
+
+type TramoConvenio = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
+
+function rangoPeso(min: string, max: string): string {
+  const mn = (min ?? '').trim()
+  const mx = (max ?? '').trim()
+  if (mn && mx) return `${mn} – ${mx} kg`
+  if (mn && !mx) return `${mn} kg o más`
+  return `${mx || mn} kg`
+}
+function precioNum(s: string): number { return parseInt((s ?? '').replace(/\D/g, ''), 10) || 0 }
 
 const BENEFICIOS = [
   { icono: '⏱️', titulo: 'Retiro en menos de 3 horas', detalle: 'Retiramos directamente desde tu clínica, habitualmente en menos de 3 horas.' },
@@ -41,6 +53,14 @@ export default function ConvenioVeterinariasPage() {
   const [comunas, setComunas] = useState<string[]>([])
   const [enviando, setEnviando] = useState(false)
   const [resultado, setResultado] = useState<{ tipo: 'ok' | 'error' | 'duplicado'; mensaje: string } | null>(null)
+  const [tramos, setTramos] = useState<TramoConvenio[]>([])
+
+  useEffect(() => {
+    fetch('/api/veterinarios/precios-convenio')
+      .then(r => r.json())
+      .then(d => setTramos(Array.isArray(d?.tramos) ? d.tramos : []))
+      .catch(() => {})
+  }, [])
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault()
@@ -125,6 +145,46 @@ export default function ConvenioVeterinariasPage() {
               Cremación con código de seguimiento, y entrega de cenizas + certificado en máximo 3 días hábiles. Te informamos cada hito por correo.
             </Card>
           </div>
+        </section>
+
+        {/* Precios de convenio */}
+        <section>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">Tarifas de convenio</h2>
+          <p className="text-sm sm:text-base text-gray-600 mb-4">
+            Estos son los valores <strong>preferentes del convenio</strong> por cremación solicitada, según el peso de la mascota y el tipo de servicio.
+            Quedan asignados automáticamente al inscribir tu clínica.
+          </p>
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-x-auto">
+            {tramos.length === 0 ? (
+              <div className="p-6 text-center text-gray-400 text-sm">Cargando tarifas…</div>
+            ) : (
+              <table className="w-full min-w-[520px] text-sm sm:text-base">
+                <thead style={{ backgroundColor: COLOR }} className="text-white">
+                  <tr>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs sm:text-sm">Peso de la mascota</th>
+                    <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm">Individual</th>
+                    <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm">Premium</th>
+                    <th className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm">Sin devolución</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {tramos.map(t => (
+                    <tr key={t.id}>
+                      <td className="px-3 sm:px-4 py-3 text-gray-700">{rangoPeso(t.peso_min, t.peso_max)}</td>
+                      <td className="px-3 sm:px-4 py-3 text-right font-semibold text-gray-900">{fmtPrecio(precioNum(t.precio_ci))}</td>
+                      <td className="px-3 sm:px-4 py-3 text-right text-gray-700">{fmtPrecio(precioNum(t.precio_cp))}</td>
+                      <td className="px-3 sm:px-4 py-3 text-right text-gray-700">{fmtPrecio(precioNum(t.precio_sd))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 mt-3">
+            <strong>Cremación Individual:</strong> devolvemos las cenizas de tu paciente. ·
+            <strong> Premium:</strong> incluye ánfora premium. ·
+            <strong> Sin devolución:</strong> cremación comunitaria, sin retorno de cenizas.
+          </p>
         </section>
 
         {/* Formulario */}
