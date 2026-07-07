@@ -55,6 +55,43 @@ function expandirAutocierre(html: string): string {
 
 function aCamel(k: string): string { return k.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()) }
 
+/** px numérico de un valor de estilo ("60px" → 60), o null si no es px puro. */
+function pxNum(v?: string): number | null {
+  if (!v) return null
+  const m = /^(-?\d*\.?\d+)px$/.exec(v.trim())
+  return m ? parseFloat(m[1]) : null
+}
+
+/**
+ * Blindaje anti-encimado DETERMINISTA (corre en TODA placa, sin depender del
+ * modelo). satori ya fuerza flex-column (ver nodoAVNode), pero el texto igual se
+ * encimaba por tres cosas que el modelo escribía para "apretar" líneas:
+ *   1) márgenes NEGATIVOS (margin-top:-Npx) → líneas montadas ("Suma ingresos"
+ *      encimando "en tu zona"). Se descartan (excepto en <img>, donde un cutout
+ *      puede sangrar a propósito).
+ *   2) height FIJA en una hoja de TEXTO → recorta/encima el texto. Se quita (el
+ *      texto debe medir por su contenido).
+ *   3) line-height demasiado chico (px < font-size, o unitless < 1.02) → líneas
+ *      pegadas. Se sube a un piso seguro.
+ */
+function blindarAntiOverlap(style: Record<string, string>, tag: string, esHojaTexto: boolean): void {
+  if (tag !== 'img') {
+    for (const k of ['margin', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight'] as const) {
+      const v = style[k]
+      if (v && /(^|\s)-\d/.test(v)) delete style[k]
+    }
+  }
+  if (!esHojaTexto) return
+  if (style.height) delete style.height // el texto se dimensiona por su contenido
+  const fs = pxNum(style.fontSize)
+  const lhTrim = (style.lineHeight || '').trim()
+  const lhPx = pxNum(style.lineHeight)
+  const lhNum = /^\d*\.?\d+$/.test(lhTrim) ? parseFloat(lhTrim) : null
+  if (lhPx != null && fs != null && lhPx < fs) style.lineHeight = `${Math.round(fs * 1.12)}px`
+  else if (lhNum != null && lhNum < 1.02) style.lineHeight = '1.08'
+  else if (!lhTrim && fs != null && fs >= 40) style.lineHeight = '1.1'
+}
+
 function parseStyle(s?: string): Record<string, string> {
   const o: Record<string, string> = {}
   if (!s) return o
@@ -99,6 +136,23 @@ function nodoAVNode(node: Node): VNode | null {
     if (d !== 'flex' && d !== 'contents' && d !== 'none') {
       style.display = 'flex'
       if (!style.flexDirection) style.flexDirection = 'column'
+    }
+  }
+  // Blindaje anti-encimado (márgenes negativos, height fija en texto, line-height chico).
+  const esHojaTexto = hijos.length > 0 && hijos.every(h => typeof h === 'string')
+  blindarAntiOverlap(style, tag, esHojaTexto)
+  // CAUSA RAÍZ del encimado clásico (probado con repro A/B): si el contenido de una
+  // COLUMNA flex excede el lienzo, satori COMPRIME las cajas hijas (flex-shrink:1
+  // default) pero dibuja los glifos completos → el texto se derrama sobre el elemento
+  // siguiente (issue vercel/satori#532). Fix: los hijos de una columna NUNCA se
+  // comprimen (flex-shrink:0 salvo que lo declaren). El exceso, si lo hay, se recorta
+  // abajo — visible y detectable por el QA — en vez de encimar texto. En filas (row)
+  // NO se toca: ahí el shrink es lo que permite que el texto envuelva a lo ancho.
+  if (String(style.display) === 'flex' && String(style.flexDirection || 'row').startsWith('column')) {
+    for (const h of hijos) {
+      if (typeof h === 'string') continue
+      const st = (h.props.style ??= {}) as Record<string, unknown>
+      if (st.flexShrink === undefined) st.flexShrink = 0
     }
   }
   // children: un solo hijo va suelto; varios, como array; CERO → no seteamos `children`.

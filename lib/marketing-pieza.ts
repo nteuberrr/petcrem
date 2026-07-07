@@ -1,10 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { BRAND, getContacto } from './email-layout'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
+import { GUIA_SOCIAL, GUIA_QA } from './marketing-guia'
+import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, type SlotsPlantilla } from './marketing-plantillas'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { REGLAS_INVIOLABLES } from './marca-voz'
 import { lintCopy, extraerTextoHtml } from './marketing-lint'
-import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, reducirParaVision, type ImagenBanco } from './mailing-images'
+import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, reducirParaVision, eliminarImagenPorUrl, type ImagenBanco } from './mailing-images'
 import { generarGraficoMarca, cargarDisenoGrafico, type FotoGrafico } from './marketing-grafico'
 import { esLogo } from './marca-logo'
 import { isNanoBananaConfigurado } from './nano-banana'
@@ -95,7 +97,7 @@ const VOZ_AUDIENCIA: Record<string, string> = {
 }
 
 const CANAL_HINT: Record<string, string> = {
-  instagram: 'Instagram (feed): copy breve y con gancho, 1-3 frases potentes, salto de línea entre ideas, y 5-12 hashtags relevantes al final (mezcla marca + nicho mascotas/Chile). Emojis con MUCHA moderación (a lo sumo una huellita 🐾). Instagram admite CARRUSEL (varias imágenes que el usuario desliza). DIMENSIÓN (regla del dueño): TODAS las imágenes de Instagram van en 4:5 VERTICAL — aspect "4:5" en fotos y lienzo post_vertical 1080x1350 en las placas (así se ven bien en el perfil).',
+  instagram: 'Instagram (feed): copy breve y con gancho. El HOOK va en los primeros ~125 caracteres (funciona solo, sin relleno) e incluí la KEYWORD principal como la buscaría la gente en las primeras 2 líneas. Al final, 3-5 hashtags NICHO y específicos (mascotas/Chile/comuna; más de 5 baja el alcance) — nunca genéricos (#amor #mascotas). Emojis con MUCHA moderación (a lo sumo una huellita 🐾). Instagram admite CARRUSEL (varias imágenes que el usuario desliza). DIMENSIÓN (regla del dueño): TODAS las imágenes de Instagram van en 4:5 VERTICAL — aspect "4:5" en fotos y lienzo post_vertical 1080x1350 en las placas (así se ven bien en el perfil).',
   facebook: 'Facebook (Página): copy un poco más extenso que IG, 2-4 frases, puede incluir un llamado a la acción y el sitio web. Pocos o ningún hashtag. Sin emojis tristes. Facebook admite VARIAS imágenes en un mismo post (álbum/paso a paso): si la idea es una secuencia o varias ideas, hacé varias placas.',
 }
 
@@ -104,7 +106,10 @@ const MAX_IMGS = 10
 const MAX_NUEVAS = 10
 
 interface EspecieImagen {
-  modo?: 'reuse' | 'nueva' | 'grafico'
+  modo?: 'reuse' | 'nueva' | 'grafico' | 'plantilla'
+  /** modo=plantilla: nombre de la plantilla maestra + sus slots. */
+  plantilla?: string
+  slots?: SlotsPlantilla
   url?: string
   prompt?: string
   alt?: string
@@ -148,6 +153,16 @@ function bloqueLogosPieza(banco: ImagenBanco[]): string {
     return `- ${l.descripcion || `logo #${l.id}`}: ${l.url}${hint}`
   }).join('\n')
   return `LOGOS DE MARCA (al diseñar una placa, poné el logo con <img src="URL"> eligiendo la variante que CONTRASTE con el fondo):\n${lineas}`
+}
+
+/** Resuelve las URLs del logo por contraste (blanco para fondos oscuros/foto, navy
+ *  para fondos claros), para pasárselas a las plantillas maestras. */
+function resolverLogos(banco: ImagenBanco[]): { blanco?: string; navy?: string } {
+  const logos = banco.filter(esLogo)
+  const desc = (l: ImagenBanco) => `${l.descripcion || ''} ${l.alt || ''}`.toLowerCase()
+  const blanco = logos.find(l => /blanc/.test(desc(l)))?.url
+  const navy = logos.find(l => /azul|navy|oscuro/.test(desc(l)))?.url
+  return { blanco: blanco || logos[0]?.url, navy: navy || blanco || logos[0]?.url }
 }
 
 function bancoBloque(banco: ImagenBanco[], fotosUsadas?: Set<string>): string {
@@ -214,7 +229,29 @@ const TOOL_POST: Anthropic.Tool = {
         items: {
           type: 'object',
           properties: {
-            modo: { type: 'string', enum: ['grafico', 'reuse', 'nueva'], description: 'grafico = PLACA DE MARCA con texto (no cuesta); reuse = usar una foto del banco; nueva = generar una foto fotorrealista NUEVA (bien usada suma variedad; preferila si las del banco ya se usaron hace poco).' },
+            modo: { type: 'string', enum: ['plantilla', 'grafico', 'reuse', 'nueva'], description: 'plantilla = PLACA de una PLANTILLA MAESTRA on-brand (RECOMENDADO para casi todo: elegís plantilla + slots y el layout no se rompe); reuse = usar una foto del banco; nueva = generar una foto fotorrealista NUEVA; grafico = HTML libre (SOLO si ninguna plantilla calza — es más frágil).' },
+            plantilla: { type: 'string', enum: [...PLANTILLAS], description: 'Si modo=plantilla: qué plantilla usar (portada = apertura/gancho; contenido = idea + bullets; dato = una cifra fuerte; foto = foto protagonista casi sin texto; cierre = CTA final).' },
+            slots: {
+              type: 'object',
+              description: 'Si modo=plantilla: el CONTENIDO de la plantilla (textos CORTOS; lo que no cabe se recorta). No todos aplican a cada plantilla — mirá PLANTILLAS DISPONIBLES.',
+              properties: {
+                eyebrow: { type: 'string', description: 'Etiqueta corta arriba (ej. "PARA VETERINARIOS").' },
+                titulo: { type: 'string', description: 'Titular (2-4 palabras). En "foto" es una frase corta.' },
+                titulo_destacado: { type: 'string', description: '2ª línea del titular; sale en DORADO, en su propia línea.' },
+                bajada: { type: 'string', description: 'Una frase de apoyo, corta.' },
+                bullets: { type: 'array', items: { type: 'string' }, description: 'Solo "contenido": 2-4 bullets MUY cortos.' },
+                dato: { type: 'string', description: 'Solo "dato": el número/palabra grande (ej. "3 días").' },
+                dato_label: { type: 'string', description: 'Solo "dato": qué es esa cifra.' },
+                cta: { type: 'string', description: 'Llamado a la acción corto o teléfono (portada/cierre).' },
+                cta_secundario: { type: 'string', description: 'Web o dato secundario del CTA.' },
+                fondo: { type: 'string', enum: ['navy', 'crema', 'blanco'], description: 'Color de fondo dominante (alterná entre piezas).' },
+                foto: {
+                  type: 'object',
+                  description: 'Foto de la plantilla (banda o full-bleed). prompt para generar una nueva, o url para reutilizar una del banco.',
+                  properties: { prompt: { type: 'string', description: 'Descripción fotográfica cálida (mascota viva/tutor; NUNCA instalaciones).' }, url: { type: 'string', description: 'URL exacta del banco para reutilizar.' } },
+                },
+              },
+            },
             layout: { type: 'string', enum: ['foto_full', 'foto_protagonista', 'recorte_color', 'asomandose', 'editorial', 'placa_texto', 'foto_banco'], description: 'Layout de ESTA imagen (memoria de variedad: se guarda para que la próxima pieza no repita el molde).' },
             fondo: { type: 'string', enum: ['navy', 'crema', 'blanco', 'foto'], description: 'Fondo/color DOMINANTE de esta imagen (para alternar entre piezas y dentro del carrusel).' },
             html: { type: 'string', description: 'Si modo=grafico: el HTML de la placa (ver "DISEÑO DE GRÁFICOS CON TEXTO": un solo <div> raíz del tamaño del formato, flexbox, More Sugar solo el título / Inter el resto, hex de marca, el logo con <img>, fotos con <img src="FOTO:slotN">).' },
@@ -248,7 +285,7 @@ const TOOL_POST: Anthropic.Tool = {
   },
 }
 
-async function generarPiezaSocial(item: ItemCalendario, creadoPor?: string): Promise<{ cuerpo: string; imagenUrl: string; imagenId: string; imagenesJson: string; estiloJson: string; avisos: string[] }> {
+async function generarPiezaSocial(item: ItemCalendario, creadoPor?: string, opts: { soloImagen?: boolean } = {}): Promise<{ cuerpo: string; imagenUrl: string; imagenId: string; imagenesJson: string; estiloJson: string; avisos: string[] }> {
   const puedeGenerar = isNanoBananaConfigurado()
   const [contacto, banco, memoria] = await Promise.all([
     getContacto(),
@@ -258,6 +295,21 @@ async function generarPiezaSocial(item: ItemCalendario, creadoPor?: string): Pro
   const web = contacto.web?.startsWith('http') ? contacto.web : `https://${contacto.web || 'crematorioalmaanimal.cl'}`
   const voz = VOZ_AUDIENCIA[item.audiencia] || VOZ_AUDIENCIA.ambos
   const canalHint = CANAL_HINT[item.canal] || ''
+
+  // Modo "solo imagen": conserva el copy actual y diseña imágenes NUEVAS y distintas
+  // (misma cantidad). Veta las fotos que la pieza usa hoy para forzar variedad.
+  let notaSoloImagen = ''
+  if (opts.soloImagen) {
+    let nActual = 1
+    try { const a = JSON.parse(item.imagenes_json || '[]'); if (Array.isArray(a) && a.length) nActual = a.length } catch { /* */ }
+    let actualTxt = ''
+    try {
+      const e = JSON.parse(item.estilo || '{}') as { fotos?: string[]; portada?: string }
+      for (const f of e.fotos || []) memoria.fotosUsadas.add(f)
+      if (e.portada) actualTxt = ` (la actual usa: ${e.portada})`
+    } catch { /* */ }
+    notaSoloImagen = `\n\n⚠️ MODO SOLO-IMAGEN: EL COPY YA ESTÁ DECIDIDO Y NO SE CAMBIA. Devolvé EXACTAMENTE este mismo texto en "caption", sin tocar ni una palabra:\n«${(item.cuerpo || '').trim()}»\nTu ÚNICA tarea es diseñar la(s) IMAGEN(es): hacelas NUEVAS y CLARAMENTE DISTINTAS a las actuales${actualTxt} — otra plantilla/layout, otra foto, otro fondo. Entregá ${nActual} imagen(es) (la misma cantidad que ahora).`
+  }
 
   const system = `Eres community manager senior del **Crematorio Alma Animal** (cremación de mascotas, Recoleta, Santiago de Chile; cobertura RM; lema "Huellas que no se borran"). Redactas un post orgánico para ${item.canal === 'facebook' ? 'Facebook' : 'Instagram'}.
 
@@ -280,10 +332,11 @@ IMÁGENES (campo "imagenes", EN ORDEN) — OBLIGATORIO:
 - RESPETÁ EL ALCANCE PEDIDO: si el pedido es SIMPLE, corto o "un post", entregá UNA imagen limpia con copy BREVE; no agregues slides, ni más bullets/datos de los necesarios, ni copy largo.
 - VARIEDAD ante todo (es la queja del dueño, textual: "todas son muy iguales, muy azules, muy recicladas"). Las marcas buenas del rubro usan MUCHA foto real (mascota viva, feliz o serena) y MUCHOS layouts distintos. Somos un crematorio, pero el feed debe verse VIVO, cálido y bonito — de vez en cuando un post puramente estético (foto protagonista) que embellezca el perfil. NO repitas el molde ni el fondo de las últimas piezas.
 - En cada imagen DECLARÁ "layout" y "fondo" (se guardan como memoria para que la próxima pieza no repita).
-- Modos por imagen:
-  · "grafico" = tu placa/diseño de marca (escribís el HTML, ver "DISEÑO DE GRÁFICOS CON TEXTO"). PUEDE y normalmente conviene que INTEGRE una foto (FOTO:slot reutilizando el banco, o full-bleed), no ser puro texto. Sirve para portada con gancho, datos, pasos, "por qué elegirnos", cierre con CTA — variando el layout. Una placa SIN foto (cita corta, dato fuerte, cierre) está OK de vez en cuando, no como molde único.
-  · "reuse" = usar una FOTO del banco (URL exacta) como imagen completa de la slide. Tenemos fotos de mascotas/personas: aprovechalas — pero NUNCA una marcada "USADA en las últimas piezas".
-  · "nueva" = generar una FOTO nueva (cálida: mascota viva tranquila/feliz, o un tutor con su mascota; variá especie/raza/escena). Usala con libertad cuando el banco no tenga una que calce o cuando las que calzan ya se usaron hace poco — una foto nueva y linda vale más que repetir. NUNCA fotos ejecutivas/de oficina/financieras; NUNCA instalaciones.
+- Modos por imagen (PREFERÍ SIEMPRE "plantilla"):
+  · "plantilla" = una PLANTILLA MAESTRA on-brand (ver "PLANTILLAS DISPONIBLES"): elegís la plantilla (portada/contenido/dato/foto/cierre) y llenás sus SLOTS con textos CORTOS. El layout, el encuadre, la marca y el logo salen de código PROBADO — NO se encima ni se rompe. Es lo que debés usar para CASI TODO (portadas, láminas de carrusel, datos, cierres). Las fotos van dentro de la plantilla (slot foto: "prompt" para una nueva, o "url" del banco para reutilizar). Variá la plantilla y el fondo entre piezas.
+  · "grafico" = HTML de diseño LIBRE (ver "DISEÑO DE GRÁFICOS CON TEXTO"). Es MÁS FRÁGIL porque lo armás vos: usalo SOLO si ninguna plantilla calza con lo que necesitás.
+  · "reuse" = usar una FOTO del banco (URL exacta) como imagen completa de la slide — NUNCA una marcada "USADA en las últimas piezas".
+  · "nueva" = generar una FOTO nueva (cálida: mascota viva tranquila/feliz, o un tutor con su mascota; variá especie/raza/escena) SIN texto. NUNCA fotos de oficina/financieras; NUNCA instalaciones. (Para una foto CON texto encima, usá la plantilla "foto".)
 - B2B (clínicas/veterinarios): igual va con fotos cálidas (mascota viva, atención cercana) + diseño on-brand; el profesionalismo se transmite con el diseño, NO con placas frías de puro texto ni stock de oficina.
 - Carrusel: portada con una FOTO potente + gancho cuando se pueda → slides que MEZCLAN foto y datos VARIANDO el layout (no todas iguales) → cierre con CTA + contacto. Mismo aspecto en TODAS (Instagram: SIEMPRE 4:5; Facebook: 1:1 o 4:5). Si numerás pasos, badge IDÉNTICO en todas.
 ${puedeGenerar ? '' : '- (Generación de FOTOS nuevas no disponible ahora: REUTILIZÁ fotos del banco + placas; igual DEBE llevar imágenes y variar el layout.)\n'}
@@ -295,12 +348,14 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
     item.titulo && `GANCHO/TÍTULO SUGERIDO: ${item.titulo}`,
     `IDEA A COMUNICAR:\n${item.idea}`,
     item.notas && `NOTAS: ${item.notas}`,
-  ].filter(Boolean).join('\n\n')
+  ].filter(Boolean).join('\n\n') + notaSoloImagen
 
   // REGLAS_INVIOLABLES al INICIO y al FINAL (máxima saliencia; evita lost-in-the-middle).
   const systemBlocks: Anthropic.TextBlockParam[] = [
     { type: 'text', text: REGLAS_INVIOLABLES },
     { type: 'text', text: system },
+    { type: 'text', text: PLANTILLAS_INFO },
+    { type: 'text', text: GUIA_SOCIAL },
     { type: 'text', text: DIFERENCIADORES },
     { type: 'text', text: MODALIDADES_SERVICIOS },
     { type: 'text', text: bancoBloque(banco, memoria.fotosUsadas) },
@@ -333,7 +388,7 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
     const placaTextos = (out.imagenes || [])
       .filter(im => im.modo === 'grafico' && (im.html || '').trim())
       .map(im => extraerTextoHtml(String(im.html)))
-    const hallazgos = lintCopy({ caption: cuerpo, placas: placaTextos, telefono: contacto.telefono, web })
+    const hallazgos = lintCopy({ caption: opts.soloImagen ? undefined : cuerpo, placas: placaTextos, telefono: contacto.telefono, web })
     // Regla del dueño: en Instagram TODO va 4:5 vertical (el render usa las dimensiones
     // del root del HTML, así que se valida acá y se regenera con feedback si no cumple).
     if (item.canal === 'instagram') {
@@ -359,6 +414,8 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
     convo.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: tu.id, content: 'RECHAZADO por reglas de marca. Corregí EXACTAMENTE esto y volvé a entregar con entregar_post (mantené el resto igual):\n- ' + hallazgos.map(h => `[${h.campo}] ${h.problema}`).join('\n- ') }] })
   }
   if (!out) throw new Error('El modelo no devolvió el post')
+  // En modo solo-imagen se conserva el copy actual (el caption del modelo se ignora).
+  if (opts.soloImagen) cuerpo = (item.cuerpo || cuerpo).trim()
   if (!cuerpo) throw new Error('El modelo no devolvió el texto del post')
   // Instagram (carrusel) y Facebook (álbum) admiten hasta MAX_IMGS imágenes.
   const tope = MAX_IMGS
@@ -380,7 +437,24 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
   // fotos del banco que la pieza terminó usando (reuse directo o dentro de una placa).
   const estilos: { layout: string; fondo: string }[] = []
   const fotosDelBanco = new Set<string>()
+  const { blanco: logoBlanco, navy: logoNavy } = resolverLogos(banco)
   for (const sp of specs) {
+    // PLANTILLA MAESTRA (preferido): el layout sale de código probado, no del modelo.
+    if (sp.modo === 'plantilla' && sp.plantilla) {
+      try {
+        if (!campania) campania = await asignarCampania()
+        const formato = aspectoAFormato(aspectoForzado || sp.aspect)
+        const { html, fotos } = construirPlantilla(sp.plantilla, sp.slots || {}, { formato, logoBlanco, logoNavy })
+        const g = await generarGraficoMarca({ formato, html, fotos, creadoPor, campania })
+        resueltas.push({ url: g.url, alt: sp.alt || '', id: '', grafico: true })
+        estilos.push({ layout: `plantilla:${sp.plantilla}`, fondo: sp.slots?.fondo || (sp.slots?.foto ? 'foto' : 'navy') })
+        for (const b of banco) { if (!esLogo(b) && b.url && html.includes(b.url)) fotosDelBanco.add(b.url) }
+        avisos.push(...g.avisos)
+      } catch (e) {
+        avisos.push(`No se pudo generar la plantilla ${sp.plantilla}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+      continue
+    }
     if (sp.modo === 'reuse' && sp.url) {
       const m = banco.find(b => b.url === sp.url)
       resueltas.push({ url: sp.url, alt: sp.alt || m?.alt || m?.descripcion || '', id: m?.id || '' })
@@ -472,13 +546,19 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
 
   // QA con VISIÓN (Bloque C): revisa el render REAL, autocorrige lo OBJETIVO de placas
   // (re-edita su HTML y re-renderiza, misma campaña; cap 3) y escala el resto como aviso.
+  // BEST-OF: tras corregir, VUELVE a mirar el render; si la corrección EMPEORÓ la slide
+  // (el bug que shippeaba C-51.4, peor que un intermedio), revierte a la versión previa.
+  // Higiene: la versión descartada de cada slide se des-registra del banco.
   if (resueltas.length > 0) {
     try {
-      const problemas = await qaPieza(resueltas, item)
+      const pass1 = await qaPieza(resueltas, item)
+      const original = resueltas.map(r => ({ ...r }))   // snapshot pre-corrección
+      const corregidas = new Set<number>()
       let correcciones = 0
-      for (const p of problemas) {
+      for (const p of pass1) {
         const i = (p.slide >= 1 && p.slide <= resueltas.length) ? p.slide - 1 : -1
-        const autocorr = i >= 0 && p.objetivo && p.severidad !== 'baja' && !!p.correccion?.trim() && resueltas[i].grafico && correcciones < 3
+        const autocorr = i >= 0 && p.objetivo && p.severidad !== 'baja' && !!p.correccion?.trim()
+          && resueltas[i].grafico && correcciones < 3 && !corregidas.has(i)
         if (autocorr) {
           const design = await cargarDisenoGrafico(resueltas[i].url)
           if (design) {
@@ -495,8 +575,8 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
               if (lintQA.length) throw new Error('la corrección del QA no pasó el linter de marca')
               const g = await generarGraficoMarca({ formato: design.formato, html: nuevoHtml, fotos, creadoPor, campania: campania || undefined })
               resueltas[i] = { ...resueltas[i], url: g.url, grafico: true }
+              corregidas.add(i)
               correcciones++
-              avisos.push(`QA: corregí la slide ${p.slide} (${p.tipo}).`)
               continue
             } catch { /* cae a aviso */ }
           }
@@ -505,6 +585,31 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
           avisos.push(`QA (slide ${p.slide}, ${p.tipo}): ${p.detalle}${p.objetivo ? '' : ' — revisá si te convence'}`)
         }
       }
+
+      // BEST-OF: re-verificar SOLO si hubo correcciones. Se compara la severidad de la
+      // slide antes/después; si empeoró, se vuelve a la original. La perdedora se limpia.
+      const descartar: string[] = []
+      if (corregidas.size > 0) {
+        const pass2 = await qaPieza(resueltas, item)
+        const sev = (probs: QAProblema[], slide0: number) => probs
+          .filter(p => p.slide === slide0 + 1)
+          .reduce((s, p) => s + (p.severidad === 'alta' ? 3 : p.severidad === 'media' ? 2 : 1) + (p.objetivo ? 1 : 0), 0)
+        for (const i of corregidas) {
+          const corregidaUrl = resueltas[i].url
+          if (sev(pass2, i) > sev(pass1, i)) {
+            // La corrección empeoró la slide → volver a la versión original.
+            resueltas[i] = original[i]
+            descartar.push(corregidaUrl)
+            avisos.push(`QA: la corrección de la slide ${i + 1} no mejoró el render; mantuve la versión original.`)
+          } else {
+            descartar.push(original[i].url)   // la corrección quedó → limpiar la vieja
+            avisos.push(`QA: corregí la slide ${i + 1}.`)
+          }
+        }
+      }
+      // Higiene: des-registrar del banco las versiones que NO quedaron en la pieza.
+      const finales = new Set(resueltas.map(r => r.url))
+      for (const u of descartar) if (u && !finales.has(u)) { try { await eliminarImagenPorUrl(u) } catch { /* best-effort */ } }
     } catch { /* QA best-effort: si falla, la pieza igual se entrega */ }
   }
 
@@ -572,6 +677,27 @@ export async function generarPieza(id: string, creadoPor?: string): Promise<Piez
     estilo: estiloJson,
     estado: item.estado === 'propuesta' ? 'generada' : item.estado,
     generado_por: 'ia',
+  })
+  return { item: item2, avisos }
+}
+
+/**
+ * "Misma copy, imagen nueva": conserva el COPY tal cual y regenera SOLO la imagen
+ * (desde cero, con plantilla, distinta a la actual). Para cuando el texto está bien
+ * pero la imagen no convence. No toca el estado. Solo aplica a social (IG/FB).
+ */
+export async function regenerarImagenPieza(id: string, creadoPor?: string): Promise<PiezaGenerada> {
+  const item = await obtenerItem(id)
+  if (!item) throw new Error(`ítem ${id} no encontrado`)
+  if (item.canal === 'email') throw new Error('Esto aplica a piezas de Instagram/Facebook, no a email.')
+  if (!item.cuerpo?.trim()) throw new Error('La pieza todavía no tiene copy. Generala primero con "Generar".')
+  const { imagenUrl, imagenId, imagenesJson, estiloJson, avisos } = await generarPiezaSocial(item, creadoPor, { soloImagen: true })
+  const item2 = await actualizarItem(id, {
+    imagen_url: imagenUrl,
+    imagen_id: imagenId,
+    imagenes_json: imagenesJson,
+    estilo: estiloJson,
+    // NO se toca ni el cuerpo (copy) ni el estado.
   })
   return { item: item2, avisos }
 }
@@ -699,12 +825,14 @@ async function qaPieza(resueltas: ImagenResuelta[], item: ItemCalendario): Promi
 - CAJAS o glifos ROTOS (cuadritos, símbolos raros);
 - TEXTO cortado, encimado, ilegible o que se sale del lienzo;
 - COMPOSICIÓN vacía/desbalanceada — sobre todo una FRANJA de fondo VACÍA arriba o abajo (la placa llena solo parte del lienzo, ej. la mitad superior y el resto vacío): esto es OBJETIVO y GRAVE; o que se ve plana/aburrida;
-- FOTO ausente cuando aportaría calidez (todo texto); o FOTO MAL ENCUADRADA (OBJETIVO y grave): la mascota con la CARA/CABEZA/OJOS cortados por el borde, o se ve solo un pedazo del animal (lomo, patas o cuerpo sin rostro), o recorte/calidad fea;
+- FOTO ausente cuando aportaría calidez (todo texto); o FOTO MAL ENCUADRADA (OBJETIVO y grave): la mascota con la CARA/CABEZA/OJOS cortados por el borde, o se ve solo un pedazo del animal (lomo, patas o cuerpo sin rostro), o recorte/calidad fea; o una PERSONA/animal CORTADO POR LA MITAD por el borde del VELO o BLOQUE de color que le cruza el cuerpo y lo deja "partido" entre la foto y el bloque (OBJETIVO y grave: el sujeto debe quedar de un lado y el texto del otro);
 - en CARRUSEL: inconsistencia entre slides (badges/logo/fondos sin sistema);
 - PALABRAS PEGADAS (dos palabras sin espacio entre medio, ej. "Escríbenosahora") o faltas de ortografía/tildes visibles en una placa — es OBJETIVO y la corrección es reescribir ese texto bien;
 - MONOTONÍA de color: TODAS las slides con fondo navy/azul dominante, o una foto tapada por un velo oscuro que la vuelve un afiche azul liso (el dueño pide alternar crema/blanco/foto y que la foto se VEA) — reportalo tipo "composicion";
 - errores visibles en el texto.
-Marcá cada uno como OBJETIVO (claro y binario) o no. Si es una PLACA de texto con arreglo de texto/diseño, dá la "correccion" exacta. Si está todo bien, problemas: []. Reportá SIEMPRE con reportar_qa.`
+Marcá cada uno como OBJETIVO (claro y binario) o no. Si es una PLACA de texto con arreglo de texto/diseño, dá la "correccion" exacta. Si está todo bien, problemas: []. Reportá SIEMPRE con reportar_qa.
+
+${GUIA_QA}`
   try {
     const res = await getClient().messages.create({
       model: MODEL, max_tokens: 1500, system: sys,
@@ -743,6 +871,7 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
     throw new Error(`La pieza tiene ${imgs.length} imágenes. Indicá cuál ajustar con "indice" (1 a ${imgs.length}); no se editan todas a la vez.`)
   }
   const ti = (indice && indice >= 1 && indice <= imgs.length) ? indice - 1 : 0
+  const urlPrevia = imgs[ti].url
 
   const avisos: string[] = []
   const banco = await listarImagenes().catch(() => [] as ImagenBanco[])
@@ -785,6 +914,21 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
         imgs[ti] = { url, alt: imgs[ti].alt || '' }
       } catch (e) { avisos.push(`No se pudo regenerar la imagen ${ti + 1}: ${e instanceof Error ? e.message : 'error'}`) }
     }
+  }
+
+  // QA de PARIDAD: mirar el render EDITADO; si introdujo un problema objetivo grave
+  // (logo/texto cortado, foto mal encuadrada, caja rota), revertir a la versión previa
+  // en vez de shippear una edición peor. La versión mala se des-registra del banco.
+  if (imgs[ti].url && imgs[ti].url !== urlPrevia) {
+    try {
+      const probs = await qaPieza([{ url: imgs[ti].url, alt: imgs[ti].alt || '', id: '', grafico: !!design }], item)
+      if (probs.some(p => p.objetivo && p.severidad === 'alta')) {
+        const mala = imgs[ti].url
+        imgs[ti] = { url: urlPrevia, alt: imgs[ti].alt || '' }
+        try { await eliminarImagenPorUrl(mala) } catch { /* best-effort */ }
+        avisos.push(`Esa edición dejó la imagen ${ti + 1} con un problema visible, así que mantuve la versión anterior. Probá reformular el cambio.`)
+      }
+    } catch { /* QA best-effort */ }
   }
 
   const imagenesJson = imgs.length > 1 ? JSON.stringify(imgs.map(x => ({ url: x.url, alt: x.alt || '' }))) : ''

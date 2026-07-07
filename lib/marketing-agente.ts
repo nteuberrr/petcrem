@@ -6,14 +6,17 @@ import { listarCalendario, crearItems, actualizarItem, eliminarItem, obtenerItem
 import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
+import { GUIA_SOCIAL, GUIA_EMAIL, GUIA_PERFIL } from './marketing-guia'
+import { getMarketingParams, bloqueParametros } from './marketing-params'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { REGLAS_INVIOLABLES } from './marca-voz'
 import { lintCopy, extraerTextoHtml } from './marketing-lint'
 import { getContacto } from './email-layout'
 import { LINKS_PUBLICOS } from './links-publicos'
 import { esLogo } from './marca-logo'
-import { generarPieza, editarImagenPieza, setImagenesPieza } from './marketing-pieza'
+import { generarPieza, editarImagenPieza, regenerarImagenPieza, setImagenesPieza } from './marketing-pieza'
 import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
+import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, type SlotsPlantilla } from './marketing-plantillas'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
 import { publicarItem } from './marketing-publicar'
 import { resumenAds, resumenOrganico, isInsightsConfigurado } from './meta-insights'
@@ -51,7 +54,7 @@ CÓMO TRABAJÁS (lo más importante — leelo bien)
 - SÉ PROACTIVO Y RESOLUTIVO. Cuando te piden crear algo (una imagen, una portada, un post, un plan), tu primera reacción es HACERLO con tu mejor criterio y MOSTRAR una primera versión lista — NO llenar al dueño de preguntas ni mostrar piezas viejas y preguntar. Asumí defaults sensatos y on-brand, generá, y RECIÉN DESPUÉS ofrecé ajustar.
 - RESPETÁ LO QUE PIDE EL DUEÑO (alcance, formato y tono). Si pide "un post" → UNA sola imagen (NO carrusel). Si pide algo SIMPLE o corto → copy BREVE y una pieza limpia, sin inflarlo en varias láminas ni agregar datos/diferenciadores que no te pidió. Un CARRUSEL / paso a paso SOLO si lo pide explícitamente o la idea es claramente una serie o secuencia. Ante la duda, UNA imagen y menos texto.
 - UNA pregunta como MÁXIMO, y solo si sin esa respuesta no podés avanzar de verdad; aun así, ofrecé una opción por defecto y avanzá igual. NUNCA respondas solo con preguntas si podías entregar algo.
-- ENTREGÁS PIEZAS TERMINADAS Y USABLES. JAMÁS derivás al dueño a Canva, Photoshop ni otra herramienta "para ponerle el texto" o retocar. VOS PODÉS hacer GRÁFICOS CON TEXTO integrado (portadas, placas con datos/horario/diferenciadores, anuncios, citas) con la herramienta "disenar_grafico" — salen con la MARCA EXACTA (colores, tipografía y logo reales). No expliques "limitaciones de la IA" para no hacer algo: hacelo.
+- ENTREGÁS PIEZAS TERMINADAS Y USABLES. JAMÁS derivás al dueño a Canva, Photoshop ni otra herramienta "para ponerle el texto" o retocar. VOS PODÉS hacer GRÁFICOS CON TEXTO integrado (portadas, placas con datos/horario/diferenciadores, anuncios, citas) con la herramienta "disenar_plantilla" (PREFERIDA: elegís una plantilla maestra y llenás sus slots — sale con la marca, el encuadre y el logo EXACTOS y el layout no se rompe). Solo si ninguna plantilla calza, caé a "disenar_grafico" (HTML a mano, más frágil). No expliques "limitaciones de la IA" para no hacer algo: hacelo.
 - PENSÁ COMO DIRECTOR SENIOR. Cada pieza tiene UN objetivo, un gancho fuerte al inicio, UNA idea central, un CTA claro, el formato correcto del canal y el tono de la audiencia. Calidad sobre cantidad; si algo se puede hacer mejor, hacelo mejor sin que te lo pidan.
 - MOSTRÁ, no describas: cuando generás o elegís una imagen, inclúila en tu respuesta con ![](URL) para que el dueño la VEA. Nunca describas una imagen con palabras en vez de generarla.
 - Reutilizá del banco SOLO si hay una imagen que calza muy bien con lo pedido. Si piden algo nuevo o específico, generalo.
@@ -112,7 +115,7 @@ FECHAS RELEVANTES DE CHILE (para colgar campañas con sentido; confirmá el día
 FLUJO Y HERRAMIENTAS
 
 ⚠️ DECISIÓN CLAVE — ¿gráfico suelto o PUBLICACIÓN? (no la confundas):
-- Si el dueño solo quiere VER un gráfico/imagen en el chat (sin publicar ni agendar) → "disenar_grafico" (uno) o "generar_imagen".
+- Si el dueño solo quiere VER un gráfico/imagen en el chat (sin publicar ni agendar) → "disenar_plantilla" (PREFERIDO para placas con texto) o "disenar_grafico" (HTML libre, solo si ninguna plantilla calza) o "generar_imagen" (una foto sola sin texto).
 - Si pide una PUBLICACIÓN para PUBLICAR, AGENDAR, PROGRAMAR o DEJAR EN EL CALENDARIO / "para [fecha]/hoy/mañana" (y MÁS si es de VARIAS LÁMINAS) → SIEMPRE el FLUJO DEL CALENDARIO, COMPLETO y de punta a punta, sin parar a mitad:
   1) "proponer_campanas" → creá el ítem (fecha + canal + audiencia + objetivo + idea).
   2) "generar_pieza" con ese id → genera el POST COMPLETO (todas las láminas en una sola pasada; NUNCA armes el carrusel con disenar_grafico lámina por lámina).
@@ -128,7 +131,7 @@ FLUJO Y HERRAMIENTAS
    - Republicar un post entero o llevarlo a otro canal → "reutilizar_publicacion" (id; canal opcional para IG↔FB). Crea una copia con el copy y TODAS las imágenes, lista para publicar/programar; el original queda intacto. Ej.: "subí a Facebook el carrusel que hicimos en Instagram".
    - Poner imágenes que YA existen en una pieza → "usar_imagenes_en_pieza" (id, codigos). Una campaña "C-X" trae TODAS sus imágenes en orden. Ej.: "agarrá la C-4 y poné esas 7 placas en la pieza de Facebook #21".
 3. IMÁGENES Y GRÁFICOS sueltos (lo más usado en el chat). Entregá la pieza TERMINADA y mostrala con ![](URL). (Podés mirar el banco con "consultar_banco_imagenes" para reutilizar.)
-   - GRÁFICO CON TEXTO (portada de FB, placa con datos/horario/diferenciadores, anuncio, cita, post con texto) → "disenar_grafico": VOS diseñás el HTML (libre y creativo) y sale con la marca EXACTA (More Sugar + Inter, navy/dorado/crema exactos, logo real). Seguí las reglas de "DISEÑO DE GRÁFICOS CON TEXTO" del contexto. El texto SIEMPRE va por acá, NUNCA con una imagen generada por IA. CARRUSEL (varias placas de una serie): generá TODAS las placas en la MISMA respuesta y poné el MISMO valor en "carrusel" (ej. "por-que-elegirnos") en todas, para que queden agrupadas como una sola campaña (C-X.1, C-X.2, …) y no como campañas sueltas. ⚠️ disenar_grafico es para un gráfico SUELTO que el dueño quiere VER en el chat; si pide una PUBLICACIÓN para publicar/agendar/dejar en el calendario, NO uses esto → flujo del calendario (proponer_campanas → generar_pieza → aprobar → programar).
+   - GRÁFICO CON TEXTO (portada, placa con datos/horario/diferenciadores, cifra, anuncio, cita, cierre con CTA) → "disenar_plantilla" (PREFERIDO): elegí la plantilla que calce (portada/contenido/dato/foto/cierre — ver "PLANTILLAS DISPONIBLES") y llená sus SLOTS con textos CORTOS; sale con la marca, el encuadre y el logo EXACTOS y el layout NO se rompe (nada de encimados ni sujetos cortados). El texto SIEMPRE va por una placa (plantilla o grafico), NUNCA incrustado en una imagen de IA. Solo si NINGUNA plantilla calza con lo que necesitás, usá "disenar_grafico" (HTML a mano, más frágil). CARRUSEL (varias placas de una serie): generá TODAS en la MISMA respuesta con el MISMO "carrusel" (ej. "por-que-elegirnos"), para que queden en una sola campaña (C-X.1, C-X.2, …). ⚠️ Esto es para un gráfico SUELTO que el dueño quiere VER en el chat; si pide una PUBLICACIÓN para publicar/agendar/dejar en el calendario, NO uses esto → flujo del calendario (proponer_campanas → generar_pieza → aprobar → programar).
    - FOTO sola (sin texto) → "generar_imagen": prompt fotográfico detallado.
    - EDITAR una foto existente (cambiar un detalle SIN rehacerla) → "generar_imagen" con editar:true + la referencia (referencia_url del banco, o usar_adjunto:true si la adjuntó el dueño) y en el prompt SOLO el cambio.
    - Si el dueño adjunta una imagen, la VES en su mensaje (podés comentarla y trabajarla).
@@ -370,9 +373,44 @@ const TOOL_GENERAR_IMG: Anthropic.Tool = {
   },
 }
 
+const TOOL_DISENAR_PLANTILLA: Anthropic.Tool = {
+  name: 'disenar_plantilla',
+  description: 'DISEÑA una placa/gráfico con texto usando una PLANTILLA MAESTRA on-brand. Es la forma PREFERIDA de hacer un gráfico con texto (portada, placa de datos, cifra, foto con frase, cierre con CTA): elegís la plantilla y llenás sus SLOTS con textos CORTOS, y el layout, el encuadre, la tipografía y el logo salen de código PROBADO — no se encima ni se rompe. Devuelve la URL; muéstrasela con ![](URL) y decí su código. Para un CARRUSEL, generá TODAS las placas en la misma respuesta con el mismo "carrusel".',
+  input_schema: {
+    type: 'object',
+    properties: {
+      plantilla: { type: 'string', enum: [...PLANTILLAS], description: 'portada = apertura/gancho (eyebrow + titular + bajada + foto arriba + CTA); contenido = idea + hasta 4 bullets; dato = una cifra/palabra grande; foto = foto protagonista con una frase; cierre = CTA final (titular + teléfono/web).' },
+      formato: { type: 'string', enum: ['post_vertical', 'post', 'story'], description: 'post_vertical (1080x1350, feed IG/FB — DEFAULT), post (1080x1080), story (1080x1920).' },
+      carrusel: { type: 'string', description: 'Mismo identificador en todas las placas de un carrusel/serie (las agrupa en una campaña C-X.1, C-X.2…). Vacío si es suelta.' },
+      slots: {
+        type: 'object',
+        description: 'Contenido de la plantilla (textos CORTOS; lo que no cabe se recorta). No todos aplican a cada plantilla.',
+        properties: {
+          eyebrow: { type: 'string', description: 'Etiqueta corta arriba (ej. "PARA VETERINARIOS").' },
+          titulo: { type: 'string', description: 'Titular (2-4 palabras); en "foto" una frase corta.' },
+          titulo_destacado: { type: 'string', description: '2ª línea del titular, en DORADO.' },
+          bajada: { type: 'string', description: 'Frase de apoyo corta.' },
+          bullets: { type: 'array', items: { type: 'string' }, description: 'Solo "contenido": 2-4 bullets MUY cortos.' },
+          dato: { type: 'string', description: 'Solo "dato": el número/palabra grande (ej. "3 días").' },
+          dato_label: { type: 'string', description: 'Solo "dato": qué es esa cifra.' },
+          cta: { type: 'string', description: 'CTA corto o teléfono (portada/cierre).' },
+          cta_secundario: { type: 'string', description: 'Web o dato secundario del CTA.' },
+          fondo: { type: 'string', enum: ['navy', 'crema', 'blanco'], description: 'Fondo dominante (alterná entre piezas).' },
+          foto: {
+            type: 'object',
+            description: 'Foto de la plantilla. prompt para generar una nueva, o url para reutilizar una del banco.',
+            properties: { prompt: { type: 'string', description: 'Descripción fotográfica cálida (mascota viva/tutor; NUNCA instalaciones).' }, url: { type: 'string', description: 'URL exacta del banco para reutilizar.' } },
+          },
+        },
+      },
+    },
+    required: ['plantilla'],
+  },
+}
+
 const TOOL_DISENAR_GRAFICO: Anthropic.Tool = {
   name: 'disenar_grafico',
-  description: 'Diseña una PIEZA GRÁFICA CON TEXTO con la MARCA EXACTA (portada de Facebook, placa con datos/horario/diferenciadores, anuncio, cita, post con texto). VOS escribís el diseño en HTML (layout libre y creativo) y el sistema lo rasteriza con las fuentes y colores REALES de Alma Animal (More Sugar + Inter; navy/dorado/crema exactos) y le pone el logo. Para FOTOS reales dentro del diseño usá <img src="FOTO:slot1" .../> y pedí cada foto en "fotos". Esto es lo correcto para CUALQUIER gráfico con texto (NO generar_imagen). Seguí las reglas de "DISEÑO DE GRÁFICOS CON TEXTO" del contexto (flexbox, fuentes y colores de marca, tamaño exacto del canvas). Devuelve la URL; muéstrasela con ![](URL).',
+  description: 'FALLBACK (usá "disenar_plantilla" primero): diseña una pieza gráfica con texto escribiendo el HTML A MANO (layout libre). Es MÁS FRÁGIL — usalo SOLO si ninguna plantilla calza con lo que necesitás. VOS escribís el diseño en HTML (layout libre y creativo) y el sistema lo rasteriza con las fuentes y colores REALES de Alma Animal (More Sugar + Inter; navy/dorado/crema exactos) y le pone el logo. Para FOTOS reales dentro del diseño usá <img src="FOTO:slot1" .../> y pedí cada foto en "fotos". Esto es lo correcto para CUALQUIER gráfico con texto (NO generar_imagen). Seguí las reglas de "DISEÑO DE GRÁFICOS CON TEXTO" del contexto (flexbox, fuentes y colores de marca, tamaño exacto del canvas). Devuelve la URL; muéstrasela con ![](URL).',
   input_schema: {
     type: 'object',
     properties: {
@@ -451,6 +489,16 @@ const TOOL_EDITAR_IMG: Anthropic.Tool = {
   },
 }
 
+const TOOL_NUEVA_IMAGEN: Anthropic.Tool = {
+  name: 'nueva_imagen_pieza',
+  description: 'CONSERVA el copy de una pieza del calendario y regenera SOLO la imagen DESDE CERO — nueva y CLARAMENTE DISTINTA a la actual, con plantilla on-brand. Úsala cuando al dueño le gustó el TEXTO pero quiere OTRA imagen ("dejá el copy y hacé otra imagen", "misma copy pero una imagen completamente distinta"). Diferencias: editar_imagen_pieza solo RETOCA la imagen actual (se ancla en ella, no sirve para algo totalmente nuevo); generar_pieza rehace TODO incluido el copy. Esta conserva el copy y solo cambia la imagen.',
+  input_schema: {
+    type: 'object',
+    properties: { id: { type: 'string', description: 'Id de la pieza del calendario.' } },
+    required: ['id'],
+  },
+}
+
 const TOOL_REUTILIZAR: Anthropic.Tool = {
   name: 'reutilizar_publicacion',
   description: 'Reutiliza una publicación ANTIGUA (ya generada o publicada) para volver a usarla: crea una COPIA nueva en el calendario con el MISMO copy y TODAS sus imágenes, lista para publicar o programar. Sirve para republicar un post que funcionó, o para llevar un post de un canal a otro (ej. reusar en Facebook el carrusel que hicimos en Instagram → se copian TODAS las placas, no una sola). El original queda intacto. Para republicar tal cual NO cambies el canal. Si no sabés el id, usá listar_calendario. Después confirmá; publicar/programar es aparte y solo si lo pide.',
@@ -523,22 +571,26 @@ export async function generarRespuestaMarketing(
     }
   }
 
-  const [tarifas, cfg, banco, empresa, contacto] = await Promise.all([
+  const [tarifas, cfg, banco, empresa, contacto, params] = await Promise.all([
     bloqueTarifas(),
     getMarketingConfig().catch(() => null),
     listarImagenes().catch(() => [] as ImagenBanco[]),
     bloqueEmpresa(),
     getContacto().catch(() => null),
+    getMarketingParams(),
   ])
 
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${REGLAS_INVIOLABLES}\n\n${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${MARCA_GRAFICO}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: `${REGLAS_INVIOLABLES}\n\n${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${PLANTILLAS_INFO}\n\n${MARCA_GRAFICO}\n\n${GUIA_SOCIAL}\n\n${GUIA_EMAIL}\n\n${GUIA_PERFIL}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
   ]
   const ajustes = [
     cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO (trátalos como la verdad actual; REEMPLAZAN el guion base si chocan, salvo: precios siempre de TARIFAS VIGENTES):\n${cfg.instrucciones.trim()}`,
     cfg?.calibracion?.trim() && `GUÍA DE ESTILO / LÍNEA EDITORIAL:\n${cfg.calibracion.trim()}`,
   ].filter(Boolean).join('\n\n')
   if (ajustes) system.push({ type: 'text', text: ajustes })
+  // Parámetros vigentes (cadencia + pilares + presupuesto): sin caché, reflejan
+  // ediciones al instante y REEMPLAZAN la cadencia genérica del guion base.
+  system.push({ type: 'text', text: bloqueParametros(params) })
   if (empresa) system.push({ type: 'text', text: empresa })
   system.push({ type: 'text', text: bloqueFechaChile() })
   system.push({ type: 'text', text: bloqueBanco(banco) })
@@ -551,7 +603,7 @@ export async function generarRespuestaMarketing(
   // Reglas inviolables REPETIDAS al final (máxima saliencia; se validan además por código).
   system.push({ type: 'text', text: REGLAS_INVIOLABLES })
 
-  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG, TOOL_REUTILIZAR, TOOL_USAR_IMGS]
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_PLANTILLA, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG, TOOL_NUEVA_IMAGEN, TOOL_REUTILIZAR, TOOL_USAR_IMGS]
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
   let cambios = false
@@ -728,6 +780,32 @@ export async function generarRespuestaMarketing(
             cambios = true
             resultText = `Imagen ${editar ? 'editada' : 'creada'}${conLogoOk ? ' con el logo de marca' : ''} — código ${g.imagen.codigo || '(sin código)'} (guardada en el banco, grupo ${grupoImg}). Muéstrasela al dueño incluyéndola con ![](${urlFinal}) y decile su código (${g.imagen.codigo || ''}).`
           }
+        } else if (tu.name === 'disenar_plantilla') {
+          const inp = tu.input as { plantilla?: string; formato?: string; slots?: SlotsPlantilla; carrusel?: string }
+          const s = inp.slots || {}
+          const textos = [s.eyebrow, s.titulo, s.titulo_destacado, s.bajada, s.dato, s.dato_label, s.cta, s.cta_secundario, ...(s.bullets || [])].filter(Boolean).join(' · ')
+          const lintP = textos.trim() ? lintCopy({ placas: [textos], telefono: contacto?.telefono, web: contacto?.web }) : []
+          if (!inp.plantilla) {
+            resultText = 'Falta indicar qué plantilla usar.'
+          } else if (lintP.length) {
+            resultText = 'RECHAZADO por reglas de marca (corregí los textos de los slots y volvé a llamar disenar_plantilla):\n- ' + lintP.map(h => `[${h.campo}] ${h.problema}`).join('\n- ')
+          } else {
+            const logos = banco.filter(esLogo)
+            const dd = (l: ImagenBanco) => `${l.descripcion || ''} ${l.alt || ''}`.toLowerCase()
+            const logoBlanco = logos.find(l => /blanc/.test(dd(l)))?.url || logos[0]?.url
+            const logoNavy = logos.find(l => /azul|navy|oscuro/.test(dd(l)))?.url || logoBlanco
+            let campania: string | undefined
+            const carrKey = (inp.carrusel || '').trim()
+            if (carrKey) {
+              campania = campaniasCarrusel.get(carrKey)
+              if (!campania) { campania = await asignarCampania(); campaniasCarrusel.set(carrKey, campania) }
+            }
+            const formato = String(inp.formato || 'post_vertical')
+            const { html, fotos } = construirPlantilla(inp.plantilla, s, { formato, logoBlanco, logoNavy })
+            const r = await generarGraficoMarca({ formato, html, fotos, creadoPor: opts.creadoPor, campania })
+            cambios = true
+            resultText = `Placa on-brand generada con la plantilla "${inp.plantilla}" (marca, encuadre y logo exactos) — código ${r.codigo || '(sin código)'}. Muéstrasela al dueño con ![](${r.url}) y decile su código (${r.codigo || ''}).${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}`
+          }
         } else if (tu.name === 'disenar_grafico') {
           const inp = tu.input as { formato?: string; html?: string; carrusel?: string; fotos?: { slot?: string; prompt?: string; aspect?: string; recortar?: boolean }[] }
           const lintH = inp.html?.trim() ? lintCopy({ placas: [extraerTextoHtml(String(inp.html))], telefono: contacto?.telefono, web: contacto?.web }) : []
@@ -810,6 +888,11 @@ export async function generarRespuestaMarketing(
           const r = await editarImagenPieza(String(inp.id || ''), String(inp.instruccion || ''), inp.indice, opts.creadoPor)
           cambios = true
           resultText = `Imagen(es) ajustada(s) en la pieza #${r.item.id}.${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}${r.item.imagen_url ? ` Mostrale el resultado al dueño con ![](${r.item.imagen_url}).` : ''}`
+        } else if (tu.name === 'nueva_imagen_pieza') {
+          const inp = tu.input as { id?: string }
+          const r = await regenerarImagenPieza(String(inp.id || ''), opts.creadoPor)
+          cambios = true
+          resultText = `Listo: conservé el copy de la pieza #${r.item.id} y generé una imagen NUEVA y distinta.${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}${r.item.imagen_url ? ` Mostrásela al dueño con ![](${r.item.imagen_url}).` : ''}`
         } else if (tu.name === 'reutilizar_publicacion') {
           const inp = tu.input as { id?: string; canal?: string; fecha?: string; hora?: string }
           const id = String(inp.id || '')

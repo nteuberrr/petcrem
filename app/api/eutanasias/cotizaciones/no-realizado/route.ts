@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateByIdIf, deleteRow } from '@/lib/datastore'
+import { getSheetData, updateByIdIf, deleteById } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
 import { getConsultaEutanasia } from '@/lib/eutanasia-precios'
 import { enviarMailNoRealizada, fechaProximoPago } from '@/lib/eutanasia-mailer'
+import { isWhatsappConfigured, avisarAdminsWhatsapp } from '@/lib/whatsapp'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
 
@@ -12,8 +13,10 @@ const SHEET_COTI = 'cotizaciones_eutanasia'
  *
  * Endpoint público. El vet, tras evaluar a la mascota a domicilio, marca que la
  * eutanasia NO correspondía. Pasa estado 'aceptada' → 'no_realizada', congela el
- * pago al vet por la consulta, ELIMINA el borrador de cremación (la mascota sigue
- * viva) y le manda al vet el correo de pago de la consulta. No se avisa al tutor.
+ * pago al vet por la consulta y le manda al vet el correo de pago de la consulta.
+ * Sobre la ficha de cremación asociada: si sigue en borrador (no ingresada) la
+ * ELIMINA; si ya fue ingresada, la CONSERVA y deja una alerta en la cotización
+ * (Servicios → Eutanasias) + aviso al equipo por WhatsApp. No se avisa al tutor.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -83,16 +86,27 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // La mascota sigue viva → eliminar el borrador de cremación creado al agendar.
+    // La mascota sigue viva. Si la ficha de cremación asociada AÚN es un borrador
+    // (el equipo no la ingresó), se elimina — no hay nada que cremar. Pero si el
+    // equipo YA la ingresó, NO se toca: puede haber gestión en curso. En ese caso
+    // queda una alerta en la cotización (Servicios → Eutanasias, derivada del
+    // estado de la ficha) y se avisa al equipo por WhatsApp para que decida.
     if (c.cliente_id) {
       try {
         const clientes = await getSheetData('clientes')
-        const ci = clientes.findIndex(r => String(r.id) === String(c.cliente_id))
-        if (ci !== -1 && (clientes[ci].estado || '') === 'borrador') {
-          await deleteRow('clientes', ci)
+        const ficha = clientes.find(r => String(r.id) === String(c.cliente_id))
+        if (ficha) {
+          if ((ficha.estado || '').toLowerCase() === 'borrador') {
+            await deleteById('clientes', String(c.cliente_id))
+          } else if (isWhatsappConfigured()) {
+            try {
+              await avisarAdminsWhatsapp(
+                `⚠️ Eutanasia N° ${c.id} (${c.mascota_nombre} · ${c.cliente_nombre}): el veterinario marcó que la eutanasia NO se realizó, pero la ficha de cremación ${ficha.codigo || '(sin código)'} YA está ingresada. Revísala en Servicios → Eutanasias.`)
+            } catch { /* best-effort */ }
+          }
         }
       } catch (e) {
-        console.warn('[eutanasias/no-realizado] no se pudo eliminar el borrador:', e)
+        console.warn('[eutanasias/no-realizado] no se pudo procesar la ficha de cremación:', e)
       }
     }
 

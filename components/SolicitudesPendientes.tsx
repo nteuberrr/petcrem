@@ -88,7 +88,8 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
     }
   }
 
-  if (!cargado || (pendientes.length === 0 && confirmadas.length === 0 && !feedback)) return null
+  // Mostramos SIEMPRE los grupos (aunque estén vacíos), una vez cargado.
+  if (!cargado) return null
 
   return (
     <div className="mb-4 space-y-4">
@@ -96,12 +97,15 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
         <div className="rounded-lg px-3 py-2 text-xs font-medium text-amber-900 bg-amber-100 border border-amber-200">{feedback}</div>
       )}
 
-      {pendientes.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">🔔</span>
-            <h2 className="text-sm font-bold text-gray-800">Solicitudes de retiro pendientes ({pendientes.length})</h2>
-          </div>
+      <section>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-lg">🔔</span>
+          <h2 className="text-sm font-bold text-gray-800">Solicitudes de retiro pendientes ({pendientes.length})</h2>
+        </div>
+        {pendientes.length === 0 ? (
+          <p className="text-xs text-gray-500 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 py-2">Sin solicitudes pendientes.</p>
+        ) : (
+          <>
           <div className={GRID}>
             {recortar(pendientes, 'pendientes').map(s => (
               <div key={s.id} className="rounded-xl border-2 border-red-300 bg-red-50 shadow-sm p-3 flex flex-col justify-between gap-2 min-h-[150px]">
@@ -135,15 +139,19 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
             ))}
           </div>
           {verTodas(pendientes, 'pendientes')}
-        </section>
-      )}
+          </>
+        )}
+      </section>
 
-      {confirmadas.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">✅</span>
-            <h2 className="text-sm font-bold text-gray-800">Retiros confirmados ({confirmadas.length})</h2>
-          </div>
+      <section>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-lg">✅</span>
+          <h2 className="text-sm font-bold text-gray-800">Retiros confirmados ({confirmadas.length})</h2>
+        </div>
+        {confirmadas.length === 0 ? (
+          <p className="text-xs text-gray-500 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 py-2">Sin retiros confirmados por ingresar.</p>
+        ) : (
+          <>
           <div className={GRID}>
             {recortar(confirmadas, 'confirmadas').map(s => (
               <div key={s.id}
@@ -166,8 +174,9 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
             ))}
           </div>
           {verTodas(confirmadas, 'confirmadas')}
-        </section>
-      )}
+          </>
+        )}
+      </section>
     </div>
   )
 }

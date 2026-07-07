@@ -249,7 +249,7 @@ export const SHEETS: Record<string, string[]> = {
   // Config editable del agente de marketing (una sola fila, id=1): instrucciones
   // del equipo + calibración. Espejo de agente_config del inbox.
   marketing_config: [
-    'id', 'instrucciones', 'calibracion', 'updated_at',
+    'id', 'instrucciones', 'calibracion', 'parametros', 'updated_at',
   ],
   // Convenio de eutanasias a domicilio. Vets se inscriben en /convenio-eutanasias
   // (auto-aprobado) o los carga el admin manualmente.

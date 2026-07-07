@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { formatDateTime } from '@/lib/dates'
+import MarketingParamsConfig from './MarketingParamsConfig'
 
 type Cfg = { instrucciones: string; calibracion: string; updated_at: string | null }
 
@@ -96,6 +97,12 @@ export default function MarketingAgenteConfig() {
       </div>
 
       <p className="text-[11px] text-gray-400">Última actualización: {formatDateTime(cfg?.updated_at ?? null) || '—'}</p>
+
+      {/* Parámetros del plan (cadencia, pilares, ads) + autopiloto semanal. */}
+      <div className="pt-2">
+        <h2 className="text-sm font-bold text-brand mb-3">Parámetros del plan y autopiloto</h2>
+        <MarketingParamsConfig />
+      </div>
     </div>
   )
 }

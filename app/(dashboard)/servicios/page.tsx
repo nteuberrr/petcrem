@@ -35,6 +35,9 @@ type Cotizacion = {
   fecha_pago?: string
   fecha_realizacion?: string
   fecha_creacion: string
+  /** Derivado: la eutanasia se marcó no realizada pero la ficha de cremación ya estaba ingresada. */
+  ficha_ingresada?: string
+  ficha_codigo?: string
 }
 
 interface ColumnaConfig {
@@ -1244,6 +1247,11 @@ export default function ServiciosEutanasiasPage() {
                 {detalleCoti.estado === 'aceptada' && <p className="text-xs text-amber-700 mt-1">⏳ Coordina con la familia, evalúa y marca el resultado (realizada / no realizada).</p>}
                 {detalleCoti.estado === 'realizada' && <p className="text-xs text-emerald-700 mt-1">✓ Eutanasia realizada.</p>}
                 {detalleCoti.estado === 'no_realizada' && <p className="text-xs text-slate-600 mt-1">✗ Evaluada: no correspondía realizarla (se paga la consulta).</p>}
+                {detalleCoti.estado === 'no_realizada' && detalleCoti.ficha_ingresada === 'TRUE' && (
+                  <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 leading-snug">
+                    ⚠️ El veterinario indicó que la eutanasia <strong>no se realizó</strong>, pero la ficha de cremación{detalleCoti.ficha_codigo ? <> <strong>{detalleCoti.ficha_codigo}</strong></> : ''} <strong>ya está ingresada</strong> (no se eliminó automáticamente). Revisa la ficha y decide si corresponde eliminarla.
+                  </div>
+                )}
               </FichaBloque>
             )}
 
@@ -1573,6 +1581,13 @@ function CotizacionCard({
         <span className="text-gray-400 shrink-0">📍</span>
         <span className="truncate">{c.direccion}, {c.comuna}</span>
       </p>
+
+      {/* Alerta: el vet marcó "no realizada" pero la ficha de cremación ya estaba ingresada. */}
+      {c.estado === 'no_realizada' && c.ficha_ingresada === 'TRUE' && (
+        <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900 leading-tight">
+          ⚠️ El veterinario indicó que <strong>no se realizó</strong>, pero la ficha de cremación{c.ficha_codigo ? <> <strong>{c.ficha_codigo}</strong></> : ''} ya está ingresada. Revísala.
+        </div>
+      )}
 
       {/* Footer histórico: resultado + valor a pagar al vet + estado de pago */}
       {showPago && (c.estado === 'realizada' || c.estado === 'no_realizada') && (() => {

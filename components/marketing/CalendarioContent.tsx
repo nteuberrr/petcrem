@@ -211,6 +211,18 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
       setPreview(d.item)
     } finally { setBusy('') }
   }
+  // "Misma copy, imagen nueva": conserva el texto y regenera SOLO la imagen desde cero.
+  async function nuevaImagen(id: string) {
+    setBusy(`${id}:img`)
+    try {
+      const r = await fetch(`/api/mailing/calendario/${id}/nueva-imagen`, { method: 'POST' })
+      const d = await r.json()
+      if (!r.ok) { alert(d.error || 'Error al regenerar la imagen'); return }
+      setItems(prev => prev.map(x => x.id === id ? d.item : x))
+      if (d.avisos?.length) alert('Imagen nueva con avisos:\n' + d.avisos.join('\n'))
+      setPreview(d.item)
+    } finally { setBusy('') }
+  }
   async function publicar(id: string) {
     if (!confirm('¿Publicar ahora en la red? Esta acción es pública.')) return
     setBusy(`${id}:pub`)
@@ -263,6 +275,12 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
         {it.activa !== 'FALSE' && ['propuesta', 'generada', 'aprobada'].includes(it.estado) && (
           <button disabled={enCurso} onClick={() => generar(it.id)} className="text-xs px-2 py-1 rounded bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50">
             {busy === `${it.id}:gen` ? '…' : it.cuerpo ? 'Regenerar' : 'Generar'}
+          </button>
+        )}
+        {social && it.activa !== 'FALSE' && it.cuerpo && ['propuesta', 'generada', 'aprobada'].includes(it.estado) && (
+          <button disabled={enCurso} onClick={() => nuevaImagen(it.id)} title="Conserva el copy y regenera SOLO la imagen (nueva y distinta)"
+            className="text-xs px-2 py-1 rounded border border-violet-300 text-violet-700 hover:bg-violet-50 disabled:opacity-50">
+            {busy === `${it.id}:img` ? '…' : '🖼️ Nueva imagen'}
           </button>
         )}
         {it.activa !== 'FALSE' && it.estado === 'generada' && it.cuerpo && (

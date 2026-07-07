@@ -55,6 +55,25 @@ export async function GET(req: NextRequest) {
     const rows = await getSheetData(SHEET)
     const filtradas = estado ? rows.filter(r => r.estado === estado) : rows
     filtradas.sort((a, b) => (b.fecha_creacion || '').localeCompare(a.fecha_creacion || ''))
+
+    // Alerta derivada: una cotización 'no_realizada' cuya ficha de cremación
+    // asociada NO se eliminó (porque el equipo ya la había ingresado) queda
+    // marcada `ficha_ingresada` para mostrar el aviso en la tarjeta.
+    const necesitaFicha = filtradas.some(r => r.estado === 'no_realizada' && r.cliente_id)
+    if (necesitaFicha) {
+      const clientes = await getSheetData('clientes')
+      const porId = new Map(clientes.map(x => [String(x.id), x]))
+      const enriquecidas = filtradas.map(r => {
+        if (r.estado === 'no_realizada' && r.cliente_id) {
+          const f = porId.get(String(r.cliente_id))
+          if (f && (f.estado || '').toLowerCase() !== 'borrador') {
+            return { ...r, ficha_ingresada: 'TRUE', ficha_codigo: f.codigo || '' }
+          }
+        }
+        return r
+      })
+      return NextResponse.json(enriquecidas)
+    }
     return NextResponse.json(filtradas)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

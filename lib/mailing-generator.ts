@@ -3,6 +3,7 @@ import { BRAND, LOGO_URL, getContacto, type Contacto } from './email-layout'
 import { isNanoBananaConfigurado } from './nano-banana'
 import { listarImagenes, generarYGuardarImagen, reducirParaVision, type ImagenBanco } from './mailing-images'
 import { MARCA_VISUAL } from './marca-visual'
+import { GUIA_EMAIL } from './marketing-guia'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { LINKS_PUBLICOS } from './links-publicos'
 
@@ -128,8 +129,10 @@ CONTACTO (inclúyelo en el pie y/o en los CTA, con enlaces reales):
 ${LINKS_PUBLICOS()}
   Úsalos como BOTÓN principal cuando el objetivo de la campaña calce (ej. campaña de captación → botón "Inscribe tu clínica al convenio" apuntando al link de inscripción). Fuera de estos links y el contacto, no inventes otros enlaces ni formularios.
 
-asunto: claro y específico, máx ~60 caracteres, sin emojis llamativos.
-preview_text: una frase que complementa el asunto (no lo repite), máx ~110 caracteres.
+${GUIA_EMAIL}
+
+asunto: corto y frontal, máx ~8 palabras (~40-45 caracteres, para que no se trunque en móvil), la info clave al inicio. SIN mayúsculas sostenidas, SIN "!!!", sin palabras tipo GRATIS/URGENTE, sin emojis llamativos. Nunca prometas algo que el cuerpo no cumpla.
+preview_text: una frase que COMPLEMENTA el asunto (no lo repite), máx ~90 caracteres.
 
 Responde siempre llamando a la herramienta "generar_campana".`
 }
@@ -357,6 +360,9 @@ Revisa y CORRIGE en el HTML:
 NO cambies: el copy/mensaje, las variables {{...}}, ni las URLs de las imágenes (atributo src). Solo ajusta el markup/estilos para que quede impecable.
 
 Si te paso imágenes generadas, verifica que sean FOTORREALISTAS y CONSISTENTES entre sí y con el correo. Si alguna NO calza (estilo distinto, no realista, mal recortada), NO la quites: anótala en "avisos" para que el equipo la regenere.
+
+Verificá TAMBIÉN contra la guía de email (asunto/preheader, 600px, UN solo CTA botón, nada de email 100% imagen, alt text, footer con baja):
+${GUIA_EMAIL}
 
 Devuelve con la herramienta "entregar_revision".`
 

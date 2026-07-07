@@ -5,6 +5,7 @@ import { esAdminTotal } from '@/lib/roles'
 import { listarCalendario, claimPublicacion, finalizarPublicacion, marcarErrorPublicacion, type ItemCalendario } from '@/lib/marketing-calendario'
 import { publicarEnCanal, isFacebookConfigurado, isInstagramConfigurado } from '@/lib/meta-publish'
 import { barridoOportunidadSeguimiento } from '@/lib/seguimiento-leads'
+import { correrAutopilotoSemanal } from '@/lib/marketing-autopiloto'
 import { todayISO } from '@/lib/dates'
 
 /** URLs de imagen del ítem: del carrusel (imagenes_json) o, si no, la principal. */
@@ -92,7 +93,13 @@ async function ejecutar(req: NextRequest) {
   let seguimiento = null
   try { seguimiento = await barridoOportunidadSeguimiento() } catch (e) { console.error('[cron-publicar] seguimiento', e) }
 
-  return NextResponse.json({ revisados: pendientes.length, publicados: resultados.filter(r => r.ok).length, resultados, seguimiento })
+  // Autopiloto de marketing (Etapa 1): planifica la semana si falta y genera 1
+  // pieza por tick (queda como propuesta/generada, NUNCA se publica solo). Best-
+  // effort y desactivado por defecto (params.autopiloto_activo).
+  let autopiloto = null
+  try { autopiloto = await correrAutopilotoSemanal({ maxGenerar: 1 }) } catch (e) { console.error('[cron-publicar] autopiloto', e) }
+
+  return NextResponse.json({ revisados: pendientes.length, publicados: resultados.filter(r => r.ok).length, resultados, seguimiento, autopiloto })
 }
 
 export async function GET(req: NextRequest) { return ejecutar(req) }

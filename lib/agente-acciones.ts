@@ -7,6 +7,7 @@ import { agregarDiasHabiles, isoFecha } from './dias-habiles'
 import { fmtPrecio } from './format'
 import { precioClienteEutanasia, getConsultaEutanasia } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
+import { evaluarSlotRetiro } from './agenda'
 import { capitalizarNombre } from './nombres'
 import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional } from './cobros'
@@ -73,6 +74,12 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
   a.nombre_mascota = capitalizarNombre(a.nombre_mascota)
   if (!(await direccionValida(a.direccion, a.comuna))) {
     return `No pude validar la dirección "${a.direccion}, ${a.comuna}". Pídele al cliente que la confirme o la corrija (calle y número) y vuelve a registrarla. NO la registres aún.`
+  }
+
+  const slot = await evaluarSlotRetiro(a.fecha, a.hora)
+  if (!slot.ok) {
+    const libres = slot.libres.length ? ` Horarios disponibles ese día: ${slot.libres.join(', ')}.` : ''
+    return `NO registres este retiro: ${slot.motivo}${libres} Explícaselo al cliente con amabilidad y ofrécele uno de los horarios disponibles; vuelve a llamar la herramienta solo cuando acuerden una hora válida.`
   }
 
   await ensureSheet(SHEET_RETIRO)
@@ -189,6 +196,12 @@ async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<s
 
   if (!(await direccionValida(a.direccion, a.comuna))) {
     return `No pude validar la dirección "${a.direccion}, ${a.comuna}". Pídele al veterinario que la confirme o la corrija (calle y número) y vuelve a registrarla. NO la registres aún.`
+  }
+
+  const slot = await evaluarSlotRetiro(a.fecha, a.hora)
+  if (!slot.ok) {
+    const libres = slot.libres.length ? ` Horarios disponibles ese día: ${slot.libres.join(', ')}.` : ''
+    return `NO registres este retiro: ${slot.motivo}${libres} Explícaselo al veterinario y ofrécele uno de los horarios disponibles; vuelve a llamar la herramienta solo cuando acuerden una hora válida.`
   }
 
   await ensureSheet(SHEET_RETIRO)

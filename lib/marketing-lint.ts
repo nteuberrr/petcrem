@@ -131,6 +131,11 @@ export function lintCopy(args: { caption?: string; placas?: string[]; telefono?:
     const capLimpio = args.caption.replace(/#[\p{L}\p{N}_]+/gu, ' ').replace(/https?:\/\/\S+/gi, ' ')
     const tildes = lintTildes(capLimpio)
     if (tildes) out.push({ campo: 'caption', problema: tildes })
+    // Hashtags: la guía 2026 pide 3-5 nicho; más de 5 REDUCE el alcance.
+    const hashtags = args.caption.match(/#[\p{L}\p{N}_]+/gu) || []
+    if (hashtags.length > 5) {
+      out.push({ campo: 'caption', problema: `Hay ${hashtags.length} hashtags; dejá 3-5 NICHO y específicos (más de 5 reduce el alcance en 2026). Sacá los genéricos.` })
+    }
   }
   ;(args.placas || []).forEach((p, i) => {
     if (!p || !p.trim()) return

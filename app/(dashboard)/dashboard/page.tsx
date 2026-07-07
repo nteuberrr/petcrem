@@ -8,6 +8,7 @@ import {
 } from 'recharts'
 import TimelineStatus from '@/components/TimelineStatus'
 import SolicitudesPendientes from '@/components/SolicitudesPendientes'
+import AgendaSemanal from '@/components/AgendaSemanal'
 import { Modal } from '@/components/ui/Modal'
 import { esAdmin } from '@/lib/roles'
 
@@ -108,6 +109,11 @@ export default function DashboardPage() {
           confirmados (verde) y eutanasias (naranja/verde). Las ven TODOS los
           usuarios; confirmar/rechazar es solo del admin. */}
       <SolicitudesPendientes puedeResolver={isAdmin} />
+
+      {/* Agenda semanal (entre las notificaciones y el timeline): retiros de
+          cremación + retiros de eutanasia, amarillo = por confirmar / verde =
+          confirmado. */}
+      <AgendaSemanal />
 
       {/* Timeline Status */}
       <TimelineStatus />

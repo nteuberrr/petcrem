@@ -392,3 +392,15 @@ export async function eliminarImagen(id: string): Promise<void> {
   }
   await deleteById(TABLE, id)
 }
+
+/**
+ * Des-registra una imagen del banco por su URL pública (higiene: limpiar los
+ * renders INTERMEDIOS de la auto-corrección de QA que quedaron superados, para
+ * que el banco termine con una sola versión por slide). Best-effort, silencioso.
+ */
+export async function eliminarImagenPorUrl(url: string): Promise<void> {
+  if (!url) return
+  const rows = await getSheetData(TABLE)
+  const row = rows.find(r => r.url === url)
+  if (row?.id) await eliminarImagen(String(row.id))
+}

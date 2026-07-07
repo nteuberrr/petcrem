@@ -1666,7 +1666,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <div className="bg-red-50 border-2 border-red-200 rounded-lg p-3 text-sm text-red-900">
             <p className="font-semibold">Estás por eliminar permanentemente:</p>
             <p className="mt-1">
-              <span className="font-mono text-xs bg-white border border-red-200 px-1.5 py-0.5 rounded">{cliente.codigo}</span>
+              <span className="font-mono text-xs bg-white border border-red-200 px-1.5 py-0.5 rounded">{cliente.codigo || 'Ficha por ingresar'}</span>
               {' · '}
               <span className="font-semibold">{cliente.nombre_mascota}</span>
               {' · '}
@@ -1674,8 +1674,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             </p>
           </div>
           <p className="text-xs text-gray-600 leading-relaxed">
-            Esta acción no se puede deshacer. Para confirmar, escribe el código de la ficha
-            (<span className="font-mono font-semibold text-gray-900">{cliente.codigo}</span>) en el campo de abajo.
+            Esta acción no se puede deshacer. Para confirmar, escribe {cliente.codigo ? 'el código de la ficha' : ''}
+            (<span className="font-mono font-semibold text-gray-900">{cliente.codigo || 'ELIMINAR'}</span>) en el campo de abajo.
           </p>
           <div>
             <label className="text-xs font-semibold text-gray-700">Confirmar código</label>
@@ -1683,7 +1683,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               type="text"
               value={deleteConfirmText}
               onChange={e => setDeleteConfirmText(e.target.value)}
-              placeholder={cliente.codigo}
+              placeholder={cliente.codigo || 'ELIMINAR'}
               disabled={deletingFicha}
               className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-red-500"
               autoFocus
@@ -1703,7 +1703,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             </button>
             <button
               type="button"
-              disabled={deletingFicha || deleteConfirmText.trim().toUpperCase() !== cliente.codigo.toUpperCase()}
+              disabled={deletingFicha || deleteConfirmText.trim().toUpperCase() !== (cliente.codigo || 'ELIMINAR').toUpperCase()}
               onClick={eliminarFicha}
               className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
