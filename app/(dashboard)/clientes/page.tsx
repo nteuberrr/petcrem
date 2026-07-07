@@ -18,6 +18,9 @@ type Cliente = {
   fecha_retiro: string; fecha_creacion: string; ciclo_id: string
   direccion_retiro?: string; direccion_despacho?: string; comuna?: string
   adicionales?: string
+  veterinaria_id?: string; notas?: string
+  fotos_cuadro?: string; videos_servicio?: string
+  correo_diferencia_fecha?: string
 }
 type Especie = { id: string; nombre: string; letra: string; activo: string }
 type Veterinario = { id: string; nombre: string; activo: string; tipo_precios?: string }
@@ -76,7 +79,8 @@ const SERVICIOS = [
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [buscar, setBuscar] = useState('')
-  const [filtro, setFiltro] = useState<'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado' | 'pago_pendiente' | 'este_mes' | 'esta_semana' | 'datos_pendientes'>('todos')
+  const [filtro, setFiltro] = useState<'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado' | 'pago_pendiente' | 'este_mes' | 'esta_semana' | 'datos_pendientes' | 'falta_peso' | 'diferencia'>('todos')
+  const [filtroVet, setFiltroVet] = useState('') // '' = todas · '__general__' = sin vet · id de vet
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [selected, setSelected] = useState<Cliente | null>(null)
@@ -249,6 +253,35 @@ export default function ClientesPage() {
     return false
   }
 
+  // Falta el PESO DE INGRESO: ficha ya en proceso (retirada, no despachada) sin
+  // peso real registrado (el operador debe pesarla al recibirla).
+  function faltaPesoIngreso(c: Cliente): boolean {
+    return c.estado !== 'borrador' && c.estado !== 'despachado' && (!c.peso_ingreso || !c.peso_ingreso.trim())
+  }
+
+  // Hay DIFERENCIA DE PRECIO POR COBRAR: el peso de ingreso cae en un tramo más
+  // caro que el declarado y todavía no se envió el cobro de diferencia.
+  function tieneDiferenciaPorCobrar(c: Cliente): boolean {
+    // Solo fichas EN PROCESO: una vez despachada (entregada) la ventana de cobro
+    // ya pasó y sumaría ruido de fichas viejas.
+    if (c.estado === 'borrador' || c.estado === 'despachado') return false
+    if (c.correo_diferencia_fecha && c.correo_diferencia_fecha.trim()) return false
+    const pd = parsePeso(c.peso_declarado)
+    const pi = parsePeso(c.peso_ingreso)
+    if (!(pi > pd)) return false
+    const tabla = c.veterinaria_id ? preciosConvenio : preciosGenerales
+    if (!tabla.length) return false
+    const cod = c.codigo_servicio || 'CI'
+    const precioPd = precioDelTramo(encontrarTramo(tabla, pd), cod)
+    const precioPi = precioDelTramo(encontrarTramo(tabla, pi), cod)
+    return precioPi > precioPd
+  }
+
+  // Íconos de estado para las tarjetas.
+  const jsonTieneItems = (s?: string) => { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) && a.length > 0 } catch { return false } }
+  const esPremiumCuadro = (c: Cliente) => (c.codigo_servicio || '').toUpperCase() === 'CP'
+  const solicitoVideo = (c: Cliente) => (c.notas || '').includes('El tutor solicitó el video')
+
   // Resultados filtrados por buscador + filtro
   const resultados = useMemo(() => {
     const q = buscar.trim().toLowerCase()
@@ -278,6 +311,11 @@ export default function ClientesPage() {
       if (filtro === 'despachado' && c.estado !== 'despachado') return false
       if (filtro === 'pago_pendiente' && c.estado_pago === 'pagado') return false
       if (filtro === 'datos_pendientes' && !tieneDatosPendientes(c)) return false
+      if (filtro === 'falta_peso' && !faltaPesoIngreso(c)) return false
+      if (filtro === 'diferencia' && !tieneDiferenciaPorCobrar(c)) return false
+      // Filtro por veterinaria (independiente del filtro de estado)
+      if (filtroVet === '__general__' && (c.veterinaria_id || '').trim()) return false
+      if (filtroVet && filtroVet !== '__general__' && c.veterinaria_id !== filtroVet) return false
       if (filtro === 'este_mes') {
         const f = parseFecha(c.fecha_retiro)
         if (!f || f < startMes) return false
@@ -298,7 +336,8 @@ export default function ClientesPage() {
       }
       return true
     })
-  }, [buscar, filtro, clientes])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buscar, filtro, filtroVet, clientes, preciosGenerales, preciosConvenio])
 
   const nBorradores = useMemo(() => clientes.filter(c => c.estado === 'borrador').length, [clientes])
 
@@ -313,14 +352,17 @@ export default function ClientesPage() {
       // así que no cuentan como pendientes de despacho.
       porDespachar: reales.filter(c => c.estado === 'cremado' && (c.codigo_servicio || 'CI').toUpperCase() !== 'SD').length,
       datosPendientes: reales.filter(c => tieneDatosPendientes(c)).length,
+      faltaPeso: reales.filter(c => faltaPesoIngreso(c)).length,
+      diferencia: reales.filter(c => tieneDiferenciaPorCobrar(c)).length,
     }
-  }, [clientes])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientes, preciosGenerales, preciosConvenio])
 
   // Permite llegar con un filtro preseleccionado por URL (ej. desde la alerta
   // del dashboard: /clientes?filtro=borrador). Se lee una vez al montar.
   useEffect(() => {
     const f = new URLSearchParams(window.location.search).get('filtro')
-    const validos = ['todos', 'borrador', 'pendiente', 'cremado', 'despachado', 'pago_pendiente', 'este_mes', 'esta_semana', 'datos_pendientes']
+    const validos = ['todos', 'borrador', 'pendiente', 'cremado', 'despachado', 'pago_pendiente', 'este_mes', 'esta_semana', 'datos_pendientes', 'falta_peso', 'diferencia']
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (f && validos.includes(f)) setFiltro(f as typeof filtro)
   }, [])
@@ -473,7 +515,7 @@ export default function ClientesPage() {
 
       {/* Notificaciones compactas: una fila de chips clickeables que aplican el
           filtro correspondiente. Reemplaza al banner grande de pago pendiente. */}
-      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0) && (
+      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0) && (
         <div className="mb-5 flex flex-wrap items-center gap-2">
           {nBorradores > 0 && (
             <button onClick={() => setFiltro('borrador')}
@@ -503,6 +545,18 @@ export default function ClientesPage() {
             <button onClick={() => setFiltro('datos_pendientes')}
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-orange-300 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-800 shadow-md transition-colors">
               📝 {alertas.datosPendientes} con datos pendientes
+            </button>
+          )}
+          {alertas.faltaPeso > 0 && (
+            <button onClick={() => setFiltro('falta_peso')}
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-rose-300 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 text-xs font-bold text-rose-800 shadow-md transition-colors">
+              <span className="font-mono font-extrabold bg-rose-200 text-rose-900 px-1 rounded">KG</span> {alertas.faltaPeso} sin peso de ingreso
+            </button>
+          )}
+          {alertas.diferencia > 0 && (
+            <button onClick={() => setFiltro('diferencia')}
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-fuchsia-300 bg-fuchsia-50 hover:bg-fuchsia-100 px-3 py-1.5 text-xs font-bold text-fuchsia-800 shadow-md transition-colors">
+              💰 {alertas.diferencia} con diferencia por cobrar
             </button>
           )}
         </div>
@@ -556,6 +610,18 @@ export default function ClientesPage() {
             )
           })}
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-gray-600 mr-1">Veterinaria:</span>
+          <select value={filtroVet} onChange={e => setFiltroVet(e.target.value)}
+            className="border-2 border-gray-300 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand">
+            <option value="">Todas</option>
+            <option value="__general__">General (sin veterinaria)</option>
+            {veterinarias.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+          </select>
+          {filtroVet && (
+            <button onClick={() => setFiltroVet('')} className="text-xs text-brand-soft hover:underline">Quitar filtro</button>
+          )}
+        </div>
         <p className="text-xs text-gray-500 mt-3">
           {resultados.length} resultado{resultados.length !== 1 ? 's' : ''} · {clientes.length} en total
         </p>
@@ -590,6 +656,22 @@ export default function ClientesPage() {
                 <span className="text-gray-300">·</span>
                 <span className="text-xs font-semibold text-gray-700">{c.codigo_servicio}</span>
               </div>
+              {(esPremiumCuadro(c) || solicitoVideo(c)) && (
+                <div className="mt-2 flex items-center gap-1.5">
+                  {esPremiumCuadro(c) && (
+                    <span title={jsonTieneItems(c.fotos_cuadro) ? 'Cuadro conmemorativo · foto recibida' : 'Cuadro conmemorativo (Premium) · falta la foto del tutor'}
+                      className={`inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded border ${jsonTieneItems(c.fotos_cuadro) ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-amber-700 bg-amber-50 border-amber-200'}`}>
+                      🖼️ cuadro
+                    </span>
+                  )}
+                  {solicitoVideo(c) && (
+                    <span title={jsonTieneItems(c.videos_servicio) ? 'Video del proceso solicitado · ya cargado' : 'Video del proceso solicitado · pendiente de cargar'}
+                      className={`inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded border ${jsonTieneItems(c.videos_servicio) ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-sky-700 bg-sky-50 border-sky-200'}`}>
+                      🎥 video
+                    </span>
+                  )}
+                </div>
+              )}
               {c.estado === 'borrador' && (
                 <p className="mt-2 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
                   🗂 Completa la ficha para registrarla
