@@ -392,6 +392,175 @@ function GestionCampanas() {
   )
 }
 
+// ── Google Ads (solo lectura): campañas + keywords + términos de búsqueda ──
+type CampGoogle = { id: string; nombre: string; status: string; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number; conversiones: number }
+type KeywordGoogle = { texto: string; matchType: string; campana: string; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number }
+type TerminoGoogle = { termino: string; campana: string; gasto: number; impresiones: number; clicks: number; conversiones: number }
+type GoogleAdsResp = {
+  ads?: { moneda: string; cuenta: Omit<CampGoogle, 'id' | 'nombre' | 'status'>; campanas: CampGoogle[] }
+  keywords?: KeywordGoogle[]
+  terminos?: TerminoGoogle[]
+  error?: string
+}
+
+const ESTADO_GOOGLE: Record<string, { label: string; cls: string }> = {
+  ENABLED: { label: 'Activa', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  PAUSED: { label: 'Pausada', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  REMOVED: { label: 'Eliminada', cls: 'bg-gray-100 text-gray-500 border-gray-200' },
+}
+
+function GoogleAdsPanel({ periodo }: { periodo: string }) {
+  const [data, setData] = useState<GoogleAdsResp | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+
+  const cargar = useCallback(async () => {
+    setLoading(true); setErr('')
+    try {
+      const r = await fetch(`/api/mailing/google-ads?periodo=${periodo}`, { cache: 'no-store' })
+      const d = await r.json()
+      if (!r.ok) { setErr(d.error || 'Error'); setData(null) } else setData(d)
+    } catch { setErr('Error de red'); setData(null) }
+    setLoading(false)
+  }, [periodo])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargar()
+  }, [cargar])
+
+  const fmt = (n: number) => Math.round(n || 0).toLocaleString('es-CL')
+  const ads = data?.ads
+  const money = (n: number) => `$${fmt(n)}${ads && ads.moneda !== 'CLP' ? ' ' + ads.moneda : ''}`
+
+  const KPIS = ads ? [
+    { l: 'Gasto', v: money(ads.cuenta.gasto) },
+    { l: 'Impresiones', v: fmt(ads.cuenta.impresiones) },
+    { l: 'Clics', v: fmt(ads.cuenta.clicks) },
+    { l: 'CTR', v: `${ads.cuenta.ctr.toFixed(2)}%` },
+    { l: 'CPC', v: money(ads.cuenta.cpc) },
+    { l: 'Conversiones', v: ads.cuenta.conversiones.toLocaleString('es-CL') },
+  ] : []
+
+  return (
+    <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
+      <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Anuncios pagados (Google Ads)</h3>
+      {loading ? (
+        <p className="text-sm text-gray-400">Cargando…</p>
+      ) : err ? (
+        <p className="text-sm text-gray-500">No se pudieron leer los Ads: {err}</p>
+      ) : ads ? (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {KPIS.map(k => (
+              <div key={k.l} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                <div className="text-[11px] text-gray-500">{k.l}</div>
+                <div className="text-lg font-bold text-gray-900">{k.v}</div>
+              </div>
+            ))}
+          </div>
+
+          {ads.campanas.length > 0 ? (
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                  <tr>
+                    <th className="text-left px-3 py-2">Campaña</th>
+                    <th className="text-left px-3 py-2">Estado</th>
+                    <th className="text-right px-3 py-2">Gasto</th>
+                    <th className="text-right px-3 py-2">Clics</th>
+                    <th className="text-right px-3 py-2">CTR</th>
+                    <th className="text-right px-3 py-2">CPC</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {ads.campanas.map(c => {
+                    const b = ESTADO_GOOGLE[c.status] || { label: c.status || '—', cls: 'bg-gray-100 text-gray-600 border-gray-200' }
+                    return (
+                      <tr key={c.id} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 text-gray-800 max-w-[260px] truncate">{c.nombre}</td>
+                        <td className="px-3 py-2"><span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded border ${b.cls}`}>{b.label}</span></td>
+                        <td className="px-3 py-2 text-right">{money(c.gasto)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(c.clicks)}</td>
+                        <td className="px-3 py-2 text-right">{c.ctr.toFixed(2)}%</td>
+                        <td className="px-3 py-2 text-right">{money(c.cpc)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : <p className="text-sm text-gray-400">Sin campañas con datos en este período.</p>}
+
+          {data?.keywords && data.keywords.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Palabras clave (top {data.keywords.length} por gasto)</p>
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full min-w-[640px] text-sm">
+                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="text-left px-3 py-2">Palabra clave</th>
+                      <th className="text-left px-3 py-2">Campaña</th>
+                      <th className="text-right px-3 py-2">Gasto</th>
+                      <th className="text-right px-3 py-2">Clics</th>
+                      <th className="text-right px-3 py-2">CTR</th>
+                      <th className="text-right px-3 py-2">CPC</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.keywords.map((k, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 text-gray-800">{k.texto} <span className="text-gray-400 text-xs">({k.matchType?.toLowerCase()})</span></td>
+                        <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{k.campana}</td>
+                        <td className="px-3 py-2 text-right">{money(k.gasto)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(k.clicks)}</td>
+                        <td className="px-3 py-2 text-right">{k.ctr.toFixed(2)}%</td>
+                        <td className="px-3 py-2 text-right">{money(k.cpc)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {data?.terminos && data.terminos.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Términos de búsqueda reales (top {data.terminos.length} por gasto)
+                <span className="normal-case font-normal text-gray-400"> — lo que la gente escribió en Google; sirve para sumar keywords nuevas o negativas</span>
+              </p>
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full min-w-[640px] text-sm">
+                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="text-left px-3 py-2">Término buscado</th>
+                      <th className="text-left px-3 py-2">Campaña</th>
+                      <th className="text-right px-3 py-2">Gasto</th>
+                      <th className="text-right px-3 py-2">Clics</th>
+                      <th className="text-right px-3 py-2">Conversiones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.terminos.map((t, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 text-gray-800">{t.termino}</td>
+                        <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{t.campana}</td>
+                        <td className="px-3 py-2 text-right">{money(t.gasto)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(t.clicks)}</td>
+                        <td className="px-3 py-2 text-right">{t.conversiones.toLocaleString('es-CL')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      ) : <p className="text-sm text-gray-400">Sin datos de Ads.</p>}
+    </div>
+  )
+}
+
 function MetricasPanel() {
   const [periodo, setPeriodo] = useState('last_30d')
   const [data, setData] = useState<MetResp | null>(null)
@@ -492,6 +661,8 @@ function MetricasPanel() {
           </div>
 
           <GestionCampanas />
+
+          <GoogleAdsPanel periodo={periodo} />
 
           <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-3">
             <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Orgánico (Facebook)</h3>
