@@ -225,7 +225,7 @@ async function checkConfig(): Promise<Hallazgo[]> {
       area: 'Negativas',
       titulo: `${n.campana} negativas a nivel campaña pero 0 listas compartidas`,
       detalle: 'Toda negativa universal (empleo, DIY, informacional) hoy hay que agregarla campaña por campaña.',
-      accionSugerida: 'Crear una lista compartida ES-CL con las negativas universales del rubro (ver GUIA_GADS_NEGATIVAS) — backlog Fase C.',
+      accionSugerida: 'Crear la lista compartida universal ES-CL (botón "Crear lista universal ES-CL" en el panel, o pedirle al agente "creá la lista de negativas universal") — aplica de una a todas las campañas.',
     }]
   }
   return []

@@ -397,11 +397,13 @@ type CampGoogle = { id: string; nombre: string; status: string; gasto: number; i
 type KeywordGoogle = { resourceName: string; status: string; texto: string; matchType: string; campana: string; campanaEstado: string; grupoAnuncioEstado: string; enVivo: boolean; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number }
 type TerminoGoogle = { termino: string; campana: string; campanaId: string; gasto: number; impresiones: number; clicks: number; conversiones: number }
 type CampanaGestionGoogle = { id: string; nombre: string; status: string; presupuestoResourceName: string; presupuestoClp: number; compartido: boolean }
+type ListaNegativasGoogle = { resourceName: string; nombre: string; cantidadTerminos: number; campanas: string[] }
 type GoogleAdsResp = {
   ads?: { moneda: string; cuenta: Omit<CampGoogle, 'id' | 'nombre' | 'status'>; campanas: CampGoogle[] }
   keywords?: KeywordGoogle[]
   terminos?: TerminoGoogle[]
   gestion?: CampanaGestionGoogle[]
+  listasNegativas?: ListaNegativasGoogle[]
   error?: string
 }
 
@@ -565,6 +567,32 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
       const d = await r.json().catch(() => ({}))
       if (!r.ok) alert(d.error || 'No se pudo agregar la negativa.')
       else alert('Listo — agregada como palabra clave negativa.')
+    } catch { alert('Error de red') }
+    setBusyId('')
+  }
+
+  async function crearListaUniversal() {
+    if (!window.confirm('¿Crear la lista de negativas universal ES-CL (empleo, educación, DIY, gratis, segunda mano) y adjuntarla a TODAS las campañas de la cuenta? Los términos que ya existan como negativa se saltan automáticamente.')) return
+    setBusyId('crear-lista-negativas')
+    try {
+      const r = await fetch('/api/mailing/google-ads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'crear_lista_negativas_universal' }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) alert(d.error || 'No se pudo crear la lista.')
+      else if (d.creada === false) alert(d.mensaje || 'Todos los términos ya existían — no se creó la lista.')
+      else alert(`Lista creada: ${d.agregados} términos (${d.duplicados} ya existían) · adjuntada a ${d.adjuntadas} campaña(s).`)
+      await cargar()
+    } catch { alert('Error de red') }
+    setBusyId('')
+  }
+
+  async function eliminarLista(l: ListaNegativasGoogle) {
+    if (!window.confirm(`¿Eliminar la lista "${l.nombre}" (${l.cantidadTerminos} términos)? Se desadjunta de las ${l.campanas.length} campaña(s) que la usan.`)) return
+    setBusyId(l.resourceName)
+    try {
+      const r = await fetch('/api/mailing/google-ads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'eliminar_lista_negativas', resourceName: l.resourceName }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) alert(d.error || 'No se pudo eliminar la lista.')
+      await cargar()
     } catch { alert('Error de red') }
     setBusyId('')
   }
@@ -741,6 +769,31 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
               </div>
             </div>
           )}
+
+          <div>
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Listas de negativas compartidas
+                <span className="normal-case font-normal text-gray-400"> — aplican a TODAS las campañas de una vez</span>
+              </p>
+              <button disabled={busyId === 'crear-lista-negativas'} onClick={crearListaUniversal} className="text-xs font-semibold text-white bg-[#143C64] rounded-lg px-3 py-1.5 hover:bg-[#0f2e4d] disabled:opacity-50 shrink-0">
+                + Crear lista universal ES-CL
+              </button>
+            </div>
+            {data?.listasNegativas && data.listasNegativas.length > 0 ? (
+              <div className="space-y-2">
+                {data.listasNegativas.map(l => (
+                  <div key={l.resourceName} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{l.nombre} <span className="font-normal text-gray-400">— {l.cantidadTerminos} términos</span></p>
+                      <p className="text-xs text-gray-500">Campañas: {l.campanas.join(', ') || '(sin adjuntar a ninguna)'}</p>
+                    </div>
+                    <button disabled={busyId === l.resourceName} onClick={() => eliminarLista(l)} className="text-xs font-semibold text-red-700 border border-red-200 bg-red-50 rounded-lg px-2.5 py-1 hover:bg-red-100 disabled:opacity-50 shrink-0">Eliminar</button>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-sm text-gray-400">Sin listas compartidas todavía — hoy todas las negativas están cargadas campaña por campaña.</p>}
+          </div>
         </>
       ) : <p className="text-sm text-gray-400">Sin datos de Ads.</p>}
     </div>

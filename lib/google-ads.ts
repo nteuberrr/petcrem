@@ -77,8 +77,11 @@ async function gaqlSearch(query: string): Promise<GaqlRow[]> {
 /**
  * Mutación genérica (POST {resource}:mutate). `validateOnly` valida la operación
  * SIN aplicarla (dry-run real de la API) — se usa para probar sin tocar datos.
+ * Devuelve los resourceName resultantes (vacío en validateOnly, Google no los emite
+ * porque no llegó a crear nada) — se usa para encadenar creaciones (ej. lista
+ * compartida → sus criterios → adjuntarla a campañas).
  */
-async function gaqlMutate(resource: string, operations: unknown[], validateOnly = false): Promise<void> {
+async function gaqlMutate(resource: string, operations: unknown[], validateOnly = false): Promise<string[]> {
   const token = await getAccessToken()
   const customerId = process.env.GOOGLE_ADS_CUSTOMER_ID || ''
   const loginCustomerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || customerId
@@ -92,13 +95,14 @@ async function gaqlMutate(resource: string, operations: unknown[], validateOnly 
     },
     body: JSON.stringify({ operations, validateOnly }),
   })
-  const json = await res.json().catch(() => ({})) as { error?: { message?: string; details?: unknown } }
+  const json = await res.json().catch(() => ({})) as { error?: { message?: string; details?: unknown }; results?: Array<{ resourceName?: string }> }
   if (!res.ok) {
     console.error('[google-ads] mutate error:', JSON.stringify(json.error || json))
     const detalle = json.error?.details as Array<{ errors?: Array<{ message?: string }> }> | undefined
     const msgDetalle = detalle?.[0]?.errors?.[0]?.message
     throw new Error(msgDetalle || json.error?.message || `Google Ads API: HTTP ${res.status}`)
   }
+  return (json.results || []).map(r => r.resourceName || '').filter(Boolean)
 }
 
 function customerRN(): string { return `customers/${process.env.GOOGLE_ADS_CUSTOMER_ID || ''}` }
@@ -610,4 +614,106 @@ export async function contarNegativas(): Promise<ConteoNegativas> {
     gaqlSearch(`SELECT shared_set.id FROM shared_set WHERE shared_set.status = 'ENABLED' AND shared_set.type = 'NEGATIVE_KEYWORDS'`),
   ])
   return { campana: negs.length, listasCompartidas: lists.length }
+}
+
+// ─── Listas de negativas compartidas (Fase C) ──────────────────────────────────
+/** Textos (normalizados, minúscula+trim) ya negativados en la cuenta — a nivel campaña
+ *  Y en listas compartidas existentes — para no duplicar al crear una lista nueva. */
+function textoKeyword(criterio: unknown): string {
+  const c = (criterio || {}) as Record<string, unknown>
+  const kw = (c.keyword || {}) as Record<string, unknown>
+  return String(kw.text || '').trim().toLowerCase()
+}
+
+async function textosNegativosExistentes(): Promise<Set<string>> {
+  const [campaña, compartidas] = await Promise.all([
+    gaqlSearch(`SELECT campaign_criterion.keyword.text FROM campaign_criterion WHERE campaign_criterion.negative = TRUE AND campaign_criterion.type = 'KEYWORD'`),
+    gaqlSearch(`SELECT shared_criterion.keyword.text FROM shared_criterion WHERE shared_criterion.type = 'KEYWORD'`),
+  ])
+  const out = new Set<string>()
+  for (const r of campaña) { const t = textoKeyword(r.campaignCriterion); if (t) out.add(t) }
+  for (const r of compartidas) { const t = textoKeyword(r.sharedCriterion); if (t) out.add(t) }
+  return out
+}
+
+export interface ListaNegativasCompartida {
+  resourceName: string
+  nombre: string
+  cantidadTerminos: number
+  campanas: string[]
+}
+
+export async function listarListasCompartidas(): Promise<ListaNegativasCompartida[]> {
+  const [sets, campSets] = await Promise.all([
+    gaqlSearch(`SELECT shared_set.resource_name, shared_set.name, shared_set.member_count FROM shared_set WHERE shared_set.status = 'ENABLED' AND shared_set.type = 'NEGATIVE_KEYWORDS'`),
+    gaqlSearch(`SELECT campaign.name, campaign_shared_set.shared_set FROM campaign_shared_set WHERE campaign_shared_set.status = 'ENABLED'`),
+  ])
+  const campanasPorSet = new Map<string, string[]>()
+  for (const r of campSets) {
+    const rn = String((r.campaignSharedSet as Record<string, unknown> | undefined)?.sharedSet || '')
+    if (!rn) continue
+    const arr = campanasPorSet.get(rn) || []
+    arr.push(String(r.campaign?.name || ''))
+    campanasPorSet.set(rn, arr)
+  }
+  return sets.map(r => {
+    const s = (r.sharedSet || {}) as Record<string, unknown>
+    const rn = String(s.resourceName || '')
+    return {
+      resourceName: rn,
+      nombre: String(s.name || ''),
+      cantidadTerminos: num(s.memberCount),
+      campanas: campanasPorSet.get(rn) || [],
+    }
+  })
+}
+
+/** Crea una lista de negativas COMPARTIDA (aplica a nivel cuenta, no a una campaña sola)
+ *  con los términos dados, saltando los que ya existen (a nivel campaña o en otra lista
+ *  compartida) para no duplicar. NO la adjunta a ninguna campaña — eso es un paso aparte
+ *  (adjuntarListaATodasLasCampanas) para poder previsualizar antes de aplicarla. */
+export async function crearListaNegativasCompartida(
+  nombre: string,
+  terminos: { texto: string; matchType?: 'EXACT' | 'PHRASE' | 'BROAD' }[],
+  validateOnly = false,
+): Promise<{ resourceName: string; agregados: number; duplicados: number }> {
+  if (!nombre.trim()) throw new Error('Falta el nombre de la lista.')
+  if (terminos.length === 0) throw new Error('No hay términos para agregar.')
+  const existentes = validateOnly ? new Set<string>() : await textosNegativosExistentes()
+  const nuevos = terminos.filter(t => !existentes.has(t.texto.trim().toLowerCase()))
+  const duplicados = terminos.length - nuevos.length
+  if (nuevos.length === 0) return { resourceName: '', agregados: 0, duplicados }
+
+  const [setRn] = await gaqlMutate('sharedSets', [{ create: { name: nombre.trim(), type: 'NEGATIVE_KEYWORDS' } }], validateOnly)
+  if (validateOnly) return { resourceName: '(validateOnly, no se creó nada)', agregados: nuevos.length, duplicados }
+  if (!setRn) throw new Error('Google Ads no devolvió la lista creada.')
+
+  // Lote de criterios (secuencial por lote, no todo en una sola llamada gigante si la lista crece).
+  const LOTE = 200
+  for (let i = 0; i < nuevos.length; i += LOTE) {
+    const ops = nuevos.slice(i, i + LOTE).map(t => ({
+      create: { sharedSet: setRn, keyword: { text: t.texto.trim(), matchType: t.matchType || 'BROAD' } },
+    }))
+    await gaqlMutate('sharedCriteria', ops)
+  }
+  return { resourceName: setRn, agregados: nuevos.length, duplicados }
+}
+
+/** Adjunta una lista compartida a TODAS las campañas activas/pausadas que todavía no la tengan. */
+export async function adjuntarListaATodasLasCampanas(listaResourceName: string, validateOnly = false): Promise<{ adjuntadas: number; yaTenian: number }> {
+  if (!listaResourceName) throw new Error('Falta el resourceName de la lista.')
+  const [campanas, campSets] = await Promise.all([
+    gaqlSearch(`SELECT campaign.resource_name FROM campaign WHERE campaign.status IN ('ENABLED', 'PAUSED')`),
+    gaqlSearch(`SELECT campaign.resource_name, campaign_shared_set.shared_set FROM campaign_shared_set WHERE campaign_shared_set.status = 'ENABLED' AND campaign_shared_set.shared_set = '${listaResourceName}'`),
+  ])
+  const yaTienen = new Set(campSets.map(r => String(r.campaign?.resourceName || '')))
+  const faltantes = campanas.map(r => String(r.campaign?.resourceName || '')).filter(rn => rn && !yaTienen.has(rn))
+  if (faltantes.length === 0) return { adjuntadas: 0, yaTenian: campanas.length }
+  await gaqlMutate('campaignSharedSets', faltantes.map(rn => ({ create: { campaign: rn, sharedSet: listaResourceName } })), validateOnly)
+  return { adjuntadas: validateOnly ? 0 : faltantes.length, yaTenian: yaTienen.size }
+}
+
+export async function eliminarListaCompartida(resourceName: string): Promise<void> {
+  if (!resourceName) throw new Error('Falta el resourceName de la lista.')
+  await gaqlMutate('sharedSets', [{ remove: resourceName }])
 }

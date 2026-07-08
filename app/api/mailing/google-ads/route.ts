@@ -6,7 +6,9 @@ import {
   isGoogleAdsConfigurado, resumenCampanas, listarKeywords, terminosBusqueda, listarCampanasGestion,
   pausarCampanaGoogle, activarCampanaGoogle, ajustarPresupuestoGoogle,
   pausarKeywordGoogle, activarKeywordGoogle, agregarNegativaCampana,
+  listarListasCompartidas, crearListaNegativasCompartida, adjuntarListaATodasLasCampanas, eliminarListaCompartida,
 } from '@/lib/google-ads'
+import { NEGATIVAS_UNIVERSALES_ES_CL } from '@/lib/google-ads-guia'
 
 /**
  * GET /api/mailing/google-ads?periodo=last_30d — campañas (rendimiento + gestión),
@@ -28,13 +30,14 @@ export async function GET(req: NextRequest) {
   }
   const periodo = req.nextUrl.searchParams.get('periodo') || 'last_30d'
   try {
-    const [ads, keywords, terminos, gestion] = await Promise.all([
+    const [ads, keywords, terminos, gestion, listasNegativas] = await Promise.all([
       resumenCampanas(periodo),
       listarKeywords(periodo),
       terminosBusqueda(periodo),
       listarCampanasGestion(),
+      listarListasCompartidas(),
     ])
-    return NextResponse.json({ ads, keywords: keywords.keywords, terminos: terminos.terminos, gestion: gestion.campanas })
+    return NextResponse.json({ ads, keywords: keywords.keywords, terminos: terminos.terminos, gestion: gestion.campanas, listasNegativas })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Error' }, { status: 502 })
   }
@@ -47,6 +50,7 @@ interface Body {
   montoClp?: number
   texto?: string
   matchType?: 'EXACT' | 'PHRASE' | 'BROAD'
+  nombre?: string
 }
 
 export async function POST(req: NextRequest) {
@@ -85,6 +89,18 @@ export async function POST(req: NextRequest) {
       case 'negativa': {
         if (!body.campaignId || !body.texto?.trim()) return NextResponse.json({ error: 'Faltan datos' }, { status: 400 })
         await agregarNegativaCampana(body.campaignId, body.texto, body.matchType || 'PHRASE')
+        return NextResponse.json({ ok: true })
+      }
+      case 'crear_lista_negativas_universal': {
+        const nombre = body.nombre?.trim() || 'Negativas universales ES-CL'
+        const r = await crearListaNegativasCompartida(nombre, NEGATIVAS_UNIVERSALES_ES_CL)
+        if (r.agregados === 0) return NextResponse.json({ ok: true, creada: false, mensaje: `Los ${r.duplicados} términos ya existían como negativa — no se creó la lista.` })
+        const attach = await adjuntarListaATodasLasCampanas(r.resourceName)
+        return NextResponse.json({ ok: true, creada: true, agregados: r.agregados, duplicados: r.duplicados, adjuntadas: attach.adjuntadas, yaTenian: attach.yaTenian })
+      }
+      case 'eliminar_lista_negativas': {
+        if (!body.resourceName) return NextResponse.json({ error: 'Falta resourceName' }, { status: 400 })
+        await eliminarListaCompartida(body.resourceName)
         return NextResponse.json({ ok: true })
       }
       default:

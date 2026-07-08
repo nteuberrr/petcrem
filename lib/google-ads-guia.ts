@@ -112,3 +112,28 @@ El QS (1-10, visible por keyword) se calcula de 3 factores, en este orden de pes
 2. Relevancia del anuncio (a nivel anuncio): que la keyword aparezca literalmente en los titulares pinneados en slot 1; un anuncio que nunca menciona la keyword tiene mala relevancia aunque el copy sea bueno.
 3. Experiencia de la landing page (a nivel de la página, NO se puede arreglar con mejor copy de anuncio): que el H1 de la landing coincida palabra por palabra con el titular del anuncio, carga rápida, contenido relevante al término buscado. Si el QS es bajo por este factor, la solución es una landing dedicada (ver la migración del sitio a landing pages por keyword, fuera del alcance de esta tanda).
 IMPORTANTE: Ad Strength (el medidor "Malo/Regular/Bueno/Excelente" que muestra Google al editar un anuncio) NO es lo mismo que Quality Score. Un anuncio con Ad Strength "Excelente" en una keyword con mala landing page igual puede tener QS bajo — Ad Strength solo mide variedad de recursos del anuncio, no landing page ni historial real de CTR.`
+
+/**
+ * Versión MÁQUINA-LEGIBLE (no prosa) de los "candidatos universales a negativar" de
+ * GUIA_GADS_NEGATIVAS — la usa lib/google-ads.ts para crear la lista compartida real
+ * por API (Fase C). Match type BROAD por defecto (mismo criterio que la fuente: un
+ * negativo BROAD de una sola palabra ya bloquea cualquier búsqueda que la contenga).
+ * Si se edita la prosa de GUIA_GADS_NEGATIVAS, mantené esta lista sincronizada.
+ */
+export const NEGATIVAS_UNIVERSALES_ES_CL: { texto: string; matchType: 'BROAD' }[] = [
+  // Empleo/trabajo
+  'trabajo', 'empleo', 'empleos', 'se busca', 'busco trabajo', 'sueldo', 'cuánto gana',
+  'ofertas de trabajo', 'postular', 'currículum', 'cv', 'práctica', 'pasantía', 'vacante',
+  // Educación/formación
+  'curso', 'cursos', 'capacitación', 'certificación veterinaria', 'escuela veterinaria',
+  'cómo estudiar', 'universidad', 'carrera de veterinaria', 'título',
+  // Hazlo tú mismo / informacional
+  'cómo cremar', 'cómo hacer', 'cremación casera', 'hazlo tú mismo', 'tutorial', 'paso a paso',
+  'wikipedia', 'qué significa', 'definición', 'qué es la cremación', 'foro', 'reddit',
+  // Gratis/regalo
+  'gratis', 'regalo', 'sorteo', 'promoción gratis', 'muestra gratis', 'descuento código', 'cupón',
+  // Segunda mano / no aplica al rubro
+  'usado', 'segunda mano', 'se vende', 'remate', 'liquidación',
+  // Empleo específico veterinario
+  'veterinario se necesita', 'clínica veterinaria empleo', 'auxiliar veterinario trabajo',
+].map(texto => ({ texto, matchType: 'BROAD' as const }))

@@ -23,12 +23,13 @@ import { resumenAds, resumenOrganico, isInsightsConfigurado } from './meta-insig
 import {
   isGoogleAdsConfigurado, resumenCampanas as resumenCampanasGoogle, listarKeywordsConQS, terminosBusqueda,
   pausarCampanaGoogle, activarCampanaGoogle, ajustarPresupuestoGoogle, pausarKeywordGoogle, activarKeywordGoogle,
-  agregarNegativaCampana, listarCampanasGestion,
+  agregarNegativaCampana, listarCampanasGestion, listarListasCompartidas, crearListaNegativasCompartida,
+  adjuntarListaATodasLasCampanas, eliminarListaCompartida,
 } from './google-ads'
 import { auditarCuenta } from './google-ads-audit'
 import {
   GUIA_GADS_ESTRUCTURA, GUIA_GADS_BIDDING, GUIA_GADS_RSA, GUIA_GADS_ASSETS, GUIA_GADS_NEGATIVAS,
-  GUIA_GADS_TERMINOS, GUIA_GADS_QS,
+  GUIA_GADS_TERMINOS, GUIA_GADS_QS, NEGATIVAS_UNIVERSALES_ES_CL,
 } from './google-ads-guia'
 
 /**
@@ -573,7 +574,7 @@ const TOOL_GADS_KEYWORD_ESTADO: Anthropic.Tool = {
 }
 const TOOL_GADS_NEGATIVA: Anthropic.Tool = {
   name: 'gads_negativa',
-  description: 'Agrega un término como palabra clave NEGATIVA a nivel de campaña (concordancia de frase por defecto). Úsala SOLO después de aplicar el workflow de GUIA_GADS_TERMINOS (mostrar tabla de candidatos con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación explícita — los UNCERTAIN necesitan un sí por término). Acción de escritura: requiere confirmado=true.',
+  description: 'Agrega UN término como palabra clave NEGATIVA a nivel de campaña (concordancia de frase por defecto). Para varios términos aprobados a la vez, usá gads_negativas_lote en su lugar (evita llamar esta una por una). Úsala SOLO después de aplicar el workflow de GUIA_GADS_TERMINOS (mostrar tabla de candidatos con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación explícita — los UNCERTAIN necesitan un sí por término). Acción de escritura: requiere confirmado=true.',
   input_schema: {
     type: 'object',
     properties: {
@@ -583,6 +584,59 @@ const TOOL_GADS_NEGATIVA: Anthropic.Tool = {
       confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
     },
     required: ['campaignId', 'texto'],
+  },
+}
+const TOOL_GADS_NEGATIVAS_LOTE: Anthropic.Tool = {
+  name: 'gads_negativas_lote',
+  description: 'Agrega VARIOS términos como negativas a nivel de campaña en una sola pasada (concordancia de frase por defecto). Úsala para el cierre del workflow de GUIA_GADS_TERMINOS cuando el dueño aprueba un lote de una vez (ej. "agregá todos los BAD") — evita llamar gads_negativa término por término. Acción de escritura: requiere confirmado=true, y solo después de haber mostrado la tabla completa con veredictos.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      items: {
+        type: 'array',
+        description: 'Términos a negativar, cada uno con la campaña a la que pertenece.',
+        items: {
+          type: 'object',
+          properties: {
+            campaignId: { type: 'string' },
+            texto: { type: 'string' },
+            matchType: { type: 'string', enum: ['EXACT', 'PHRASE', 'BROAD'] },
+          },
+          required: ['campaignId', 'texto'],
+        },
+      },
+      confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño aprobó explícitamente el lote completo en el chat.' },
+    },
+    required: ['items'],
+  },
+}
+const TOOL_GADS_LISTAS_NEGATIVAS: Anthropic.Tool = {
+  name: 'gads_listas_negativas',
+  description: 'Lista las listas de negativas COMPARTIDAS que existen hoy en la cuenta (nombre, cantidad de términos, a qué campañas están adjuntas). Úsala antes de proponer crear una nueva, para no duplicar.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+}
+const TOOL_GADS_CREAR_LISTA_NEGATIVAS: Anthropic.Tool = {
+  name: 'gads_crear_lista_negativas_universal',
+  description: 'Crea la lista de negativas UNIVERSAL ES-CL del rubro (empleo, educación, DIY/informacional, gratis, segunda mano — ver GUIA_GADS_NEGATIVAS) como lista COMPARTIDA y la adjunta a TODAS las campañas de la cuenta de una vez. Salta automáticamente los términos que ya existen como negativa (a nivel campaña o en otra lista). ⚠️ Acción de ALTO IMPACTO: afecta TODAS las campañas a la vez, no una sola — resumíselo así al dueño explícitamente antes de pedir confirmación ("esto va a aplicar a las N campañas de la cuenta"). Acción de escritura: requiere confirmado=true.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      nombre: { type: 'string', description: 'Nombre de la lista (sugerido: "Negativas universales ES-CL"). Opcional, tiene default.' },
+      confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat, entendiendo que aplica a TODAS las campañas.' },
+    },
+    required: [],
+  },
+}
+const TOOL_GADS_ELIMINAR_LISTA_NEGATIVAS: Anthropic.Tool = {
+  name: 'gads_eliminar_lista_negativas',
+  description: 'Elimina una lista de negativas compartida completa (se desadjunta de todas las campañas que la usaban). Acción de escritura irreversible desde el chat: requiere confirmado=true tras un sí explícito, mostrando antes cuántos términos y campañas afecta (usá gads_listas_negativas primero).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      resourceName: { type: 'string', description: 'resourceName exacto de la lista (de gads_listas_negativas).' },
+      confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
+    },
+    required: ['resourceName'],
   },
 }
 
@@ -697,7 +751,7 @@ export async function generarRespuestaMarketing(
   if (isGoogleAdsConfigurado()) {
     system.push({
       type: 'text',
-      text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). Para negativas, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto antes de negativar). Usá gads_auditar cuando te pidan un diagnóstico general.\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
+      text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa, gads_negativas_lote, gads_crear_lista_negativas_universal, gads_eliminar_lista_negativas) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). Para negativas de términos de búsqueda, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación — para un lote aprobado de una vez usá gads_negativas_lote, no llames gads_negativa repetidas veces). gads_crear_lista_negativas_universal es de ALTO IMPACTO (afecta TODAS las campañas a la vez, no una sola) — avisale eso al dueño explícitamente antes de pedir el sí; revisá primero con gads_listas_negativas que no exista ya una lista similar. Usá gads_auditar cuando te pidan un diagnóstico general.\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
       cache_control: { type: 'ephemeral' },
     })
   }
@@ -726,7 +780,8 @@ export async function generarRespuestaMarketing(
     tools.push(
       TOOL_GADS_RESUMEN, TOOL_GADS_KEYWORDS, TOOL_GADS_TERMINOS, TOOL_GADS_AUDITAR,
       TOOL_GADS_PAUSAR_CAMPANA, TOOL_GADS_ACTIVAR_CAMPANA, TOOL_GADS_PRESUPUESTO,
-      TOOL_GADS_KEYWORD_ESTADO, TOOL_GADS_NEGATIVA,
+      TOOL_GADS_KEYWORD_ESTADO, TOOL_GADS_NEGATIVA, TOOL_GADS_NEGATIVAS_LOTE,
+      TOOL_GADS_LISTAS_NEGATIVAS, TOOL_GADS_CREAR_LISTA_NEGATIVAS, TOOL_GADS_ELIMINAR_LISTA_NEGATIVAS,
     )
   }
   const convo: Anthropic.MessageParam[] = [...base]
@@ -1126,6 +1181,54 @@ export async function generarRespuestaMarketing(
               await agregarNegativaCampana(inp.campaignId, inp.texto, inp.matchType || 'PHRASE')
               resultText = `Listo: "${inp.texto}" agregada como negativa (${inp.matchType || 'PHRASE'}) en la campaña id=${inp.campaignId}.`
             }
+          }
+        } else if (tu.name === 'gads_negativas_lote') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { items?: { campaignId?: string; texto?: string; matchType?: 'EXACT' | 'PHRASE' | 'BROAD' }[]; confirmado?: boolean }
+            const items = (inp.items || []).filter(i => i?.campaignId && i?.texto)
+            if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (pasá confirmado=true recién después de que apruebe el lote completo, tras mostrar la tabla con veredicto).'
+            else if (items.length === 0) resultText = 'No recibí términos válidos (cada uno necesita campaignId y texto).'
+            else {
+              let ok = 0
+              const errores: string[] = []
+              for (const it of items) {
+                try { await agregarNegativaCampana(String(it.campaignId), String(it.texto), it.matchType || 'PHRASE'); ok++ }
+                catch (e) { errores.push(`"${it.texto}": ${e instanceof Error ? e.message : 'error'}`) }
+              }
+              resultText = `Listo: ${ok}/${items.length} negativas agregadas.${errores.length ? ` Fallaron: ${errores.join('; ')}.` : ''}`
+            }
+          }
+        } else if (tu.name === 'gads_listas_negativas') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const listas = await listarListasCompartidas()
+            resultText = listas.length === 0
+              ? 'No hay listas de negativas compartidas todavía (todas las negativas están a nivel campaña).'
+              : listas.map(l => `- "${l.nombre}" (${l.resourceName}): ${l.cantidadTerminos} términos, adjunta a: ${l.campanas.join(', ') || '(ninguna campaña)'}`).join('\n')
+          }
+        } else if (tu.name === 'gads_crear_lista_negativas_universal') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { nombre?: string; confirmado?: boolean }
+            if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción — recordale que esto aplica a TODAS las campañas de la cuenta, no a una sola.'
+            else {
+              const nombre = inp.nombre?.trim() || 'Negativas universales ES-CL'
+              const r = await crearListaNegativasCompartida(nombre, NEGATIVAS_UNIVERSALES_ES_CL)
+              if (r.agregados === 0) resultText = `No se creó la lista: los ${r.duplicados} términos ya existían como negativa (a nivel campaña o en otra lista).`
+              else {
+                const attach = await adjuntarListaATodasLasCampanas(r.resourceName)
+                resultText = `Lista "${nombre}" creada con ${r.agregados} términos (${r.duplicados} ya existían y se saltaron) y adjuntada a ${attach.adjuntadas} campaña(s)${attach.yaTenian ? ` (${attach.yaTenian} ya la tenían)` : ''}.`
+              }
+            }
+          }
+        } else if (tu.name === 'gads_eliminar_lista_negativas') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { resourceName?: string; confirmado?: boolean }
+            if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción.'
+            else if (!inp.resourceName) resultText = 'Falta el resourceName de la lista (usá gads_listas_negativas para verlo).'
+            else { await eliminarListaCompartida(inp.resourceName); resultText = 'Lista eliminada y desadjuntada de todas las campañas que la usaban.' }
           }
         } else {
           resultText = 'Herramienta no disponible.'
