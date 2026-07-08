@@ -92,7 +92,7 @@ export const SHEETS: Record<string, string[]> = {
   precios_generales: ['id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd'],
   precios_convenio: ['id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd'],
   precios_especiales: ['id', 'veterinaria_id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd'],
-  productos: ['id', 'nombre', 'categoria', 'precio', 'foto_url', 'stock', 'activo', 'fecha_creacion'],
+  productos: ['id', 'nombre', 'categoria', 'precio', 'foto_url', 'stock', 'activo', 'mostrar_web', 'fecha_creacion'],
   categorias_productos: ['id', 'nombre', 'activo', 'fecha_creacion'],
   informes_veterinaria: [
     'id', 'veterinaria_id', 'veterinaria_nombre',
@@ -111,7 +111,7 @@ export const SHEETS: Record<string, string[]> = {
   // Cobros que perseguimos por ficha: producto ADICIONAL agregado o DIFERENCIA
   // de peso. estado: pendiente → cliente_confirmo → pagado.
   cobros: ['id', 'cliente_id', 'tipo', 'detalle', 'monto', 'estado', 'message_id', 'fecha_creacion', 'fecha_cliente_confirmo', 'fecha_pagado'],
-  descuentos: ['id', 'nombre', 'tipo', 'valor', 'activo', 'fecha_creacion'],
+  descuentos: ['id', 'nombre', 'tipo', 'valor', 'activo', 'foto_url', 'mostrar_web', 'fecha_creacion'],
   usuarios: ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion'],
   asistencia: [
     'id', 'usuario_id', 'usuario_nombre', 'fecha', 'dia_semana', 'es_findesemana',
@@ -383,5 +383,20 @@ export const SHEETS: Record<string, string[]> = {
   // Gastos manuales (§2.2) — todo neto.
   eerr_gastos_manuales: [
     'id', 'tipo_asignacion', 'partida_id', 'detalle', 'monto', 'fecha', 'fecha_creacion',
+  ],
+  // ── Módulo Web (panel administrador del sitio público) ──────────────────────
+  // Servicios que se muestran en la web (cremación individual/premium/sin devolución, eutanasia).
+  web_servicios: [
+    'id', 'nombre', 'slug', 'resumen', 'descripcion', 'foto_url',
+    'precio_desde', 'orden', 'publicado', 'seo_titulo', 'seo_desc', 'fecha_creacion',
+  ],
+  // Blog del sitio.
+  web_posts: [
+    'id', 'titulo', 'slug', 'categoria', 'extracto', 'contenido', 'foto_url',
+    'autor', 'fecha', 'publicado', 'seo_titulo', 'seo_desc', 'fecha_creacion',
+  ],
+  // Bloques de texto/imagen editables de páginas fijas (home, nosotros, convenios, contacto, eutanasia).
+  web_paginas: [
+    'id', 'pagina', 'clave', 'titulo', 'contenido', 'foto_url', 'orden', 'fecha_creacion',
   ],
 }

@@ -4,8 +4,58 @@ import { getToken } from 'next-auth/jwt'
 import { normalizarRol } from '@/lib/roles'
 import { esRutaAvanzada, getPermisosConfig, puedeAcceder } from '@/lib/permisos'
 
+// ── Sitio público (crematorioalmaanimal.cl) ─────────────────────────────────
+// Rutas de marketing que, en el dominio del sitio, se reescriben a /sitio/*.
+// En petcrem.vercel.app estas mismas rutas siguen siendo el panel admin (ej.
+// /servicios = Eutanasias) → el enrutado depende del hostname.
+const SITIO_EXACT = new Set([
+  '/', '/nosotros', '/servicios', '/convenios', '/contacto',
+  '/anforas', '/catalogo-anforas', '/blog',
+  '/terminos-y-condiciones', '/politicas-de-privacidad',
+  '/sitemap.xml', '/robots.txt',
+  // Landings de captación (Google Ads + SEO).
+  '/cremacion-de-mascotas', '/eutanasia-a-domicilio', '/cremacion-de-perros', '/cremacion-de-gatos',
+])
+const SITIO_PREFIX = ['/servicios/', '/blog/']
+function esRutaSitioPublico(p: string): boolean {
+  return SITIO_EXACT.has(p) || SITIO_PREFIX.some(pre => p.startsWith(pre))
+}
+// URLs viejas de Webflow → nuevas (301 permanente, para no perder SEO ni links).
+function redireccionVieja(p: string): string | null {
+  if (p.startsWith('/service/')) return '/servicios/' + p.slice('/service/'.length)
+  if (p.startsWith('/post-category/')) return '/blog'
+  if (p.startsWith('/post/')) return '/blog/' + p.slice('/post/'.length)
+  if (p === '/catalogo-anforas') return '/anforas'
+  // Restos de plantilla / ecommerce viejo que ya no existen → home.
+  if (p.startsWith('/resources/') || p.startsWith('/product/') || p.startsWith('/category/')
+    || p === '/checkout' || p === '/paypal-checkout' || p === '/order-confirmation') return '/'
+  return null
+}
+function esDominioSitio(host: string): boolean {
+  const h = (host || '').toLowerCase().split(':')[0]
+  return h === 'crematorioalmaanimal.cl' || h.endsWith('.crematorioalmaanimal.cl')
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
+
+  // Dominio del sitio público: 301 de URLs viejas + reescritura de las URLs
+  // limpias del marketing al route handler /sitio/* (páginas fieles de Webflow).
+  // El panel admin sigue disponible en este dominio por sus rutas (/login, /dashboard…).
+  if (esDominioSitio(req.headers.get('host') || '')) {
+    const destino = redireccionVieja(pathname)
+    if (destino) {
+      const url = req.nextUrl.clone()
+      url.pathname = destino
+      url.search = ''
+      return NextResponse.redirect(url, 301)
+    }
+    if (esRutaSitioPublico(pathname)) {
+      const url = req.nextUrl.clone()
+      url.pathname = '/sitio' + (pathname === '/' ? '' : pathname)
+      return NextResponse.rewrite(url)
+    }
+  }
 
   // Rutas públicas: login, NextAuth API, init-sheets, reorder-columns (operaciones admin de schema),
   // webhook de Resend (lo llama Resend, no un usuario; se valida por signature),
@@ -14,6 +64,9 @@ export async function proxy(req: NextRequest) {
   // (GET de precios para mostrar tabla, POST de inscripción).
   if (
     pathname === '/login' ||
+    // Sitio público: el route handler /sitio/* + sus assets estáticos
+    // (/sitio/site.css, /sitio/js, /sitio/assets) son públicos, sin sesión.
+    pathname.startsWith('/sitio') ||
     pathname.startsWith('/api/auth') ||
     // Política de privacidad pública (la exige Meta para publicar la app + es buena práctica).
     pathname === '/privacidad' ||

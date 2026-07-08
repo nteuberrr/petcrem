@@ -953,16 +953,17 @@ export default function ConfiguracionPage() {
           <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 max-w-3xl">
             <h2 className="text-base font-bold text-gray-900 mb-1">Seguimiento en vivo de correos electrónicos enviados</h2>
             <p className="text-sm text-gray-600 mb-4">
-              Si está activo, te llega una <b>copia oculta (BCC)</b> a tu correo de <b>cada email transaccional</b> que envíe el sistema (registro, inicio de cremación, despachos, eutanasias, informes de veterinaria…). <b>No incluye</b> el mailing masivo.
+              Si está activo, llega una <b>copia oculta (BCC)</b> a los correos configurados de <b>cada email transaccional</b> que envíe el sistema (registro, inicio de cremación, despachos, eutanasias, informes de veterinaria…). <b>No incluye</b> el mailing masivo.
             </p>
             <div className="flex items-center gap-3 mb-4">
               <Toggle checked={segActivo} onChange={setSegActivo} />
               <span className="text-sm font-medium text-gray-700">{segActivo ? 'Activado' : 'Desactivado'}</span>
             </div>
-            <label className="text-xs font-semibold text-gray-700">Reenviar copia a este correo</label>
-            <input type="email" value={segEmail} onChange={e => setSegEmail(e.target.value)}
-              placeholder="tucorreo@ejemplo.com"
+            <label className="text-xs font-semibold text-gray-700">Reenviar copia a estos correos</label>
+            <input type="text" value={segEmail} onChange={e => setSegEmail(e.target.value)}
+              placeholder="uno o varios separados por coma"
               className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            <p className="text-[11px] text-gray-500 mt-1">Puedes poner <b>varios correos separados por coma</b> y la copia le llega a todos.</p>
             <div className="flex items-center gap-3 mt-4">
               <button onClick={guardarSeguimiento} disabled={segSaving}
                 className="bg-brand hover:bg-brand-dark text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">

@@ -195,38 +195,50 @@ function buildAttachmentsPayload(attachments: AttachmentSpec[] | undefined) {
  * SOLO a los items con `bccSeguimiento: true` (opt-in) — así cubre los correos
  * de etapa al tutor sin inundar la casilla con las campañas masivas.
  */
-interface SeguimientoConfig { activo: boolean; email: string | null; tipos: Record<string, boolean> }
+interface SeguimientoConfig { activo: boolean; emails: string[]; tipos: Record<string, boolean> }
 let segCache: { ts: number; cfg: SeguimientoConfig } | null = null
+
+/** Parsea uno o VARIOS correos de seguimiento (separados por coma o punto y coma). */
+function parseEmailsSeguimiento(raw: string | undefined | null): string[] {
+  if (!raw) return []
+  const vistos = new Set<string>()
+  for (const parte of String(raw).split(/[,;\n]/)) {
+    const e = sanitizarEmail(parte)
+    if (e) vistos.add(e.toLowerCase())
+  }
+  return [...vistos]
+}
+
 async function getSeguimientoConfig(): Promise<SeguimientoConfig> {
   if (segCache && Date.now() - segCache.ts < 60000) return segCache.cfg
   try {
     const rows = await getSheetData('empresa_config')
     const row = rows.find(r => r.id === '1') || rows[0]
     const activo = String(row?.email_seguimiento_activo || '').toUpperCase() === 'TRUE'
-    const email = activo ? sanitizarEmail(row?.email_seguimiento) : null
+    const emails = activo ? parseEmailsSeguimiento(row?.email_seguimiento) : []
     let tipos: Record<string, boolean> = {}
     try {
       const parsed = JSON.parse(row?.seguimiento_tipos || '{}')
       if (parsed && typeof parsed === 'object') tipos = parsed as Record<string, boolean>
     } catch { /* JSON inválido → se asume todos los tipos ON */ }
-    const cfg: SeguimientoConfig = { activo, email, tipos }
+    const cfg: SeguimientoConfig = { activo, emails, tipos }
     segCache = { ts: Date.now(), cfg }
     return cfg
   } catch (e) {
     console.warn('[resend-mailer] no se pudo leer seguimiento de correos:', e)
-    return { activo: false, email: null, tipos: {} }
+    return { activo: false, emails: [], tipos: {} }
   }
 }
 
 /**
- * BCC de seguimiento para un correo. null si el master está apagado, si no hay
- * dirección, o si el TIPO está desactivado explícitamente en la config por-tipo.
+ * BCC de seguimiento para un correo (uno o varios destinatarios). null si el master
+ * está apagado, si no hay direcciones, o si el TIPO está desactivado en la config.
  */
-async function getSeguimientoBcc(tipo?: string): Promise<string | null> {
+async function getSeguimientoBcc(tipo?: string): Promise<string[] | null> {
   const c = await getSeguimientoConfig()
-  if (!c.activo || !c.email) return null
+  if (!c.activo || c.emails.length === 0) return null
   if (tipo && c.tipos[tipo] === false) return null
-  return c.email
+  return c.emails
 }
 
 /** Registra el envío en correos_log si el correo trae metadatos de seguimiento. */
@@ -274,7 +286,7 @@ export async function sendEmail(opts: SendOpts): Promise<SendResult> {
     const res = await client.emails.send({
       from: opts.from || getFromAddress(),
       to: opts.to,
-      bcc: bcc || undefined,
+      bcc: bcc && bcc.length ? bcc : undefined,
       subject: opts.subject,
       html,
       replyTo: opts.reply_to,
@@ -366,10 +378,10 @@ export async function sendBatch(emails: SendOpts[]): Promise<SendResult[]> {
     const segCfg = validos.some(v => v.opts.bccSeguimiento && !v.opts.noBcc)
       ? await getSeguimientoConfig()
       : null
-    const bccDe = (o: SendOpts): string | undefined => {
-      if (!o.bccSeguimiento || o.noBcc || !segCfg?.activo || !segCfg.email) return undefined
+    const bccDe = (o: SendOpts): string[] | undefined => {
+      if (!o.bccSeguimiento || o.noBcc || !segCfg?.activo || segCfg.emails.length === 0) return undefined
       if (o.seguimiento?.tipo && segCfg.tipos[o.seguimiento.tipo] === false) return undefined
-      return segCfg.email
+      return segCfg.emails
     }
     const payload = validos.map((v, i) => ({
       from: v.opts.from || getFromAddress(),

@@ -1,0 +1,84 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { leerTemplate, RUTA_A_TEMPLATE, robotsTxt, construirSitemap } from '@/lib/sitio/render'
+import { getSheetData } from '@/lib/datastore'
+import { renderProductosWeb } from '@/lib/sitio/productos-html'
+import { renderServiciosWeb } from '@/lib/sitio/servicios-html'
+import { renderPostsWeb, renderPostDetalle, buscarPost } from '@/lib/sitio/blog-html'
+import { renderTextos } from '@/lib/sitio/paginas-html'
+import { LANDINGS, renderLanding } from '@/lib/sitio/landings'
+
+const HTML_HEADERS = {
+  'content-type': 'text/html; charset=utf-8',
+  'cache-control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
+}
+
+/**
+ * Sitio público crematorioalmaanimal.cl — sirve las páginas fieles de Webflow.
+ * El proxy (host-based) reescribe las URLs limpias del dominio de marketing a
+ * /sitio/<ruta>; acá se resuelve la plantilla y se devuelve como HTML completo.
+ */
+export const dynamic = 'force-dynamic'
+
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug?: string[] }> }) {
+  const { slug } = await params
+  const key = (slug || []).join('/')
+
+  // robots.txt + sitemap.xml del sitio público.
+  if (key === 'robots.txt') {
+    return new NextResponse(robotsTxt(), { headers: { 'content-type': 'text/plain; charset=utf-8' } })
+  }
+  if (key === 'sitemap.xml') {
+    const [servicios, posts] = await Promise.all([
+      getSheetData('web_servicios').catch(() => []),
+      getSheetData('web_posts').catch(() => []),
+    ])
+    return new NextResponse(construirSitemap(servicios, posts), {
+      headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=0, s-maxage=3600' },
+    })
+  }
+
+  // Landings de captación (Google Ads + SEO).
+  if (LANDINGS[key]) {
+    return new NextResponse(renderLanding(LANDINGS[key]), { status: 200, headers: HTML_HEADERS })
+  }
+
+  // Detalle de post: /blog/<slug> → shell post-detalle + contenido de web_posts.
+  if (key.startsWith('blog/')) {
+    const posts = await getSheetData('web_posts').catch(() => [])
+    const post = buscarPost(posts, key.slice('blog/'.length))
+    const shell = leerTemplate('post-detalle')
+    if (post && shell) {
+      return new NextResponse(renderPostDetalle(shell, post), { status: 200, headers: HTML_HEADERS })
+    }
+    return new NextResponse('Página no encontrada', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } })
+  }
+
+  let tpl = RUTA_A_TEMPLATE[key]
+  // Detalle de servicio: /servicios/<slug> → plantilla service-<slug> (fiel).
+  if (!tpl && key.startsWith('servicios/')) tpl = 'service-' + key.slice('servicios/'.length)
+  let html = tpl ? leerTemplate(tpl) : null
+  if (!html) {
+    return new NextResponse('Página no encontrada', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } })
+  }
+
+  // Inyección de contenido dinámico según la página.
+  if (tpl === 'catalogo-anforas' && html.includes('<!--INJECT:productos-->')) {
+    const productos = await getSheetData('productos').catch(() => [])
+    html = html.replace('<!--INJECT:productos-->', renderProductosWeb(productos))
+  }
+  if (tpl === 'servicios' && html.includes('<!--INJECT:servicios-->')) {
+    const servicios = await getSheetData('web_servicios').catch(() => [])
+    html = html.replace('<!--INJECT:servicios-->', renderServiciosWeb(servicios))
+  }
+  if (tpl === 'blog' && html.includes('<!--INJECT:posts-->')) {
+    const posts = await getSheetData('web_posts').catch(() => [])
+    html = html.replace('<!--INJECT:posts-->', renderPostsWeb(posts))
+  }
+  // Textos editables de páginas fijas (web_paginas).
+  if (html.includes('<!--PAG:')) {
+    const paginas = await getSheetData('web_paginas').catch(() => [])
+    html = renderTextos(html, paginas)
+  }
+
+  return new NextResponse(html, { status: 200, headers: HTML_HEADERS })
+}

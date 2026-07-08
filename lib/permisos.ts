@@ -51,6 +51,8 @@ export const MODULOS: Modulo[] = [
   { key: 'configuracion', label: 'Configuración (Precios, Artículos, Descuentos, Jornada)', pages: ['/configuracion'], apis: ['/api/precios', '/api/productos', '/api/categorias-productos', '/api/especies', '/api/servicios', '/api/descuentos', '/api/tipos-servicio', '/api/jornada-config', '/api/empresa/informe'], def: { admin2: true, operador: false } },
   { key: 'mailing', label: 'Campañas (Mail / Instagram / Facebook)', pages: ['/mailing'], apis: ['/api/mailing'], def: { admin2: false, operador: false } },
   { key: 'facturacion', label: 'Facturación (Boletas, Facturas, NC)', pages: ['/facturacion'], apis: ['/api/facturacion'], def: { admin2: false, operador: false } },
+  // Panel administrador del sitio público (Web). Owner-only por defecto, activable.
+  { key: 'web', label: 'Web (sitio público)', pages: ['/web'], apis: ['/api/web'], def: { admin2: false, operador: false } },
   { key: 'eerr', label: 'Estado de Resultados', pages: ['/estado-resultados'], apis: ['/api/eerr'], def: { admin2: false, operador: false } },
 ]
 
