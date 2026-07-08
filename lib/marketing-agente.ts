@@ -20,6 +20,16 @@ import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, type SlotsPlantilla } 
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
 import { publicarItem } from './marketing-publicar'
 import { resumenAds, resumenOrganico, isInsightsConfigurado } from './meta-insights'
+import {
+  isGoogleAdsConfigurado, resumenCampanas as resumenCampanasGoogle, listarKeywordsConQS, terminosBusqueda,
+  pausarCampanaGoogle, activarCampanaGoogle, ajustarPresupuestoGoogle, pausarKeywordGoogle, activarKeywordGoogle,
+  agregarNegativaCampana, listarCampanasGestion,
+} from './google-ads'
+import { auditarCuenta } from './google-ads-audit'
+import {
+  GUIA_GADS_ESTRUCTURA, GUIA_GADS_BIDDING, GUIA_GADS_RSA, GUIA_GADS_ASSETS, GUIA_GADS_NEGATIVAS,
+  GUIA_GADS_TERMINOS, GUIA_GADS_QS,
+} from './google-ads-guia'
 
 /**
  * AGENTE DE MARKETING / CEO del Crematorio Alma Animal. Un solo agente Claude con
@@ -475,6 +485,107 @@ const TOOL_METRICAS: Anthropic.Tool = {
   },
 }
 
+// ─── Google Ads (Fase A del plan de agente Google Ads) ─────────────────────────
+// REGLA DURA: toda tool de ESCRITURA exige el parámetro confirmado=true. El agente
+// debe resumir la acción exacta (qué campaña/keyword/monto) y esperar un sí explícito
+// del dueño en el chat ANTES de llamar la tool con confirmado=true — nunca en cadena.
+const TOOL_GADS_RESUMEN: Anthropic.Tool = {
+  name: 'gads_resumen',
+  description: 'Trae el estado REAL de Google Ads: campañas con gasto/CTR/CPC/conversiones e Impression Share (cuánto % de las búsquedas elegibles se está ganando y por qué se pierde el resto). Úsala cuando el dueño pregunte cómo van los anuncios de Google.',
+  input_schema: {
+    type: 'object',
+    properties: { periodo: { type: 'string', enum: ['last_7d', 'last_14d', 'last_30d', 'this_month', 'last_month'], description: 'Default last_30d.' } },
+    required: [],
+  },
+}
+const TOOL_GADS_KEYWORDS: Anthropic.Tool = {
+  name: 'gads_keywords',
+  description: 'Lista las keywords activas de Google Ads con Quality Score, gasto, clics y CTR. Úsala para revisar rendimiento de keywords o detectar candidatas a pausar (basura/QS bajo).',
+  input_schema: {
+    type: 'object',
+    properties: { periodo: { type: 'string', enum: ['last_7d', 'last_14d', 'last_30d', 'this_month', 'last_month'], description: 'Default last_30d.' } },
+    required: [],
+  },
+}
+const TOOL_GADS_TERMINOS: Anthropic.Tool = {
+  name: 'gads_terminos',
+  description: 'Lista los términos de búsqueda REALES (lo que la gente escribió, no la keyword que activó el anuncio) con gasto e impresiones, para el workflow de negativas (ver GUIA_GADS_TERMINOS: candidato = ≥100 impresiones y ≥$10.000 sin conversión; nunca negativar sin mostrar la tabla y esperar aprobación).',
+  input_schema: {
+    type: 'object',
+    properties: { periodo: { type: 'string', enum: ['last_7d', 'last_14d', 'last_30d', 'this_month', 'last_month'], description: 'Default last_30d.' } },
+    required: [],
+  },
+}
+const TOOL_GADS_AUDITAR: Anthropic.Tool = {
+  name: 'gads_auditar',
+  description: 'Corre la auditoría completa de la cuenta de Google Ads (bidding vs playbook, valores de conversión incoherentes, RSAs incompletos/sin pinning, recursos insuficientes, keywords basura, Impression Share perdido, negativas, higiene) y devuelve los hallazgos con severidad y $ estimado. Úsala cuando el dueño pida "auditar la cuenta" o un diagnóstico general.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+}
+const TOOL_GADS_PAUSAR_CAMPANA: Anthropic.Tool = {
+  name: 'gads_pausar_campana',
+  description: 'PAUSA una campaña de Google Ads. Acción de escritura: antes de llamarla con confirmado=true, resumile al dueño la campaña exacta y su gasto reciente, y esperá un sí explícito.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      campaignId: { type: 'string', description: 'Id numérico de la campaña (de gads_resumen).' },
+      confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
+    },
+    required: ['campaignId'],
+  },
+}
+const TOOL_GADS_ACTIVAR_CAMPANA: Anthropic.Tool = {
+  name: 'gads_activar_campana',
+  description: 'ACTIVA (des-pausa) una campaña de Google Ads. Acción de escritura: requiere confirmado=true tras un sí explícito del dueño.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      campaignId: { type: 'string', description: 'Id numérico de la campaña.' },
+      confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
+    },
+    required: ['campaignId'],
+  },
+}
+const TOOL_GADS_PRESUPUESTO: Anthropic.Tool = {
+  name: 'gads_presupuesto',
+  description: 'Cambia el presupuesto DIARIO (en CLP) de una campaña de Google Ads. Bloquea automáticamente si el presupuesto es compartido con otras campañas. Acción de escritura: requiere confirmado=true tras un sí explícito del dueño, mostrando el monto anterior y el nuevo.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      campaignId: { type: 'string', description: 'Id numérico de la campaña.' },
+      montoClp: { type: 'number', description: 'Nuevo presupuesto diario en pesos chilenos.' },
+      confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
+    },
+    required: ['campaignId', 'montoClp'],
+  },
+}
+const TOOL_GADS_KEYWORD_ESTADO: Anthropic.Tool = {
+  name: 'gads_keyword_estado',
+  description: 'Pausa o activa una keyword de Google Ads por su resourceName (de gads_keywords). Acción de escritura: requiere confirmado=true tras un sí explícito del dueño.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      resourceName: { type: 'string', description: 'resourceName exacto de la keyword (viene de gads_keywords).' },
+      estado: { type: 'string', enum: ['pausar', 'activar'] },
+      confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
+    },
+    required: ['resourceName', 'estado'],
+  },
+}
+const TOOL_GADS_NEGATIVA: Anthropic.Tool = {
+  name: 'gads_negativa',
+  description: 'Agrega un término como palabra clave NEGATIVA a nivel de campaña (concordancia de frase por defecto). Úsala SOLO después de aplicar el workflow de GUIA_GADS_TERMINOS (mostrar tabla de candidatos con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación explícita — los UNCERTAIN necesitan un sí por término). Acción de escritura: requiere confirmado=true.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      campaignId: { type: 'string', description: 'Id numérico de la campaña (de gads_terminos).' },
+      texto: { type: 'string', description: 'Término a negativar.' },
+      matchType: { type: 'string', enum: ['EXACT', 'PHRASE', 'BROAD'], description: 'Default PHRASE.' },
+      confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
+    },
+    required: ['campaignId', 'texto'],
+  },
+}
+
 const TOOL_EDITAR_IMG: Anthropic.Tool = {
   name: 'editar_imagen_pieza',
   description: 'Ajusta UNA imagen de una pieza del calendario ya generada, PRESERVANDO el resto. Si es una placa de marca, edita su texto/diseño y la re-renderiza (gratis); si es una foto, la edita image-to-image. Ej: "arreglá la slide 3 de la #123" (indice=3). SIEMPRE indicá el "indice" de la slide a ajustar: en un carrusel NO se editan todas a la vez (si el dueño quiere cambiar varias, llamá la herramienta una vez por cada slide con su indice). En la instrucción describí SOLO el cambio puntual.',
@@ -583,6 +694,13 @@ export async function generarRespuestaMarketing(
   const system: Anthropic.TextBlockParam[] = [
     { type: 'text', text: `${REGLAS_INVIOLABLES}\n\n${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${PLANTILLAS_INFO}\n\n${MARCA_GRAFICO}\n\n${GUIA_SOCIAL}\n\n${GUIA_EMAIL}\n\n${GUIA_PERFIL}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
   ]
+  if (isGoogleAdsConfigurado()) {
+    system.push({
+      type: 'text',
+      text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). Para negativas, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto antes de negativar). Usá gads_auditar cuando te pidan un diagnóstico general.\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
+      cache_control: { type: 'ephemeral' },
+    })
+  }
   const ajustes = [
     cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO (trátalos como la verdad actual; REEMPLAZAN el guion base si chocan, salvo: precios siempre de TARIFAS VIGENTES):\n${cfg.instrucciones.trim()}`,
     cfg?.calibracion?.trim() && `GUÍA DE ESTILO / LÍNEA EDITORIAL:\n${cfg.calibracion.trim()}`,
@@ -604,6 +722,13 @@ export async function generarRespuestaMarketing(
   system.push({ type: 'text', text: REGLAS_INVIOLABLES })
 
   const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_PLANTILLA, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG, TOOL_NUEVA_IMAGEN, TOOL_REUTILIZAR, TOOL_USAR_IMGS]
+  if (isGoogleAdsConfigurado()) {
+    tools.push(
+      TOOL_GADS_RESUMEN, TOOL_GADS_KEYWORDS, TOOL_GADS_TERMINOS, TOOL_GADS_AUDITAR,
+      TOOL_GADS_PAUSAR_CAMPANA, TOOL_GADS_ACTIVAR_CAMPANA, TOOL_GADS_PRESUPUESTO,
+      TOOL_GADS_KEYWORD_ESTADO, TOOL_GADS_NEGATIVA,
+    )
+  }
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
   let cambios = false
@@ -918,7 +1043,89 @@ export async function generarRespuestaMarketing(
             const r = await setImagenesPieza(id, codigos)
             cambios = true
             const aviso = r.noEncontrados.length ? ` (no encontré: ${r.noEncontrados.join(', ')})` : ''
-            resultText = `La pieza #${r.item.id} (${r.item.canal}) quedó con ${r.n} imagen(es) de ${codigos.join(', ')}${aviso}, en orden y SIN regenerar.${r.item.imagen_url ? ` Mostrá la primera con ![](${r.item.imagen_url}).` : ''} Si el dueño lo pide, publicала o programала.`
+            resultText = `La pieza #${r.item.id} (${r.item.canal}) quedó con ${r.n} imagen(es) de ${codigos.join(', ')}${aviso}, en orden y SIN regenerar.${r.item.imagen_url ? ` Mostrá la primera con ![](${r.item.imagen_url}).` : ''} Si el dueño lo pide, publicala o programala.`
+          }
+        } else if (tu.name === 'gads_resumen') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { periodo?: string }
+            const periodo = inp.periodo || 'last_30d'
+            const [r, gestion] = await Promise.all([resumenCampanasGoogle(periodo), listarCampanasGestion()])
+            const porId = new Map(gestion.campanas.map(c => [c.id, c]))
+            const lineas = r.campanas.map(c => {
+              const g = porId.get(c.id)
+              return `- ${c.nombre} [${c.status}] (id=${c.id}): gasto ${fmtPrecio(c.gasto)}${g ? ` · presupuesto diario ${fmtPrecio(g.presupuestoClp)}${g.compartido ? ' (COMPARTIDO)' : ''}` : ''} · impresiones ${c.impresiones} · clics ${c.clicks} · CTR ${c.ctr.toFixed(2)}% · CPC ${fmtPrecio(c.cpc)} · conversiones ${c.conversiones}`
+            }).join('\n')
+            resultText = `GOOGLE ADS (${periodo}, ${r.moneda}) — CUENTA: gasto ${fmtPrecio(r.cuenta.gasto)} · clics ${r.cuenta.clicks} · CTR ${r.cuenta.ctr.toFixed(2)}% · CPC ${fmtPrecio(r.cuenta.cpc)} · conversiones ${r.cuenta.conversiones}\nPOR CAMPAÑA:\n${lineas || '(sin campañas con datos)'}`
+          }
+        } else if (tu.name === 'gads_keywords') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { periodo?: string }
+            const { keywords, moneda } = await listarKeywordsConQS(inp.periodo || 'last_30d')
+            const lineas = keywords.slice(0, 40).map(k => `- "${k.texto}" [${k.matchType}] (${k.campana}, id campaña=${k.campanaId})${k.enVivo ? '' : ' ⚠️ NO está gastando de verdad: su campaña o grupo de anuncios está pausado, aunque la keyword en sí figure "enabled"'}: QS=${k.qualityScore ?? 's/d'} · gasto ${fmtPrecio(k.gasto)} · clics ${k.clicks} · CTR ${k.ctr.toFixed(2)}% · resourceName=${k.resourceName}`).join('\n')
+            resultText = `KEYWORDS con status propio ENABLED (${moneda}, ordenadas por gasto) — OJO: el status propio de la keyword NO refleja si su campaña/grupo están pausados; fijate en el aviso ⚠️ de cada línea antes de decir que algo "está activo":\n${lineas || '(sin keywords con datos)'}`
+          }
+        } else if (tu.name === 'gads_terminos') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { periodo?: string }
+            const { terminos, moneda } = await terminosBusqueda(inp.periodo || 'last_30d')
+            const lineas = terminos.map(t => `- "${t.termino}" (${t.campana}, id campaña=${t.campanaId}): impresiones ${t.impresiones} · gasto ${fmtPrecio(t.gasto)} · conversiones ${t.conversiones}`).join('\n')
+            resultText = `TÉRMINOS DE BÚSQUEDA REALES (${moneda}, ordenados por gasto):\n${lineas || '(sin términos con datos)'}\n\nAplicá el workflow de GUIA_GADS_TERMINOS: candidato = ≥100 impresiones y ≥$10.000 sin conversión; mostrale al dueño la tabla con veredicto BAD/KEEP/UNCERTAIN y esperá aprobación antes de llamar gads_negativa.`
+          }
+        } else if (tu.name === 'gads_auditar') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const hallazgos = await auditarCuenta()
+            if (hallazgos.length === 0) resultText = 'Auditoría sin hallazgos relevantes por ahora.'
+            else resultText = hallazgos.map(h => `[${h.severidad.toUpperCase()}] (${h.area}) ${h.titulo}${h.dolaresEstimados ? ` — ~${fmtPrecio(h.dolaresEstimados)}` : ''}\n  ${h.detalle}\n  → ${h.accionSugerida}`).join('\n\n')
+          }
+        } else if (tu.name === 'gads_pausar_campana' || tu.name === 'gads_activar_campana') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { campaignId?: string; confirmado?: boolean }
+            if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (pasá confirmado=true recién después de que diga que sí).'
+            else if (!inp.campaignId) resultText = 'Falta el id de la campaña.'
+            else {
+              if (tu.name === 'gads_pausar_campana') await pausarCampanaGoogle(inp.campaignId)
+              else await activarCampanaGoogle(inp.campaignId)
+              resultText = `Listo: campaña id=${inp.campaignId} ${tu.name === 'gads_pausar_campana' ? 'pausada' : 'activada'} en Google Ads.`
+            }
+          }
+        } else if (tu.name === 'gads_presupuesto') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { campaignId?: string; montoClp?: number; confirmado?: boolean }
+            if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (pasá confirmado=true recién después de que diga que sí).'
+            else if (!inp.campaignId || !inp.montoClp) resultText = 'Faltan datos (campaignId y montoClp).'
+            else {
+              await ajustarPresupuestoGoogle(inp.campaignId, inp.montoClp)
+              resultText = `Listo: presupuesto diario de la campaña id=${inp.campaignId} ajustado a ${fmtPrecio(inp.montoClp)}.`
+            }
+          }
+        } else if (tu.name === 'gads_keyword_estado') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { resourceName?: string; estado?: string; confirmado?: boolean }
+            if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (pasá confirmado=true recién después de que diga que sí).'
+            else if (!inp.resourceName || !inp.estado) resultText = 'Faltan datos (resourceName y estado).'
+            else {
+              if (inp.estado === 'pausar') await pausarKeywordGoogle(inp.resourceName)
+              else await activarKeywordGoogle(inp.resourceName)
+              resultText = `Listo: keyword ${inp.estado === 'pausar' ? 'pausada' : 'activada'}.`
+            }
+          }
+        } else if (tu.name === 'gads_negativa') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { campaignId?: string; texto?: string; matchType?: 'EXACT' | 'PHRASE' | 'BROAD'; confirmado?: boolean }
+            if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (pasá confirmado=true recién después de que diga que sí, tras mostrar la tabla de candidatos con veredicto).'
+            else if (!inp.campaignId || !inp.texto) resultText = 'Faltan datos (campaignId y texto).'
+            else {
+              await agregarNegativaCampana(inp.campaignId, inp.texto, inp.matchType || 'PHRASE')
+              resultText = `Listo: "${inp.texto}" agregada como negativa (${inp.matchType || 'PHRASE'}) en la campaña id=${inp.campaignId}.`
+            }
           }
         } else {
           resultText = 'Herramienta no disponible.'

@@ -206,6 +206,13 @@ export interface KeywordGoogle {
   texto: string
   matchType: string
   campana: string
+  /** Estado de la CAMPAÑA dueña (ENABLED/PAUSED/REMOVED) — el status propio de la keyword
+   *  puede ser ENABLED aunque la campaña o el grupo de anuncios estén pausados; en ese caso
+   *  la keyword NO está gastando de verdad. Ver `enVivo`. */
+  campanaEstado: string
+  grupoAnuncioEstado: string
+  /** true SOLO si la keyword está realmente sirviendo: ella, su grupo y su campaña ENABLED. */
+  enVivo: boolean
   gasto: number
   impresiones: number
   clicks: number
@@ -213,13 +220,16 @@ export interface KeywordGoogle {
   cpc: number
 }
 
-/** Por defecto trae ENABLED + PAUSED (para poder reactivar desde el panel). */
+/** Por defecto trae ENABLED + PAUSED (para poder reactivar desde el panel). Incluye el
+ *  estado de campaña/grupo porque el status propio de la keyword NO refleja si su campaña
+ *  está pausada — sin esto, keywords de una campaña apagada se ven como "activas". */
 export async function listarKeywords(periodo: string, limite = 30): Promise<{ moneda: string; keywords: KeywordGoogle[] }> {
   const where = whereFecha(periodo)
   const [rows, moneda] = await Promise.all([
     gaqlSearch(`
       SELECT ad_group_criterion.resource_name, ad_group_criterion.status,
-             ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, campaign.name,
+             ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
+             campaign.name, campaign.status, ad_group.status,
              metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.average_cpc
       FROM keyword_view
       WHERE ${where} AND ad_group_criterion.status IN ('ENABLED', 'PAUSED')
@@ -230,12 +240,18 @@ export async function listarKeywords(periodo: string, limite = 30): Promise<{ mo
     const crit = (r.adGroupCriterion || {}) as Record<string, unknown>
     const kw = (crit.keyword || {}) as Record<string, unknown>
     const m = (r.metrics || {}) as Record<string, unknown>
+    const status = String(crit.status || '')
+    const campanaEstado = String(r.campaign?.status || '')
+    const grupoAnuncioEstado = String(r.adGroup?.status || '')
     return {
       resourceName: String(crit.resourceName || ''),
-      status: String(crit.status || ''),
+      status,
       texto: String(kw.text || ''),
       matchType: String(kw.matchType || ''),
       campana: String(r.campaign?.name || ''),
+      campanaEstado,
+      grupoAnuncioEstado,
+      enVivo: status === 'ENABLED' && campanaEstado === 'ENABLED' && grupoAnuncioEstado === 'ENABLED',
       gasto: clp(m.costMicros),
       impresiones: num(m.impressions),
       clicks: num(m.clicks),
@@ -369,4 +385,229 @@ export async function ajustarPresupuestoGoogle(campaignId: string, montoClp: num
     update: { resourceName: c.presupuestoResourceName, amountMicros: String(Math.round(montoClp * 1_000_000)) },
     updateMask: 'amount_micros',
   }])
+}
+
+// ─── Quality Score + Impression Share (Fase A: lecturas para el agente + auditoría) ──
+export interface KeywordConQS extends KeywordGoogle {
+  campanaId: string
+  qualityScore: number | null
+}
+
+/** Igual que listarKeywords pero agrega Quality Score y el id de campaña (para pausar/negativar por campaña).
+ *  Solo trae keywords con status propio ENABLED, pero igual expone campanaEstado/enVivo porque su
+ *  campaña o grupo de anuncios pueden estar pausados sin que el status propio lo refleje. */
+export async function listarKeywordsConQS(periodo: string, limite = 200): Promise<{ moneda: string; keywords: KeywordConQS[] }> {
+  const where = whereFecha(periodo)
+  const [rows, moneda] = await Promise.all([
+    gaqlSearch(`
+      SELECT ad_group_criterion.resource_name, ad_group_criterion.status,
+             ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
+             ad_group_criterion.quality_info.quality_score,
+             campaign.id, campaign.name, campaign.status, ad_group.status,
+             metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.average_cpc
+      FROM keyword_view
+      WHERE ${where} AND ad_group_criterion.status = 'ENABLED'
+    `),
+    monedaCuenta(),
+  ])
+  const keywords: KeywordConQS[] = rows.map(r => {
+    const crit = (r.adGroupCriterion || {}) as Record<string, unknown>
+    const kw = (crit.keyword || {}) as Record<string, unknown>
+    const qi = (crit.qualityInfo || {}) as Record<string, unknown>
+    const m = (r.metrics || {}) as Record<string, unknown>
+    const status = String(crit.status || '')
+    const campanaEstado = String(r.campaign?.status || '')
+    const grupoAnuncioEstado = String(r.adGroup?.status || '')
+    return {
+      resourceName: String(crit.resourceName || ''),
+      status,
+      texto: String(kw.text || ''),
+      matchType: String(kw.matchType || ''),
+      campana: String(r.campaign?.name || ''),
+      campanaId: String(r.campaign?.id || ''),
+      campanaEstado,
+      grupoAnuncioEstado,
+      enVivo: status === 'ENABLED' && campanaEstado === 'ENABLED' && grupoAnuncioEstado === 'ENABLED',
+      qualityScore: qi.qualityScore != null ? num(qi.qualityScore) : null,
+      gasto: clp(m.costMicros),
+      impresiones: num(m.impressions),
+      clicks: num(m.clicks),
+      ctr: num(m.ctr) * 100,
+      cpc: clp(m.averageCpc),
+    }
+  }).sort((a, b) => b.gasto - a.gasto).slice(0, limite)
+  return { moneda, keywords }
+}
+
+export interface ImpressionShareCampana {
+  id: string
+  nombre: string
+  gasto: number
+  impressionShare: number | null
+  perdidoPorPresupuesto: number | null
+  perdidoPorRanking: number | null
+}
+
+/** Impression Share (30d por defecto) — cuánto % de las búsquedas elegibles se ganó, y por qué se pierde el resto. */
+export async function impressionShareCampanas(periodo = 'last_30d'): Promise<ImpressionShareCampana[]> {
+  const where = whereFecha(periodo)
+  const rows = await gaqlSearch(`
+    SELECT campaign.id, campaign.name, metrics.cost_micros,
+           metrics.search_impression_share, metrics.search_budget_lost_impression_share,
+           metrics.search_rank_lost_impression_share
+    FROM campaign
+    WHERE ${where} AND campaign.status = 'ENABLED'
+  `)
+  const pct = (v: unknown): number | null => v == null ? null : Math.round(num(v) * 1000) / 10
+  return rows.map(r => {
+    const m = (r.metrics || {}) as Record<string, unknown>
+    return {
+      id: String(r.campaign?.id || ''),
+      nombre: String(r.campaign?.name || ''),
+      gasto: clp(m.costMicros),
+      impressionShare: pct(m.searchImpressionShare),
+      perdidoPorPresupuesto: pct(m.searchBudgetLostImpressionShare),
+      perdidoPorRanking: pct(m.searchRankLostImpressionShare),
+    }
+  })
+}
+
+export interface ConversionActionGoogle {
+  resourceName: string
+  nombre: string
+  categoria: string
+  tipo: string
+  status: string
+  primaryForGoal: boolean
+  valorDefault: number | null
+}
+
+export async function listarConversionActions(): Promise<ConversionActionGoogle[]> {
+  const rows = await gaqlSearch(`
+    SELECT conversion_action.resource_name, conversion_action.name, conversion_action.category,
+           conversion_action.type, conversion_action.status, conversion_action.primary_for_goal,
+           conversion_action.value_settings.default_value
+    FROM conversion_action
+    WHERE conversion_action.status = 'ENABLED'
+  `)
+  return rows.map(r => {
+    const c = (r.conversionAction || {}) as Record<string, unknown>
+    const vs = (c.valueSettings || {}) as Record<string, unknown>
+    return {
+      resourceName: String(c.resourceName || ''),
+      nombre: String(c.name || ''),
+      categoria: String(c.category || ''),
+      tipo: String(c.type || ''),
+      status: String(c.status || ''),
+      primaryForGoal: Boolean(c.primaryForGoal),
+      valorDefault: vs.defaultValue != null ? num(vs.defaultValue) : null,
+    }
+  })
+}
+
+/** Cambia el valor por defecto de una conversion action (para corregir valores incoherentes — ver GUIA_GADS_BIDDING). */
+export async function actualizarValorConversion(resourceName: string, valor: number, validateOnly = false): Promise<void> {
+  if (!resourceName) throw new Error('Falta el resourceName de la conversion action.')
+  if (!(valor > 0)) throw new Error('El valor debe ser mayor a 0.')
+  await gaqlMutate('conversionActions', [{
+    update: { resourceName, valueSettings: { defaultValue: valor } },
+    updateMask: 'value_settings.default_value',
+  }], validateOnly)
+}
+
+export interface AdGoogle {
+  campana: string
+  campanaId: string
+  grupoAnuncio: string
+  status: string
+  headlines: number
+  headlinesPinned: number
+  descripciones: number
+  adStrength: string
+  finalUrl: string
+}
+
+export async function listarAds(): Promise<AdGoogle[]> {
+  const rows = await gaqlSearch(`
+    SELECT campaign.id, campaign.name, ad_group.name, ad_group_ad.status,
+           ad_group_ad.ad.responsive_search_ad.headlines,
+           ad_group_ad.ad.responsive_search_ad.descriptions,
+           ad_group_ad.ad.final_urls, ad_group_ad.ad_strength
+    FROM ad_group_ad
+    WHERE ad_group_ad.status = 'ENABLED' AND campaign.status = 'ENABLED'
+  `)
+  return rows.map(r => {
+    const adGroupAd = (r.adGroupAd || {}) as Record<string, unknown>
+    const ad = (adGroupAd.ad || {}) as Record<string, unknown>
+    const rsa = (ad.responsiveSearchAd || {}) as Record<string, unknown>
+    const headlines = (rsa.headlines || []) as Array<{ pinnedField?: string }>
+    const descripciones = (rsa.descriptions || []) as unknown[]
+    const finalUrls = (ad.finalUrls || []) as string[]
+    return {
+      campana: String(r.campaign?.name || ''),
+      campanaId: String(r.campaign?.id || ''),
+      grupoAnuncio: String(r.adGroup?.name || ''),
+      status: String(adGroupAd.status || ''),
+      headlines: headlines.length,
+      headlinesPinned: headlines.filter(h => h.pinnedField).length,
+      descripciones: descripciones.length,
+      adStrength: String(adGroupAd.adStrength || 's/d'),
+      finalUrl: finalUrls[0] || '',
+    }
+  })
+}
+
+export interface ConteoAssets { sitelinks: number; callouts: number; snippets: number }
+
+export async function contarAssets(): Promise<ConteoAssets> {
+  const rows = await gaqlSearch(`
+    SELECT asset.type FROM asset WHERE asset.type IN ('SITELINK', 'CALLOUT', 'STRUCTURED_SNIPPET')
+  `)
+  const out: ConteoAssets = { sitelinks: 0, callouts: 0, snippets: 0 }
+  for (const r of rows) {
+    const t = String(r.asset?.type || '')
+    if (t === 'SITELINK') out.sitelinks++
+    else if (t === 'CALLOUT') out.callouts++
+    else if (t === 'STRUCTURED_SNIPPET') out.snippets++
+  }
+  return out
+}
+
+export interface CampanaBidding {
+  id: string
+  nombre: string
+  biddingStrategyType: string
+  gasto: number
+  conversiones: number
+}
+
+/** Estrategia de puja por campaña + conversiones del período — para chequear contra el playbook (GUIA_GADS_BIDDING). */
+export async function campanasConBidding(periodo = 'last_30d'): Promise<CampanaBidding[]> {
+  const where = whereFecha(periodo)
+  const rows = await gaqlSearch(`
+    SELECT campaign.id, campaign.name, campaign.bidding_strategy_type,
+           metrics.cost_micros, metrics.conversions
+    FROM campaign
+    WHERE ${where} AND campaign.status = 'ENABLED'
+  `)
+  return rows.map(r => {
+    const m = (r.metrics || {}) as Record<string, unknown>
+    return {
+      id: String(r.campaign?.id || ''),
+      nombre: String(r.campaign?.name || ''),
+      biddingStrategyType: String(r.campaign?.biddingStrategyType || ''),
+      gasto: clp(m.costMicros),
+      conversiones: Math.round(num(m.conversions) * 10) / 10,
+    }
+  })
+}
+
+export interface ConteoNegativas { campana: number; listasCompartidas: number }
+
+export async function contarNegativas(): Promise<ConteoNegativas> {
+  const [negs, lists] = await Promise.all([
+    gaqlSearch(`SELECT campaign_criterion.criterion_id FROM campaign_criterion WHERE campaign_criterion.negative = TRUE AND campaign_criterion.type = 'KEYWORD'`),
+    gaqlSearch(`SELECT shared_set.id FROM shared_set WHERE shared_set.status = 'ENABLED' AND shared_set.type = 'NEGATIVE_KEYWORDS'`),
+  ])
+  return { campana: negs.length, listasCompartidas: lists.length }
 }

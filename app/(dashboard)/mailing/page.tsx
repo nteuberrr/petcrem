@@ -394,7 +394,7 @@ function GestionCampanas() {
 
 // ── Google Ads (solo lectura): campañas + keywords + términos de búsqueda ──
 type CampGoogle = { id: string; nombre: string; status: string; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number; conversiones: number }
-type KeywordGoogle = { resourceName: string; status: string; texto: string; matchType: string; campana: string; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number }
+type KeywordGoogle = { resourceName: string; status: string; texto: string; matchType: string; campana: string; campanaEstado: string; grupoAnuncioEstado: string; enVivo: boolean; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number }
 type TerminoGoogle = { termino: string; campana: string; campanaId: string; gasto: number; impresiones: number; clicks: number; conversiones: number }
 type CampanaGestionGoogle = { id: string; nombre: string; status: string; presupuestoResourceName: string; presupuestoClp: number; compartido: boolean }
 type GoogleAdsResp = {
@@ -409,6 +409,67 @@ const ESTADO_GOOGLE: Record<string, { label: string; cls: string }> = {
   ENABLED: { label: 'Activa', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
   PAUSED: { label: 'Pausada', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
   REMOVED: { label: 'Eliminada', cls: 'bg-gray-100 text-gray-500 border-gray-200' },
+}
+
+// ── Auditoría de cuenta (Fase B) ──────────────────────────────────────────────
+type Hallazgo = { id: string; severidad: 'alta' | 'media' | 'baja'; area: string; titulo: string; detalle: string; accionSugerida: string; dolaresEstimados?: number }
+
+const SEMAFORO: Record<Hallazgo['severidad'], { icono: string; cls: string }> = {
+  alta: { icono: '🔴', cls: 'border-red-200 bg-red-50' },
+  media: { icono: '🟠', cls: 'border-amber-200 bg-amber-50' },
+  baja: { icono: '🟢', cls: 'border-emerald-200 bg-emerald-50' },
+}
+
+function AuditoriaGoogleAds() {
+  const [hallazgos, setHallazgos] = useState<Hallazgo[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function auditar() {
+    setLoading(true); setErr('')
+    try {
+      const r = await fetch('/api/mailing/google-ads/audit', { cache: 'no-store' })
+      const d = await r.json()
+      if (!r.ok) { setErr(d.error || 'Error'); setHallazgos(null) } else setHallazgos(d.hallazgos || [])
+    } catch { setErr('Error de red'); setHallazgos(null) }
+    setLoading(false)
+  }
+
+  return (
+    <div className="rounded-xl border-2 border-gray-300 bg-gray-50 p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Auditoría de cuenta</p>
+          <p className="text-[11px] text-gray-400">Revisa bidding, valores de conversión, anuncios, recursos, keywords e Impression Share contra las buenas prácticas.</p>
+        </div>
+        <button disabled={loading} onClick={auditar} className="text-xs font-semibold text-white bg-[#143C64] rounded-lg px-3 py-1.5 hover:bg-[#0f2e4d] disabled:opacity-50 shrink-0">
+          {loading ? 'Auditando…' : 'Auditar ahora'}
+        </button>
+      </div>
+      {err && <p className="text-sm text-gray-500">No se pudo auditar: {err}</p>}
+      {hallazgos && (
+        hallazgos.length === 0 ? (
+          <p className="text-sm text-emerald-700">Sin hallazgos relevantes por ahora.</p>
+        ) : (
+          <div className="space-y-2">
+            {hallazgos.map(h => {
+              const s = SEMAFORO[h.severidad]
+              return (
+                <div key={h.id} className={`rounded-lg border p-3 ${s.cls}`}>
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <p className="text-sm font-semibold text-gray-800">{s.icono} {h.titulo} <span className="font-normal text-gray-400">({h.area})</span></p>
+                    {h.dolaresEstimados != null && <span className="text-xs font-bold text-gray-700 shrink-0">~${Math.round(h.dolaresEstimados).toLocaleString('es-CL')}</span>}
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">{h.detalle}</p>
+                  <p className="text-xs text-gray-700 mt-1">→ {h.accionSugerida}</p>
+                </div>
+              )
+            })}
+          </div>
+        )
+      )}
+    </div>
+  )
 }
 
 function GoogleAdsPanel({ periodo }: { periodo: string }) {
@@ -513,6 +574,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
   return (
     <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
       <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Anuncios pagados (Google Ads)</h3>
+      <AuditoriaGoogleAds />
       {loading ? (
         <p className="text-sm text-gray-400">Cargando…</p>
       ) : err ? (
@@ -610,14 +672,19 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                   <tbody className="divide-y divide-gray-100">
                     {data.keywords.map((k, i) => {
                       const activa = k.status === 'ENABLED'
+                      // El status propio de la keyword puede ser ENABLED aunque su campaña o
+                      // grupo de anuncios estén pausados — en ese caso NO está gastando de
+                      // verdad. `enVivo` es la única señal confiable de "realmente activa".
+                      const campanaApagada = activa && !k.enVivo
                       const busy = busyId === k.resourceName
                       return (
                         <tr key={i} className="hover:bg-gray-50">
                           <td className="px-3 py-2 text-gray-800">
                             {k.texto} <span className="text-gray-400 text-xs">({k.matchType?.toLowerCase()})</span>
                             {!activa && <span className="ml-1.5 text-[10px] font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">pausada</span>}
+                            {campanaApagada && <span className="ml-1.5 text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded" title="La keyword figura habilitada, pero su campaña o grupo de anuncios está pausado: no está gastando.">no gasta (campaña pausada)</span>}
                           </td>
-                          <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{k.campana}</td>
+                          <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{k.campana}{k.campanaEstado && k.campanaEstado !== 'ENABLED' && <span className="text-amber-600"> (pausada)</span>}</td>
                           <td className="px-3 py-2 text-right">{money(k.gasto)}</td>
                           <td className="px-3 py-2 text-right">{fmt(k.clicks)}</td>
                           <td className="px-3 py-2 text-right">{k.ctr.toFixed(2)}%</td>
