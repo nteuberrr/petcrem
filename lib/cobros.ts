@@ -60,6 +60,15 @@ export async function cobrosPendientesPorCliente(clienteId: string): Promise<Cob
   } catch { return [] }
 }
 
+/** TODOS los cobros no pagados (para la notificación global arriba de /clientes). */
+export async function cobrosPendientesTodos(): Promise<Cobro[]> {
+  try {
+    return (await getSheetData(TABLE)).map(toCobro)
+      .filter(c => c.estado !== 'pagado' && c.cliente_id)
+      .sort((a, b) => (parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0))
+  } catch { return [] }
+}
+
 export async function obtenerCobro(id: string): Promise<Cobro | null> {
   const rows = await getSheetData(TABLE)
   const r = rows.find(x => String(x.id) === String(id))

@@ -60,18 +60,21 @@ export function calcularPrecioFicha(
   const codigo = c.codigo_servicio || 'CI'
   let tabla: Tramo[] = tablas.convenio
   const explicit = c.tipo_precios
-  if (explicit === 'especial') tabla = tablas.especialesDeVet
+  // Un vet con precios especiales cobra SIEMPRE el especial (prima sobre lo guardado).
+  if (vetTipoPrecios === 'precios_especiales') tabla = tablas.especialesDeVet
+  else if (explicit === 'especial') tabla = tablas.especialesDeVet
   else if (explicit === 'general') tabla = tablas.generales
-  else if (vetTipoPrecios === 'precios_especiales') tabla = tablas.especialesDeVet
   const tramo = findTramo(tabla, peso)
   const servicio = precioDelTramo(tramo, codigo)
   const adi = items.reduce((s, a) => s + Math.max(0, parseMonto(a.precio)) * Math.max(0, a.qty ?? 1), 0)
   const subtotal = servicio + adi
+  // Descuento SOLO sobre el servicio de cremación, nunca sobre los adicionales
+  // (mismo criterio que calcularSnapshotFicha en price-calculator.ts).
   let descuento = 0
   const dVal = parseMonto(c.descuento_valor)
   if (dVal > 0) {
-    if (c.descuento_tipo === 'fijo') descuento = Math.min(dVal, subtotal)
-    else if (c.descuento_tipo === 'variable') descuento = Math.round(subtotal * dVal / 100)
+    if (c.descuento_tipo === 'fijo') descuento = Math.min(dVal, servicio)
+    else if (c.descuento_tipo === 'variable') descuento = Math.round(servicio * dVal / 100)
   }
   return {
     servicio: Math.round(servicio),

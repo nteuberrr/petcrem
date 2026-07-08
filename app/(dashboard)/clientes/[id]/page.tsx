@@ -499,12 +499,12 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     // Calcular snapshot del descuento al momento de guardar.
     // Si no aplica descuento o el descuento ya no existe, limpiamos las columnas.
     const desc = aplicarDescuento && descuentoId ? descuentosDisp.find(d => d.id === descuentoId) : null
-    const subtotal = precioServicio + totalAdicionales
+    // Descuento SOLO sobre el precio de la cremación, nunca sobre los adicionales.
     const monto = !desc
       ? 0
       : desc.tipo === 'fijo'
-        ? Math.min(parseFloat(desc.valor) || 0, subtotal)
-        : Math.round((subtotal * (parseFloat(desc.valor) || 0)) / 100)
+        ? Math.min(parseFloat(desc.valor) || 0, precioServicio)
+        : Math.round((precioServicio * (parseFloat(desc.valor) || 0)) / 100)
     const payload = {
       ...form,
       veterinaria_id: esVeterinaria ? (form.veterinaria_id ?? '') : '',
@@ -653,15 +653,18 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const precioOptions = (() => {
     if (!esVeterinaria || !form.veterinaria_id) return [{ value: 'general', label: 'Precios generales' }]
     const vet = veterinarias.find(v => v.id === form.veterinaria_id)
-    const opts = [
+    // Un veterinario con precios ESPECIALES cobra SIEMPRE el precio especial: no se
+    // puede elegir convenio ni general (la opción queda fijada en "especial").
+    if (vet?.tipo_precios === 'precios_especiales') {
+      return [{ value: 'especial', label: 'Precios especiales' }]
+    }
+    return [
       { value: 'general', label: 'Precios generales' },
       { value: 'convenio', label: 'Precios convenio' },
     ]
-    if (vet?.tipo_precios === 'precios_especiales') {
-      opts.push({ value: 'especial', label: 'Precios especiales' })
-    }
-    return opts
   })()
+  // Si el vet tiene precios especiales, el selector queda bloqueado en "especial".
+  const precioBloqueado = precioOptions.length === 1 && precioOptions[0].value === 'especial'
 
   const certUltimo = certificadosEmitidos[0]
   const puedeGenerarCert = cliente.estado === 'cremado' || cliente.estado === 'despachado'
@@ -1273,11 +1276,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 <select
                   value={form.tipo_precios ?? 'general'}
                   onChange={e => setForm(f => ({ ...f, tipo_precios: e.target.value }))}
-                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                  disabled={precioBloqueado}
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:bg-gray-100 disabled:text-gray-500"
                 >
                   {precioOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
-                {tramosEspeciales.length > 0 && (
+                {precioBloqueado ? (
+                  <p className="text-xs text-purple-600 mt-1">Este veterinario tiene precios especiales: se aplican siempre.</p>
+                ) : tramosEspeciales.length > 0 && (
                   <p className="text-xs text-purple-600 mt-1">{tramosEspeciales.length} tramo(s) especiales cargados</p>
                 )}
               </div>

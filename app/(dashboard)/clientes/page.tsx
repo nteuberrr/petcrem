@@ -79,7 +79,7 @@ const SERVICIOS = [
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [buscar, setBuscar] = useState('')
-  const [filtro, setFiltro] = useState<'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado' | 'pago_pendiente' | 'este_mes' | 'esta_semana' | 'datos_pendientes' | 'falta_peso' | 'diferencia'>('todos')
+  const [filtro, setFiltro] = useState<'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado' | 'pago_pendiente' | 'este_mes' | 'esta_semana' | 'datos_pendientes' | 'falta_peso' | 'diferencia' | 'pendiente_cobro'>('todos')
   const [filtroVet, setFiltroVet] = useState('') // '' = todas · '__general__' = sin vet · id de vet
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -104,6 +104,10 @@ export default function ClientesPage() {
   const [preciosConvenio, setPreciosConvenio] = useState<Tramo[]>([])
   const [tramosEspeciales, setTramosEspeciales] = useState<TramoEspecial[]>([])
   const [fichaCreada, setFichaCreada] = useState<FichaCreada | null>(null)
+  // Cobros NO pagados (tabla `cobros`): diferencia de peso o producto adicional que
+  // ya se cobró al tutor pero todavía no se marca como pagado. Alimenta el chip
+  // "pendiente de cobro" (distinto de la diferencia SUGERIDA, que es pre-cobro).
+  const [cobrosPend, setCobrosPend] = useState<{ cliente_id: string; monto: string; detalle: string; tipo: string }[]>([])
 
   const fetchClientes = useCallback(async () => {
     setLoading(true)
@@ -114,6 +118,15 @@ export default function ClientesPage() {
   }, [])
 
   useEffect(() => { fetchClientes() }, [fetchClientes])
+
+  const fetchCobros = useCallback(async () => {
+    try {
+      const r = await fetch('/api/cobros')
+      const d = await r.json()
+      setCobrosPend(Array.isArray(d.cobros) ? d.cobros : [])
+    } catch { setCobrosPend([]) }
+  }, [])
+  useEffect(() => { fetchCobros() }, [fetchCobros])
 
   useEffect(() => {
     fetch('/api/especies').then(r => r.json()).then(d => setEspecies(Array.isArray(d) ? d.filter((e: Especie) => e.activo === 'TRUE') : []))
@@ -282,6 +295,9 @@ export default function ClientesPage() {
   const esPremiumCuadro = (c: Cliente) => (c.codigo_servicio || '').toUpperCase() === 'CP'
   const solicitoVideo = (c: Cliente) => (c.notas || '').includes('El tutor solicitó el video')
 
+  // Ids de fichas con al menos un cobro NO pagado (de la tabla `cobros`).
+  const idsConCobroPendiente = useMemo(() => new Set(cobrosPend.map(c => String(c.cliente_id))), [cobrosPend])
+
   // Resultados filtrados por buscador + filtro
   const resultados = useMemo(() => {
     const q = buscar.trim().toLowerCase()
@@ -313,6 +329,7 @@ export default function ClientesPage() {
       if (filtro === 'datos_pendientes' && !tieneDatosPendientes(c)) return false
       if (filtro === 'falta_peso' && !faltaPesoIngreso(c)) return false
       if (filtro === 'diferencia' && !tieneDiferenciaPorCobrar(c)) return false
+      if (filtro === 'pendiente_cobro' && !idsConCobroPendiente.has(String(c.id))) return false
       // Filtro por veterinaria (independiente del filtro de estado)
       if (filtroVet === '__general__' && (c.veterinaria_id || '').trim()) return false
       if (filtroVet && filtroVet !== '__general__' && c.veterinaria_id !== filtroVet) return false
@@ -337,7 +354,7 @@ export default function ClientesPage() {
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buscar, filtro, filtroVet, clientes, preciosGenerales, preciosConvenio])
+  }, [buscar, filtro, filtroVet, clientes, preciosGenerales, preciosConvenio, cobrosPend])
 
   const nBorradores = useMemo(() => clientes.filter(c => c.estado === 'borrador').length, [clientes])
 
@@ -354,9 +371,14 @@ export default function ClientesPage() {
       datosPendientes: reales.filter(c => tieneDatosPendientes(c)).length,
       faltaPeso: reales.filter(c => faltaPesoIngreso(c)).length,
       diferencia: reales.filter(c => tieneDiferenciaPorCobrar(c)).length,
+      // Fichas con un cobro emitido y aún NO pagado (tabla `cobros`).
+      pendienteCobro: reales.filter(c => idsConCobroPendiente.has(String(c.id))).length,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientes, preciosGenerales, preciosConvenio])
+  }, [clientes, preciosGenerales, preciosConvenio, idsConCobroPendiente])
+
+  // Monto total pendiente de cobro (para mostrarlo en el chip).
+  const montoPendienteCobro = useMemo(() => cobrosPend.reduce((s, c) => s + (parseInt(c.monto, 10) || 0), 0), [cobrosPend])
 
   // Permite llegar con un filtro preseleccionado por URL (ej. desde la alerta
   // del dashboard: /clientes?filtro=borrador). Se lee una vez al montar.
@@ -483,11 +505,13 @@ export default function ClientesPage() {
     ? descuentosDisp.find(d => d.id === descuentoId) ?? null
     : null
   const descuentoValorNum = descuentoElegido ? parseFloat(descuentoElegido.valor) || 0 : 0
+  // El descuento aplica SOLO al precio de la cremación, nunca a los adicionales
+  // (fuera de horario, distancia, ánfora premium, etc. se pagan completos).
   const montoDescuento = !descuentoElegido
     ? 0
     : descuentoElegido.tipo === 'fijo'
-      ? Math.min(descuentoValorNum, subtotalServicio)
-      : Math.round((subtotalServicio * descuentoValorNum) / 100)
+      ? Math.min(descuentoValorNum, precioServicio)
+      : Math.round((precioServicio * descuentoValorNum) / 100)
   const totalServicio = Math.max(0, subtotalServicio - montoDescuento)
   const descuentoEtiqueta = descuentoElegido
     ? descuentoElegido.tipo === 'fijo' ? fmtPrecio(descuentoValorNum) : `${descuentoValorNum}%`
@@ -515,8 +539,14 @@ export default function ClientesPage() {
 
       {/* Notificaciones compactas: una fila de chips clickeables que aplican el
           filtro correspondiente. Reemplaza al banner grande de pago pendiente. */}
-      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0) && (
+      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0 || alertas.pendienteCobro > 0) && (
         <div className="mb-5 flex flex-wrap items-center gap-2">
+          {alertas.pendienteCobro > 0 && (
+            <button onClick={() => setFiltro('pendiente_cobro')}
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-fuchsia-400 bg-fuchsia-50 hover:bg-fuchsia-100 px-3 py-1.5 text-xs font-bold text-fuchsia-900 shadow-md transition-colors">
+              💳 {alertas.pendienteCobro} pendiente{alertas.pendienteCobro === 1 ? '' : 's'} de cobro{montoPendienteCobro > 0 ? ` · ${fmtPrecio(montoPendienteCobro)}` : ''}
+            </button>
+          )}
           {nBorradores > 0 && (
             <button onClick={() => setFiltro('borrador')}
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-red-300 bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-bold text-red-800 shadow-md transition-colors">

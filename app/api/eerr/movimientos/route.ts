@@ -27,11 +27,13 @@ function esConvenio(c: Cli): boolean {
 function adicionalesSum(raw: string): number {
   try { const items = JSON.parse(raw || '[]') as Array<{ precio?: number; qty?: number }>; return items.reduce((s, a) => s + Math.max(0, a.precio ?? 0) * Math.max(0, a.qty ?? 1), 0) } catch { return 0 }
 }
-function descuentoMonto(c: Cli, subtotal: number): number {
+// `base` = precio del servicio de cremación (el descuento aplica SOLO sobre él, no
+// sobre los adicionales). Para fichas con snapshot se usa el monto congelado.
+function descuentoMonto(c: Cli, base: number): number {
   const snap = parseDecimalOr0(c.descuento_monto); if (snap > 0) return snap
   const dVal = parseDecimalOr0(c.descuento_valor); if (dVal <= 0) return 0
-  if (c.descuento_tipo === 'fijo') return Math.min(dVal, subtotal)
-  if (c.descuento_tipo === 'variable') return Math.round(subtotal * dVal / 100)
+  if (c.descuento_tipo === 'fijo') return Math.min(dVal, base)
+  if (c.descuento_tipo === 'variable') return Math.round(base * dVal / 100)
   return 0
 }
 
@@ -78,7 +80,7 @@ export async function GET(req: NextRequest) {
           const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
           serv = precioDelTramo(findTramo(tablaDe(c), peso), c.codigo_servicio || 'CI')
           adic = adicionalesSum(c.adicionales)
-          total = Math.max(0, serv + adic - descuentoMonto(c, serv + adic))
+          total = Math.max(0, serv + adic - descuentoMonto(c, serv))
         }
         const base = serv + adic
         const servShare = base > 0 ? total * (serv / base) : total

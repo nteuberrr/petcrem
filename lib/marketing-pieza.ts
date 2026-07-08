@@ -682,6 +682,57 @@ export async function generarPieza(id: string, creadoPor?: string): Promise<Piez
 }
 
 /**
+ * AJUSTE INCREMENTAL de un correo ya generado: conserva el HTML actual y aplica SOLO
+ * el cambio pedido (ej. "meté la tabla de precios", "cambiá el CTA"), sin rehacerlo de
+ * cero. Reusa la edición incremental que ya soporta generarCampana (actual + comentario).
+ * Solo aplica a email. Para eso el generador ahora recibe las tarifas reales, así que
+ * "meté la tabla de precios" funciona con las cifras vigentes.
+ */
+export async function ajustarPiezaEmail(id: string, comentario: string, creadoPor?: string): Promise<PiezaGenerada> {
+  const item = await obtenerItem(id)
+  if (!item) throw new Error(`ítem ${id} no encontrado`)
+  if (item.canal !== 'email') throw new Error('Esto aplica solo a piezas de email.')
+  if (!item.cuerpo?.trim()) throw new Error('El correo todavía no está generado. Generalo primero con "generar_pieza".')
+  if (!comentario?.trim()) throw new Error('Falta indicar qué ajustar en el correo.')
+
+  const categoria = mapCategoriaEmail(item.objetivo)
+  // preview_text vive en la campaña materializada; si no está, va vacío (el generador lo rehace).
+  let preview = ''
+  if (item.campana_id) {
+    try {
+      const rows = await getSheetData('mailing_campanas')
+      preview = rows.find(r => String(r.id) === String(item.campana_id))?.preview_text || ''
+    } catch { /* best-effort */ }
+  }
+
+  const camp = await generarCampana({
+    instruccion: item.idea || item.titulo || 'Ajuste del correo',
+    categoria, creadoPor,
+    actual: { asunto: item.titulo || '', preview_text: preview, html: item.cuerpo },
+    comentario: comentario.trim(),
+  })
+  const avisos = [...camp.avisos]
+  let campanaId = item.campana_id
+  try {
+    campanaId = await materializarBorradorEmail({
+      asunto: camp.asunto, preview: camp.preview_text, html: camp.html, categoria,
+      creadoPor, existingId: item.campana_id || undefined,
+    })
+  } catch (e) {
+    avisos.push('No se pudo actualizar el borrador en Mail: ' + (e instanceof Error ? e.message : String(e)))
+  }
+  const primera = camp.imagenes[0]
+  const item2 = await actualizarItem(id, {
+    titulo: camp.asunto,
+    cuerpo: camp.html,
+    ...(primera ? { imagen_url: primera.url, imagen_id: primera.id } : {}),
+    campana_id: campanaId,
+    generado_por: 'ia',
+  })
+  return { item: item2, avisos }
+}
+
+/**
  * "Misma copy, imagen nueva": conserva el COPY tal cual y regenera SOLO la imagen
  * (desde cero, con plantilla, distinta a la actual). Para cuando el texto está bien
  * pero la imagen no convence. No toca el estado. Solo aplica a social (IG/FB).

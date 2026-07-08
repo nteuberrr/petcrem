@@ -100,6 +100,15 @@ export async function calcularSnapshotFicha(input: SnapshotInput): Promise<Preci
       console.error(`[price-calculator] no se pudo leer veterinarios (veterinaria_id=${input.veterinaria_id}); snapshot con tarifa GENERAL:`, e)
     }
   }
+  // REGLA DURA: un veterinario con precios ESPECIALES cobra SIEMPRE el precio especial,
+  // pase lo que pase en el payload (defensa en profundidad — el form ya lo bloquea).
+  if (input.veterinaria_id && tipo !== 'especial') {
+    try {
+      const vets = await getSheetData('veterinarios')
+      const vet = vets.find(v => v.id === input.veterinaria_id)
+      if (vet?.tipo_precios === 'precios_especiales') tipo = 'especial'
+    } catch { /* si falla la lectura, respetamos lo ya resuelto */ }
+  }
 
   // 2) Cargar tabla aplicable
   let tabla: TramoRaw[] = []
@@ -144,14 +153,17 @@ export async function calcularSnapshotFicha(input: SnapshotInput): Promise<Preci
 
   const subtotal = precio_servicio + precio_adicionales
 
-  // 5) Aplicar descuento (snapshot ya tipeado por el form)
+  // 5) Aplicar descuento — SOLO sobre el precio del servicio de cremación, NUNCA
+  // sobre los adicionales. Un convenio con descuento (ej. Municipalidad de Colina,
+  // Cactus) rebaja la cremación; los extras (fuera de horario, distancia, ánfora
+  // premium comprada aparte, etc.) se pagan completos. (Decisión del dueño 2026-07-07.)
   let descuento_monto = 0
   const valor = num(input.descuento_valor)
   if (valor > 0) {
     if (input.descuento_tipo === 'fijo') {
-      descuento_monto = Math.min(valor, subtotal)
+      descuento_monto = Math.min(valor, precio_servicio)
     } else if (input.descuento_tipo === 'variable') {
-      descuento_monto = Math.round((subtotal * valor) / 100)
+      descuento_monto = Math.round((precio_servicio * valor) / 100)
     }
   }
 

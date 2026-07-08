@@ -6,6 +6,7 @@ import { MARCA_VISUAL } from './marca-visual'
 import { GUIA_EMAIL } from './marketing-guia'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { LINKS_PUBLICOS } from './links-publicos'
+import { getTarifasContexto } from './tarifas-html'
 
 /**
  * Generador IA de campañas de mailing (B2B a la base de veterinarios).
@@ -108,7 +109,7 @@ AUDIENCIA Y VOZ (B2B veterinarios):
   - Español neutro de Chile. NUNCA voseo argentino (nada de "tenés", "podés", "querés").
   - Sin humor, sin referencias religiosas, sin clichés del rubro ("puente del arcoíris", "angelitos", "tu ángel").
   - Diferenciadores que puedes comunicar si aplican: instalaciones propias en Recoleta (no se externaliza), trazabilidad total, entrega en 3 días hábiles, retiro a domicilio o desde la clínica, certificado digital, tecnología de punta, red de eutanasia a domicilio para clínicas en convenio.
-  - NUNCA inventes precios, descuentos, plazos ni promesas que no estén en la instrucción del usuario.
+  - PRECIOS: NUNCA los inventes. Pero SÍ tienes las tarifas reales en el bloque "PRECIOS DE CREMACIÓN" (más abajo): cuando la campaña pida mostrar precios o una TABLA DE PRECIOS, INCLÚYELOS usando EXACTAMENTE esas cifras. Tienes ahí una tabla HTML lista para pegar tal cual en el cuerpo. No inventes descuentos, plazos ni promesas que no estén en la instrucción del usuario ni en ese bloque.
 
 REGISTRO SEGÚN EL TONO PEDIDO (importante — adaptá la ENERGÍA del correo al tono que pida el usuario):
   - Por defecto, sobrio y profesional. PERO si piden un tono CONVOCATORIO / VENDEDOR / PROMOCIONAL / ENTUSIASTA (o algo parecido, en el campo de tono o en la instrucción), subí el voltaje comercial y ponéle "cuento": un GANCHO potente en el titular, los beneficios concretos al frente (rápido, conveniente, siempre disponible, todo bajo control), una invitación CÁLIDA y DIRECTA a sumarse, y un CTA imperativo y entusiasta ("Súmate hoy", "Trabajemos juntos", "Llámanos y accede a las nuevas tarifas"). Contá el "para qué" y por qué conviene ahora — que el correo INVITE a unirse, que no parezca un informe. Podés usar un signo de exclamación puntual y verbos de acción.
@@ -311,12 +312,19 @@ export async function generarCampana(opts: GenerarOpts): Promise<CampanaGenerada
   const puedeGenerar = isNanoBananaConfigurado()
   const [contacto, banco] = await Promise.all([getContacto(), listarImagenes().catch(() => [] as ImagenBanco[])])
 
+  const tarifas = await getTarifasContexto()
   const system: Anthropic.TextBlockParam[] = [
     { type: 'text', text: systemPrompt(contacto, puedeGenerar) },
     { type: 'text', text: DIFERENCIADORES },
     { type: 'text', text: MODALIDADES_SERVICIOS },
     { type: 'text', text: bloqueBanco(banco) },
   ]
+  if (tarifas.hayTarifas) {
+    system.push({
+      type: 'text',
+      text: `PRECIOS DE CREMACIÓN (cifras REALES y vigentes — úsalas SOLO de acá, nunca inventes otras). Si la campaña pide mostrar precios o una tabla de precios, incluílos; podés pegar la TABLA HTML de abajo tal cual dentro del cuerpo del correo (ya es email-safe y con la paleta de marca).\n\n${tarifas.texto}\n\nTABLA HTML LISTA PARA PEGAR (cópiala tal cual donde quieras mostrar los precios):\n${tarifas.tablaHtml}`,
+    })
+  }
 
   const res = await getClient().messages.create({
     model: MODEL,

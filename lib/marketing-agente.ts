@@ -14,7 +14,7 @@ import { lintCopy, extraerTextoHtml } from './marketing-lint'
 import { getContacto } from './email-layout'
 import { LINKS_PUBLICOS } from './links-publicos'
 import { esLogo } from './marca-logo'
-import { generarPieza, editarImagenPieza, regenerarImagenPieza, setImagenesPieza } from './marketing-pieza'
+import { generarPieza, editarImagenPieza, regenerarImagenPieza, setImagenesPieza, ajustarPiezaEmail } from './marketing-pieza'
 import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
 import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, type SlotsPlantilla } from './marketing-plantillas'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
@@ -140,6 +140,7 @@ FLUJO Y HERRAMIENTAS
 1b. GESTIONAR EL CALENDARIO (hacelo cuando te lo pidan, sin vueltas): podés EDITAR cualquier campaña con "editar_campana" (mover de fecha u hora, cambiar canal/audiencia/objetivo, corregir idea/título, aprobar, programar, descartar→"descartada", archivar→activa=false), CREAR nuevas con "proponer_campanas", y BORRAR de forma permanente con "eliminar_campana" (solo si lo piden explícito; si dudás entre borrar o descartar, descartá o preguntá). Si no tenés el id, mirá "listar_calendario" primero. Para mover/editar varias a la vez, llamá la herramienta una vez por cada una en el mismo turno. Tras el cambio, confirmá en una frase qué quedó.
    FLUJO DE PUBLICACIÓN (importante): es generar → aprobar → programar → (auto)publicar. NO se puede APROBAR sin GENERAR la pieza primero (estado "aprobada" requiere copy+imagen), ni PROGRAMAR sin APROBAR (estado "programada"). Una campaña en estado "programada" se PUBLICA SOLA cuando llega su fecha/hora. Entonces, si el dueño te pide "programá/agendá la publicación de la #X para tal fecha a tal hora": 1) si no está generada, generá la pieza ("generar_pieza"); 2) aprobala ("editar_campana" estado="aprobada"); 3) fijá la fecha/hora y dejala en estado="programada" ("editar_campana"). Aclarale que quedó programada y se publicará sola a esa hora.
 2. GENERAR PIEZA DEL CALENDARIO: "generar_pieza" con el id (copy + imagen para social, o asunto + HTML para email). Úsalo cuando el dueño lo pida sobre ítems concretos.
+2-email. RETOCAR UN CORREO YA HECHO: si el dueño quiere cambiar algo de un correo que YA generaste (ej. "meté la tabla de precios", "cambiá el CTA", "sacá esa sección") usá "ajustar_email" (id + qué cambiar), NUNCA "generar_pieza" (ese lo rehace de cero y pierde el trabajo). El generador YA conoce las tarifas reales, así que pedir "meté la tabla de precios" inserta la tabla con las cifras vigentes. Si te lo piden y no lo hiciste, es porque usaste la herramienta equivocada: usá "ajustar_email".
 2b. REUTILIZAR lo que YA existe (NUNCA lo regeneres con generar_pieza, que crea contenido NUEVO y distinto). Resolvelo VOS de una, sin ofrecer menús de opciones:
    - Republicar un post entero o llevarlo a otro canal → "reutilizar_publicacion" (id; canal opcional para IG↔FB). Crea una copia con el copy y TODAS las imágenes, lista para publicar/programar; el original queda intacto. Ej.: "subí a Facebook el carrusel que hicimos en Instagram".
    - Poner imágenes que YA existen en una pieza → "usar_imagenes_en_pieza" (id, codigos). Una campaña "C-X" trae TODAS sus imágenes en orden. Ej.: "agarrá la C-4 y poné esas 7 placas en la pieza de Facebook #21".
@@ -354,6 +355,19 @@ const TOOL_GENERAR: Anthropic.Tool = {
     type: 'object',
     properties: { id: { type: 'string', description: 'Id del ítem del calendario.' } },
     required: ['id'],
+  },
+}
+
+const TOOL_AJUSTAR_EMAIL: Anthropic.Tool = {
+  name: 'ajustar_email',
+  description: 'AJUSTA un correo YA GENERADO conservando lo que está bien y cambiando SOLO lo que se pide (ej. "meté la tabla de precios", "cambiá el CTA", "sacá la última sección"). Úsalo cuando el dueño quiera RETOCAR el correo en curso — NO uses generar_pieza para eso (rehace todo de cero y pierde el trabajo). El generador ya conoce las TARIFAS reales, así que "meté la tabla de precios" inserta la tabla con las cifras vigentes. Solo aplica a ítems de canal email ya generados.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Id del ítem de email del calendario.' },
+      comentario: { type: 'string', description: 'Qué ajustar exactamente (ej. "agregá una tabla con los precios de cremación por peso, después de la sección de servicios").' },
+    },
+    required: ['id', 'comentario'],
   },
 }
 
@@ -841,7 +855,7 @@ export async function generarRespuestaMarketing(
   // Reglas inviolables REPETIDAS al final (máxima saliencia; se validan además por código).
   system.push({ type: 'text', text: REGLAS_INVIOLABLES })
 
-  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_PLANTILLA, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG, TOOL_NUEVA_IMAGEN, TOOL_REUTILIZAR, TOOL_USAR_IMGS]
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AJUSTAR_EMAIL, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_PLANTILLA, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG, TOOL_NUEVA_IMAGEN, TOOL_REUTILIZAR, TOOL_USAR_IMGS]
   if (isGoogleAdsConfigurado()) {
     tools.push(
       TOOL_GADS_RESUMEN, TOOL_GADS_KEYWORDS, TOOL_GADS_TERMINOS, TOOL_GADS_AUDITAR,
@@ -970,6 +984,21 @@ export async function generarRespuestaMarketing(
               + (r.item.imagen_url ? `\n\nMostrale al dueño este copy y la imagen incluyéndola con ![](${r.item.imagen_url}).` : '\n\n(sin imagen)')
           }
           resultText = `${prev}${r.avisos.length ? '\n\nAvisos: ' + r.avisos.join('; ') : ''}`
+        } else if (tu.name === 'ajustar_email') {
+          const inp = tu.input as { id?: string; comentario?: string }
+          const id = String(inp.id || '')
+          const comentario = String(inp.comentario || '')
+          if (!id || !comentario.trim()) {
+            resultText = 'Faltan datos: el id del correo y qué ajustar.'
+          } else {
+            try {
+              const r = await ajustarPiezaEmail(id, comentario, opts.creadoPor)
+              cambios = true
+              resultText = `Correo ajustado (asunto: "${r.item.titulo}"). Se conservó lo que estaba y se aplicó el cambio pedido. Sigue como borrador en Mailing. Resumí en una frase qué cambiaste; no pegues el HTML.${r.avisos.length ? '\n\nAvisos: ' + r.avisos.join('; ') : ''}`
+            } catch (e) {
+              resultText = `No se pudo ajustar el correo: ${e instanceof Error ? e.message : String(e)}.`
+            }
+          }
         } else if (tu.name === 'auditar_perfil') {
           const [fb, ig] = await Promise.all([
             leerPerfilFacebook().catch(() => null),

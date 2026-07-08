@@ -281,21 +281,31 @@ export default function ConfiguracionPage() {
     return 'all'
   }
 
-  const patch = async (url: string, body: object) => {
+  // Anti doble-envío: si una mutación ya está en vuelo, ignora la segunda (evita que
+  // un doble-click rápido cree/duplique dos veces — pasó con los precios especiales).
+  // Solo bloquea llamadas CONCURRENTES; las secuenciales (await ya resuelto) pasan.
+  const inFlight = useRef(false)
+  async function guardado<T>(fn: () => Promise<T>): Promise<T | undefined> {
+    if (inFlight.current) return
+    inFlight.current = true
+    try { return await fn() } finally { inFlight.current = false }
+  }
+
+  const patch = async (url: string, body: object) => guardado(async () => {
     const res = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al actualizar: ${err.error ?? res.status}`); return }
     await refresh(refreshKeyForUrl(url))
-  }
-  const post = async (url: string, body: object) => {
+  })
+  const post = async (url: string, body: object) => guardado(async () => {
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al guardar: ${err.error ?? res.status}`); return }
     await refresh(refreshKeyForUrl(url))
-  }
-  const del = async (url: string) => {
+  })
+  const del = async (url: string) => guardado(async () => {
     const res = await fetch(url, { method: 'DELETE' })
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al eliminar: ${err.error ?? res.status}`); return }
     await refresh(refreshKeyForUrl(url))
-  }
+  })
   const reorder = async (tipo: PrecioSubTab, id: string, direction: 'up' | 'down') => {
     await fetch(`/api/precios/reorder?tipo=${tipo}`, {
       method: 'POST',
@@ -304,7 +314,7 @@ export default function ConfiguracionPage() {
     })
     await refresh('precios')
   }
-  const duplicarTabla = async () => {
+  const duplicarTabla = async () => guardado(async () => {
     const { destino, origen } = duplicarForm
     if (!destino || !origen) { alert('Elige la veterinaria destino y la tabla de origen.'); return }
     const yaTiene = preciosE.filter(pe => pe.veterinaria_id === destino).length
@@ -320,7 +330,7 @@ export default function ConfiguracionPage() {
     setEspecialVetFiltro(destino)
     await refresh('precios')
     alert(`Listo: ${data.copiados} tramo(s) copiados${data.reemplazados ? ` (se reemplazaron ${data.reemplazados})` : ''}. Ajústalos si hace falta.`)
-  }
+  })
   const normalizarIds = async () => {
     if (!confirm('¿Renumerar IDs de todos los tramos (general, convenio y especiales)? Los IDs quedarán secuenciales 1, 2, 3...')) return
     const res = await fetch('/api/precios/normalizar-ids', { method: 'POST' })
@@ -809,7 +819,7 @@ export default function ConfiguracionPage() {
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <div>
               <h2 className="font-semibold text-gray-900">Descuentos</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Variable (%) o Fijo (monto en CLP) · Aplica sobre el total del servicio (cremación + adicionales)</p>
+              <p className="text-xs text-gray-400 mt-0.5">Variable (%) o Fijo (monto en CLP) · Aplica SOLO al precio de la cremación (los adicionales se pagan completos)</p>
             </div>
             <button onClick={() => { setEditingDescuento(null); setDescuentoForm({ nombre: '', tipo: 'variable', valor: '' }); setShowDescuentoModal(true) }}
               className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>

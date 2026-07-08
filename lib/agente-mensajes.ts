@@ -62,7 +62,7 @@ AGENDAMIENTO (usa las herramientas SOLO cuando tengas TODOS los datos; si falta 
 
 CUANDO EL CLIENTE DUDA O NO CIERRA (no lo dejes ir con un frío "cualquier duda nos escribe")
 - "Lo estoy pensando / cotizando / lo veo con la familia": responde cálido y da UN motivo concreto para elegirnos (retiro rápido en vehículo habilitado, entrega en 3 días hábiles, trazabilidad con código y certificado digital), y deja la puerta abierta con una acción fácil: "si quieres te dejo el retiro reservado para hoy y lo confirmamos apenas me avises". Un solo empujón, sin presionar.
-- OBJECIÓN DE PRECIO / "¿algo más económico?": no la esquives. Existe la modalidad *Sin Devolución*, que es la más económica; ofrécela con naturalidad explicando en qué se diferencia (no se devuelven las cenizas). NUNCA inventes descuentos ni precios fuera de la tabla.
+- OBJECIÓN DE PRECIO / "¿algo más económico?": no la esquives. Existe la modalidad *Sin Devolución*, que es la más económica; ofrécela con naturalidad explicando en qué se diferencia (no se devuelven las cenizas). Sobre DESCUENTOS: guíate por el bloque "DESCUENTOS / CONVENIOS VIGENTES" de abajo (son convenios con instituciones, no promos abiertas); NUNCA inventes uno que no esté ahí ni precios fuera de la tabla.
 - URGENCIA (mascota recién fallecida o sufriendo): trátala como prioridad. Ofrece la franja de retiro más pronta posible desde la hora actual y avanza al cierre rápido; no dilates con preguntas que puedes resolver después.
 
 REGLAS DURAS
@@ -155,6 +155,25 @@ async function bloqueProductos(): Promise<string> {
     const todo = [...lineasP, ...lineasS]
     if (todo.length === 0) return ''
     return `PRODUCTOS ADICIONALES DISPONIBLES (para ofrecer y para "agregar_adicional" — usa el id y tipo EXACTOS; los PRECIOS son estos, no los inventes):\n${todo.slice(0, 60).join('\n')}`
+  } catch { return '' }
+}
+
+/** Descuentos/convenios vigentes (hoja `descuentos`), para que el bot responda con
+ *  la verdad cuando pregunten "¿tienen descuentos?" — sin inventar ni prometer de más. */
+async function bloqueDescuentos(): Promise<string> {
+  try {
+    const rows = await getSheetData('descuentos')
+    const act = rows.filter(r => (r.activo || '').toUpperCase() === 'TRUE')
+    if (act.length === 0) {
+      return `DESCUENTOS / CONVENIOS: hoy no hay descuentos ni convenios activos. Si preguntan por descuentos, dilo con cordialidad (podés ofrecer la modalidad Sin Devolución, que es la más económica) y NO inventes ninguno.`
+    }
+    const lineas = act.map(d => {
+      const v = parseFloat(d.valor) || 0
+      const val = d.tipo === 'fijo' ? fmtPrecio(v) : `${v}%`
+      return `- ${d.nombre}: ${val} de descuento`
+    }).join('\n')
+    return `DESCUENTOS / CONVENIOS VIGENTES (son ACUERDOS con instituciones o convenios puntuales, NO promociones abiertas para cualquiera). Si el cliente pregunta "¿tienen descuentos?", podés contarle que trabajamos con algunos convenios y mencionar los que apliquen, PERO aclarando que el descuento aplica solo si viene por ese convenio/institución (ej. es funcionario o cliente de esa entidad). NUNCA prometas un descuento a alguien que no calza en un convenio, ni inventes uno que no esté acá. El descuento aplica SOLO al valor de la cremación, nunca a los adicionales (ánfora premium, fuera de horario, distancia). Si tenés dudas de si aplica a esa persona, decile que lo confirma el equipo:
+${lineas}`
   } catch { return '' }
 }
 
@@ -526,9 +545,10 @@ export async function generarRespuesta(
   // (caso Cristián). Son mensajes de WhatsApp cortos → el costo extra es bajo.
   const base = construirMensajes(historial.slice(-40))
   if (base.length === 0) return { mensaje: '', escalar: false, acciones: [] }
-  const [tarifas, productos, cfg, imgsWa] = await Promise.all([
+  const [tarifas, productos, descuentos, cfg, imgsWa] = await Promise.all([
     bloqueTarifas(),
     bloqueProductos(),
+    bloqueDescuentos(),
     getAgenteConfig().catch(() => null),
     listarImagenesWhatsapp().catch(() => [] as ImagenBanco[]),
   ])
@@ -550,6 +570,8 @@ ${cfg.instrucciones.trim()}`,
   system.push({ type: 'text', text: bloqueFechaChile() })
   // Productos adicionales disponibles (para ofrecer/cotizar/agregar).
   if (productos) system.push({ type: 'text', text: productos })
+  // Descuentos/convenios vigentes (para responder "¿tienen descuentos?" sin inventar).
+  if (descuentos) system.push({ type: 'text', text: descuentos })
   // Si el cliente ya tiene una ficha de retiro en proceso (borrador visible en
   // /clientes), evita que el agente registre otra.
   if (opts.ctx?.waId) {
