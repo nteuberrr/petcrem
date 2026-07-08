@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { esAdminTotal } from '@/lib/roles'
-import { isGoogleAdsConfigurado } from '@/lib/google-ads'
+import { isGoogleAdsConfigurado, esTokenVencido } from '@/lib/google-ads'
 import { auditarCuenta } from '@/lib/google-ads-audit'
 
 /**
@@ -26,6 +26,7 @@ export async function GET() {
     const hallazgos = await auditarCuenta()
     return NextResponse.json({ hallazgos })
   } catch (e) {
+    if (esTokenVencido(e)) return NextResponse.json({ error: 'El acceso a Google Ads venció. Regeneralo con scripts/google-ads-refresh-token.ts.', tokenVencido: true }, { status: 502 })
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Error' }, { status: 502 })
   }
 }

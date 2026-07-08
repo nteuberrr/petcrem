@@ -7,6 +7,7 @@ import {
   pausarCampanaGoogle, activarCampanaGoogle, ajustarPresupuestoGoogle,
   pausarKeywordGoogle, activarKeywordGoogle, agregarNegativaCampana,
   listarListasCompartidas, crearListaNegativasCompartida, adjuntarListaATodasLasCampanas, eliminarListaCompartida,
+  esTokenVencido,
 } from '@/lib/google-ads'
 import { NEGATIVAS_UNIVERSALES_ES_CL } from '@/lib/google-ads-guia'
 
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
     ])
     return NextResponse.json({ ads, keywords: keywords.keywords, terminos: terminos.terminos, gestion: gestion.campanas, listasNegativas })
   } catch (e) {
+    if (esTokenVencido(e)) return NextResponse.json({ error: 'El acceso a Google Ads venció. Regeneralo con scripts/google-ads-refresh-token.ts.', tokenVencido: true }, { status: 502 })
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Error' }, { status: 502 })
   }
 }

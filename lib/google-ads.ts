@@ -44,10 +44,19 @@ async function getAccessToken(): Promise<string> {
   })
   const j = await res.json().catch(() => ({})) as { access_token?: string; expires_in?: number; error?: string; error_description?: string }
   if (!res.ok || !j.access_token) {
+    // invalid_grant = el refresh token venció (app OAuth en modo "Prueba") → hay que
+    // regenerarlo con scripts/google-ads-refresh-token.ts. Se marca para que el panel
+    // muestre un banner claro en vez de un error genérico.
+    if (j.error === 'invalid_grant') throw new Error('GOOGLE_ADS_TOKEN_VENCIDO')
     throw new Error(j.error_description || j.error || `No se pudo renovar el token de Google Ads (HTTP ${res.status})`)
   }
   tokenCache = { token: j.access_token, exp: Date.now() + ((j.expires_in ?? 3600) - 60) * 1000 }
   return j.access_token
+}
+
+/** true si el error es por el refresh token de Google Ads vencido (invalid_grant). */
+export function esTokenVencido(e: unknown): boolean {
+  return e instanceof Error && e.message === 'GOOGLE_ADS_TOKEN_VENCIDO'
 }
 
 type GaqlRow = Record<string, Record<string, unknown> & { resourceName?: string }>
@@ -188,37 +197,106 @@ export interface CampanaGoogle {
   ctr: number
   cpc: number
   conversiones: number
+  /** Valor total de conversión del período (suma de conversions_value). */
+  conversionesValor: number
+  /** Costo por conversión (CPA) = gasto / conversiones. 0 si no hubo conversiones. */
+  costoPorConversion: number
+  /** Impression Share (0-100) y % perdido — null si la campaña no sirvió/no aplica. */
+  impressionShare: number | null
+  perdidoPorPresupuesto: number | null
+  perdidoPorRanking: number | null
+}
+export interface ComparacionPeriodo {
+  etiqueta: string
+  gasto: number
+  conversiones: number
+  conversionesValor: number
+  costoPorConversion: number
 }
 export interface ResumenGoogleAds {
   moneda: string
   cuenta: Omit<CampanaGoogle, 'id' | 'nombre' | 'status'>
   campanas: CampanaGoogle[]
+  /** Totales del período inmediatamente anterior (misma duración) para comparar. */
+  comparacion?: ComparacionPeriodo
+}
+
+const pctIS = (v: unknown): number | null => v == null ? null : Math.round(num(v) * 1000) / 10
+const cpa = (gasto: number, conv: number): number => conv > 0 ? Math.round(gasto / conv) : 0
+
+/** WHERE de fechas del período INMEDIATAMENTE ANTERIOR (misma duración), para comparar. */
+function whereFechaAnterior(periodo: string): { where: string; etiqueta: string } | null {
+  const diasMap: Record<string, number> = { last_7d: 7, last_14d: 14, last_30d: 30, last_90d: 90 }
+  const dstr = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return fmtFecha(d) }
+  if (periodo in diasMap) {
+    const n = diasMap[periodo]
+    // Actual (DURING LAST_N_DAYS) = [hoy-n, hoy-1]; anterior = [hoy-2n, hoy-n-1].
+    return { where: `segments.date BETWEEN '${dstr(2 * n)}' AND '${dstr(n + 1)}'`, etiqueta: `${n} días previos` }
+  }
+  const hoy = new Date()
+  if (periodo === 'this_month') {
+    const first = fmtFecha(new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1))
+    const last = fmtFecha(new Date(hoy.getFullYear(), hoy.getMonth(), 0))
+    return { where: `segments.date BETWEEN '${first}' AND '${last}'`, etiqueta: 'mes anterior' }
+  }
+  if (periodo === 'last_month') {
+    const first = fmtFecha(new Date(hoy.getFullYear(), hoy.getMonth() - 2, 1))
+    const last = fmtFecha(new Date(hoy.getFullYear(), hoy.getMonth() - 1, 0))
+    return { where: `segments.date BETWEEN '${first}' AND '${last}'`, etiqueta: 'mes previo' }
+  }
+  return null
+}
+
+async function totalesPeriodo(where: string): Promise<{ gasto: number; conversiones: number; conversionesValor: number }> {
+  const rows = await gaqlSearch(`
+    SELECT metrics.cost_micros, metrics.conversions, metrics.conversions_value
+    FROM campaign WHERE ${where} AND campaign.status != 'REMOVED'
+  `)
+  let gasto = 0, conversiones = 0, conversionesValor = 0
+  for (const r of rows) {
+    const m = (r.metrics || {}) as Record<string, unknown>
+    gasto += clp(m.costMicros)
+    conversiones += num(m.conversions)
+    conversionesValor += clp(m.conversionsValue)
+  }
+  return { gasto, conversiones: Math.round(conversiones * 10) / 10, conversionesValor }
 }
 
 export async function resumenCampanas(periodo: string): Promise<ResumenGoogleAds> {
   const where = whereFecha(periodo)
-  const [rows, moneda] = await Promise.all([
+  const anterior = whereFechaAnterior(periodo)
+  const [rows, moneda, comparacionTot] = await Promise.all([
     gaqlSearch(`
       SELECT campaign.id, campaign.name, campaign.status,
-             metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions
+             metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
+             metrics.conversions, metrics.conversions_value,
+             metrics.search_impression_share, metrics.search_budget_lost_impression_share, metrics.search_rank_lost_impression_share
       FROM campaign
-      WHERE ${where}
+      WHERE ${where} AND campaign.status != 'REMOVED'
     `),
     monedaCuenta(),
+    anterior ? totalesPeriodo(anterior.where) : Promise.resolve(null),
   ])
 
   const campanas: CampanaGoogle[] = rows.map(r => {
     const m = (r.metrics || {}) as Record<string, unknown>
+    const gasto = clp(m.costMicros)
+    const conversiones = Math.round(num(m.conversions) * 10) / 10
     return {
       id: String(r.campaign?.id || ''),
       nombre: String(r.campaign?.name || 'Campaña'),
       status: String(r.campaign?.status || ''),
-      gasto: clp(m.costMicros),
+      gasto,
       impresiones: num(m.impressions),
       clicks: num(m.clicks),
       ctr: num(m.ctr) * 100,
       cpc: clp(m.averageCpc),
-      conversiones: Math.round(num(m.conversions) * 10) / 10,
+      conversiones,
+      conversionesValor: clp(m.conversionsValue),
+      costoPorConversion: cpa(gasto, conversiones),
+      impressionShare: pctIS(m.searchImpressionShare),
+      perdidoPorPresupuesto: pctIS(m.searchBudgetLostImpressionShare),
+      perdidoPorRanking: pctIS(m.searchRankLostImpressionShare),
     }
   }).sort((a, b) => b.gasto - a.gasto)
 
@@ -229,11 +307,25 @@ export async function resumenCampanas(periodo: string): Promise<ResumenGoogleAds
     ctr: 0, // se recalcula abajo
     cpc: 0,
     conversiones: Math.round((acc.conversiones + c.conversiones) * 10) / 10,
-  }), { gasto: 0, impresiones: 0, clicks: 0, ctr: 0, cpc: 0, conversiones: 0 })
+    conversionesValor: acc.conversionesValor + c.conversionesValor,
+    costoPorConversion: 0,
+    impressionShare: null as number | null,
+    perdidoPorPresupuesto: null as number | null,
+    perdidoPorRanking: null as number | null,
+  }), { gasto: 0, impresiones: 0, clicks: 0, ctr: 0, cpc: 0, conversiones: 0, conversionesValor: 0, costoPorConversion: 0, impressionShare: null as number | null, perdidoPorPresupuesto: null as number | null, perdidoPorRanking: null as number | null })
   cuenta.ctr = cuenta.impresiones > 0 ? Math.round((cuenta.clicks / cuenta.impresiones) * 1000) / 10 : 0
   cuenta.cpc = cuenta.clicks > 0 ? Math.round(cuenta.gasto / cuenta.clicks) : 0
+  cuenta.costoPorConversion = cpa(cuenta.gasto, cuenta.conversiones)
 
-  return { moneda, cuenta, campanas }
+  const comparacion: ComparacionPeriodo | undefined = (anterior && comparacionTot) ? {
+    etiqueta: anterior.etiqueta,
+    gasto: comparacionTot.gasto,
+    conversiones: comparacionTot.conversiones,
+    conversionesValor: comparacionTot.conversionesValor,
+    costoPorConversion: cpa(comparacionTot.gasto, comparacionTot.conversiones),
+  } : undefined
+
+  return { moneda, cuenta, campanas, comparacion }
 }
 
 // ─── Keywords ─────────────────────────────────────────────────────────────────
@@ -250,6 +342,8 @@ export interface KeywordGoogle {
   grupoAnuncioEstado: string
   /** true SOLO si la keyword está realmente sirviendo: ella, su grupo y su campaña ENABLED. */
   enVivo: boolean
+  /** Quality Score 1-10 (null si Google todavía no tiene datos suficientes). */
+  qualityScore: number | null
   gasto: number
   impresiones: number
   clicks: number
@@ -266,6 +360,7 @@ export async function listarKeywords(periodo: string, limite = 30): Promise<{ mo
     gaqlSearch(`
       SELECT ad_group_criterion.resource_name, ad_group_criterion.status,
              ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
+             ad_group_criterion.quality_info.quality_score,
              campaign.name, campaign.status, ad_group.status,
              metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.average_cpc
       FROM keyword_view
@@ -276,6 +371,7 @@ export async function listarKeywords(periodo: string, limite = 30): Promise<{ mo
   const keywords: KeywordGoogle[] = rows.map(r => {
     const crit = (r.adGroupCriterion || {}) as Record<string, unknown>
     const kw = (crit.keyword || {}) as Record<string, unknown>
+    const qi = (crit.qualityInfo || {}) as Record<string, unknown>
     const m = (r.metrics || {}) as Record<string, unknown>
     const status = String(crit.status || '')
     const campanaEstado = String(r.campaign?.status || '')
@@ -289,6 +385,7 @@ export async function listarKeywords(periodo: string, limite = 30): Promise<{ mo
       campanaEstado,
       grupoAnuncioEstado,
       enVivo: status === 'ENABLED' && campanaEstado === 'ENABLED' && grupoAnuncioEstado === 'ENABLED',
+      qualityScore: qi.qualityScore != null ? num(qi.qualityScore) : null,
       gasto: clp(m.costMicros),
       impresiones: num(m.impressions),
       clicks: num(m.clicks),

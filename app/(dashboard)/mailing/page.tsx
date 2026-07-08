@@ -393,18 +393,20 @@ function GestionCampanas() {
 }
 
 // ── Google Ads (solo lectura): campañas + keywords + términos de búsqueda ──
-type CampGoogle = { id: string; nombre: string; status: string; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number; conversiones: number }
-type KeywordGoogle = { resourceName: string; status: string; texto: string; matchType: string; campana: string; campanaEstado: string; grupoAnuncioEstado: string; enVivo: boolean; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number }
+type CampGoogle = { id: string; nombre: string; status: string; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number; conversiones: number; conversionesValor: number; costoPorConversion: number; impressionShare: number | null; perdidoPorPresupuesto: number | null; perdidoPorRanking: number | null }
+type ComparacionGoogle = { etiqueta: string; gasto: number; conversiones: number; conversionesValor: number; costoPorConversion: number }
+type KeywordGoogle = { resourceName: string; status: string; texto: string; matchType: string; campana: string; campanaEstado: string; grupoAnuncioEstado: string; enVivo: boolean; qualityScore: number | null; gasto: number; impresiones: number; clicks: number; ctr: number; cpc: number }
 type TerminoGoogle = { termino: string; campana: string; campanaId: string; gasto: number; impresiones: number; clicks: number; conversiones: number }
 type CampanaGestionGoogle = { id: string; nombre: string; status: string; presupuestoResourceName: string; presupuestoClp: number; compartido: boolean }
 type ListaNegativasGoogle = { resourceName: string; nombre: string; cantidadTerminos: number; campanas: string[] }
 type GoogleAdsResp = {
-  ads?: { moneda: string; cuenta: Omit<CampGoogle, 'id' | 'nombre' | 'status'>; campanas: CampGoogle[] }
+  ads?: { moneda: string; cuenta: Omit<CampGoogle, 'id' | 'nombre' | 'status'>; campanas: CampGoogle[]; comparacion?: ComparacionGoogle }
   keywords?: KeywordGoogle[]
   terminos?: TerminoGoogle[]
   gestion?: CampanaGestionGoogle[]
   listasNegativas?: ListaNegativasGoogle[]
   error?: string
+  tokenVencido?: boolean
 }
 
 const ESTADO_GOOGLE: Record<string, { label: string; cls: string }> = {
@@ -478,16 +480,17 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
   const [data, setData] = useState<GoogleAdsResp | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
+  const [tokenVencido, setTokenVencido] = useState(false)
   const [busyId, setBusyId] = useState('')
   const [editId, setEditId] = useState('')
   const [editVal, setEditVal] = useState('')
 
   const cargar = useCallback(async () => {
-    setLoading(true); setErr('')
+    setLoading(true); setErr(''); setTokenVencido(false)
     try {
       const r = await fetch(`/api/mailing/google-ads?periodo=${periodo}`, { cache: 'no-store' })
       const d = await r.json()
-      if (!r.ok) { setErr(d.error || 'Error'); setData(null) } else setData(d)
+      if (!r.ok) { setErr(d.error || 'Error'); setTokenVencido(!!d.tokenVencido); setData(null) } else setData(d)
     } catch { setErr('Error de red'); setData(null) }
     setLoading(false)
   }, [periodo])
@@ -499,14 +502,25 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
   const fmt = (n: number) => Math.round(n || 0).toLocaleString('es-CL')
   const ads = data?.ads
   const money = (n: number) => `$${fmt(n)}${ads && ads.moneda !== 'CLP' ? ' ' + ads.moneda : ''}`
+  const comp = ads?.comparacion
+  // Delta % vs período anterior. mejorSubir=true → subir es bueno (verde); false → bajar es bueno.
+  const delta = (actual: number, previo: number, mejorSubir: boolean): { txt: string; cls: string } | null => {
+    if (previo === 0) return null
+    const pct = Math.round(((actual - previo) / previo) * 1000) / 10
+    if (pct === 0) return { txt: '=', cls: 'text-gray-400' }
+    const bueno = mejorSubir ? pct > 0 : pct < 0
+    return { txt: `${pct > 0 ? '+' : ''}${pct}%`, cls: bueno ? 'text-emerald-600' : 'text-red-600' }
+  }
 
   const KPIS = ads ? [
-    { l: 'Gasto', v: money(ads.cuenta.gasto) },
-    { l: 'Impresiones', v: fmt(ads.cuenta.impresiones) },
-    { l: 'Clics', v: fmt(ads.cuenta.clicks) },
-    { l: 'CTR', v: `${ads.cuenta.ctr.toFixed(2)}%` },
-    { l: 'CPC', v: money(ads.cuenta.cpc) },
-    { l: 'Conversiones', v: ads.cuenta.conversiones.toLocaleString('es-CL') },
+    { l: 'Gasto', v: money(ads.cuenta.gasto), d: comp ? delta(ads.cuenta.gasto, comp.gasto, false) : null },
+    { l: 'Conversiones', v: ads.cuenta.conversiones.toLocaleString('es-CL'), d: comp ? delta(ads.cuenta.conversiones, comp.conversiones, true) : null },
+    { l: 'Costo/conversión', v: ads.cuenta.costoPorConversion > 0 ? money(ads.cuenta.costoPorConversion) : '—', d: comp ? delta(ads.cuenta.costoPorConversion, comp.costoPorConversion, false) : null },
+    { l: 'Valor conversión', v: ads.cuenta.conversionesValor > 0 ? money(ads.cuenta.conversionesValor) : '—', d: comp ? delta(ads.cuenta.conversionesValor, comp.conversionesValor, true) : null },
+    { l: 'Clics', v: fmt(ads.cuenta.clicks), d: null },
+    { l: 'CTR', v: `${ads.cuenta.ctr.toFixed(2)}%`, d: null },
+    { l: 'CPC', v: money(ads.cuenta.cpc), d: null },
+    { l: 'Impresiones', v: fmt(ads.cuenta.impresiones), d: null },
   ] : []
 
   async function accionCampana(id: string, nombre: string, accion: 'pausar_campana' | 'activar_campana') {
@@ -602,6 +616,12 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
   return (
     <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
       <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Anuncios pagados (Google Ads)</h3>
+      {tokenVencido && (
+        <div className="rounded-xl border-2 border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          <p className="font-semibold">⚠️ El acceso a Google Ads venció</p>
+          <p className="text-red-700 mt-0.5">El token de conexión (modo de prueba de Google) caducó. Para reconectar, corré <code className="bg-red-100 px-1 rounded">npx tsx scripts/google-ads-refresh-token.ts</code> y actualizá <code className="bg-red-100 px-1 rounded">GOOGLE_ADS_REFRESH_TOKEN</code> en .env.local y en Vercel.</p>
+        </div>
+      )}
       <AuditoriaGoogleAds />
       {loading ? (
         <p className="text-sm text-gray-400">Cargando…</p>
@@ -609,24 +629,30 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
         <p className="text-sm text-gray-500">No se pudieron leer los Ads: {err}</p>
       ) : ads ? (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {comp && <p className="text-[11px] text-gray-400 -mb-1">Comparado con {comp.etiqueta}</p>}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {KPIS.map(k => (
               <div key={k.l} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
                 <div className="text-[11px] text-gray-500">{k.l}</div>
-                <div className="text-lg font-bold text-gray-900">{k.v}</div>
+                <div className="flex items-baseline gap-1.5">
+                  <div className="text-lg font-bold text-gray-900">{k.v}</div>
+                  {k.d && <span className={`text-[11px] font-semibold ${k.d.cls}`}>{k.d.txt}</span>}
+                </div>
               </div>
             ))}
           </div>
 
           {ads.campanas.length > 0 ? (
             <div className="overflow-x-auto rounded-xl border border-gray-200">
-              <table className="w-full min-w-[820px] text-sm">
+              <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                   <tr>
                     <th className="text-left px-3 py-2">Campaña</th>
                     <th className="text-left px-3 py-2">Estado</th>
                     <th className="text-right px-3 py-2">Gasto</th>
-                    <th className="text-right px-3 py-2">Clics</th>
+                    <th className="text-right px-3 py-2">Conv.</th>
+                    <th className="text-right px-3 py-2" title="Costo por conversión">Costo/conv.</th>
+                    <th className="text-right px-3 py-2" title="% de las búsquedas elegibles donde apareciste">Imp. Share</th>
                     <th className="text-right px-3 py-2">CTR</th>
                     <th className="text-right px-3 py-2">CPC</th>
                     <th className="text-left px-3 py-2">Presupuesto/día</th>
@@ -640,12 +666,18 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                     const editando = editId === c.id
                     const busy = busyId === c.id
                     const activa = c.status === 'ENABLED'
+                    // Motivo dominante de pérdida de Impression Share (para el tooltip).
+                    const perdida = c.impressionShare != null
+                      ? [c.perdidoPorPresupuesto != null && c.perdidoPorPresupuesto >= 10 ? `pierde ${c.perdidoPorPresupuesto}% por presupuesto` : '', c.perdidoPorRanking != null && c.perdidoPorRanking >= 20 ? `pierde ${c.perdidoPorRanking}% por ranking` : ''].filter(Boolean).join(' · ')
+                      : ''
                     return (
                       <tr key={c.id} className="hover:bg-gray-50 align-middle">
-                        <td className="px-3 py-2 text-gray-800 max-w-[220px] truncate">{c.nombre}</td>
+                        <td className="px-3 py-2 text-gray-800 max-w-[200px] truncate">{c.nombre}</td>
                         <td className="px-3 py-2"><span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded border ${b.cls}`}>{b.label}</span></td>
                         <td className="px-3 py-2 text-right">{money(c.gasto)}</td>
-                        <td className="px-3 py-2 text-right">{fmt(c.clicks)}</td>
+                        <td className="px-3 py-2 text-right">{c.conversiones.toLocaleString('es-CL')}</td>
+                        <td className="px-3 py-2 text-right">{c.costoPorConversion > 0 ? money(c.costoPorConversion) : '—'}</td>
+                        <td className="px-3 py-2 text-right" title={perdida}>{c.impressionShare != null ? `${c.impressionShare}%` : '—'}{perdida && <span className="text-amber-600"> ⚠</span>}</td>
                         <td className="px-3 py-2 text-right">{c.ctr.toFixed(2)}%</td>
                         <td className="px-3 py-2 text-right">{money(c.cpc)}</td>
                         <td className="px-3 py-2">
@@ -685,11 +717,12 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Palabras clave (top {data.keywords.length} por gasto)</p>
               <div className="overflow-x-auto rounded-xl border border-gray-200">
-                <table className="w-full min-w-[720px] text-sm">
+                <table className="w-full min-w-[780px] text-sm">
                   <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                     <tr>
                       <th className="text-left px-3 py-2">Palabra clave</th>
                       <th className="text-left px-3 py-2">Campaña</th>
+                      <th className="text-center px-3 py-2" title="Quality Score 1-10 (calidad según Google)">QS</th>
                       <th className="text-right px-3 py-2">Gasto</th>
                       <th className="text-right px-3 py-2">Clics</th>
                       <th className="text-right px-3 py-2">CTR</th>
@@ -705,6 +738,8 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                       // verdad. `enVivo` es la única señal confiable de "realmente activa".
                       const campanaApagada = activa && !k.enVivo
                       const busy = busyId === k.resourceName
+                      // Color del QS: verde ≥7, ámbar 4-6, rojo ≤3.
+                      const qsCls = k.qualityScore == null ? 'text-gray-300' : k.qualityScore >= 7 ? 'text-emerald-600' : k.qualityScore >= 4 ? 'text-amber-600' : 'text-red-600'
                       return (
                         <tr key={i} className="hover:bg-gray-50">
                           <td className="px-3 py-2 text-gray-800">
@@ -713,6 +748,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                             {campanaApagada && <span className="ml-1.5 text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded" title="La keyword figura habilitada, pero su campaña o grupo de anuncios está pausado: no está gastando.">no gasta (campaña pausada)</span>}
                           </td>
                           <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{k.campana}{k.campanaEstado && k.campanaEstado !== 'ENABLED' && <span className="text-amber-600"> (pausada)</span>}</td>
+                          <td className={`px-3 py-2 text-center font-bold ${qsCls}`}>{k.qualityScore ?? '—'}</td>
                           <td className="px-3 py-2 text-right">{money(k.gasto)}</td>
                           <td className="px-3 py-2 text-right">{fmt(k.clicks)}</td>
                           <td className="px-3 py-2 text-right">{k.ctr.toFixed(2)}%</td>
