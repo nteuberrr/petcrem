@@ -25,6 +25,7 @@ import {
   pausarCampanaGoogle, activarCampanaGoogle, ajustarPresupuestoGoogle, pausarKeywordGoogle, activarKeywordGoogle,
   agregarNegativaCampana, listarCampanasGestion, listarListasCompartidas, crearListaNegativasCompartida,
   adjuntarListaATodasLasCampanas, eliminarListaCompartida, listarAds, crearRSA, agregarCallouts,
+  crearCampanaCompleta, type NuevaCampanaParams,
 } from './google-ads'
 import { auditarCuenta } from './google-ads-audit'
 import {
@@ -680,6 +681,30 @@ const TOOL_GADS_AGREGAR_CALLOUTS: Anthropic.Tool = {
     required: ['campaignId', 'textos'],
   },
 }
+const TOOL_GADS_CREAR_CAMPANA: Anthropic.Tool = {
+  name: 'gads_crear_campana',
+  description: 'WIZARD de campaña NUEVA de cero: crea de una sola vez (atómico) presupuesto + campaña de Búsqueda (Maximize Conversions, solo Google Search sin socios/display, Presencia) + cobertura geográfica copiada de una campaña existente (por defecto la de mayor gasto = misma cobertura RM ya probada) + idioma español + las negativas universales ES-CL + 1 grupo de anuncios + la keyword (phrase) + 1 RSA. TODO queda EN PAUSA para que el dueño revise en Google Ads y active él — nada gasta hasta que lo active. FLUJO OBLIGATORIO (modelo SKAG, ver GUIA_GADS_ESTRUCTURA/RSA): 1) juntá los datos con el dueño (servicio/keyword, presupuesto diario en CLP, URL final; opcional: de qué campaña copiar el geo); 2) redactá el RSA completo (15 titulares con 3 pinneados slot 1, 4 descripciones) siguiendo GUIA_GADS_RSA; 3) mostrale al dueño TODO el resumen (nombre, presupuesto, keyword, URL, los 15 titulares y 4 descripciones) y pedí el sí; 4) recién ahí llamá con confirmado=true. El servidor corre el linter de RSA antes de crear; si rechaza, corregí y reintentá sin volver a pedir confirmación. Acción de escritura de ALTO IMPACTO: requiere confirmado=true.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      nombreCampana: { type: 'string', description: 'Nombre de la campaña (ej. "Búsqueda - Cremación Premium").' },
+      presupuestoClpDiario: { type: 'number', description: 'Presupuesto diario en pesos chilenos (idealmente 3-5× el CPA objetivo).' },
+      keyword: { type: 'string', description: 'La keyword principal (modelo SKAG: una keyword por grupo).' },
+      matchType: { type: 'string', enum: ['EXACT', 'PHRASE', 'BROAD'], description: 'Default PHRASE.' },
+      finalUrl: { type: 'string', description: 'URL final de la landing (idealmente una página que matchee la keyword).' },
+      headlines: {
+        type: 'array', description: 'EXACTAMENTE 15 titulares (3 con pinnedSlot1=true).',
+        items: { type: 'object', properties: { texto: { type: 'string' }, pinnedSlot1: { type: 'boolean' } }, required: ['texto'] },
+      },
+      descriptions: { type: 'array', description: 'EXACTAMENTE 4 descripciones.', items: { type: 'string' } },
+      path1: { type: 'string', description: 'Display URL path1, opcional, ≤15 chars.' },
+      path2: { type: 'string', description: 'Display URL path2, opcional, ≤15 chars.' },
+      geoTemplateCampaignId: { type: 'string', description: 'Id de la campaña de la que copiar la cobertura geográfica (opcional; por defecto la de mayor gasto).' },
+      confirmado: { type: 'boolean', description: 'true SOLO después de mostrarle al dueño el resumen COMPLETO (incluyendo los 15 titulares y 4 descripciones) y recibir el sí explícito.' },
+    },
+    required: ['nombreCampana', 'presupuestoClpDiario', 'keyword', 'finalUrl', 'headlines', 'descriptions'],
+  },
+}
 
 const TOOL_EDITAR_IMG: Anthropic.Tool = {
   name: 'editar_imagen_pieza',
@@ -792,7 +817,7 @@ export async function generarRespuestaMarketing(
   if (isGoogleAdsConfigurado()) {
     system.push({
       type: 'text',
-      text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa, gads_negativas_lote, gads_crear_lista_negativas_universal, gads_eliminar_lista_negativas, gads_crear_rsa, gads_agregar_callouts) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). Para negativas de términos de búsqueda, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación — para un lote aprobado de una vez usá gads_negativas_lote, no llames gads_negativa repetidas veces). gads_crear_lista_negativas_universal es de ALTO IMPACTO (afecta TODAS las campañas a la vez, no una sola) — avisale eso al dueño explícitamente antes de pedir el sí; revisá primero con gads_listas_negativas que no exista ya una lista similar. gads_crear_rsa SIEMPRE crea un anuncio PAUSADO nuevo, nunca reemplaza el que ya está corriendo — aclaráselo al dueño (revisa y activa él desde Google Ads o pidiéndotelo). Usá gads_auditar cuando te pidan un diagnóstico general.\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
+      text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa, gads_negativas_lote, gads_crear_lista_negativas_universal, gads_eliminar_lista_negativas, gads_crear_rsa, gads_agregar_callouts) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). Para negativas de términos de búsqueda, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación — para un lote aprobado de una vez usá gads_negativas_lote, no llames gads_negativa repetidas veces). gads_crear_lista_negativas_universal es de ALTO IMPACTO (afecta TODAS las campañas a la vez, no una sola) — avisale eso al dueño explícitamente antes de pedir el sí; revisá primero con gads_listas_negativas que no exista ya una lista similar. gads_crear_rsa SIEMPRE crea un anuncio PAUSADO nuevo, nunca reemplaza el que ya está corriendo — aclaráselo al dueño (revisa y activa él desde Google Ads o pidiéndotelo). gads_crear_campana (wizard de campaña nueva) crea TODO en PAUSA de una vez (presupuesto+campaña+geo+idioma+negativas+grupo+keyword+RSA) y es de ALTO IMPACTO: antes de pedir el sí, mostrale al dueño el resumen COMPLETO (nombre, presupuesto diario, keyword, URL final y los 15 titulares + 4 descripciones) y aclarale que queda en pausa hasta que él la active en Google Ads. Usá gads_auditar cuando te pidan un diagnóstico general.\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
       cache_control: { type: 'ephemeral' },
     })
   }
@@ -823,7 +848,7 @@ export async function generarRespuestaMarketing(
       TOOL_GADS_PAUSAR_CAMPANA, TOOL_GADS_ACTIVAR_CAMPANA, TOOL_GADS_PRESUPUESTO,
       TOOL_GADS_KEYWORD_ESTADO, TOOL_GADS_NEGATIVA, TOOL_GADS_NEGATIVAS_LOTE,
       TOOL_GADS_LISTAS_NEGATIVAS, TOOL_GADS_CREAR_LISTA_NEGATIVAS, TOOL_GADS_ELIMINAR_LISTA_NEGATIVAS,
-      TOOL_GADS_ANUNCIOS, TOOL_GADS_CREAR_RSA, TOOL_GADS_AGREGAR_CALLOUTS,
+      TOOL_GADS_ANUNCIOS, TOOL_GADS_CREAR_RSA, TOOL_GADS_AGREGAR_CALLOUTS, TOOL_GADS_CREAR_CAMPANA,
     )
   }
   const convo: Anthropic.MessageParam[] = [...base]
@@ -1310,6 +1335,22 @@ export async function generarRespuestaMarketing(
               } else {
                 const n = await agregarCallouts(inp.campaignId, textos)
                 resultText = `Listo: ${n} callout(s) nuevo(s) agregados a la campaña id=${inp.campaignId}.`
+              }
+            }
+          }
+        } else if (tu.name === 'gads_crear_campana') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as NuevaCampanaParams & { confirmado?: boolean }
+            if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de crear la campaña (mostrale el resumen COMPLETO primero: nombre, presupuesto, keyword, URL y los 15 titulares + 4 descripciones).'
+            else if (!inp.nombreCampana || !inp.presupuestoClpDiario || !inp.keyword || !inp.finalUrl) resultText = 'Faltan datos (nombreCampana, presupuestoClpDiario, keyword, finalUrl).'
+            else {
+              const errores = lintRSA({ headlines: inp.headlines || [], descriptions: inp.descriptions || [] })
+              if (errores.length) {
+                resultText = 'RECHAZADO por el linter de RSA (corregí el copy y volvé a llamar gads_crear_campana, sin pedir confirmación de nuevo):\n- ' + errores.map(e => `[${e.campo}] ${e.problema}`).join('\n- ')
+              } else {
+                const r = await crearCampanaCompleta({ ...inp, negativas: NEGATIVAS_UNIVERSALES_ES_CL })
+                resultText = `Listo: campaña "${inp.nombreCampana}" creada COMPLETA y EN PAUSA (${r.campaignResourceName}) — presupuesto ${fmtPrecio(inp.presupuestoClpDiario)}/día, cobertura de ${r.geoComunas} comuna(s), idioma español, ${NEGATIVAS_UNIVERSALES_ES_CL.length} negativas universales, keyword "${inp.keyword}" (${inp.matchType || 'PHRASE'}) y 1 RSA. Nada gasta hasta que el dueño la active en Google Ads (campaña + grupo + anuncio están en pausa).`
               }
             }
           }

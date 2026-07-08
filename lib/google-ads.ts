@@ -105,6 +105,39 @@ async function gaqlMutate(resource: string, operations: unknown[], validateOnly 
   return (json.results || []).map(r => r.resourceName || '').filter(Boolean)
 }
 
+/**
+ * Mutación HETEROGÉNEA y ATÓMICA (POST googleAds:mutate): varias operaciones de
+ * distintos recursos en UNA sola transacción — si una falla, no se aplica ninguna
+ * (no quedan recursos huérfanos). Permite referenciar recursos creados en la misma
+ * request con resource names TEMPORALES (enteros negativos, ej. campaignBudgets/-1).
+ * Se usa para el wizard de campaña nueva (budget→campaign→criterios→adGroup→keyword→RSA).
+ * `validateOnly` valida TODO el conjunto sin aplicar nada (dry-run real del wizard entero).
+ */
+async function gaqlMutateMulti(mutateOperations: unknown[], validateOnly = false): Promise<string[]> {
+  const token = await getAccessToken()
+  const customerId = process.env.GOOGLE_ADS_CUSTOMER_ID || ''
+  const loginCustomerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || customerId
+  const res = await fetch(`${BASE}/customers/${customerId}/googleAds:mutate`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'developer-token': process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '',
+      'login-customer-id': loginCustomerId,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ mutateOperations, validateOnly }),
+  })
+  const json = await res.json().catch(() => ({})) as { error?: { message?: string; details?: unknown }; mutateOperationResponses?: Array<Record<string, { resourceName?: string }>> }
+  if (!res.ok) {
+    console.error('[google-ads] mutateMulti error:', JSON.stringify(json.error || json))
+    const detalle = json.error?.details as Array<{ errors?: Array<{ message?: string }> }> | undefined
+    const msgDetalle = detalle?.[0]?.errors?.[0]?.message
+    throw new Error(msgDetalle || json.error?.message || `Google Ads API: HTTP ${res.status}`)
+  }
+  // Cada respuesta es { <recurso>Result: { resourceName } } — extraemos todos los resourceName.
+  return (json.mutateOperationResponses || []).map(r => Object.values(r)[0]?.resourceName || '').filter(Boolean)
+}
+
 function customerRN(): string { return `customers/${process.env.GOOGLE_ADS_CUSTOMER_ID || ''}` }
 
 // ─── Rango de fechas: mismos presets que usa el panel de Meta ────────────────
@@ -768,4 +801,121 @@ export async function adjuntarListaATodasLasCampanas(listaResourceName: string, 
 export async function eliminarListaCompartida(resourceName: string): Promise<void> {
   if (!resourceName) throw new Error('Falta el resourceName de la lista.')
   await gaqlMutate('sharedSets', [{ remove: resourceName }])
+}
+
+// ─── Wizard de campaña nueva (Fase D parte 2) ──────────────────────────────────
+/** Lee los geoTargetConstants (comunas/regiones) de una campaña existente, para copiar
+ *  su cobertura geográfica a una campaña nueva sin hardcodear la lista de comunas. */
+export async function leerGeoDeCampana(campaignId: string): Promise<string[]> {
+  const rows = await gaqlSearch(`
+    SELECT campaign_criterion.location.geo_target_constant
+    FROM campaign_criterion
+    WHERE campaign.id = ${JSON.stringify(campaignId)} AND campaign_criterion.type = 'LOCATION' AND campaign_criterion.negative = FALSE
+  `)
+  return rows.map(r => String(((r.campaignCriterion as Record<string, unknown> | undefined)?.location as Record<string, unknown> | undefined)?.geoTargetConstant || '')).filter(Boolean)
+}
+
+/** Campaña plantilla de geo por defecto: la de mayor gasto en 30 días (cobertura ya probada). */
+async function campanaGeoPorDefecto(): Promise<string | null> {
+  const rows = await gaqlSearch(`
+    SELECT campaign.id, metrics.cost_micros FROM campaign
+    WHERE segments.date DURING LAST_30_DAYS AND campaign.advertising_channel_type = 'SEARCH'
+  `)
+  let mejor: { id: string; gasto: number } | null = null
+  for (const r of rows) {
+    const id = String(r.campaign?.id || '')
+    const gasto = num((r.metrics as Record<string, unknown> | undefined)?.costMicros)
+    if (id && (!mejor || gasto > mejor.gasto)) mejor = { id, gasto }
+  }
+  return mejor?.id || null
+}
+
+export interface NuevaCampanaParams {
+  nombreCampana: string
+  presupuestoClpDiario: number
+  keyword: string
+  matchType?: 'EXACT' | 'PHRASE' | 'BROAD'
+  finalUrl: string
+  headlines: { texto: string; pinnedSlot1?: boolean }[]
+  descriptions: string[]
+  path1?: string
+  path2?: string
+  /** Campaña de la que copiar la cobertura geográfica. Si se omite, la de mayor gasto. */
+  geoTemplateCampaignId?: string
+  /** Negativas universales a cargar a nivel campaña (las pasa el caller para no acoplar guia). */
+  negativas?: { texto: string; matchType?: 'EXACT' | 'PHRASE' | 'BROAD' }[]
+}
+
+/**
+ * Crea una campaña de Búsqueda COMPLETA de una sola vez y ATÓMICAMENTE (si algo falla,
+ * no queda nada a medias): presupuesto + campaña (Search-only, Maximize Conversions,
+ * Presence, socios/display OFF) + geo (copiada de una campaña existente) + idioma español
+ * + negativas a nivel campaña + grupo de anuncios + keyword (phrase) + 1 RSA. TODO en
+ * estado PAUSED (salvo la keyword, que va ENABLED dentro del grupo pausado) para que el
+ * dueño revise en Google Ads y active él. Devuelve el resourceName de la campaña creada.
+ */
+export async function crearCampanaCompleta(p: NuevaCampanaParams, validateOnly = false): Promise<{ campaignResourceName: string; geoComunas: number }> {
+  if (!p.nombreCampana?.trim()) throw new Error('Falta el nombre de la campaña.')
+  if (!(p.presupuestoClpDiario > 0)) throw new Error('El presupuesto diario debe ser mayor a 0.')
+  if (!p.keyword?.trim()) throw new Error('Falta la keyword.')
+  if (!p.finalUrl?.trim()) throw new Error('Falta la URL final.')
+
+  const geoTemplate = p.geoTemplateCampaignId || await campanaGeoPorDefecto()
+  const geo = geoTemplate ? await leerGeoDeCampana(geoTemplate) : []
+  if (geo.length === 0) throw new Error('No se pudo determinar la cobertura geográfica (no hay campaña plantilla con ubicaciones). Indicá una campaña de la que copiar el geo.')
+
+  const cust = customerRN()
+  // Resource names TEMPORALES (negativos) para encadenar dentro de la misma transacción.
+  const budgetTmp = `${cust}/campaignBudgets/-1`
+  const campTmp = `${cust}/campaigns/-2`
+  const adGroupTmp = `${cust}/adGroups/-3`
+
+  const ops: unknown[] = []
+  ops.push({ campaignBudgetOperation: { create: {
+    resourceName: budgetTmp,
+    name: `${p.nombreCampana.trim()} — presupuesto`,
+    amountMicros: String(Math.round(p.presupuestoClpDiario * 1_000_000)),
+    deliveryMethod: 'STANDARD',
+    explicitlyShared: false,
+  } } })
+  ops.push({ campaignOperation: { create: {
+    resourceName: campTmp,
+    name: p.nombreCampana.trim(),
+    advertisingChannelType: 'SEARCH',
+    status: 'PAUSED',
+    campaignBudget: budgetTmp,
+    maximizeConversions: {},
+    networkSettings: { targetGoogleSearch: true, targetSearchNetwork: false, targetContentNetwork: false, targetPartnerSearchNetwork: false },
+    geoTargetTypeSetting: { positiveGeoTargetType: 'PRESENCE', negativeGeoTargetType: 'PRESENCE' },
+    contains_eu_political_advertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
+  } } })
+  // Geo (copiado de la plantilla)
+  for (const g of geo) ops.push({ campaignCriterionOperation: { create: { campaign: campTmp, location: { geoTargetConstant: g } } } })
+  // Idioma español (languageConstants/1003)
+  ops.push({ campaignCriterionOperation: { create: { campaign: campTmp, language: { languageConstant: 'languageConstants/1003' } } } })
+  // Negativas a nivel campaña (si el caller las pasó)
+  for (const n of (p.negativas || [])) ops.push({ campaignCriterionOperation: { create: { campaign: campTmp, negative: true, keyword: { text: n.texto.trim(), matchType: n.matchType || 'BROAD' } } } })
+  // Grupo de anuncios (PAUSED)
+  ops.push({ adGroupOperation: { create: { resourceName: adGroupTmp, name: p.keyword.trim(), campaign: campTmp, status: 'PAUSED' } } })
+  // Keyword (phrase por defecto) — ENABLED dentro del grupo pausado
+  ops.push({ adGroupCriterionOperation: { create: { adGroup: adGroupTmp, status: 'ENABLED', keyword: { text: p.keyword.trim(), matchType: p.matchType || 'PHRASE' } } } })
+  // RSA (PAUSED)
+  ops.push({ adGroupAdOperation: { create: {
+    adGroup: adGroupTmp,
+    status: 'PAUSED',
+    ad: {
+      finalUrls: [p.finalUrl.trim()],
+      responsiveSearchAd: {
+        headlines: p.headlines.map(h => ({ text: h.texto.trim(), ...(h.pinnedSlot1 ? { pinnedField: 'HEADLINE_1' } : {}) })),
+        descriptions: p.descriptions.map(d => ({ text: d.trim() })),
+        ...(p.path1 ? { path1: p.path1.slice(0, 15) } : {}),
+        ...(p.path2 ? { path2: p.path2.slice(0, 15) } : {}),
+      },
+    },
+  } } })
+
+  const rns = await gaqlMutateMulti(ops, validateOnly)
+  // La 2ª operación es la campaña; en validateOnly no vuelven resourceNames.
+  const campaignResourceName = validateOnly ? '(validateOnly, no se creó nada)' : (rns.find(rn => rn.includes('/campaigns/')) || '')
+  return { campaignResourceName, geoComunas: geo.length }
 }
