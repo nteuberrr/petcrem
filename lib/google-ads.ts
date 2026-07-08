@@ -523,6 +523,7 @@ export interface AdGoogle {
   campana: string
   campanaId: string
   grupoAnuncio: string
+  grupoAnuncioId: string
   status: string
   headlines: number
   headlinesPinned: number
@@ -533,7 +534,7 @@ export interface AdGoogle {
 
 export async function listarAds(): Promise<AdGoogle[]> {
   const rows = await gaqlSearch(`
-    SELECT campaign.id, campaign.name, ad_group.name, ad_group_ad.status,
+    SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, ad_group_ad.status,
            ad_group_ad.ad.responsive_search_ad.headlines,
            ad_group_ad.ad.responsive_search_ad.descriptions,
            ad_group_ad.ad.final_urls, ad_group_ad.ad_strength
@@ -551,6 +552,7 @@ export async function listarAds(): Promise<AdGoogle[]> {
       campana: String(r.campaign?.name || ''),
       campanaId: String(r.campaign?.id || ''),
       grupoAnuncio: String(r.adGroup?.name || ''),
+      grupoAnuncioId: String(r.adGroup?.id || ''),
       status: String(adGroupAd.status || ''),
       headlines: headlines.length,
       headlinesPinned: headlines.filter(h => h.pinnedField).length,
@@ -559,6 +561,56 @@ export async function listarAds(): Promise<AdGoogle[]> {
       finalUrl: finalUrls[0] || '',
     }
   })
+}
+
+/** Crea un RSA NUEVO (siempre PAUSED) en un grupo de anuncios existente — nunca reemplaza
+ *  el anuncio actual, así el dueño revisa side-by-side en Google Ads antes de activar.
+ *  headlines: exactamente 3 con pinnedSlot1=true (variantes de keyword) + 12 sin pinnear. */
+export async function crearRSA(
+  adGroupId: string,
+  headlines: { texto: string; pinnedSlot1?: boolean }[],
+  descriptions: string[],
+  finalUrl: string,
+  opts: { path1?: string; path2?: string; validateOnly?: boolean } = {},
+): Promise<string> {
+  if (!adGroupId) throw new Error('Falta el id del grupo de anuncios.')
+  if (!finalUrl?.trim()) throw new Error('Falta la URL final.')
+  const [rn] = await gaqlMutate('adGroupAds', [{
+    create: {
+      adGroup: `${customerRN()}/adGroups/${adGroupId}`,
+      status: 'PAUSED',
+      ad: {
+        finalUrls: [finalUrl.trim()],
+        responsiveSearchAd: {
+          headlines: headlines.map(h => ({ text: h.texto.trim(), ...(h.pinnedSlot1 ? { pinnedField: 'HEADLINE_1' } : {}) })),
+          descriptions: descriptions.map(d => ({ text: d.trim() })),
+          ...(opts.path1 ? { path1: opts.path1.slice(0, 15) } : {}),
+          ...(opts.path2 ? { path2: opts.path2.slice(0, 15) } : {}),
+        },
+      },
+    },
+  }], opts.validateOnly)
+  return rn || ''
+}
+
+/** Elimina un anuncio (para deshacer una prueba, o retirar una versión vieja). */
+export async function eliminarAd(adGroupAdResourceName: string): Promise<void> {
+  if (!adGroupAdResourceName) throw new Error('Falta el resourceName del anuncio.')
+  await gaqlMutate('adGroupAds', [{ remove: adGroupAdResourceName }])
+}
+
+/** Crea callouts NUEVOS a nivel campaña (los suma al pool, no reemplaza los existentes). */
+export async function agregarCallouts(campaignId: string, textos: string[], validateOnly = false): Promise<number> {
+  if (!campaignId) throw new Error('Falta el id de la campaña.')
+  const limpios = textos.map(t => t.trim()).filter(Boolean)
+  if (limpios.length === 0) throw new Error('No hay callouts para agregar.')
+  const assetRNs = await gaqlMutate('assets', limpios.map(t => ({ create: { calloutAsset: { calloutText: t } } })), validateOnly)
+  if (validateOnly) return limpios.length
+  if (assetRNs.length === 0) throw new Error('Google Ads no devolvió los recursos creados.')
+  await gaqlMutate('campaignAssets', assetRNs.map(rn => ({
+    create: { campaign: `${customerRN()}/campaigns/${campaignId}`, asset: rn, fieldType: 'CALLOUT' },
+  })))
+  return assetRNs.length
 }
 
 export interface ConteoAssets { sitelinks: number; callouts: number; snippets: number }

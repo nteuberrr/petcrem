@@ -24,13 +24,14 @@ import {
   isGoogleAdsConfigurado, resumenCampanas as resumenCampanasGoogle, listarKeywordsConQS, terminosBusqueda,
   pausarCampanaGoogle, activarCampanaGoogle, ajustarPresupuestoGoogle, pausarKeywordGoogle, activarKeywordGoogle,
   agregarNegativaCampana, listarCampanasGestion, listarListasCompartidas, crearListaNegativasCompartida,
-  adjuntarListaATodasLasCampanas, eliminarListaCompartida,
+  adjuntarListaATodasLasCampanas, eliminarListaCompartida, listarAds, crearRSA, agregarCallouts,
 } from './google-ads'
 import { auditarCuenta } from './google-ads-audit'
 import {
   GUIA_GADS_ESTRUCTURA, GUIA_GADS_BIDDING, GUIA_GADS_RSA, GUIA_GADS_ASSETS, GUIA_GADS_NEGATIVAS,
   GUIA_GADS_TERMINOS, GUIA_GADS_QS, NEGATIVAS_UNIVERSALES_ES_CL,
 } from './google-ads-guia'
+import { lintRSA, lintCallout, type HeadlineRsa } from './google-ads-rsa-lint'
 
 /**
  * AGENTE DE MARKETING / CEO del Crematorio Alma Animal. Un solo agente Claude con
@@ -640,6 +641,46 @@ const TOOL_GADS_ELIMINAR_LISTA_NEGATIVAS: Anthropic.Tool = {
   },
 }
 
+const TOOL_GADS_ANUNCIOS: Anthropic.Tool = {
+  name: 'gads_anuncios',
+  description: 'Lista los RSAs (anuncios) activos por grupo de anuncios: cantidad de titulares/pinneados/descripciones, Ad Strength, URL final e id del grupo. Usala antes de gads_crear_rsa para saber en qué grupo falta completar y con qué URL final debe coincidir.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+}
+const TOOL_GADS_CREAR_RSA: Anthropic.Tool = {
+  name: 'gads_crear_rsa',
+  description: 'Crea un RSA NUEVO (siempre en pausa) en un grupo de anuncios existente — NO reemplaza el anuncio actual, se suma para que el dueño lo revise en Google Ads y decida activarlo (y pausar el viejo si corresponde). Antes de llamarla, redactá el copy siguiendo GUIA_GADS_RSA al pie de la letra: EXACTAMENTE 15 titulares (≤30 chars, 3 con pinnedSlot1=true = variantes de la keyword, cubriendo los 6 ángulos) y EXACTAMENTE 4 descripciones (≤90 chars). El servidor corre un linter determinista antes de crear — si rechaza, corregí el texto según los errores devueltos y volvé a llamar la tool SIN pedir de nuevo confirmación (no es una decisión nueva, es corregir formato). Acción de escritura: requiere confirmado=true tras mostrarle el copy completo al dueño y recibir el sí.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      grupoAnuncioId: { type: 'string', description: 'Id del grupo de anuncios (de gads_anuncios).' },
+      headlines: {
+        type: 'array',
+        description: 'EXACTAMENTE 15 titulares.',
+        items: { type: 'object', properties: { texto: { type: 'string' }, pinnedSlot1: { type: 'boolean', description: 'true SOLO para las 3 variantes de keyword en slot 1.' } }, required: ['texto'] },
+      },
+      descriptions: { type: 'array', description: 'EXACTAMENTE 4 descripciones.', items: { type: 'string' } },
+      finalUrl: { type: 'string', description: 'URL final — debe coincidir con la del resto de anuncios del mismo grupo (modelo SKAG, ver gads_anuncios).' },
+      path1: { type: 'string', description: 'Display URL path1, opcional, ≤15 chars.' },
+      path2: { type: 'string', description: 'Display URL path2, opcional, ≤15 chars.' },
+      confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente el copy completo en el chat.' },
+    },
+    required: ['grupoAnuncioId', 'headlines', 'descriptions', 'finalUrl'],
+  },
+}
+const TOOL_GADS_AGREGAR_CALLOUTS: Anthropic.Tool = {
+  name: 'gads_agregar_callouts',
+  description: 'Agrega callouts NUEVOS a nivel campaña (se suman al pool existente, no lo reemplazan — ver GUIA_GADS_ASSETS: 8-12 recomendado, diferenciados, sin repetir lo que ya dicen los titulares). Acción de escritura: requiere confirmado=true tras mostrarle la lista propuesta al dueño.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      campaignId: { type: 'string', description: 'Id numérico de la campaña.' },
+      textos: { type: 'array', items: { type: 'string' }, description: 'Callouts propuestos, cada uno ≤25 caracteres.' },
+      confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
+    },
+    required: ['campaignId', 'textos'],
+  },
+}
+
 const TOOL_EDITAR_IMG: Anthropic.Tool = {
   name: 'editar_imagen_pieza',
   description: 'Ajusta UNA imagen de una pieza del calendario ya generada, PRESERVANDO el resto. Si es una placa de marca, edita su texto/diseño y la re-renderiza (gratis); si es una foto, la edita image-to-image. Ej: "arreglá la slide 3 de la #123" (indice=3). SIEMPRE indicá el "indice" de la slide a ajustar: en un carrusel NO se editan todas a la vez (si el dueño quiere cambiar varias, llamá la herramienta una vez por cada slide con su indice). En la instrucción describí SOLO el cambio puntual.',
@@ -751,7 +792,7 @@ export async function generarRespuestaMarketing(
   if (isGoogleAdsConfigurado()) {
     system.push({
       type: 'text',
-      text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa, gads_negativas_lote, gads_crear_lista_negativas_universal, gads_eliminar_lista_negativas) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). Para negativas de términos de búsqueda, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación — para un lote aprobado de una vez usá gads_negativas_lote, no llames gads_negativa repetidas veces). gads_crear_lista_negativas_universal es de ALTO IMPACTO (afecta TODAS las campañas a la vez, no una sola) — avisale eso al dueño explícitamente antes de pedir el sí; revisá primero con gads_listas_negativas que no exista ya una lista similar. Usá gads_auditar cuando te pidan un diagnóstico general.\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
+      text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa, gads_negativas_lote, gads_crear_lista_negativas_universal, gads_eliminar_lista_negativas, gads_crear_rsa, gads_agregar_callouts) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). Para negativas de términos de búsqueda, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación — para un lote aprobado de una vez usá gads_negativas_lote, no llames gads_negativa repetidas veces). gads_crear_lista_negativas_universal es de ALTO IMPACTO (afecta TODAS las campañas a la vez, no una sola) — avisale eso al dueño explícitamente antes de pedir el sí; revisá primero con gads_listas_negativas que no exista ya una lista similar. gads_crear_rsa SIEMPRE crea un anuncio PAUSADO nuevo, nunca reemplaza el que ya está corriendo — aclaráselo al dueño (revisa y activa él desde Google Ads o pidiéndotelo). Usá gads_auditar cuando te pidan un diagnóstico general.\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
       cache_control: { type: 'ephemeral' },
     })
   }
@@ -782,6 +823,7 @@ export async function generarRespuestaMarketing(
       TOOL_GADS_PAUSAR_CAMPANA, TOOL_GADS_ACTIVAR_CAMPANA, TOOL_GADS_PRESUPUESTO,
       TOOL_GADS_KEYWORD_ESTADO, TOOL_GADS_NEGATIVA, TOOL_GADS_NEGATIVAS_LOTE,
       TOOL_GADS_LISTAS_NEGATIVAS, TOOL_GADS_CREAR_LISTA_NEGATIVAS, TOOL_GADS_ELIMINAR_LISTA_NEGATIVAS,
+      TOOL_GADS_ANUNCIOS, TOOL_GADS_CREAR_RSA, TOOL_GADS_AGREGAR_CALLOUTS,
     )
   }
   const convo: Anthropic.MessageParam[] = [...base]
@@ -1229,6 +1271,47 @@ export async function generarRespuestaMarketing(
             if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción.'
             else if (!inp.resourceName) resultText = 'Falta el resourceName de la lista (usá gads_listas_negativas para verlo).'
             else { await eliminarListaCompartida(inp.resourceName); resultText = 'Lista eliminada y desadjuntada de todas las campañas que la usaban.' }
+          }
+        } else if (tu.name === 'gads_anuncios') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const ads = await listarAds()
+            resultText = ads.map(a => `- ${a.campana} / ${a.grupoAnuncio} (grupoAnuncioId=${a.grupoAnuncioId}): ${a.headlines} titulares (${a.headlinesPinned} pinneados) · ${a.descripciones} descripciones · strength=${a.adStrength} · url=${a.finalUrl}`).join('\n') || 'Sin anuncios activos.'
+          }
+        } else if (tu.name === 'gads_crear_rsa') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { grupoAnuncioId?: string; headlines?: HeadlineRsa[]; descriptions?: string[]; finalUrl?: string; path1?: string; path2?: string; confirmado?: boolean }
+            if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de crear el anuncio (mostrale el copy completo primero).'
+            else if (!inp.grupoAnuncioId || !inp.finalUrl) resultText = 'Faltan datos (grupoAnuncioId y finalUrl).'
+            else {
+              const headlines = inp.headlines || []
+              const descriptions = inp.descriptions || []
+              const errores = lintRSA({ headlines, descriptions })
+              if (errores.length) {
+                resultText = 'RECHAZADO por el linter (corregí el copy y volvé a llamar gads_crear_rsa, sin pedir confirmación de nuevo):\n- ' + errores.map(e => `[${e.campo}] ${e.problema}`).join('\n- ')
+              } else {
+                const rn = await crearRSA(inp.grupoAnuncioId, headlines, descriptions, inp.finalUrl, { path1: inp.path1, path2: inp.path2 })
+                resultText = `Listo: RSA nuevo creado en PAUSA (${rn}) en el grupo de anuncios ${inp.grupoAnuncioId}. El anuncio anterior sigue corriendo tal cual — el dueño lo revisa en Google Ads y decide activarlo.`
+              }
+            }
+          }
+        } else if (tu.name === 'gads_agregar_callouts') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { campaignId?: string; textos?: string[]; confirmado?: boolean }
+            const textos = (inp.textos || []).filter(Boolean)
+            if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (mostrale la lista propuesta primero).'
+            else if (!inp.campaignId || textos.length === 0) resultText = 'Faltan datos (campaignId y textos).'
+            else {
+              const rechazados = textos.map(t => ({ t, err: lintCallout(t) })).filter(x => x.err)
+              if (rechazados.length) {
+                resultText = 'RECHAZADO por el linter (corregí y volvé a llamar, sin pedir confirmación de nuevo):\n- ' + rechazados.map(x => `"${x.t}": ${x.err}`).join('\n- ')
+              } else {
+                const n = await agregarCallouts(inp.campaignId, textos)
+                resultText = `Listo: ${n} callout(s) nuevo(s) agregados a la campaña id=${inp.campaignId}.`
+              }
+            }
           }
         } else {
           resultText = 'Herramienta no disponible.'
