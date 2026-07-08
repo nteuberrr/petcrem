@@ -545,6 +545,11 @@ export async function generarRespuesta(
   // (caso Cristián). Son mensajes de WhatsApp cortos → el costo extra es bajo.
   const base = construirMensajes(historial.slice(-40))
   if (base.length === 0) return { mensaje: '', escalar: false, acciones: [] }
+  // El modelo exige que la conversación termine en un mensaje del CLIENTE (user).
+  // Si el último turno es del bot/operador (no hay un mensaje nuevo al que responder
+  // —p.ej. un echo o evento de estado que gatilló el webhook—), no generamos nada:
+  // evita el 400 "does not support assistant message prefill" y una respuesta espuria.
+  if (base[base.length - 1].role !== 'user') return { mensaje: '', escalar: false, acciones: [] }
   const [tarifas, productos, descuentos, cfg, imgsWa] = await Promise.all([
     bloqueTarifas(),
     bloqueProductos(),
