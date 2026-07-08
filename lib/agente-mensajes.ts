@@ -559,10 +559,8 @@ export async function generarRespuesta(
   ])
 
   // Bloque base + tarifas: cacheado (estable). Ajustes del operador/calibración: sin caché (cambian seguido).
-  // TTL 1h (no el default de 5m): entre mensajes de distintas conversaciones puede
-  // pasar más de 5 min y se perdía el cache hit — con 1h se sostiene todo el día.
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${BASE}\n\n${DIFERENCIADORES}\n\n${tarifas}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
+    { type: 'text', text: `${BASE}\n\n${DIFERENCIADORES}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
   ]
   const ajustes = [
     cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO — trátalos como la VERDAD ACTUAL del negocio, no como una nota aparte.

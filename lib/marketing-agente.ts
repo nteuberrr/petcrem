@@ -833,16 +833,14 @@ export async function generarRespuestaMarketing(
     getMarketingParams(),
   ])
 
-  // TTL 1h: este agente se usa a ratos durante el día (no en cada mensaje como el
-  // de WhatsApp) — con el default de 5m casi nunca había cache hit.
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${REGLAS_INVIOLABLES}\n\n${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${PLANTILLAS_INFO}\n\n${MARCA_GRAFICO}\n\n${GUIA_SOCIAL}\n\n${GUIA_EMAIL}\n\n${GUIA_PERFIL}\n\n${tarifas}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
+    { type: 'text', text: `${REGLAS_INVIOLABLES}\n\n${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${PLANTILLAS_INFO}\n\n${MARCA_GRAFICO}\n\n${GUIA_SOCIAL}\n\n${GUIA_EMAIL}\n\n${GUIA_PERFIL}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
   ]
   if (isGoogleAdsConfigurado()) {
     system.push({
       type: 'text',
       text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa, gads_negativas_lote, gads_crear_lista_negativas_universal, gads_eliminar_lista_negativas, gads_crear_rsa, gads_agregar_callouts) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). Para negativas de términos de búsqueda, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación — para un lote aprobado de una vez usá gads_negativas_lote, no llames gads_negativa repetidas veces). gads_crear_lista_negativas_universal es de ALTO IMPACTO (afecta TODAS las campañas a la vez, no una sola) — avisale eso al dueño explícitamente antes de pedir el sí; revisá primero con gads_listas_negativas que no exista ya una lista similar. gads_crear_rsa SIEMPRE crea un anuncio PAUSADO nuevo, nunca reemplaza el que ya está corriendo — aclaráselo al dueño (revisa y activa él desde Google Ads o pidiéndotelo). gads_crear_campana (wizard de campaña nueva) crea TODO en PAUSA de una vez (presupuesto+campaña+geo+idioma+negativas+grupo+keyword+RSA) y es de ALTO IMPACTO: antes de pedir el sí, mostrale al dueño el resumen COMPLETO (nombre, presupuesto diario, keyword, URL final y los 15 titulares + 4 descripciones) y aclarale que queda en pausa hasta que él la active en Google Ads. Usá gads_auditar cuando te pidan un diagnóstico general.\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
-      cache_control: { type: 'ephemeral', ttl: '1h' },
+      cache_control: { type: 'ephemeral' },
     })
   }
   const ajustes = [
