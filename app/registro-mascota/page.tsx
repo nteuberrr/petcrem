@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { fmtPrecio } from '@/lib/format'
 import { todayISO } from '@/lib/dates'
+import { findTramo } from '@/lib/tramos'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Formulario PÚBLICO de registro de mascota (auto-atención del tutor).
@@ -47,19 +48,9 @@ const FORM_DEFAULT = {
   codigo_servicio: 'CI' as 'CI' | 'CP' | 'SD',
 }
 
-// Regla de borde: intervalos [min, max). En el límite exacto gana el tramo MAYOR
-// (ej. 15 kg entre 10–15 y 15–25 → usa 15–25). Idéntica a lib/price-calculator.
-function encontrarTramo(tabla: Tramo[], peso: number): Tramo | null {
-  if (!tabla.length || !isFinite(peso) || peso <= 0) return null
-  const maxPesoMin = Math.max(...tabla.map(t => parseFloat(t.peso_min) || 0))
-  const tramoTope = tabla.find(t => (parseFloat(t.peso_min) || 0) === maxPesoMin)
-  if (tramoTope && peso >= maxPesoMin) return tramoTope
-  return tabla.find(t => {
-    const min = parseFloat(t.peso_min) || 0
-    const max = parseFloat(t.peso_max) || 0
-    return peso >= min && peso < max
-  }) ?? null
-}
+// Regla de borde canónica (única fuente): lib/tramos.ts findTramo — intervalos
+// (min, max], en el límite exacto gana el tramo MENOR (ej. 5 kg → 2–5).
+const encontrarTramo = (tabla: Tramo[], peso: number): Tramo | null => findTramo(tabla, peso)
 function precioDelTramo(t: Tramo | null, codigo: string): number {
   if (!t) return 0
   const raw = codigo === 'CP' ? t.precio_cp : codigo === 'SD' ? t.precio_sd : t.precio_ci

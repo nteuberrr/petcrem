@@ -6,10 +6,11 @@
 // antes estaba duplicada (y divergía) en el dashboard, reportes/ingresos, la
 // ficha del cliente, price-calculator y los precios de eutanasia.
 //
-// Regla de borde canónica (ver CLAUDE.md): los tramos son intervalos [min, max).
-// En el límite exacto entre dos tramos gana SIEMPRE el tramo MAYOR (ej. 15 kg
-// entre 10–15 y 15–25 → 15–25). El tramo de mayor peso_min cubre además el borde
-// superior y cualquier peso por encima de la tabla.
+// Regla de borde canónica (ver CLAUDE.md): los tramos son intervalos (min, max].
+// En el límite exacto entre dos tramos gana SIEMPRE el tramo MENOR (ej. 5 kg entre
+// 2–5 y 5–10 → 2–5; 15 kg entre 10–15 y 15–25 → 10–15). El tramo de menor peso_min
+// (base) incluye su propio mínimo; el de mayor peso_min (tope) cubre cualquier peso
+// por encima de la tabla.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type TramoConPeso = {
@@ -33,20 +34,24 @@ export function numTramo(v: unknown): number {
  */
 export function findTramo<T extends TramoConPeso>(tabla: T[], peso: number): T | null {
   if (!tabla.length || !Number.isFinite(peso) || peso <= 0) return null
-  // Tramo tope = el de mayor peso_min. Si el peso lo iguala o supera, aplica
-  // (cubre el borde superior y los pesos por encima de la tabla).
+  // Tramo tope = el de mayor peso_min; tramo base = el de menor peso_min.
   let maxMin = -Infinity
+  let minMin = Infinity
   let tramoTope: T | null = null
   for (const t of tabla) {
     const min = numTramo(t.peso_min)
     if (min > maxMin) { maxMin = min; tramoTope = t }
+    if (min < minMin) minMin = min
   }
-  if (tramoTope && peso >= maxMin) return tramoTope
-  // Intervalos [min, max): en el límite exacto gana el tramo MAYOR.
+  // Por encima del borde superior (o de la tabla) → tramo tope.
+  if (tramoTope && peso > maxMin) return tramoTope
+  // Intervalos (min, max]: en el borde exacto gana el tramo MENOR (5 kg → 2–5).
+  // El tramo base incluye su propio mínimo (no hay tramo debajo que lo cubra).
   for (const t of tabla) {
     const min = numTramo(t.peso_min)
     const max = numTramo(t.peso_max)
-    if (peso >= min && peso < max) return t
+    const cumpleMin = min === minMin ? peso >= min : peso > min
+    if (cumpleMin && peso <= max) return t
   }
   return null
 }

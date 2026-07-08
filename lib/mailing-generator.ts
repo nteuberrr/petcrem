@@ -328,7 +328,9 @@ export async function generarCampana(opts: GenerarOpts): Promise<CampanaGenerada
 
   const res = await getClient().messages.create({
     model: MODEL,
-    max_tokens: 8000,
+    // El HTML de un correo completo (con tabla de precios + diseño) supera los 8k
+    // tokens; con 8000 el modelo truncaba y devolvía el html vacío (stop_reason=max_tokens).
+    max_tokens: 16000,
     system,
     tools: [TOOL],
     tool_choice: { type: 'tool', name: 'generar_campana' },
@@ -343,7 +345,12 @@ export async function generarCampana(opts: GenerarOpts): Promise<CampanaGenerada
   const asunto = (out.asunto || '').trim()
   const preview_text = (out.preview_text || '').trim()
   let html = (out.html || '').trim()
-  if (!html) throw new Error('El modelo no devolvió el HTML del correo')
+  if (!html) {
+    throw new Error(
+      `El modelo no devolvió el HTML del correo (stop_reason=${res.stop_reason}, ` +
+      `output_tokens=${res.usage?.output_tokens ?? '?'}, campos=[${Object.keys(out).join(', ')}])`,
+    )
+  }
 
   const avisos: string[] = []
   const imagenes: ImagenUsada[] = []
@@ -491,7 +498,8 @@ async function revisarYPulir(
   }
   const res = await getClient().messages.create({
     model: MODEL,
-    max_tokens: 8000,
+    // Re-emite el HTML COMPLETO pulido → necesita el mismo margen que la generación.
+    max_tokens: 16000,
     system: REVIEW_SYSTEM,
     tools: [REVIEW_TOOL],
     tool_choice: { type: 'tool', name: 'entregar_revision' },

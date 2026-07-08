@@ -7,6 +7,7 @@ import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtKg, fmtPrecio, fmtFecha } from '@/lib/format'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseDecimal, parsePeso } from '@/lib/numbers'
+import { findTramo } from '@/lib/tramos'
 import { anforaPremiumIncluida, servicioIncluyeAnforaPremium } from '@/lib/anforas-premium'
 
 type Cliente = {
@@ -477,20 +478,9 @@ export default function ClientesPage() {
     anforaPremiumIncluida(form.codigo_servicio, productosDisp.find(p => p.id === a.id)?.categoria)
   const totalAdicionales = adicionales.reduce((sum, a) => sum + (adicionalIncluido(a) ? 0 : a.precio * a.qty), 0)
 
-  // Resumen del servicio en vivo: tabla aplicable según veterinaria y cálculo del tramo
-  function encontrarTramo(tabla: Tramo[], peso: number): Tramo | null {
-    if (!tabla.length || !isFinite(peso) || peso <= 0) return null
-    const maxPesoMin = Math.max(...tabla.map(t => parseFloat(t.peso_min) || 0))
-    const tramoTope = tabla.find(t => (parseFloat(t.peso_min) || 0) === maxPesoMin)
-    if (tramoTope && peso >= maxPesoMin) return tramoTope
-    // Regla de borde: intervalos [min, max) → en el límite exacto gana el tramo
-    // MAYOR (ej. 15 kg entre 10–15 y 15–25 → usa 15–25). Igual que lib/price-calculator.
-    return tabla.find(t => {
-      const min = parseFloat(t.peso_min) || 0
-      const max = parseFloat(t.peso_max) || 0
-      return peso >= min && peso < max
-    }) ?? null
-  }
+  // Resumen del servicio en vivo. Regla de borde canónica (única fuente):
+  // lib/tramos.ts findTramo — intervalos (min, max], en el límite gana el MENOR.
+  const encontrarTramo = (tabla: Tramo[], peso: number): Tramo | null => findTramo(tabla, peso)
   function precioDelTramo(t: Tramo | null, codigo: string): number {
     if (!t) return 0
     const raw = codigo === 'CP' ? t.precio_cp : codigo === 'SD' ? t.precio_sd : t.precio_ci

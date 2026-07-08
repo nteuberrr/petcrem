@@ -375,7 +375,7 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
   for (let intento = 0; intento < 3; intento++) {
     const res = await getClient().messages.create({
       model: MODEL,
-      max_tokens: 8000, // Alto: copy + el HTML de VARIAS placas (verboso).
+      max_tokens: 16000, // Copy + el HTML de VARIAS placas (verboso) → margen amplio para no truncar.
       system: systemBlocks,
       tools: [TOOL_POST],
       tool_choice: { type: 'tool', name: 'entregar_post' },
@@ -810,7 +810,7 @@ async function editarPlacaHtml(html: string, instruccion: string): Promise<{ htm
   })
   const res = await getClient().messages.create({
     model: MODEL,
-    max_tokens: 4000,
+    max_tokens: 8000, // Edita el HTML de una placa y lo re-emite → margen para no truncar.
     tools: [TOOL_EDIT_PLACA],
     tool_choice: { type: 'tool', name: 'entregar_placa' },
     system: `${REGLAS_INVIOLABLES}\n\nSos diseñador de Crematorio Alma Animal. Te paso el HTML de una PLACA de marca que se rasteriza con satori. Aplicá EXACTAMENTE el cambio pedido manteniendo la estructura, la marca, las fuentes y los colores; cambiá únicamente lo pedido. Devolvés el resultado SOLO con la tool entregar_placa.\n\nREGLAS:\n- Si ves marcadores como __ASSET_0__ (imágenes ya incrustadas, p. ej. el logo), copialos TAL CUAL: no los borres, no los muevas de su <img>, no los reescribas.\n- Si el cambio pide AGREGAR o cambiar una FOTO: reestructurá el layout para que la foto sea protagonista (full-bleed, panel lateral o mascota asomándose, según el menú de layouts), poné un <img src="FOTO:slot" .../> dimensionado con CSS donde va, y devolvé esa foto en "fotos" con un prompt fotorealista on-brand. NO inventes <img> con URLs http: las fotos nuevas SIEMPRE van como FOTO:slot.\n- Conservá el copy/los datos salvo que el cambio pida lo contrario.\n\n${MARCA_GRAFICO}`,
