@@ -325,6 +325,12 @@ export async function generarCampana(opts: GenerarOpts): Promise<CampanaGenerada
       text: `PRECIOS DE CREMACIÓN (cifras REALES y vigentes — úsalas SOLO de acá, nunca inventes otras). Si la campaña pide mostrar precios o una tabla de precios, incluílos; podés pegar la TABLA HTML de abajo tal cual dentro del cuerpo del correo (ya es email-safe y con la paleta de marca).\n\n${tarifas.texto}\n\nTABLA HTML LISTA PARA PEGAR (cópiala tal cual donde quieras mostrar los precios):\n${tarifas.tablaHtml}`,
     })
   }
+  if (tarifas.hayConvenio) {
+    system.push({
+      type: 'text',
+      text: `PRECIOS DE CONVENIO — SOLO para campañas dirigidas a VETERINARIOS/clínicas o que mencionen "convenio" o "precios preferentes". Son las tarifas preferentes para la red de convenio (distintas y MÁS BAJAS que las generales). ⚠️ Si la campaña es para veterinarios, usa ESTAS y ESTA tabla, NUNCA las generales. Cifras REALES, nunca inventes ni mezcles con las generales.\n\n${tarifas.textoConvenio}\n\nTABLA HTML DE CONVENIO LISTA PARA PEGAR (cópiala tal cual):\n${tarifas.tablaHtmlConvenio}`,
+    })
+  }
 
   const res = await getClient().messages.create({
     model: MODEL,

@@ -162,15 +162,23 @@ FORMATO DE RESPUESTA (legible y al grano — tus mensajes se muestran con format
 
 async function bloqueTarifas(): Promise<string> {
   try {
-    const [pg, ts] = await Promise.all([getSheetData('precios_generales'), getSheetData('tipos_servicio')])
-    const tramos = [...pg]
-      .sort((a, b) => (parseFloat(a.peso_min) || 0) - (parseFloat(b.peso_min) || 0))
-      .map(r => {
-        const max = (r.peso_max && r.peso_max.trim()) ? `${r.peso_min}–${r.peso_max} kg` : `${r.peso_min}+ kg`
-        return `- ${max}: Individual ${fmtPrecio(parseInt(r.precio_ci, 10) || 0)} · Premium ${fmtPrecio(parseInt(r.precio_cp, 10) || 0)} · Sin Devolución ${fmtPrecio(parseInt(r.precio_sd, 10) || 0)}`
-      }).join('\n')
+    const [pg, ts, pc] = await Promise.all([
+      getSheetData('precios_generales'),
+      getSheetData('tipos_servicio'),
+      getSheetData('precios_convenio').catch(() => [] as Record<string, string>[]),
+    ])
+    const linea = (r: Record<string, string>) => {
+      const max = (r.peso_max && r.peso_max.trim()) ? `${r.peso_min}–${r.peso_max} kg` : `${r.peso_min}+ kg`
+      return `- ${max}: Individual ${fmtPrecio(parseInt(r.precio_ci, 10) || 0)} · Premium ${fmtPrecio(parseInt(r.precio_cp, 10) || 0)} · Sin Devolución ${fmtPrecio(parseInt(r.precio_sd, 10) || 0)}`
+    }
+    const ordenar = (t: Record<string, string>[]) => [...t].sort((a, b) => (parseFloat(a.peso_min) || 0) - (parseFloat(b.peso_min) || 0))
+    const gen = ordenar(pg).map(linea).join('\n')
+    const conv = ordenar(pc).map(linea).join('\n')
     const nombres = ts.map(t => `${t.codigo}=${t.nombre}`).join(', ')
-    return `TARIFAS VIGENTES de cremación (CLP, por peso):\n${tramos}\n\nTipos de servicio: ${nombres}. Entrega en hasta 3 días hábiles.`
+    const bloqueConv = conv
+      ? `\n\nTARIFAS DE CONVENIO (preferentes, para VETERINARIOS/clínicas; en campañas a veterinarios usá ESTAS, NO las generales):\n${conv}`
+      : ''
+    return `TARIFAS GENERALES de cremación (para TUTORES; CLP, por peso):\n${gen}\n\nTipos de servicio: ${nombres}. Entrega en hasta 3 días hábiles.${bloqueConv}`
   } catch {
     return 'TARIFAS: (no disponibles ahora — no inventes precios).'
   }
