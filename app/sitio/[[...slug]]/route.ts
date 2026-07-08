@@ -12,6 +12,21 @@ const HTML_HEADERS = {
   'cache-control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
 }
 
+function esDominioMarketing(host: string): boolean {
+  const h = (host || '').toLowerCase().split(':')[0]
+  return h === 'crematorioalmaanimal.cl' || h.endsWith('.crematorioalmaanimal.cl')
+}
+
+const RUTAS_PUB_RE = /href="\/(servicios|nosotros|convenios|contacto|anforas|catalogo-anforas|blog|terminos-y-condiciones|politicas-de-privacidad|cremacion-de-mascotas|cremacion-de-perros|cremacion-de-gatos|eutanasia-a-domicilio)(["/#?])/g
+
+// Versión de prueba (host != dominio oficial): el sitio vive bajo /sitio/* y el
+// proxy NO reescribe el dominio, así que los enlaces internos absolutos (/servicios,
+// /nosotros…) no navegan. Acá los prefijamos con /sitio para poder recorrer todo.
+// En el dominio real quedan tal cual (el proxy hace el rewrite).
+function prefijarLinksSitio(html: string): string {
+  return html.replace(RUTAS_PUB_RE, 'href="/sitio/$1$2').replace(/href="\/"/g, 'href="/sitio"')
+}
+
 /**
  * Sitio público crematorioalmaanimal.cl — sirve las páginas fieles de Webflow.
  * El proxy (host-based) reescribe las URLs limpias del dominio de marketing a
@@ -19,9 +34,12 @@ const HTML_HEADERS = {
  */
 export const dynamic = 'force-dynamic'
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug?: string[] }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ slug?: string[] }> }) {
   const { slug } = await params
   const key = (slug || []).join('/')
+  // En la versión de prueba (host != dominio oficial) navegamos bajo /sitio/*.
+  const prefijar = !esDominioMarketing(req.headers.get('host') || '')
+  const fin = (html: string) => new NextResponse(prefijar ? prefijarLinksSitio(html) : html, { status: 200, headers: HTML_HEADERS })
 
   // robots.txt + sitemap.xml del sitio público.
   if (key === 'robots.txt') {
@@ -39,7 +57,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
   // Landings de captación (Google Ads + SEO).
   if (LANDINGS[key]) {
-    return new NextResponse(renderLanding(LANDINGS[key]), { status: 200, headers: HTML_HEADERS })
+    return fin(renderLanding(LANDINGS[key]))
   }
 
   // Detalle de post: /blog/<slug> → shell post-detalle + contenido de web_posts.
@@ -48,7 +66,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     const post = buscarPost(posts, key.slice('blog/'.length))
     const shell = leerTemplate('post-detalle')
     if (post && shell) {
-      return new NextResponse(renderPostDetalle(shell, post), { status: 200, headers: HTML_HEADERS })
+      return fin(renderPostDetalle(shell, post))
     }
     return new NextResponse('Página no encontrada', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } })
   }
@@ -80,5 +98,5 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     html = renderTextos(html, paginas)
   }
 
-  return new NextResponse(html, { status: 200, headers: HTML_HEADERS })
+  return fin(html)
 }
