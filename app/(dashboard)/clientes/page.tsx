@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -98,6 +98,7 @@ export default function ClientesPage() {
   const [aplicarDescuento, setAplicarDescuento] = useState(false)
   const [descuentoId, setDescuentoId] = useState('')
   const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)  // guard anti doble-click al crear ficha (ver handleSubmit)
   const [form, setForm] = useState(FORM_DEFAULT)
   const [formError, setFormError] = useState('')
   const [preciosGenerales, setPreciosGenerales] = useState<Tramo[]>([])
@@ -404,8 +405,13 @@ export default function ClientesPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    // Guard anti doble-click (regla general del sitio): un doble-click rápido podía
+    // crear la ficha dos veces antes de que `saving` re-renderice. El ref bloquea al toque.
+    if (savingRef.current) return
+    savingRef.current = true
     setFormError('')
     setSaving(true)
+    try {
     const pesoDeclarado = parseDecimal(form.peso_declarado) ?? 0
     const body = {
       ...form,
@@ -458,7 +464,10 @@ export default function ClientesPage() {
       const err = await res.json().catch(() => ({}))
       setFormError(err?.error ?? 'Error al guardar la ficha. Revisa que todos los campos obligatorios estén completos.')
     }
-    setSaving(false)
+    } finally {
+      setSaving(false)
+      savingRef.current = false
+    }
   }
 
   // Cremación Premium (CP) incluye sin costo cualquier ánfora premium: su línea

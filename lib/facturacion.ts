@@ -2,8 +2,8 @@ import { getSheetData, appendRow, updateByIdIf, getNextId } from './datastore'
 import { todayISO } from './dates'
 import { uploadToR2 } from './cloudflare-r2'
 import {
-  emitirDTE, construirDtePayload, construirNcPayload, desglosarIvaIncluido,
-  DTE_NOTA_CREDITO, type DteEmisor, type DteReceptor, type LineaItem,
+  emitirDTE, construirDtePayload, construirNcPayload, desglosarIvaIncluido, isOpenFacturaConfigurado,
+  DTE_NOTA_CREDITO, DTE_BOLETA_AFECTA, type DteEmisor, type DteReceptor, type LineaItem,
 } from './openfactura'
 
 /**
@@ -179,6 +179,44 @@ export async function emitirDocumento(o: EmitirDocOpts): Promise<EmitirDocResult
   }
 
   return { ok: true, documento: row, warnings: r.warnings }
+}
+
+/**
+ * Emite la BOLETA (39) al TUTOR por una ficha de cremación cuando se confirma su
+ * pago. Consumidor final (RUT 66666666-6). Una sola línea con el total de la ficha
+ * (precio_total ya trae servicio − descuento + adicionales). Best-effort: la llama
+ * el trigger del PATCH de clientes; si algo falla devuelve {ok:false} sin romper.
+ *
+ * NO se usa para fichas de veterinaria (esas se facturan al vet, mensual y manual).
+ */
+export async function emitirBoletaFicha(
+  c: Record<string, string>,
+  meta: { creadoPorId?: string; creadoPorNombre?: string } = {},
+): Promise<EmitirDocResultado> {
+  if (!isOpenFacturaConfigurado()) return { ok: false, error: 'OpenFactura no configurado' }
+  const total = parseInt(String(c.precio_total || '0'), 10) || 0
+  if (total <= 0) return { ok: false, error: 'La ficha no tiene monto para facturar.' }
+  const mascota = (c.nombre_mascota || 'mascota').trim()
+  const tutor = (c.nombre_tutor || mascota).trim()
+  const servicio = (c.tipo_servicio || 'Cremación').trim()
+  const lineas: LineaItem[] = [{
+    nombre: `Cremación de ${mascota}`.slice(0, 80),
+    cantidad: 1,
+    montoBruto: total,
+    descripcion: servicio,
+  }]
+  return emitirDocumento({
+    tipo: DTE_BOLETA_AFECTA,
+    receptorTipo: 'tutor',
+    receptorId: String(c.id || ''),
+    // Boleta a consumidor final: RUT genérico 66666666-6 (mismo criterio que la emisión manual).
+    receptor: { RUTRecep: '66666666-6', RznSocRecep: tutor, CorreoRecep: (c.email || '').trim() || undefined },
+    lineas,
+    resumen: `Cremación ${(c.codigo || '').trim()} · ${mascota}`.trim(),
+    cliente: { nombre: tutor, email: (c.email || '').trim() || undefined },
+    creadoPorId: meta.creadoPorId,
+    creadoPorNombre: meta.creadoPorNombre,
+  })
 }
 
 export interface AnularOpts {

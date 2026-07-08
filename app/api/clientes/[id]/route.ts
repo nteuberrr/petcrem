@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, updateById, ensureColumns, deleteRow } from '@/lib/datastore'
+import { getSheetData, updateById, updateByIdIf, ensureColumns, deleteRow } from '@/lib/datastore'
 import { ajustarStock } from '@/lib/stock'
 import { parseDecimal } from '@/lib/numbers'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
@@ -12,6 +12,7 @@ import { esAdmin } from '@/lib/roles'
 import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
 import { dispararCobroAdicional, cobrosPendientesPorCliente } from '@/lib/cobros'
 import { excluirIncluidos } from '@/lib/anforas-premium'
+import { emitirBoletaFicha } from '@/lib/facturacion'
 
 export async function GET(
   _req: NextRequest,
@@ -58,7 +59,7 @@ export async function PATCH(
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
       'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
       'peso_declarado', 'peso_ingreso', 'despacho_id',
-      'precio_servicio', 'precio_adicionales', 'precio_total',
+      'precio_servicio', 'precio_adicionales', 'precio_total', 'boleta_id',
     ])
 
     const rows = await getSheetData('clientes')
@@ -219,6 +220,29 @@ export async function PATCH(
         }
       } catch (e) {
         console.warn('[clientes PATCH] fallo cobro adicional (no bloqueante):', e)
+      }
+    }
+
+    // EMISIÓN AUTOMÁTICA DE BOLETA (39) AL TUTOR cuando la ficha pasa a PAGADA.
+    // Solo fichas de TUTOR (sin veterinaria — las de convenio se facturan al vet,
+    // mensual y manual). Best-effort: nunca bloquea el guardado. Guardas contra
+    // doble emisión: (1) transición real pendiente→pagada, (2) columna boleta_id.
+    const pagoAntes = String(rows[idx].estado_pago || '').toLowerCase()
+    const pagoAhora = String(updated.estado_pago || '').toLowerCase()
+    const esTutor = !String(updated.veterinaria_id || '').trim()
+    const yaTieneBoleta = !!String(rows[idx].boleta_id || '').trim()
+    const fichaRegistrada = String(updated.estado || '') !== 'borrador' && !!String(updated.codigo || '').trim()
+    if (pagoAntes !== 'pagado' && pagoAhora === 'pagado' && esTutor && fichaRegistrada && !yaTieneBoleta) {
+      try {
+        const r = await emitirBoletaFicha(updated as Record<string, string>, { creadoPorNombre: 'Automático (pago confirmado)' })
+        if (r.ok && r.documento?.id) {
+          await updateByIdIf('clientes', String(updated.id), {}, { boleta_id: String(r.documento.id) })
+          updated.boleta_id = String(r.documento.id)
+        } else if (!r.ok) {
+          console.warn('[clientes PATCH] no se pudo emitir la boleta automática:', r.error)
+        }
+      } catch (e) {
+        console.warn('[clientes PATCH] error emitiendo boleta automática (no bloqueante):', e)
       }
     }
 

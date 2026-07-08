@@ -36,6 +36,9 @@ export const SHEETS: Record<string, string[]> = {
     // id del documento_tributarios (factura al veterinario) que ya cubrió esta
     // ficha; vacío = no facturada aún (la excluye de la próxima propuesta mensual).
     'factura_vet_id',
+    // id de la boleta (39) emitida AL TUTOR al pagar la ficha; vacío = no emitida
+    // (guard de idempotencia del auto-emisor).
+    'boleta_id',
     'origen', 'fecha_creacion',
   ],
   ciclos: [
