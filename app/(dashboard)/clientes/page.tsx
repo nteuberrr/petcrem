@@ -106,6 +106,18 @@ export default function ClientesPage() {
   const [preciosConvenio, setPreciosConvenio] = useState<Tramo[]>([])
   const [tramosEspeciales, setTramosEspeciales] = useState<TramoEspecial[]>([])
   const [fichaCreada, setFichaCreada] = useState<FichaCreada | null>(null)
+
+  // Declarados ANTES que los useMemo/funciones que los usan (kpis, tieneDiferenciaPorCobrar):
+  // encontrarTramo es un const (no hoisteable) — declararlo más abajo rompía la página con
+  // "Cannot access 'encontrarTramo' before initialization" apenas hubiera un cliente con
+  // peso_ingreso > peso_declarado. Regla de borde canónica (única fuente): lib/tramos.ts
+  // findTramo — intervalos (min, max], en el límite gana el MENOR.
+  const encontrarTramo = (tabla: Tramo[], peso: number): Tramo | null => findTramo(tabla, peso)
+  function precioDelTramo(t: Tramo | null, codigo: string): number {
+    if (!t) return 0
+    const raw = codigo === 'CP' ? t.precio_cp : codigo === 'SD' ? t.precio_sd : t.precio_ci
+    return parseFloat(raw) || 0
+  }
   // Cobros NO pagados (tabla `cobros`): diferencia de peso o producto adicional que
   // ya se cobró al tutor pero todavía no se marca como pagado. Alimenta el chip
   // "pendiente de cobro" (distinto de la diferencia SUGERIDA, que es pre-cobro).
@@ -478,14 +490,6 @@ export default function ClientesPage() {
     anforaPremiumIncluida(form.codigo_servicio, productosDisp.find(p => p.id === a.id)?.categoria)
   const totalAdicionales = adicionales.reduce((sum, a) => sum + (adicionalIncluido(a) ? 0 : a.precio * a.qty), 0)
 
-  // Resumen del servicio en vivo. Regla de borde canónica (única fuente):
-  // lib/tramos.ts findTramo — intervalos (min, max], en el límite gana el MENOR.
-  const encontrarTramo = (tabla: Tramo[], peso: number): Tramo | null => findTramo(tabla, peso)
-  function precioDelTramo(t: Tramo | null, codigo: string): number {
-    if (!t) return 0
-    const raw = codigo === 'CP' ? t.precio_cp : codigo === 'SD' ? t.precio_sd : t.precio_ci
-    return parseFloat(raw) || 0
-  }
   const vetSeleccionada = !noEsVeterinaria ? veterinarias.find(v => v.id === form.veterinaria_id) : undefined
   const tipoPrecios: 'general' | 'convenio' | 'especial' = !vetSeleccionada
     ? 'general'
