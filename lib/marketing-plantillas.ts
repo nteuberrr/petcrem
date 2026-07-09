@@ -35,7 +35,13 @@ function esc(s: unknown): string {
 }
 function clampText(s: string, max: number): string {
   const t = (s || '').trim()
-  return t.length <= max ? t : t.slice(0, max - 1).trimEnd() + '…'
+  if (t.length <= max) return t
+  // Corta en el último espacio dentro del límite para no partir una palabra
+  // al medio (ej. "exposición d…"); si no hay espacio razonable, corta seco.
+  const cut = t.slice(0, max - 1)
+  const lastSpace = cut.lastIndexOf(' ')
+  const safe = lastSpace > max * 0.5 ? cut.slice(0, lastSpace) : cut
+  return safe.trimEnd() + '…'
 }
 /** Tamaño de fuente que hace CABER `text` en `maxW` (Inter bold ≈ 0.60×fs por glifo).
  *  Nunca deja que la palabra más larga se desborde a lo ancho. */
@@ -152,10 +158,15 @@ function contenido(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPl
     banda = `<div style="display:flex;width:${C.w}px;height:${bandaH}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${C.w}" height="${bandaH}" style="object-fit:cover;object-position:center 40%;display:block" /></div>`
   }
   const eb = s.eyebrow ? eyebrowChip(s.eyebrow) : ''
-  const tit = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2, 62, 38)}px;color:${col};line-height:1.1">${esc(s.titulo)}</span>` : ''
+  // tituloBloque (no un <span> suelto): si el modelo manda titulo_destacado
+  // (2ª línea en dorado) acá se perdía en silencio, dejando títulos cortados
+  // a la mitad (ej. "Elige la" sin "modalidad que te acomode").
+  const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, C.w - PAD * 2, 62) : ''
   const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:20px">${esc(clampText(s.bajada, 120))}</span>` : ''
+  // 90 (no 42): el bullet puede pasar a 2 líneas igual que la bajada — el límite
+  // corto cortaba bullets normales a mitad de palabra ("exposición d…").
   const items = (s.bullets || []).slice(0, 4).map(b =>
-    `<div style="display:flex;flex-direction:row;align-items:flex-start;gap:16px"><div style="display:flex;width:11px;height:11px;border-radius:6px;background:${GOLD};margin-top:12px;flex-shrink:0"></div><span style="font-family:Inter;font-weight:600;font-size:30px;color:${col};line-height:1.3">${esc(clampText(b, 42))}</span></div>`).join('')
+    `<div style="display:flex;flex-direction:row;align-items:flex-start;gap:16px"><div style="display:flex;width:11px;height:11px;border-radius:6px;background:${GOLD};margin-top:12px;flex-shrink:0"></div><span style="font-family:Inter;font-weight:600;font-size:30px;color:${col};line-height:1.3">${esc(clampText(b, 90))}</span></div>`).join('')
   const bullets = items ? `<div style="display:flex;flex-direction:column;gap:18px;margin-top:34px">${items}</div>` : ''
   const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
   const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:56px ${PAD}px 120px ${PAD}px">${eb}${tit}${bajada}${bullets}</div>`
