@@ -498,6 +498,71 @@ export function buildCobroAdicional(args: CobroAdicionalArgs, contacto: Contacto
   }
 }
 
+// ─── 8. Envío de la boleta emitida (PDF adjunto) ──────────────────────────────
+
+export interface BoletaArgs {
+  email: string
+  nombreMascota: string
+  nombreTutor: string
+  clienteId?: string
+  /** Folio del DTE emitido por el SII. */
+  folio: string
+  /** Monto total (CLP), IVA incluido. */
+  montoTotal: number
+  /** URL pública del PDF en R2 (Resend lo descarga desde ahí). */
+  pdfUrl: string
+}
+
+/**
+ * Envía al tutor la boleta (PDF) recién emitida, al correo registrado en la
+ * ficha. La dispara emitirBoletaFicha (lib/facturacion.ts) apenas se emite —
+ * automática al confirmar el pago. Best-effort: nunca rompe la emisión.
+ */
+export async function enviarBoletaCliente(args: BoletaArgs): Promise<void> {
+  if (!args.email) return
+  if (!isResendConfigured()) {
+    console.warn('[cliente-mailer] Resend no configurado, salto mail boleta a', args.email)
+    return
+  }
+  const contacto = await getContacto()
+  try {
+    const res = await sendEmail(buildBoleta(args, contacto))
+    if (res.ok) console.log(`[cliente-mailer] OK boleta a ${args.email}, message_id=${res.message_id}`)
+    else console.error(`[cliente-mailer] FAIL boleta a ${args.email}: ${res.error}`)
+    await registrarEnvio({ clienteId: args.clienteId, tipo: 'boleta', email: args.email, messageId: res.message_id, ok: res.ok, error: res.error })
+  } catch (e) {
+    console.error(`[cliente-mailer] EXC boleta a ${args.email}:`, e instanceof Error ? e.message : String(e))
+    await registrarEnvio({ clienteId: args.clienteId, tipo: 'boleta', email: args.email, ok: false, error: e instanceof Error ? e.message : String(e) })
+  }
+}
+
+/** Arma el correo con la boleta (PDF) adjunta. */
+export function buildBoleta(args: BoletaArgs, contacto: Contacto): SendOpts {
+  const mascota = escapeHtml(args.nombreMascota)
+  const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
+  const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">${saludo(args.nombreTutor)}</p>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+        Adjuntamos la boleta correspondiente al servicio de <strong>${mascota}</strong>.
+      </p>
+      <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:12px;padding:18px;margin:18px 0;text-align:center">
+        <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;color:${BRAND.navy}">Boleta N° ${escapeHtml(args.folio)}</p>
+        <p style="margin:0;font-size:24px;font-weight:700;color:${BRAND.navy}">${fmt(args.montoTotal)}</p>
+      </div>
+      <p style="margin:0;font-size:14px;line-height:1.6">
+        Cualquier duda sobre este documento, escríbenos — estamos para ayudarte. 🐾
+      </p>`
+  return {
+    to: args.email,
+    subject: `Tu boleta — ${args.nombreMascota}`,
+    html: renderEmailLayout({ titulo: `Boleta del servicio de ${args.nombreMascota}`, bodyHtml: cuerpo, contacto }),
+    preview_text: `Adjuntamos la boleta N° ${args.folio} del servicio de ${args.nombreMascota}.`,
+    tags: [{ name: 'tipo', value: 'cliente_boleta' }],
+    attachments: args.pdfUrl ? [{ filename: `Boleta-${args.folio || 'AlmaAnimal'}.pdf`, path: args.pdfUrl, content_type: 'application/pdf' }] : undefined,
+    seguimiento: { tipo: 'cliente_boleta', audiencia: 'Tutor', nombre: args.nombreMascota, clienteId: args.clienteId },
+  }
+}
+
 /**
  * Envía en lotes de 100 (límite de sendBatch) y REGISTRA cada destinatario en
  * correos_cliente (con su message_id) para el historial de la ficha. Loggea un

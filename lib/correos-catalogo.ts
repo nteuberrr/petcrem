@@ -2,7 +2,7 @@ import { type Contacto } from './email-layout'
 import { todayISO, formatDate } from './dates'
 import {
   buildRegistro, buildCremacion, buildDespacho, buildEntrega, buildCertificado,
-  buildCobroDiferencia, buildCobroAdicional,
+  buildCobroDiferencia, buildCobroAdicional, buildBoleta,
 } from './cliente-mailer'
 import {
   renderBienvenida, renderCotizacionEmail, renderCoordinarEmail,
@@ -148,6 +148,17 @@ export const CORREOS: CorreoDef[] = [
       monto: 53000,
       transferencia: { titular: 'Crematorio Alma Animal', rut: '78.144.186-0', banco: 'Banco de Chile', tipoCuenta: 'Cuenta Corriente', numeroCuenta: '00-000-00000-00', correo: 'contacto@crematorioalmaanimal.cl' },
       linkConfirma: baseUrl() + '/pago/confirma/demo',
+    }, c)),
+  },
+  {
+    key: 'cliente_boleta',
+    titulo: 'Boleta emitida (PDF adjunto)',
+    modulo: 'Clientes',
+    audiencia: 'Tutor',
+    cuando: 'Al emitir la boleta (automático, cuando se confirma el pago de una ficha de tutor).',
+    build: (m, c) => pick(buildBoleta({
+      email: m.email, nombreMascota: m.nombreMascota, nombreTutor: m.nombreTutor,
+      folio: '12345', montoTotal: 150000, pdfUrl: '#',
     }, c)),
   },
 

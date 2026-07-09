@@ -1,6 +1,7 @@
 import { getSheetData, appendRow, updateByIdIf, getNextId } from './datastore'
 import { todayISO } from './dates'
 import { uploadToR2 } from './cloudflare-r2'
+import { enviarBoletaCliente } from './cliente-mailer'
 import {
   emitirDTE, construirDtePayload, construirNcPayload, desglosarIvaIncluido, isOpenFacturaConfigurado,
   DTE_NOTA_CREDITO, DTE_BOLETA_AFECTA, type DteEmisor, type DteReceptor, type LineaItem,
@@ -205,7 +206,7 @@ export async function emitirBoletaFicha(
     montoBruto: total,
     descripcion: servicio,
   }]
-  return emitirDocumento({
+  const r = await emitirDocumento({
     tipo: DTE_BOLETA_AFECTA,
     receptorTipo: 'tutor',
     receptorId: String(c.id || ''),
@@ -217,6 +218,23 @@ export async function emitirBoletaFicha(
     creadoPorId: meta.creadoPorId,
     creadoPorNombre: meta.creadoPorNombre,
   })
+
+  // Envío al tutor (al correo ingresado en la ficha) — best-effort, nunca rompe
+  // la emisión ya confirmada ante el SII.
+  const email = (c.email || '').trim()
+  if (r.ok && r.documento && email) {
+    try {
+      await enviarBoletaCliente({
+        email, nombreMascota: mascota, nombreTutor: tutor, clienteId: String(c.id || ''),
+        folio: r.documento.folio, montoTotal: parseInt(r.documento.monto_total, 10) || total,
+        pdfUrl: r.documento.pdf_url,
+      })
+    } catch (e) {
+      console.error('[facturacion] error enviando boleta al tutor:', e)
+    }
+  }
+
+  return r
 }
 
 export interface AnularOpts {

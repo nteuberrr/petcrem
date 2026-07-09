@@ -11,7 +11,7 @@ import { getSupabase, isSupabaseConfigured } from './supabase'
  * romper el envío (que es la operación importante).
  */
 
-export const TIPOS_CORREO = ['registro', 'inicio_cremacion', 'inicio_despacho', 'entrega', 'certificado', 'cobro_diferencia', 'cobro_adicional'] as const
+export const TIPOS_CORREO = ['registro', 'inicio_cremacion', 'inicio_despacho', 'entrega', 'certificado', 'cobro_diferencia', 'cobro_adicional', 'boleta'] as const
 export type TipoCorreo = typeof TIPOS_CORREO[number]
 
 const TABLE = 'correos_cliente'
