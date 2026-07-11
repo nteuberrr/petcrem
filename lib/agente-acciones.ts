@@ -1,4 +1,4 @@
-import { ensureSheet, ensureColumns, appendRow, getNextId, getSheetData, updateById } from './datastore'
+import { ensureSheet, ensureColumns, appendRow, getNextId, getSheetData, updateById, updateByIdIf } from './datastore'
 import { enviarBotonesWhatsapp, adminsWhatsapp, avisarAdminsWhatsapp, enviarMediaWhatsapp, type BotonWa, type EnvioResult } from './whatsapp'
 import { crearRelayPendiente } from './relay-retiro'
 import { geocodeAddress, coordEnChile } from './google-maps'
@@ -15,7 +15,7 @@ import { anforaPremiumIncluida } from './anforas-premium'
 import { generarCatalogoPdf } from './catalogo-generator'
 import { uploadToR2 } from './cloudflare-r2'
 import { upsertContacto, getOrCreateConversacion, insertarMensaje } from './mensajes'
-import type { HandlersAgente, AccionRetiro, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, AccionConsultaEstado, AccionAgregarAdicional, CtxAgente } from './agente-mensajes'
+import type { HandlersAgente, AccionRetiro, AccionReprogramar, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, AccionConsultaEstado, AccionAgregarAdicional, CtxAgente } from './agente-mensajes'
 
 /**
  * Valida que una dirección + comuna exista y caiga dentro de Chile (geocoding).
@@ -150,6 +150,62 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
   return `Solicitud de retiro registrada (N° ${id}) y enviada al equipo para confirmación. ` +
     `Confirma al cliente que RECIBIMOS su solicitud para el ${formatDate(a.fecha)} a las ${a.hora} y que le avisaremos por este mismo medio apenas la validemos. ` +
     `NO le digas que ya está confirmada.`
+}
+
+/**
+ * Cambia la fecha/hora de un retiro YA solicitado (pendiente o confirmado) de
+ * este mismo cliente, y avisa al equipo del cambio. Caso real (Guillermo,
+ * 2026-07-11): el bot decía "ya le avisé al equipo" sin llamar ninguna
+ * herramienta — nadie se enteraba del nuevo horario y el cliente se fue con la
+ * competencia. Si ya hay una ficha borrador vinculada, también le actualiza la
+ * fecha de retiro (partial update — nunca updateById de fila completa, borraría
+ * el resto de la ficha).
+ */
+async function reprogramarRetiro(a: AccionReprogramar, ctx: CtxAgente): Promise<string> {
+  const waCliente = (ctx.waId || '').replace(/\D/g, '')
+  const tel9 = waCliente.slice(-9)
+  if (!tel9) {
+    return 'No pude identificar el WhatsApp del cliente para reprogramar el retiro. Escala a un humano.'
+  }
+
+  const slot = await evaluarSlotRetiro(a.fecha, a.hora)
+  if (!slot.ok) {
+    const libres = slot.libres.length ? ` Horarios disponibles ese día: ${slot.libres.join(', ')}.` : ''
+    return `NO reprogrames: ${slot.motivo}${libres} Explícaselo al cliente con amabilidad y ofrécele uno de los horarios disponibles; vuelve a llamar la herramienta solo cuando acuerden una hora válida.`
+  }
+
+  await ensureSheet(SHEET_RETIRO)
+  await ensureColumns(SHEET_RETIRO, COLS_RETIRO)
+  const solicitudes = await getSheetData(SHEET_RETIRO)
+  const propias = solicitudes
+    .filter(s => ['pendiente', 'confirmada'].includes(s.estado || '') && (s.cliente_wa_id || '').replace(/\D/g, '').slice(-9) === tel9)
+    .sort((x, y) => (parseInt(y.id, 10) || 0) - (parseInt(x.id, 10) || 0))
+  const sol = propias[0]
+  if (!sol) {
+    return 'Este cliente no tiene ningún retiro pendiente ni confirmado a su nombre para reprogramar. Si quiere agendar uno nuevo, usa la herramienta solicitar_retiro_cremacion en vez de esta.'
+  }
+
+  const fechaAnterior = formatDate(sol.fecha_retiro)
+  const horaAnterior = sol.hora_retiro
+
+  await updateByIdIf(SHEET_RETIRO, sol.id, {}, { fecha_retiro: a.fecha, hora_retiro: a.hora })
+  if (sol.cliente_id) {
+    try { await updateByIdIf('clientes', sol.cliente_id, {}, { fecha_retiro: a.fecha }) }
+    catch (e) { console.warn('[agente-acciones] reprogramarRetiro: no se pudo actualizar la ficha:', e) }
+  }
+
+  const aviso =
+    `🔁 *Retiro reprogramado*\n\n` +
+    `Tutor: ${sol.cliente_nombre}\n` +
+    `Mascota: ${sol.nombre_mascota}\n` +
+    `Dirección: ${sol.direccion}, ${sol.comuna}\n` +
+    `Antes: ${fechaAnterior} a las ${horaAnterior}\n` +
+    `AHORA: ${formatDate(a.fecha)} a las ${a.hora}\n` +
+    (waCliente ? `Cliente: +${waCliente}\n` : '') +
+    `\nActualiza la ruta/turno del chofer.`
+  try { await avisarAdminsWhatsapp(aviso) } catch (e) { console.warn('[agente-acciones] reprogramarRetiro: no se pudo avisar al admin:', e) }
+
+  return `Listo, retiro reprogramado para el ${formatDate(a.fecha)} a las ${a.hora}. Confírmaselo al cliente con calidez y dile que el equipo ya quedó al tanto del cambio.`
 }
 
 // ─── Flujo A-vet: retiro originado por un veterinario de convenio ─────────────
@@ -597,5 +653,5 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
 
 /** Handlers disponibles para el agente (Flujo A: retiro · Flujo B: eutanasia). */
 export function handlersAgente(): HandlersAgente {
-  return { solicitarRetiro, solicitarRetiroVet, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro, consultarEstadoMascota, enviarCatalogo, agregarAdicional }
+  return { solicitarRetiro, reprogramarRetiro, solicitarRetiroVet, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro, consultarEstadoMascota, enviarCatalogo, agregarAdicional }
 }

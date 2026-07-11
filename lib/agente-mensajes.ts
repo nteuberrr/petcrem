@@ -52,7 +52,9 @@ FLUJO DE ATENCIÓN (síguelo con naturalidad, sin sonar a robot)
 5. En cuanto tengas nombre + dirección + comuna + peso + servicio + día/hora, LLAMA la herramienta de retiro de inmediato (no sigas conversando). La entrega es en 3 días hábiles.
 
 AGENDAMIENTO (usa las herramientas SOLO cuando tengas TODOS los datos; si falta uno, pídelo y no llames la herramienta todavía)
-- RETIRO DE CREMACIÓN (lo normal): reúne nombre del tutor, dirección (calle y número) + comuna, peso y nombre de la mascota, fecha + hora de retiro, y QUÉ SERVICIO quiere (Individual / Premium / Sin Devolución — si no lo ha dicho, pregúntaselo presentando las tres opciones, sin sugerir una por defecto). EN CUANTO tengas TODOS esos datos, LLAMA "solicitar_retiro_cremacion" DE INMEDIATO — no sigas conversando ni digas "un miembro del equipo te va a contactar" sin haberla llamado (ese aviso es SOLO para escalamientos). El equipo lo confirma y luego se le avisa al cliente; no le digas que ya está confirmado, dile que estamos validando la solicitud. Si la herramienta te avisa que no pudo validar la dirección, pídele al cliente que la confirme o la corrija (calle y número) antes de volver a registrarla.
+- RETIRO DE CREMACIÓN (lo normal): reúne nombre del tutor, dirección (calle y número) + comuna, peso y nombre de la mascota, fecha + hora de retiro, y QUÉ SERVICIO quiere (Individual / Premium / Sin Devolución — si no lo ha dicho, pregúntaselo presentando las tres opciones, sin sugerir una por defecto). EN CUANTO tengas TODOS esos datos, LLAMA "solicitar_retiro_cremacion" DE INMEDIATO — no sigas conversando ni digas "un miembro del equipo te va a contactar" sin haberla llamado (ese aviso es SOLO para escalamientos). El equipo lo confirma y luego se le avisa al cliente; no le digas que ya está confirmada, dile que estamos validando la solicitud. Si la herramienta te avisa que no pudo validar la dirección, pídele al cliente que la confirme o la corrija (calle y número) antes de volver a registrarla.
+- CONFIRMACIÓN EXPLÍCITA ANTES DE AGENDAR (regla dura): solo llama "solicitar_retiro_cremacion" / "solicitar_retiro_vet" cuando el cliente haya aceptado una fecha Y una hora CONCRETAS, dichas por ti y confirmadas por él (o dichas por él directamente) EN ESTE INTERCAMBIO. Frases como "mañana lo hablamos mejor", "después vemos", "cualquier hora está bien" o silencio NO son una confirmación — son un aplazamiento: no agendes con una fecha/hora que tú propusiste pero que el cliente no aceptó, y muchísimo menos con una hora que el cliente acaba de RECHAZAR. Ante la duda, vuelve a preguntar la fecha/hora exacta antes de llamar la herramienta.
+- REPROGRAMAR un retiro YA solicitado (el cliente pide cambiar el día/hora de una solicitud pendiente o confirmada, o vuelve otro día a coordinar el detalle): usa "reprogramar_retiro" con la NUEVA fecha/hora — NUNCA vuelvas a llamar "solicitar_retiro_cremacion" para esto (te lo bloqueará por duplicado) y nunca te limites a decir "ya le aviso al equipo" sin llamar la herramienta, porque eso NO avisa a nadie de verdad.
 - HORARIOS DE RETIRO (regla dura): coordinamos los retiros por HORA, de 09:00 a 21:00. La ÚLTIMA hora para agendar un retiro es las 21:00 — NUNCA ofrezcas ni agendes un retiro más tarde. Tampoco agendes dentro de la próxima hora: lo más pronto posible es la HORA ACTUAL de Chile + 1 hora (ej.: si son las 14:30, lo antes es 15:30). Solo cabe UN retiro por hora: si esa hora ya está tomada, NO está disponible. Propón siempre un horario realista dentro de esa ventana; al registrar, el sistema valida la hora y, si no sirve o ya está ocupada, te devuelve las horas libres de ese día — ofrécele una de esas y NO insistas con la ocupada. Esto aplica igual a los retiros de tutores y de veterinarios.
 - NO REPITAS PREGUNTAS NI EL SALUDO: antes de pedir cualquier dato, REVISA TODO el historial de la conversación. Si el cliente ya dio un dato (peso, comuna, servicio, nombre, dirección) —aunque haya sido varios mensajes atrás—, reúsalo y NO lo vuelvas a pedir. NUNCA reenvíes el saludo/pésame de bienvenida ni "indícame el peso" si ya saludaste o si el cliente ya está en pleno proceso (ya dio datos o ya dijo "sí"/"confirmo"): retoma justo donde iban. Reenviar el saludo cuando el cliente ya dijo "confirmo" hace que abandone.
 - MASCOTA EN UNA CLÍNICA/VETERINARIA: si quien te escribe es el TUTOR y su mascota está EN una clínica (falleció ahí, o la dejó ahí), es un retiro de TUTOR normal — la dirección de la clínica es simplemente la dirección de retiro. Regístralo con "solicitar_retiro_cremacion" a nombre del tutor, con la dirección de la clínica. NO te trabes preguntando "¿eres el tutor o la clínica?": si la persona habla como dueño de la mascota, es el tutor. El MODO VETERINARIO es SOLO cuando quien escribe habla EN NOMBRE de la clínica/veterinario (es el personal de la clínica coordinando retiros).
@@ -211,6 +213,12 @@ export interface AccionRetiro {
   tipo_servicio?: string  // CI | CP | SD
 }
 
+/** Cambio de fecha/hora de un retiro YA solicitado (pendiente o confirmado) de este mismo cliente. */
+export interface AccionReprogramar {
+  fecha: string   // YYYY-MM-DD
+  hora: string    // HH:MM
+}
+
 /** Retiro originado por un VETERINARIO de convenio (clínica). */
 export interface AccionRetiroVet {
   /** Nombre de la clínica/veterinario tal como lo dijo (para buscarlo en la base). */
@@ -265,6 +273,7 @@ export interface AccionAgregarAdicional {
 
 export interface HandlersAgente {
   solicitarRetiro?: (a: AccionRetiro, ctx: CtxAgente) => Promise<string>
+  reprogramarRetiro?: (a: AccionReprogramar, ctx: CtxAgente) => Promise<string>
   solicitarRetiroVet?: (a: AccionRetiroVet, ctx: CtxAgente) => Promise<string>
   agendarEutanasia?: (a: AccionEutanasia, ctx: CtxAgente) => Promise<string>
   cotizarEutanasia?: (a: AccionCotizarEutanasia, ctx: CtxAgente) => Promise<string>
@@ -344,6 +353,19 @@ const TOOL_RETIRO: Anthropic.Tool = {
       tipo_servicio: { type: 'string', enum: ['CI', 'CP', 'SD'], description: 'Servicio elegido por el cliente: CI (Individual), CP (Premium) o SD (Sin Devolución). Obligatorio: si no lo ha dicho, pregúntaselo presentando las tres opciones.' },
     },
     required: ['nombre_tutor', 'direccion', 'comuna', 'peso', 'nombre_mascota', 'fecha', 'hora', 'tipo_servicio'],
+  },
+}
+
+const TOOL_REPROGRAMAR: Anthropic.Tool = {
+  name: 'reprogramar_retiro',
+  description: 'Cambia la fecha y/o hora de un retiro de cremación YA solicitado (pendiente de confirmar o ya confirmado) de este mismo cliente. Úsala cuando el cliente, después de haber pedido un retiro, quiera cambiar el día/hora acordado. Requiere la NUEVA fecha y hora, ya confirmadas explícitamente por el cliente en este intercambio. NO la uses para una primera solicitud (usa solicitar_retiro_cremacion) ni si el cliente no tiene ningún retiro previo.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      fecha: { type: 'string', description: 'Nueva fecha de retiro en formato YYYY-MM-DD.' },
+      hora: { type: 'string', description: 'Nueva hora de retiro en formato HH:MM (24h).' },
+    },
+    required: ['fecha', 'hora'],
   },
 }
 
@@ -452,7 +474,8 @@ function bloqueFechaChile(): string {
 - Pasado mañana es ${ref(2)}.
 - Ahora son las ${horaActual} hrs.
 - Retiros: solo de 09:00 a 21:00 (última hora para agendar = 21:00) y nunca dentro de la próxima hora (mínimo = ahora + 1 h).
-Resuelve SIEMPRE las fechas Y horas relativas que diga el cliente ("hoy", "mañana", "este viernes", "lo antes posible", "en un rato") en base a ESTO. Pasa las fechas a las herramientas en formato YYYY-MM-DD y las horas en HH:MM (24h). Si pide "lo antes posible" o algo similar y no hay una indicación distinta del equipo, calcula la hora de retiro a partir de la HORA ACTUAL de arriba. NUNCA inventes ni adivines la fecha, el año ni la hora; si hay ambigüedad, confírmasela al cliente antes de agendar.`
+Resuelve SIEMPRE las fechas Y horas relativas que diga el cliente ("hoy", "mañana", "este viernes", "lo antes posible", "en un rato") en base a ESTO. Pasa las fechas a las herramientas en formato YYYY-MM-DD y las horas en HH:MM (24h). Si pide "lo antes posible" o algo similar y no hay una indicación distinta del equipo, calcula la hora de retiro a partir de la HORA ACTUAL de arriba. NUNCA inventes ni adivines la fecha, el año ni la hora; si hay ambigüedad, confírmasela al cliente antes de agendar.
+ESTE BLOQUE ES SIEMPRE LA VERDAD VIGENTE, incluso si en mensajes anteriores de ESTA MISMA conversación (tuyos o del cliente) se mencionó otra fecha, otro día de la semana u otra hora — por ejemplo, algo dicho pasada la medianoche puede haber quedado desactualizado apenas cambió el día. Antes de repetir, confirmar o reutilizar una fecha/día que aparece en el historial, vuelve a calcularla contra el "Hoy es..." de arriba; si no coincide, usa la de arriba y NO la del historial (nunca le llames "domingo" a un día que HOY es sábado, por ejemplo).`
 }
 
 /** Limpia el texto final del modelo (quita fences y desarma JSON heredado). */
@@ -493,7 +516,7 @@ async function bloqueFichaEnProceso(waId: string): Promise<string> {
     const borr = rows.find(c => c.estado === 'borrador' && (c.telefono || '').replace(/\D/g, '').slice(-9) === tel9)
     if (borr) {
       const m = borr.nombre_mascota ? ` (${borr.nombre_mascota})` : ''
-      notas.push(`Ya tiene una solicitud de retiro EN PROCESO${m} que el equipo está terminando de ingresar. NO registres otra solicitud de retiro; si pide agendar de nuevo, dile cálido y breve que su solicitud ya está en proceso y que la estamos gestionando.`)
+      notas.push(`Ya tiene una solicitud de retiro EN PROCESO${m} que el equipo está terminando de ingresar. NO llames "solicitar_retiro_cremacion" de nuevo (quedaría duplicada). Si el cliente quiere CAMBIAR el día/hora de esa solicitud, usa "reprogramar_retiro" con la nueva fecha/hora (no le digas solo "ya le aviso al equipo" sin llamarla, eso no avisa a nadie de verdad). Si solo pregunta por el estado sin querer cambiar nada, dile cálido y breve que su solicitud ya está en proceso y que la estamos gestionando.`)
     }
   } catch { /* best-effort */ }
   try {
@@ -589,6 +612,7 @@ ${cfg.instrucciones.trim()}`,
 
   const tools: Anthropic.Tool[] = [TOOL_ESCALAR]
   if (opts.handlers?.solicitarRetiro) tools.push(TOOL_RETIRO)
+  if (opts.handlers?.reprogramarRetiro) tools.push(TOOL_REPROGRAMAR)
   if (opts.handlers?.solicitarRetiroVet) tools.push(TOOL_RETIRO_VET)
   if (opts.handlers?.cotizarEutanasia) tools.push(TOOL_COTIZAR_EUTANASIA)
   if (opts.handlers?.agendarEutanasia) tools.push(TOOL_EUTANASIA)
@@ -639,6 +663,8 @@ ${cfg.instrucciones.trim()}`,
           }
         } else if (tu.name === 'solicitar_retiro_cremacion' && opts.handlers?.solicitarRetiro) {
           resultText = await opts.handlers.solicitarRetiro(tu.input as unknown as AccionRetiro, opts.ctx ?? {})
+        } else if (tu.name === 'reprogramar_retiro' && opts.handlers?.reprogramarRetiro) {
+          resultText = await opts.handlers.reprogramarRetiro(tu.input as unknown as AccionReprogramar, opts.ctx ?? {})
         } else if (tu.name === 'solicitar_retiro_vet' && opts.handlers?.solicitarRetiroVet) {
           resultText = await opts.handlers.solicitarRetiroVet(tu.input as unknown as AccionRetiroVet, opts.ctx ?? {})
         } else if (tu.name === 'cotizar_eutanasia' && opts.handlers?.cotizarEutanasia) {
@@ -676,6 +702,8 @@ ${cfg.instrucciones.trim()}`,
       mensaje = 'Recibimos tu solicitud de eutanasia a domicilio. Apenas un veterinario de nuestra red confirme, te avisamos. Cualquier duda, escríbenos por aquí.'
     } else if (acciones.includes('solicitar_retiro_cremacion') || acciones.includes('solicitar_retiro_vet')) {
       mensaje = 'Recibimos tu solicitud de retiro. La estamos validando y te confirmamos a la brevedad. Cualquier duda, escríbenos por aquí.'
+    } else if (acciones.includes('reprogramar_retiro')) {
+      mensaje = 'Listo, actualizamos el horario de tu retiro y el equipo ya quedó al tanto. Cualquier duda, escríbenos por aquí.'
     } else if (imagenesAEnviar.length > 0) {
       mensaje = 'Te comparto algunas fotos 🐾'
     }

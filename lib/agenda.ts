@@ -150,14 +150,20 @@ async function ocupadosDe(fechaISO: string): Promise<Set<number>> {
   return set
 }
 
-/** Horas libres (HH:MM) sugeribles en una fecha, respetando ventana + buffer. */
+/**
+ * Horas libres (HH:MM) sugeribles en una fecha, respetando ventana + buffer.
+ * Recorre TODA la ventana 09:00–21:00 (antes se cortaba a las primeras 5 horas
+ * libres, lo que escondía la tarde completa cuando la mañana ya tenía 5+ bloques
+ * libres — bug real: a un cliente solo se le ofreció hasta las 14:00 habiendo
+ * horas libres hasta las 21:00).
+ */
 function horasLibres(fechaISO: string, hoy: string, ahora: number, ocupados: Set<number>): string[] {
   if (fechaISO < hoy) return []
   const esHoy = fechaISO === hoy
   const startMin = esHoy ? Math.max(MIN_APERTURA, ahora + BUFFER_MIN) : MIN_APERTURA
   const libres: string[] = []
   let cursor = startMin
-  while (libres.length < 5 && cursor <= MIN_ULTIMO) {
+  while (cursor <= MIN_ULTIMO) {
     const blk = Math.floor(cursor / 60)
     if (!ocupados.has(blk)) libres.push(fmtMin(cursor))
     cursor = (blk + 1) * 60   // avanza a la próxima hora en punto
