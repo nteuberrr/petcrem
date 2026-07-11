@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { leerTemplate, RUTA_A_TEMPLATE, robotsTxt, construirSitemap } from '@/lib/sitio/render'
 import { getSheetData } from '@/lib/datastore'
 import { renderProductosWeb } from '@/lib/sitio/productos-html'
-import { renderServiciosWeb } from '@/lib/sitio/servicios-html'
+import { renderServiciosWeb, renderServicioSeo } from '@/lib/sitio/servicios-html'
 import { renderPostsWeb, renderPostDetalle, buscarPost } from '@/lib/sitio/blog-html'
 import { renderTextos } from '@/lib/sitio/paginas-html'
 import { LANDINGS, renderLanding } from '@/lib/sitio/landings'
@@ -73,10 +73,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
 
   let tpl = RUTA_A_TEMPLATE[key]
   // Detalle de servicio: /servicios/<slug> → plantilla service-<slug> (fiel).
-  if (!tpl && key.startsWith('servicios/')) tpl = 'service-' + key.slice('servicios/'.length)
+  const servicioSlug = !tpl && key.startsWith('servicios/') ? key.slice('servicios/'.length) : ''
+  if (servicioSlug) tpl = 'service-' + servicioSlug
   let html = tpl ? leerTemplate(tpl) : null
   if (!html) {
     return new NextResponse('Página no encontrada', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } })
+  }
+
+  // Título/meta reales del servicio (el CMS ya los tiene cargados en web_servicios;
+  // la plantilla estática solo trae un <title>Alma Animal</title> genérico).
+  if (servicioSlug) {
+    const servicios = await getSheetData('web_servicios').catch(() => [])
+    const servicio = servicios.find(s => s.slug === servicioSlug)
+    html = renderServicioSeo(html, servicio, servicioSlug)
   }
 
   // Inyección de contenido dinámico según la página.

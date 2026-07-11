@@ -9,7 +9,7 @@
  */
 
 const BASE = 'https://www.crematorioalmaanimal.cl'
-const WA = '56994370745'
+const WA = '56963126603'
 const LOGO = '/sitio/assets/68780d4f39586a806a378a9d_Logo.png'
 const GTM = 'GTM-5TWVTZNM'
 
@@ -28,13 +28,13 @@ export const LANDINGS: Record<string, Landing> = {
   'cremacion-de-mascotas': {
     slug: 'cremacion-de-mascotas',
     title: 'Cremación de Mascotas en Santiago | Alma Animal',
-    meta: 'Cremación de mascotas en Santiago con devolución de cenizas, retiro a domicilio y entrega en 4 días hábiles. Instalaciones propias y trazabilidad total. Escríbenos por WhatsApp.',
+    meta: 'Cremación de mascotas en Santiago con devolución de cenizas, retiro a domicilio y entrega en 3 días hábiles. Instalaciones propias y trazabilidad total. Escríbenos por WhatsApp.',
     h1: 'Cremación de mascotas en Santiago',
-    subtitulo: 'Una despedida digna para tu mascota, con retiro a domicilio y entrega de sus cenizas en 4 días hábiles.',
-    intro: 'En Alma Animal acompañamos a tu familia en la despedida de tu mascota con un servicio cercano, rápido y responsable. Contamos con <strong>instalaciones propias</strong> en Recoleta, trazabilidad total del proceso y cobertura en toda la Región Metropolitana, todos los días de 08:00 a 23:00.',
+    subtitulo: 'Una despedida digna para tu mascota, con retiro a domicilio y entrega de sus cenizas en 3 días hábiles.',
+    intro: 'En Alma Animal acompañamos a tu familia en la despedida de tu mascota con un servicio cercano, rápido y responsable. Contamos con <strong>instalaciones propias</strong> en Recoleta, trazabilidad total del proceso y cobertura en toda la Región Metropolitana, todos los días de 09:00 a 22:00.',
     waMsg: 'Hola! Necesito información sobre la cremación de mi mascota',
     faqs: [
-      { q: '¿Cuánto demora la entrega de las cenizas?', a: 'La entrega es en 4 días hábiles, con retiro a domicilio y devolución en un ánfora.' },
+      { q: '¿Cuánto demora la entrega de las cenizas?', a: 'La entrega es en 3 días hábiles, con retiro a domicilio y devolución en un ánfora.' },
       { q: '¿Retiran a domicilio?', a: 'Sí, retiramos tu mascota en tu casa o en la clínica veterinaria, en toda la Región Metropolitana.' },
       { q: '¿La cremación es individual?', a: 'Ofrecemos cremación individual (con devolución de cenizas) y comunitaria. Tú eliges la modalidad.' },
     ],
@@ -50,34 +50,34 @@ export const LANDINGS: Record<string, Landing> = {
     faqs: [
       { q: '¿La eutanasia se realiza en mi casa?', a: 'Sí, un médico veterinario acude a tu domicilio para que la despedida sea tranquila y sin trasladar a tu mascota.' },
       { q: '¿Incluye la cremación?', a: 'Podemos hacernos cargo de la cremación después del procedimiento, con devolución de cenizas si lo deseas.' },
-      { q: '¿En qué comunas atienden?', a: 'Atendemos en toda la Región Metropolitana, todos los días de 08:00 a 23:00.' },
+      { q: '¿En qué comunas atienden?', a: 'Atendemos en toda la Región Metropolitana, todos los días de 09:00 a 22:00.' },
     ],
   },
   'cremacion-de-perros': {
     slug: 'cremacion-de-perros',
     title: 'Cremación de Perros en Santiago | Alma Animal',
-    meta: 'Cremación de perros en Santiago con retiro a domicilio, devolución de cenizas y entrega en 4 días hábiles. Instalaciones propias y trazabilidad. Escríbenos por WhatsApp.',
+    meta: 'Cremación de perros en Santiago con retiro a domicilio, devolución de cenizas y entrega en 3 días hábiles. Instalaciones propias y trazabilidad. Escríbenos por WhatsApp.',
     h1: 'Cremación de perros en Santiago',
-    subtitulo: 'Despide a tu perro con respeto. Retiro a domicilio y entrega de sus cenizas en 4 días hábiles.',
+    subtitulo: 'Despide a tu perro con respeto. Retiro a domicilio y entrega de sus cenizas en 3 días hábiles.',
     intro: 'Sabemos lo que significa tu perro para tu familia. En Alma Animal realizamos su cremación con <strong>instalaciones propias</strong> y trazabilidad total, y te devolvemos sus cenizas en un ánfora. Retiro a domicilio en toda la Región Metropolitana.',
     waMsg: 'Hola! Necesito información sobre la cremación de mi perro',
     faqs: [
       { q: '¿Retiran a mi perro en casa?', a: 'Sí, retiramos a domicilio o en la clínica veterinaria, en toda la Región Metropolitana.' },
-      { q: '¿Me devuelven las cenizas?', a: 'En la cremación individual te devolvemos las cenizas en un ánfora en 4 días hábiles.' },
+      { q: '¿Me devuelven las cenizas?', a: 'En la cremación individual te devolvemos las cenizas en un ánfora en 3 días hábiles.' },
       { q: '¿Atienden perros de todo tamaño?', a: 'Sí, atendemos perros de todos los tamaños. Escríbenos y te orientamos según el caso.' },
     ],
   },
   'cremacion-de-gatos': {
     slug: 'cremacion-de-gatos',
     title: 'Cremación de Gatos en Santiago | Alma Animal',
-    meta: 'Cremación de gatos en Santiago con retiro a domicilio, devolución de cenizas y entrega en 4 días hábiles. Instalaciones propias y trazabilidad. Escríbenos por WhatsApp.',
+    meta: 'Cremación de gatos en Santiago con retiro a domicilio, devolución de cenizas y entrega en 3 días hábiles. Instalaciones propias y trazabilidad. Escríbenos por WhatsApp.',
     h1: 'Cremación de gatos en Santiago',
-    subtitulo: 'Despide a tu gato con respeto. Retiro a domicilio y entrega de sus cenizas en 4 días hábiles.',
+    subtitulo: 'Despide a tu gato con respeto. Retiro a domicilio y entrega de sus cenizas en 3 días hábiles.',
     intro: 'Tu gato fue parte de tu familia y merece una despedida a su altura. Realizamos su cremación con <strong>instalaciones propias</strong> y trazabilidad total, con devolución de sus cenizas. Retiro a domicilio en toda la Región Metropolitana.',
     waMsg: 'Hola! Necesito información sobre la cremación de mi gato',
     faqs: [
       { q: '¿Retiran a mi gato en casa?', a: 'Sí, retiramos a domicilio o en la clínica veterinaria, en toda la Región Metropolitana.' },
-      { q: '¿Me devuelven las cenizas?', a: 'En la cremación individual te devolvemos las cenizas en un ánfora en 4 días hábiles.' },
+      { q: '¿Me devuelven las cenizas?', a: 'En la cremación individual te devolvemos las cenizas en un ánfora en 3 días hábiles.' },
       { q: '¿Cómo coordino el retiro?', a: 'Escríbenos por WhatsApp y coordinamos el retiro en el horario que necesites.' },
     ],
   },
@@ -90,10 +90,10 @@ function waLink(msg: string): string {
 }
 
 const DIFERENCIADORES = [
-  { i: '📦', t: 'Entrega en 4 días hábiles', d: 'Proceso rápido y sin esperas eternas.' },
+  { i: '📦', t: 'Entrega en 3 días hábiles', d: 'Proceso rápido y sin esperas eternas.' },
   { i: '🏭', t: 'Instalaciones propias', d: 'No externalizamos: todo bajo nuestro control en Recoleta.' },
   { i: '🔎', t: 'Trazabilidad total', d: 'Sigues cada etapa del proceso, con certificado.' },
-  { i: '🚗', t: 'Retiro a domicilio', d: 'En tu casa o clínica, en toda la RM, de 08:00 a 23:00.' },
+  { i: '🚗', t: 'Retiro a domicilio', d: 'En tu casa o clínica, en toda la RM, de 09:00 a 22:00.' },
 ]
 
 export function renderLanding(l: Landing): string {
@@ -155,7 +155,7 @@ export function renderLanding(l: Landing): string {
     <h1>${esc(l.h1)}</h1>
     <p class="sub">${esc(l.subtitulo)}</p>
     <a class="cta" href="${wa}" target="_blank" rel="noopener">💬 Escríbenos por WhatsApp</a>
-    <div class="trust">Atención todos los días · 08:00 a 23:00 · Cobertura Región Metropolitana</div>
+    <div class="trust">Atención todos los días · 09:00 a 22:00 · Cobertura Región Metropolitana</div>
   </section>
   <p class="lp-intro">${l.intro}</p>
   <section class="difs">

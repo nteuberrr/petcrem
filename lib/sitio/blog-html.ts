@@ -3,6 +3,8 @@
  * Reusa las clases de Webflow (post-preview-full / preview-link / category-link…).
  */
 
+import { BASE_URL } from './render'
+
 type Post = Record<string, string>
 
 const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -41,9 +43,37 @@ export function renderPostsWeb(posts: Post[]): string {
   return pub.map(card).join('')
 }
 
-/** Inyecta título + contenido (HTML del CMS) en la plantilla de detalle. */
+/**
+ * Inyecta título + contenido (HTML del CMS) en la plantilla de detalle, y
+ * reemplaza los metadatos de cabecera (title/description/OG/twitter, fijos en
+ * el shell exportado de Webflow) por los reales del post — si no, TODOS los
+ * artículos comparten el título y la descripción de un único post.
+ */
 export function renderPostDetalle(shell: string, post: Post): string {
-  return shell
-    .replace('<!--INJECT:post-titulo-->', esc(post.titulo))
+  const tituloVisible = esc(post.titulo)
+  const seoTitulo = esc(post.seo_titulo || post.titulo)
+  const seoDesc = esc(post.seo_desc || post.extracto || '')
+  const url = `${BASE_URL}/blog/${escUrl(post.slug)}`
+  const imgRaw = post.foto_url || FALLBACK
+  const img = /^https?:\/\//.test(imgRaw) ? escUrl(imgRaw) : `${BASE_URL}${escUrl(imgRaw)}`
+
+  let html = shell
+    .replace('<!--INJECT:post-titulo-->', tituloVisible)
     .replace('<!--INJECT:post-contenido-->', post.contenido || '')
+
+  html = html
+    .replace(/<title>[^<]*<\/title>/, `<title>${seoTitulo}</title>`)
+    .replace(/<meta content="[^"]*" name="description"\/>/, `<meta content="${seoDesc}" name="description"/>`)
+    .replace(/<meta content="[^"]*" property="og:title"\/>/, `<meta content="${seoTitulo}" property="og:title"/>`)
+    .replace(/<meta content="[^"]*" property="og:description"\/>/, `<meta content="${seoDesc}" property="og:description"/>`)
+    .replace(/<meta content="[^"]*" property="og:image"\/>/, `<meta content="${img}" property="og:image"/>`)
+    .replace(/<meta content="[^"]*" name="twitter:title"\/>/, `<meta content="${seoTitulo}" name="twitter:title"/>`)
+    .replace(/<meta content="[^"]*" name="twitter:description"\/>/, `<meta content="${seoDesc}" name="twitter:description"/>`)
+    .replace(/<meta content="[^"]*" name="twitter:image"\/>/, `<meta content="${img}" name="twitter:image"/>`)
+
+  // El shell no trae canonical ni og:url (ambos ausentes en el export original).
+  if (!html.includes('rel="canonical"')) {
+    html = html.replace('</title>', `</title><link rel="canonical" href="${url}"/><meta property="og:url" content="${url}"/>`)
+  }
+  return html
 }
