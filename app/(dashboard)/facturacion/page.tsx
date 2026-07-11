@@ -7,7 +7,17 @@ import { fmtPrecio, fmtFecha } from '@/lib/format'
 import ManualModal from '@/components/facturacion/ManualModal'
 import FacturarVetsModal from '@/components/facturacion/FacturarVetsModal'
 
-export type TipoTab = '39' | '33' | '61'
+export type TipoTab = '39' | '33' | '61' | 'pendientes'
+
+export interface FichaPendiente {
+  id: string
+  codigo: string
+  nombre_mascota: string
+  nombre_tutor: string
+  email: string
+  precio_total: string
+  fecha_creacion: string
+}
 
 export interface Documento {
   id: string
@@ -35,6 +45,7 @@ const TABS: { key: TipoTab; label: string }[] = [
   { key: '39', label: '🧾 Boletas' },
   { key: '33', label: '📄 Facturas' },
   { key: '61', label: '↩️ Notas de Crédito' },
+  { key: 'pendientes', label: '⚠️ Pagadas sin boleta' },
 ]
 
 const ORDENES = [
@@ -46,6 +57,7 @@ const ORDENES = [
 export default function FacturacionPage() {
   const [tab, setTab] = useState<TipoTab>('39')
   const [documentos, setDocumentos] = useState<Documento[]>([])
+  const [pendientes, setPendientes] = useState<FichaPendiente[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [desde, setDesde] = useState('')
@@ -60,6 +72,15 @@ export default function FacturacionPage() {
 
   const cargar = useCallback(async () => {
     setLoading(true); setErr('')
+    if (tab === 'pendientes') {
+      try {
+        const r = await fetch('/api/facturacion/pendientes', { cache: 'no-store' })
+        const d = await r.json()
+        if (!r.ok) { setErr(d.error || 'Error'); setPendientes([]) } else setPendientes(d.pendientes || [])
+      } catch { setErr('Error de red'); setPendientes([]) }
+      setLoading(false)
+      return
+    }
     try {
       const params = new URLSearchParams({ tipo: tab, orden, dir })
       if (desde) params.set('desde', desde)
@@ -92,38 +113,43 @@ export default function FacturacionPage() {
 
       <Tabs tabs={TABS} value={tab} onChange={k => setTab(k as TipoTab)} />
 
-      <Card className="p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Desde</label>
-            <input type="date" value={desde} onChange={e => setDesde(e.target.value)} className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Hasta</label>
-            <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-          </div>
-          <div className="flex-1 min-w-[180px]">
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Buscar</label>
-            <input type="text" value={q} onChange={e => setQ(e.target.value)} placeholder="Folio, receptor, RUT, mes…"
-              className="w-full border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Ordenar</label>
-            <div className="flex gap-1">
-              <select value={orden} onChange={e => setOrden(e.target.value as typeof orden)} className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm">
-                {ORDENES.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
-              </select>
-              <button onClick={() => setDir(d => d === 'asc' ? 'desc' : 'asc')} className="border-2 border-gray-300 rounded-lg px-2.5 py-1.5 text-sm hover:bg-gray-50" title="Cambiar dirección">
-                {dir === 'asc' ? '↑' : '↓'}
-              </button>
+      {tab !== 'pendientes' && (
+        <Card className="p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Desde</label>
+              <input type="date" value={desde} onChange={e => setDesde(e.target.value)} className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Hasta</label>
+              <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+            </div>
+            <div className="flex-1 min-w-[180px]">
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Buscar</label>
+              <input type="text" value={q} onChange={e => setQ(e.target.value)} placeholder="Folio, receptor, RUT, mes…"
+                className="w-full border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Ordenar</label>
+              <div className="flex gap-1">
+                <select value={orden} onChange={e => setOrden(e.target.value as typeof orden)} className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+                  {ORDENES.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </select>
+                <button onClick={() => setDir(d => d === 'asc' ? 'desc' : 'asc')} className="border-2 border-gray-300 rounded-lg px-2.5 py-1.5 text-sm hover:bg-gray-50" title="Cambiar dirección">
+                  {dir === 'asc' ? '↑' : '↓'}
+                </button>
+              </div>
+            </div>
+            {(desde || hasta || q) && (
+              <button onClick={() => { setDesde(''); setHasta(''); setQ('') }} className="text-xs text-brand-soft hover:underline pb-2">Limpiar filtros</button>
+            )}
           </div>
-          {(desde || hasta || q) && (
-            <button onClick={() => { setDesde(''); setHasta(''); setQ('') }} className="text-xs text-brand-soft hover:underline pb-2">Limpiar filtros</button>
-          )}
-        </div>
-      </Card>
+        </Card>
+      )}
 
+      {tab === 'pendientes' ? (
+        <PendientesTable pendientes={pendientes} loading={loading} err={err} onReintentado={cargar} />
+      ) : (
       <Card className="p-0 overflow-hidden">
         {loading ? (
           <p className="p-8 text-center text-sm text-gray-400">Cargando…</p>
@@ -201,6 +227,7 @@ export default function FacturacionPage() {
           </>
         )}
       </Card>
+      )}
 
       {showManual && (
         <ManualModal onClose={() => setShowManual(false)} onEmitido={() => { setShowManual(false); cargar() }} />
@@ -212,6 +239,83 @@ export default function FacturacionPage() {
         <AnularModal documento={anularTarget} onClose={() => setAnularTarget(null)} onAnulado={() => { setAnularTarget(null); cargar() }} />
       )}
     </div>
+  )
+}
+
+/**
+ * Fichas de tutor ya pagadas cuya boleta automática falló (ver aviso WhatsApp al
+ * admin en el momento, disparado desde app/api/clientes/[id]/route.ts). Permite
+ * reintentar la emisión sin tener que recrear la ficha ni tocar Sheets/Supabase.
+ */
+function PendientesTable({ pendientes, loading, err, onReintentado }: {
+  pendientes: FichaPendiente[]; loading: boolean; err: string; onReintentado: () => void
+}) {
+  const [reintentando, setReintentando] = useState<string | null>(null)
+  const [errFila, setErrFila] = useState<Record<string, string>>({})
+
+  async function reintentar(id: string) {
+    setReintentando(id)
+    setErrFila(prev => { const n = { ...prev }; delete n[id]; return n })
+    try {
+      const r = await fetch(`/api/facturacion/pendientes/${id}/reintentar`, { method: 'POST' })
+      const d = await r.json()
+      if (!r.ok) setErrFila(prev => ({ ...prev, [id]: d.error || 'No se pudo emitir.' }))
+      else onReintentado()
+    } catch {
+      setErrFila(prev => ({ ...prev, [id]: 'Error de red' }))
+    }
+    setReintentando(null)
+  }
+
+  return (
+    <Card className="p-0 overflow-hidden">
+      {loading ? (
+        <p className="p-8 text-center text-sm text-gray-400">Cargando…</p>
+      ) : err ? (
+        <p className="p-4 text-sm text-red-700 bg-red-50">{err}</p>
+      ) : pendientes.length === 0 ? (
+        <p className="p-8 text-center text-sm text-gray-400">No hay fichas pagadas sin boleta 🎉</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+              <tr>
+                <th className="text-left px-4 py-2.5">Código</th>
+                <th className="text-left px-4 py-2.5">Mascota / Tutor</th>
+                <th className="text-left px-4 py-2.5">Correo</th>
+                <th className="text-right px-4 py-2.5">Monto</th>
+                <th className="text-right px-4 py-2.5">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {pendientes.map(p => (
+                <tr key={p.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-2.5 font-mono text-xs font-bold text-brand">{p.codigo || `#${p.id}`}</td>
+                  <td className="px-4 py-2.5">
+                    <div className="text-gray-900 font-medium">{p.nombre_mascota || '—'}</div>
+                    <div className="text-xs text-gray-400">{p.nombre_tutor}</div>
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-600">{p.email || '—'}</td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-gray-900">{fmtPrecio(parseFloat(p.precio_total) || 0)}</td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex flex-col items-end gap-1">
+                      <button
+                        onClick={() => reintentar(p.id)}
+                        disabled={reintentando === p.id}
+                        className="text-xs font-semibold text-white bg-brand rounded-lg px-3 py-1.5 hover:bg-brand-dark disabled:opacity-50"
+                      >
+                        {reintentando === p.id ? 'Emitiendo…' : 'Reintentar emisión'}
+                      </button>
+                      {errFila[p.id] && <span className="text-xs text-red-600 max-w-[220px] text-right">{errFila[p.id]}</span>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   )
 }
 

@@ -21,6 +21,44 @@ function getClient(): S3Client {
 
 export type R2UploadResult = { key: string; url: string }
 
+let avisoBucketRespaldoLogueado = false
+
+/**
+ * Bucket dedicado para respaldos (dump de Postgres, snapshot de código con
+ * .env.local). Debe ser un bucket R2 APARTE, SIN dominio público conectado —
+ * el bucket `R2_BUCKET_NAME` sirve certificados/PDFs públicamente, así que un
+ * respaldo ahí solo está protegido por la key siendo inadivinable, no por
+ * control de acceso real. Si `R2_BACKUP_BUCKET_NAME` no está seteada, cae al
+ * bucket público de siempre (mismo comportamiento que antes) pero avisando.
+ */
+function getBackupBucket(): string {
+  const dedicado = process.env.R2_BACKUP_BUCKET_NAME
+  if (dedicado) return dedicado
+  if (!avisoBucketRespaldoLogueado) {
+    avisoBucketRespaldoLogueado = true
+    console.warn('[cloudflare-r2] R2_BACKUP_BUCKET_NAME no configurada — los respaldos van al bucket público (R2_BUCKET_NAME), protegidos solo por una key inadivinable. Crea un bucket R2 separado SIN dominio público para los respaldos y setea R2_BACKUP_BUCKET_NAME.')
+  }
+  return process.env.R2_BUCKET_NAME || ''
+}
+
+/**
+ * Sube un respaldo (dump de datos o snapshot de código) al bucket dedicado de
+ * backups — nunca al bucket público. No devuelve URL pública: estos objetos no
+ * deben ser servibles por HTTP, solo recuperables vía API/CLI de R2 con las
+ * credenciales de la cuenta.
+ */
+export async function uploadBackupToR2(buffer: Buffer, key: string, contentType: string): Promise<{ key: string; bucket: string }> {
+  const bucket = getBackupBucket()
+  if (!bucket) throw new Error('R2 no configurado: falta R2_BACKUP_BUCKET_NAME o R2_BUCKET_NAME')
+  const body: Buffer | Uint8Array =
+    (typeof SharedArrayBuffer !== 'undefined' && buffer.buffer instanceof SharedArrayBuffer)
+      ? new Uint8Array(buffer)
+      : buffer
+  const client = getClient()
+  await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }))
+  return { key, bucket }
+}
+
 export async function uploadToR2(
   buffer: Buffer,
   key: string,

@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # NO bloqueante por ahora: al agregar este CI el lint ya tenía ~94 errores
+      # preexistentes en el código (ninguno de esta pasada) — sobre todo la regla
+      # de react-hooks sobre setState síncrono dentro de un efecto en varias
+      # páginas del dashboard. Corre igual y se ve en el log, pero no tumba el
+      # workflow. Cuando se limpien esos errores, sacar el `continue-on-error`.
+      - run: npm run lint
+        continue-on-error: true
+
+      # Placeholders: el build no debe fallar por variables de entorno faltantes
+      # (nada acá se conecta de verdad a Supabase/Sheets/R2/Resend/WhatsApp — son
+      # solo para que `next build` no reviente si algún módulo las lee al cargar).
+      # Si el build falla igual por una env var real que falte, agrégala como
+      # Secret del repo (Settings → Secrets and variables → Actions) y referénciala
+      # acá con ${{ secrets.NOMBRE }} en vez de un valor fijo.
+      - run: npm run build
+        env:
+          DATA_BACKEND: postgres
+          SUPABASE_URL: https://placeholder.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: placeholder
+          GOOGLE_SERVICE_ACCOUNT_EMAIL: placeholder@example.com
+          GOOGLE_PRIVATE_KEY: placeholder
+          GOOGLE_SPREADSHEET_ID: placeholder
+          NEXTAUTH_SECRET: placeholder-secret-for-ci-build-only
+          NEXTAUTH_URL: http://localhost:3000
+          ADMIN_EMAIL: admin@example.com
+          ADMIN_PASSWORD: placeholder
+          CRON_SECRET: placeholder
+          RESEND_API_KEY: placeholder
+          MENSAJES_SUPABASE_URL: https://placeholder.supabase.co
+          MENSAJES_SUPABASE_SERVICE_ROLE_KEY: placeholder
+          WHATSAPP_TOKEN: placeholder
+          WHATSAPP_PHONE_NUMBER_ID: placeholder
+          META_APP_SECRET: placeholder
+          WHATSAPP_VERIFY_TOKEN: placeholder
+          ANTHROPIC_API_KEY: placeholder
+          R2_ACCOUNT_ID: placeholder
+          R2_ACCESS_KEY_ID: placeholder
+          R2_SECRET_ACCESS_KEY: placeholder
+          R2_BUCKET_NAME: placeholder
+          R2_PUBLIC_URL: https://placeholder.example.com

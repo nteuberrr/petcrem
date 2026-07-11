@@ -218,7 +218,9 @@ interface Ambiente { apiKey: string; baseUrl: string }
 function ambiente(dev: boolean): Ambiente {
   if (dev) {
     return {
-      apiKey: process.env.OPENFACTURA_DEV_API_KEY || '928e15a2d14d4a6292345f04960f4bd3',
+      // Sin fallback hardcodeado: esa key de ambiente de pruebas quedaba expuesta
+      // en el código fuente (mismo valor para cualquiera que lo lea en GitHub).
+      apiKey: process.env.OPENFACTURA_DEV_API_KEY || '',
       baseUrl: (process.env.OPENFACTURA_DEV_BASE_URL || 'https://dev-api.haulmer.com').replace(/\/+$/, ''),
     }
   }
@@ -249,7 +251,7 @@ export async function emitirDTE(
   opts: { dev?: boolean; idempotencyKey?: string } = {},
 ): Promise<EmitirResultado> {
   const { apiKey, baseUrl } = ambiente(!!opts.dev)
-  if (!apiKey) return { ok: false, error: 'OPENFACTURA_API_KEY no configurada' }
+  if (!apiKey) return { ok: false, error: opts.dev ? 'OPENFACTURA_DEV_API_KEY no configurada' : 'OPENFACTURA_API_KEY no configurada' }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -257,15 +259,31 @@ export async function emitirDTE(
   }
   if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey
 
-  let res: Response
-  try {
-    res = await fetch(`${baseUrl}/v2/dte/document`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-    })
-  } catch (e) {
-    return { ok: false, error: `Red: ${e instanceof Error ? e.message : String(e)}` }
+  // Reintentos SOLO para fallas de red/timeout (fetch que ni siquiera responde) —
+  // nunca para errores de negocio (4xx: eso ya llegó con `res`, no lanza acá). El
+  // Idempotency-Key hace estos reintentos seguros (Haulmer no duplica el DTE).
+  const BACKOFF_MS = [1000, 3000]
+  let res: Response | undefined
+  let redError: unknown
+  for (let intento = 0; intento <= BACKOFF_MS.length; intento++) {
+    try {
+      res = await fetch(`${baseUrl}/v2/dte/document`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      })
+      redError = undefined
+      break
+    } catch (e) {
+      redError = e
+      if (intento < BACKOFF_MS.length) {
+        console.warn(`[openfactura] fallo de red emitiendo DTE (intento ${intento + 1}/${BACKOFF_MS.length + 1}), reintentando en ${BACKOFF_MS[intento]}ms:`, e instanceof Error ? e.message : e)
+        await new Promise(r => setTimeout(r, BACKOFF_MS[intento]))
+      }
+    }
+  }
+  if (!res) {
+    return { ok: false, error: `Red: ${redError instanceof Error ? redError.message : String(redError)}` }
   }
 
   const raw = await res.json().catch(() => ({})) as Record<string, unknown>

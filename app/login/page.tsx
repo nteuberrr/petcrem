@@ -19,7 +19,9 @@ export default function LoginPage() {
     if (res?.ok) {
       router.push('/')
     } else {
-      setError('Credenciales incorrectas')
+      // NextAuth v4 pasa el mensaje del Error lanzado en authorize() tal cual en
+      // res.error (ej. bloqueo por rate limit); si no, es "CredentialsSignin" genérico.
+      setError(res?.error && res.error !== 'CredentialsSignin' ? res.error : 'Credenciales incorrectas')
     }
     setLoading(false)
   }

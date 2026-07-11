@@ -69,11 +69,13 @@ npm run dev
 
 | Var | Uso |
 | --- | --- |
-| `R2_ACCOUNT_ID` · `R2_ACCESS_KEY_ID` · `R2_SECRET_ACCESS_KEY` · `R2_BUCKET_NAME` · `R2_PUBLIC_URL` | Cloudflare R2 (certificados, HTML de campañas, media) |
+| `R2_ACCOUNT_ID` · `R2_ACCESS_KEY_ID` · `R2_SECRET_ACCESS_KEY` · `R2_BUCKET_NAME` · `R2_PUBLIC_URL` | Cloudflare R2 (certificados, HTML de campañas, media) — bucket con dominio público |
+| `R2_BACKUP_BUCKET_NAME` | Bucket R2 SEPARADO y SIN dominio público, solo para respaldos (`/api/backup`, `scripts/respaldo-proyecto.ts`). Sin esta var, los respaldos caen al bucket público de arriba (solo protegidos por una key inadivinable) |
 | `CERT_P12_BASE64` · `CERT_P12_PASSWORD` · `CERT_SIGNER_NAME` | Firma digital PKCS#7 de certificados (opcional) |
 | `GOOGLE_MAPS_API_KEY` | Geocoding + Places (server-side; cacheado en `geocoding_cache`) |
 | `GOOGLE_DRIVE_FOLDER_ID` · `GOOGLE_DRIVE_CERTIFICADOS_FOLDER_ID` | Uploads a Drive (opcional) |
 | `NEXT_PUBLIC_FB_APP_ID` · `NEXT_PUBLIC_FB_COEX_CONFIG_ID` | Coexistence WhatsApp (código dormido) |
+| `HEALTHCHECK_URL_BACKUP` · `HEALTHCHECK_URL_ARCHIVAR` | Opcional: URL de un monitor (ej. Healthchecks.io) que hace ping `/api/backup` y `/api/mensajes/cron-archivar` al terminar (éxito y fallo), para detectar si el cron dejó de correr en silencio |
 
 ## Deploy en Vercel
 

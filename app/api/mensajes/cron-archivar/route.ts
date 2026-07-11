@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { esAdmin } from '@/lib/roles'
 import { archivarConversacionesInactivas } from '@/lib/mensajes'
 import { enviarSeguimientosPendientes } from '@/lib/seguimiento-leads'
+import { pingHealthcheck } from '@/lib/healthcheck'
 
 /**
  * Cron diario de mantenimiento del inbox (Vercel). Hace dos cosas, en orden:
@@ -39,9 +40,11 @@ export async function GET(req: NextRequest) {
     try { seguimiento = await enviarSeguimientosPendientes() } catch (e) { console.error('[cron-archivar] seguimiento', e) }
     // 2) Archivar inactivas.
     const n = await archivarConversacionesInactivas(2)
+    await pingHealthcheck('HEALTHCHECK_URL_ARCHIVAR')
     return NextResponse.json({ ok: true, archivadas: n, seguimiento })
   } catch (e) {
     console.error('[cron-archivar]', e)
+    await pingHealthcheck('HEALTHCHECK_URL_ARCHIVAR', { fail: true })
     return NextResponse.json({ error: 'Error al archivar' }, { status: 500 })
   }
 }

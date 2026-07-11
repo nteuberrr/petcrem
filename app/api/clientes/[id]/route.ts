@@ -13,6 +13,7 @@ import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
 import { dispararCobroAdicional, cobrosPendientesPorCliente } from '@/lib/cobros'
 import { excluirIncluidos } from '@/lib/anforas-premium'
 import { emitirBoletaFicha } from '@/lib/facturacion'
+import { avisarAdminsWhatsapp } from '@/lib/whatsapp'
 
 export async function GET(
   _req: NextRequest,
@@ -240,9 +241,17 @@ export async function PATCH(
           updated.boleta_id = String(r.documento.id)
         } else if (!r.ok) {
           console.warn('[clientes PATCH] no se pudo emitir la boleta automática:', r.error)
+          const nombre = String(updated.nombre_mascota || updated.codigo || updated.id || '')
+          avisarAdminsWhatsapp(
+            `⚠️ *Boleta SII no emitida*\n\nFicha ${String(updated.codigo || '#' + updated.id)} (${nombre}) quedó *pagada* pero la boleta automática falló:\n${r.error || 'error desconocido'}\n\nReintenta manualmente desde Facturación → "Pagadas sin boleta".`
+          ).catch(e => console.warn('[clientes PATCH] no se pudo avisar al admin por WhatsApp:', e))
         }
       } catch (e) {
         console.warn('[clientes PATCH] error emitiendo boleta automática (no bloqueante):', e)
+        const nombre = String(updated.nombre_mascota || updated.codigo || updated.id || '')
+        avisarAdminsWhatsapp(
+          `⚠️ *Boleta SII no emitida*\n\nFicha ${String(updated.codigo || '#' + updated.id)} (${nombre}) quedó *pagada* pero la emisión de la boleta automática falló con un error inesperado.\n\nReintenta manualmente desde Facturación → "Pagadas sin boleta".`
+        ).catch(werr => console.warn('[clientes PATCH] no se pudo avisar al admin por WhatsApp:', werr))
       }
     }
 
