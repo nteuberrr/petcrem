@@ -238,17 +238,19 @@ export function esAdminWhatsapp(num: string): boolean {
 
 /**
  * Destinatarios de los avisos/botones del sistema = ADMIN_WHATSAPP (env) +
- * usuarios ACTIVOS con celular y avisos_whatsapp=TRUE (Configuración → Usuarios).
- * Cache 60s: un cambio en la tabla aplica al minuto sin pegarle a la DB en cada aviso.
+ * usuarios ACTIVOS con rol admin/admin2, celular y avisos_whatsapp=TRUE
+ * (Configuración → Usuarios). Los OPERADORES quedan fuera aunque tengan celular:
+ * lo que viene del bot/inbox (solicitudes, escalamientos, relays) es solo del
+ * equipo admin. Cache 60s: un cambio en la tabla aplica al minuto.
  */
 let avisosCache: { ts: number; nums: string[] } | null = null
 export async function destinatariosAvisos(): Promise<string[]> {
   if (avisosCache && Date.now() - avisosCache.ts < 60_000) return avisosCache.nums
   const nums = new Set(adminsWhatsapp())
   try {
-    const { getSheetData } = await import('./datastore')
+    const [{ getSheetData }, { esAdmin }] = await Promise.all([import('./datastore'), import('./roles')])
     for (const u of await getSheetData('usuarios')) {
-      if (u.activo !== 'TRUE' || u.avisos_whatsapp !== 'TRUE') continue
+      if (u.activo !== 'TRUE' || u.avisos_whatsapp !== 'TRUE' || !esAdmin(u.rol)) continue
       const t = (u.telefono || '').replace(/\D/g, '').slice(-9)
       if (t.length === 9) nums.add(`56${t}`)
     }

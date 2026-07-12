@@ -1619,16 +1619,23 @@ export default function ConfiguracionPage() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
           </div>
-          <label className={`flex items-start gap-2 text-xs ${usuarioForm.telefono.length === 9 ? 'text-gray-700' : 'text-gray-400'}`}>
-            <input type="checkbox" disabled={usuarioForm.telefono.length !== 9}
-              checked={usuarioForm.avisos_whatsapp === 'TRUE' && usuarioForm.telefono.length === 9}
-              onChange={e => setUsuarioForm(f => ({ ...f, avisos_whatsapp: e.target.checked ? 'TRUE' : 'FALSE' }))}
-              className="mt-0.5" />
-            <span>
-              <span className="font-medium">Recibe los avisos del sistema por WhatsApp</span><br />
-              Solicitudes de retiro con botones ✅/❌, escalamientos del bot y avisos operativos. Puede confirmar/rechazar igual que el resto del equipo.
-            </span>
-          </label>
+          {(() => {
+            const rolPermite = usuarioForm.rol === 'admin' || usuarioForm.rol === 'admin2'
+            const habilitado = usuarioForm.telefono.length === 9 && rolPermite
+            return (
+              <label className={`flex items-start gap-2 text-xs ${habilitado ? 'text-gray-700' : 'text-gray-400'}`}>
+                <input type="checkbox" disabled={!habilitado}
+                  checked={usuarioForm.avisos_whatsapp === 'TRUE' && habilitado}
+                  onChange={e => setUsuarioForm(f => ({ ...f, avisos_whatsapp: e.target.checked ? 'TRUE' : 'FALSE' }))}
+                  className="mt-0.5" />
+                <span>
+                  <span className="font-medium">Recibe los avisos del sistema por WhatsApp</span><br />
+                  Solicitudes de retiro con botones ✅/❌, escalamientos del bot y avisos operativos; puede confirmar/rechazar igual que el resto del equipo.
+                  {!rolPermite && <span className="block mt-0.5">Solo disponible para roles Admin y General — lo que viene de Mensajes no es visible para operadores.</span>}
+                </span>
+              </label>
+            )
+          })()}
           <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">
             {editingUsuario ? 'Guardar cambios' : 'Crear usuario'}
           </button>
