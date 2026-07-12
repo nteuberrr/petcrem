@@ -18,10 +18,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   const { id } = await params
   try {
-    const body = await req.json() as { instruccion?: string; indice?: number }
+    const body = await req.json() as { instruccion?: string; indice?: number; quitar_logo?: boolean }
     if (!body.instruccion?.trim()) return NextResponse.json({ error: 'Falta la instrucción.' }, { status: 400 })
     const creadoPor = session?.user?.name || session?.user?.email || ''
-    const r = await editarImagenPieza(id, body.instruccion, body.indice, creadoPor)
+    // quitar_logo también se auto-detecta del texto de la instrucción (lib/marketing-pieza).
+    const r = await editarImagenPieza(id, body.instruccion, body.indice, creadoPor, { quitarLogo: body.quitar_logo === true })
     return NextResponse.json(r)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

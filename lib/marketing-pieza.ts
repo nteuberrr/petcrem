@@ -915,8 +915,12 @@ ${GUIA_QA}`
  * render de placa y el reporte "logo ausente" del QA). Sin esto, pedir "quita el
  * logo" no surte efecto (el sistema lo vuelve a poner — pasó en la práctica).
  */
+/** El pedido de sacar el logo, detectado en el texto (red de seguridad: cubre el
+ *  botón "Editar imagen" del calendario y al agente cuando olvida el flag). */
+const PEDIDO_SIN_LOGO = /(quit|quít|sac|sác|elimin|borr|remuev|remov)[a-záéíóúñ]*\s+(el\s+|la\s+|ese\s+|este\s+)?logo(tipo)?\b|\bsin\s+(el\s+)?logo(tipo)?\b/i
+
 export async function editarImagenPieza(id: string, instruccion: string, indice?: number, creadoPor?: string, opts?: { quitarLogo?: boolean }): Promise<PiezaGenerada> {
-  const quitarLogo = opts?.quitarLogo === true
+  const quitarLogo = opts?.quitarLogo === true || PEDIDO_SIN_LOGO.test(instruccion || '')
   if (!instruccion?.trim()) throw new Error('Falta la instrucción de qué ajustar.')
   const item = await obtenerItem(id)
   if (!item) throw new Error(`ítem ${id} no encontrado`)
@@ -991,11 +995,12 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
   if (imgs[ti].url && imgs[ti].url !== urlPrevia) {
     try {
       const probs = await qaPieza([{ url: imgs[ti].url, alt: imgs[ti].alt || '', id: '', grafico: !!design }], item, { sinLogo: quitarLogo })
-      if (probs.some(p => p.objetivo && p.severidad === 'alta')) {
+      const graves = probs.filter(p => p.objetivo && p.severidad === 'alta')
+      if (graves.length) {
         const mala = imgs[ti].url
         imgs[ti] = { url: urlPrevia, alt: imgs[ti].alt || '' }
         try { await eliminarImagenPorUrl(mala) } catch { /* best-effort */ }
-        avisos.push(`Esa edición dejó la imagen ${ti + 1} con un problema visible, así que mantuve la versión anterior. Probá reformular el cambio.`)
+        avisos.push(`Esa edición dejó la imagen ${ti + 1} con un problema visible (${graves.map(p => p.detalle).join('; ')}), así que mantuve la versión anterior. Probá reformular el cambio.`)
       }
     } catch { /* QA best-effort */ }
   }
