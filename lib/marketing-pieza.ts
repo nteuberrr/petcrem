@@ -628,6 +628,9 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
 export interface PiezaGenerada {
   item: ItemCalendario
   avisos: string[]
+  /** Solo lo setean funciones de EDICIÓN puntual (editarImagenPieza): false si, pese al
+   *  intento, la imagen quedó igual a como estaba (no-op detectado o revertida por QA). */
+  aplicado?: boolean
 }
 
 /** Genera la pieza de un ítem del calendario y actualiza la fila a estado=generada. */
@@ -813,7 +816,7 @@ async function editarPlacaHtml(html: string, instruccion: string): Promise<{ htm
     max_tokens: 8000, // Edita el HTML de una placa y lo re-emite → margen para no truncar.
     tools: [TOOL_EDIT_PLACA],
     tool_choice: { type: 'tool', name: 'entregar_placa' },
-    system: `${REGLAS_INVIOLABLES}\n\nSos diseñador de Crematorio Alma Animal. Te paso el HTML de una PLACA de marca que se rasteriza con satori. Aplicá EXACTAMENTE el cambio pedido manteniendo la estructura, la marca, las fuentes y los colores; cambiá únicamente lo pedido. Devolvés el resultado SOLO con la tool entregar_placa.\n\nREGLAS:\n- Si ves marcadores como __ASSET_0__ (imágenes ya incrustadas, p. ej. el logo), copialos TAL CUAL: no los borres, no los muevas de su <img>, no los reescribas.\n- Si el cambio pide AGREGAR o cambiar una FOTO: reestructurá el layout para que la foto sea protagonista (full-bleed, panel lateral o mascota asomándose, según el menú de layouts), poné un <img src="FOTO:slot" .../> dimensionado con CSS donde va, y devolvé esa foto en "fotos" con un prompt fotorealista on-brand. NO inventes <img> con URLs http: las fotos nuevas SIEMPRE van como FOTO:slot.\n- Conservá el copy/los datos salvo que el cambio pida lo contrario.\n\n${MARCA_GRAFICO}`,
+    system: `${REGLAS_INVIOLABLES}\n\nSos diseñador de Crematorio Alma Animal. Te paso el HTML de una PLACA de marca que se rasteriza con satori. Aplicá EXACTAMENTE el/los cambio(s) pedido(s) manteniendo la estructura, la marca, las fuentes y los colores; cambiá únicamente lo pedido. Devolvés el resultado SOLO con la tool entregar_placa.\n\nREGLAS:\n- Si el pedido menciona MÁS DE UN cambio (aunque estén en la misma frase, separados por "y", coma, etc.), aplicá TODOS y CADA UNO — no ignores ninguno ni prioricés uno sobre otro.\n- El HTML que devolvés en "html" DEBE ser distinto del original en el/los punto(s) pedido(s). Si no podés aplicar un cambio tal cual se pidió, hacé la mejor aproximación posible dentro del diseño — NUNCA devuelvas el HTML sin modificar.\n- Si ves marcadores como __ASSET_0__ (imágenes ya incrustadas, p. ej. el logo), copialos TAL CUAL: no los borres, no los muevas de su <img>, no los reescribas.\n- Si el cambio pide AGREGAR o cambiar una FOTO: reestructurá el layout para que la foto sea protagonista (full-bleed, panel lateral o mascota asomándose, según el menú de layouts), poné un <img src="FOTO:slot" .../> dimensionado con CSS donde va, y devolvé esa foto en "fotos" con un prompt fotorealista on-brand. NO inventes <img> con URLs http: las fotos nuevas SIEMPRE van como FOTO:slot.\n- Conservá el copy/los datos salvo que el cambio pida lo contrario.\n\n${MARCA_GRAFICO}`,
     messages: [{ role: 'user', content: `HTML actual de la placa:\n\`\`\`html\n${htmlSeguro}\n\`\`\`\n\nCAMBIO PEDIDO (solo esto; el resto queda igual): ${instruccion}` }],
   })
   const call = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'entregar_placa')
@@ -936,6 +939,13 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
     // y generarGraficoMarca las genera (gemini) e incrusta.
     try {
       let { html: nuevoHtml, fotos } = await editarPlacaHtml(design.html, instruccion.trim())
+      // Chequeo de no-op: si el modelo devolvió el HTML tal cual (normalizando espacios),
+      // no aplicó el cambio pedido — mejor fallar explícito que "ajustar" en falso y
+      // renderizar/publicar una imagen visualmente idéntica a la anterior.
+      const normalizar = (h: string) => h.replace(/\s+/g, ' ').trim()
+      if (normalizar(nuevoHtml) === normalizar(design.html)) {
+        throw new Error('El diseño no cambió con ese pedido. Probá reformularlo o dividirlo en pasos.')
+      }
       // La placa editada también pasa por el linter (que la edición no meta
       // tildes faltantes/términos prohibidos que la pieza original ya no tenía).
       const contacto = await getContacto()
@@ -984,7 +994,7 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
 
   const imagenesJson = imgs.length > 1 ? JSON.stringify(imgs.map(x => ({ url: x.url, alt: x.alt || '' }))) : ''
   const item2 = await actualizarItem(id, { imagen_url: imgs[0]?.url || '', imagen_id: '', imagenes_json: imagenesJson })
-  return { item: item2, avisos }
+  return { item: item2, avisos, aplicado: imgs[ti].url === urlPrevia ? false : true }
 }
 
 /** Resuelve códigos del banco a imágenes EN ORDEN. Un código de CAMPAÑA "C-X" trae

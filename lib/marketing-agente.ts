@@ -1171,7 +1171,9 @@ export async function generarRespuestaMarketing(
           const inp = tu.input as { id?: string; instruccion?: string; indice?: number }
           const r = await editarImagenPieza(String(inp.id || ''), String(inp.instruccion || ''), inp.indice, opts.creadoPor)
           cambios = true
-          resultText = `Imagen(es) ajustada(s) en la pieza #${r.item.id}.${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}${r.item.imagen_url ? ` Mostrale el resultado al dueño con ![](${r.item.imagen_url}).` : ''}`
+          resultText = r.aplicado === false
+            ? `NO se pudo aplicar el cambio pedido en la pieza #${r.item.id}: la imagen quedó IGUAL a como estaba.${r.avisos.length ? ' Motivo: ' + r.avisos.join('; ') : ''} Decíselo así de claro al dueño (no digas "listo"/"ajustada"), y sugerile reformular el pedido o dividirlo en pasos si tenía más de un cambio.`
+            : `Imagen(es) ajustada(s) en la pieza #${r.item.id}.${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}${r.item.imagen_url ? ` Mostrale el resultado al dueño con ![](${r.item.imagen_url}).` : ''}`
         } else if (tu.name === 'nueva_imagen_pieza') {
           const inp = tu.input as { id?: string }
           const r = await regenerarImagenPieza(String(inp.id || ''), opts.creadoPor)
