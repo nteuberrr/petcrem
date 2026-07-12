@@ -26,7 +26,7 @@ type TipoServicio = { id: string; nombre: string; codigo: string; plazo_entrega_
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
 type Vet = { id: string; nombre: string; activo: string; tipo_precios: string }
-type Usuario = { id: string; nombre: string; email: string; rol: string; activo: string }
+type Usuario = { id: string; nombre: string; email: string; rol: string; activo: string; telefono?: string; avisos_whatsapp?: string }
 
 export default function ConfiguracionPage() {
   const { data: session, status } = useSession()
@@ -206,7 +206,7 @@ export default function ConfiguracionPage() {
   const [especialVetFiltro, setEspecialVetFiltro] = useState('')
   const [showDuplicarModal, setShowDuplicarModal] = useState(false)
   const [duplicarForm, setDuplicarForm] = useState({ destino: '', origen: '' })
-  const [usuarioForm, setUsuarioForm] = useState({ nombre: '', email: '', password: '', rol: 'operador' })
+  const [usuarioForm, setUsuarioForm] = useState({ nombre: '', email: '', password: '', rol: 'operador', telefono: '', avisos_whatsapp: 'FALSE' })
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -866,14 +866,14 @@ export default function ConfiguracionPage() {
         <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Usuarios del sistema</h2>
-            <button onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: '', email: '', password: '', rol: 'operador' }); setShowUsuarioModal(true) }}
+            <button onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: '', email: '', password: '', rol: 'operador', telefono: '', avisos_whatsapp: 'FALSE' }); setShowUsuarioModal(true) }}
               className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
               + Agregar usuario
             </button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
-              <tr>{['Nombre', 'Email', 'Rol', 'Estado', ''].map(h => (
+              <tr>{['Nombre', 'Email', 'Celular (WhatsApp)', 'Rol', 'Estado', ''].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
               ))}</tr>
             </thead>
@@ -887,11 +887,12 @@ export default function ConfiguracionPage() {
                     <tr className="bg-brand/10/40">
                       <td className="px-4 py-3 font-medium text-gray-900">Administrador</td>
                       <td className="px-4 py-3 text-gray-600 text-xs">{adminEmail || '(env)'}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">—</td>
                       <td className="px-4 py-3"><Badge variant="purple">admin</Badge></td>
                       <td className="px-4 py-3"><Badge variant="green">activo</Badge></td>
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: 'Administrador', email: adminEmail, password: '', rol: 'admin' }); setShowUsuarioModal(true) }}
+                          onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: 'Administrador', email: adminEmail, password: '', rol: 'admin', telefono: '', avisos_whatsapp: 'FALSE' }); setShowUsuarioModal(true) }}
                           className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
                           Editar
                         </button>
@@ -905,6 +906,11 @@ export default function ConfiguracionPage() {
                 <tr key={u.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">{u.nombre}</td>
                   <td className="px-4 py-3 text-gray-600 text-xs">{u.email}</td>
+                  <td className="px-4 py-3 text-xs">
+                    {u.telefono
+                      ? <span className="text-gray-700">+56 {u.telefono}{u.avisos_whatsapp === 'TRUE' ? <span className="ml-1.5 text-emerald-600" title="Recibe los avisos del sistema por WhatsApp">✓ avisos</span> : <span className="ml-1.5 text-gray-400" title="Tiene celular pero los avisos están desactivados">sin avisos</span>}</span>
+                      : <span className="text-gray-400">—</span>}
+                  </td>
                   <td className="px-4 py-3">
                     <Badge variant={u.rol === 'operador' ? 'blue' : 'purple'}>{ROL_LABEL[u.rol] || u.rol}</Badge>
                   </td>
@@ -917,7 +923,7 @@ export default function ConfiguracionPage() {
                     {(isAdminTotal || u.rol === 'operador') ? (
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => { setEditingUsuario(u); setUsuarioForm({ nombre: u.nombre, email: u.email, password: '', rol: u.rol }); setShowUsuarioModal(true) }}
+                          onClick={() => { setEditingUsuario(u); setUsuarioForm({ nombre: u.nombre, email: u.email, password: '', rol: u.rol, telefono: u.telefono || '', avisos_whatsapp: u.avisos_whatsapp || 'FALSE' }); setShowUsuarioModal(true) }}
                           className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
                           Editar
                         </button>
@@ -932,7 +938,7 @@ export default function ConfiguracionPage() {
                 </tr>
               ))}
               {usuarios.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-sm">Sin usuarios registrados. Solo el admin puede iniciar sesión.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">Sin usuarios registrados. Solo el admin puede iniciar sesión.</td></tr>
               )}
             </tbody>
           </table>
@@ -1560,7 +1566,7 @@ export default function ConfiguracionPage() {
         <form onSubmit={async e => {
           e.preventDefault()
           if (editingUsuario) {
-            const updates: Record<string, string> = { id: editingUsuario.id, nombre: usuarioForm.nombre, email: usuarioForm.email, rol: usuarioForm.rol }
+            const updates: Record<string, string> = { id: editingUsuario.id, nombre: usuarioForm.nombre, email: usuarioForm.email, rol: usuarioForm.rol, telefono: usuarioForm.telefono, avisos_whatsapp: usuarioForm.avisos_whatsapp }
             if (usuarioForm.password) updates.password = usuarioForm.password
             await patch('/api/usuarios', updates)
           } else {
@@ -1568,7 +1574,7 @@ export default function ConfiguracionPage() {
           }
           setShowUsuarioModal(false)
           setEditingUsuario(null)
-          setUsuarioForm({ nombre: '', email: '', password: '', rol: 'operador' })
+          setUsuarioForm({ nombre: '', email: '', password: '', rol: 'operador', telefono: '', avisos_whatsapp: 'FALSE' })
         }} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>
@@ -1604,6 +1610,25 @@ export default function ConfiguracionPage() {
               ))}
             </select>
           </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700">Celular (WhatsApp) <span className="text-gray-400 font-normal">(opcional)</span></label>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-sm text-gray-500">+56</span>
+              <input inputMode="numeric" placeholder="9 1234 5678" maxLength={12} value={usuarioForm.telefono}
+                onChange={e => setUsuarioForm(f => ({ ...f, telefono: e.target.value.replace(/\D/g, '').slice(0, 9) }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+          </div>
+          <label className={`flex items-start gap-2 text-xs ${usuarioForm.telefono.length === 9 ? 'text-gray-700' : 'text-gray-400'}`}>
+            <input type="checkbox" disabled={usuarioForm.telefono.length !== 9}
+              checked={usuarioForm.avisos_whatsapp === 'TRUE' && usuarioForm.telefono.length === 9}
+              onChange={e => setUsuarioForm(f => ({ ...f, avisos_whatsapp: e.target.checked ? 'TRUE' : 'FALSE' }))}
+              className="mt-0.5" />
+            <span>
+              <span className="font-medium">Recibe los avisos del sistema por WhatsApp</span><br />
+              Solicitudes de retiro con botones ✅/❌, escalamientos del bot y avisos operativos. Puede confirmar/rechazar igual que el resto del equipo.
+            </span>
+          </label>
           <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">
             {editingUsuario ? 'Guardar cambios' : 'Crear usuario'}
           </button>

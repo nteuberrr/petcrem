@@ -231,20 +231,46 @@ export function adminWhatsapp(): string {
   return adminsWhatsapp()[0]
 }
 
-/** ¿El número pertenece al equipo admin? (para gatear botones/respuestas). */
+/** ¿El número pertenece al equipo admin del env? (chequeo sync, solo ADMIN_WHATSAPP). */
 export function esAdminWhatsapp(num: string): boolean {
   return adminsWhatsapp().includes((num || '').replace(/\D/g, ''))
 }
 
 /**
- * Envía un texto a TODOS los admins (best-effort por número: si uno falla, los
- * demás igual reciben). Devuelve los resultados en el mismo orden que adminsWhatsapp().
- * Si un admin tiene la ventana de 24h cerrada, reintenta con la plantilla
- * `aviso_operativo` (aprobada) — así los avisos del sistema nunca se pierden.
+ * Destinatarios de los avisos/botones del sistema = ADMIN_WHATSAPP (env) +
+ * usuarios ACTIVOS con celular y avisos_whatsapp=TRUE (Configuración → Usuarios).
+ * Cache 60s: un cambio en la tabla aplica al minuto sin pegarle a la DB en cada aviso.
+ */
+let avisosCache: { ts: number; nums: string[] } | null = null
+export async function destinatariosAvisos(): Promise<string[]> {
+  if (avisosCache && Date.now() - avisosCache.ts < 60_000) return avisosCache.nums
+  const nums = new Set(adminsWhatsapp())
+  try {
+    const { getSheetData } = await import('./datastore')
+    for (const u of await getSheetData('usuarios')) {
+      if (u.activo !== 'TRUE' || u.avisos_whatsapp !== 'TRUE') continue
+      const t = (u.telefono || '').replace(/\D/g, '').slice(-9)
+      if (t.length === 9) nums.add(`56${t}`)
+    }
+  } catch (e) { console.warn('[whatsapp] no se pudo leer usuarios para los avisos (sigue solo el env):', e) }
+  avisosCache = { ts: Date.now(), nums: [...nums] }
+  return avisosCache.nums
+}
+
+/** ¿El número puede recibir/resolver avisos del sistema? (env + usuarios con avisos ON). */
+export async function esDestinatarioAvisos(num: string): Promise<boolean> {
+  return (await destinatariosAvisos()).includes((num || '').replace(/\D/g, ''))
+}
+
+/**
+ * Envía un texto a TODO el equipo (env + usuarios con avisos WhatsApp activados;
+ * best-effort por número: si uno falla, los demás igual reciben). Si alguien tiene
+ * la ventana de 24h cerrada, reintenta con la plantilla `aviso_operativo`
+ * (aprobada) — así los avisos del sistema nunca se pierden.
  */
 export async function avisarAdminsWhatsapp(body: string): Promise<EnvioResult[]> {
   const out: EnvioResult[] = []
-  for (const num of adminsWhatsapp()) {
+  for (const num of await destinatariosAvisos()) {
     try {
       let r = await enviarTextoWhatsapp(num, body)
       if (!r.ok && r.fuera_de_ventana && (await plantillasAprobadas()).has('aviso_operativo')) {

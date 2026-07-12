@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { NextRequest, NextResponse, after } from 'next/server'
-import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, enviarMediaWhatsapp, isWhatsappConfigured, esAdminWhatsapp, avisarAdminsWhatsapp } from '@/lib/whatsapp'
+import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, enviarMediaWhatsapp, isWhatsappConfigured, esDestinatarioAvisos, avisarAdminsWhatsapp } from '@/lib/whatsapp'
 import {
   upsertContacto, getOrCreateConversacion, insertarMensaje, getMensajes,
   actualizarConversacion, existeMensajePorProvider, marcarEstadoMensaje, getConversacion,
@@ -167,8 +167,8 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
   if (!br?.id) return false
   const m = /^retiro_(ok|no):(\d+)$/.exec(br.id)
   if (!m) return false
-  // Solo un número del equipo admin puede confirmar/rechazar.
-  if (!esAdminWhatsapp(msg.from)) return true
+  // Solo un número del equipo (env + usuarios con avisos WhatsApp) puede confirmar/rechazar.
+  if (!(await esDestinatarioAvisos(msg.from))) return true
 
   // La lógica de confirmar/rechazar (cierre atómico + efectos + avisos) vive en
   // lib/solicitudes-retiro y la comparte el PANEL de la app. El acuse va a TODOS
@@ -185,7 +185,7 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
  * consumió el mensaje.
  */
 async function procesarRelayAdmin(msg: MetaMsg): Promise<boolean> {
-  if (!esAdminWhatsapp(msg.from)) return false
+  if (!(await esDestinatarioAvisos(msg.from))) return false
   const texto = msg.text?.body?.trim()
   if (!texto) return false
   // Si citó el aviso, match exacto; si no, solo si hay UNA sola consulta pendiente

@@ -1,5 +1,5 @@
 import { ensureSheet, ensureColumns, appendRow, getNextId, getSheetData, updateById, updateByIdIf } from './datastore'
-import { enviarBotonesWhatsapp, adminsWhatsapp, avisarAdminsWhatsapp, enviarMediaWhatsapp, type BotonWa, type EnvioResult } from './whatsapp'
+import { enviarBotonesWhatsapp, destinatariosAvisos, avisarAdminsWhatsapp, enviarMediaWhatsapp, type BotonWa, type EnvioResult } from './whatsapp'
 import { crearRelayPendiente } from './relay-retiro'
 import { geocodeAddress, coordEnChile } from './google-maps'
 import { formatDate, formatDateForSheet, todayISO } from './dates'
@@ -35,14 +35,14 @@ async function direccionValida(direccion: string, comuna: string): Promise<boole
 }
 
 /**
- * Botones interactivos a TODOS los admins (equipo, ver adminsWhatsapp). ok si al
- * menos uno los recibió; la resolución es atómica, así que el primero que toque
- * ✅/❌ gana y el resto recibe el acuse.
+ * Botones interactivos a TODO el equipo (env + usuarios con avisos WhatsApp, ver
+ * destinatariosAvisos). ok si al menos uno los recibió; la resolución es atómica,
+ * así que el primero que toque ✅/❌ gana y el resto recibe el acuse.
  */
 async function botonesATodosLosAdmins(body: string, botones: BotonWa[]): Promise<{ ok: boolean; error?: string }> {
   let ok = false
   let error = ''
-  for (const num of adminsWhatsapp()) {
+  for (const num of await destinatariosAvisos()) {
     let env: EnvioResult
     try { env = await enviarBotonesWhatsapp(num, body, botones) } catch (e) { env = { ok: false, error: e instanceof Error ? e.message : String(e) } }
     if (env.ok) ok = true

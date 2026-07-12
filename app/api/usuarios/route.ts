@@ -6,7 +6,13 @@ import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns
 import { todayISO } from '@/lib/dates'
 import { normalizarRol } from '@/lib/roles'
 
-const EXPECTED_COLS = ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion']
+const EXPECTED_COLS = ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion', 'telefono', 'avisos_whatsapp']
+
+/** Celular a 9 dígitos (se guarda así; al enviar se antepone 56). '' si no da. */
+function normalizarTelefono(v: unknown): string {
+  const t = String(v ?? '').replace(/\D/g, '').slice(-9)
+  return t.length === 9 ? t : ''
+}
 
 async function ensureUsuariosSheet() {
   await ensureSheet('usuarios')
@@ -34,6 +40,8 @@ export async function GET() {
       rol: u.rol,
       activo: u.activo,
       fecha_creacion: u.fecha_creacion,
+      telefono: u.telefono || '',
+      avisos_whatsapp: u.avisos_whatsapp || 'FALSE',
     })))
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
@@ -59,6 +67,7 @@ export async function POST(req: NextRequest) {
     const rol = normalizarRol(body.rol)
     const id = await getNextId('usuarios')
     const now = todayISO()
+    const telefono = normalizarTelefono(body.telefono)
     const row = {
       id,
       nombre: String(body.nombre),
@@ -67,6 +76,9 @@ export async function POST(req: NextRequest) {
       rol,
       activo: 'TRUE',
       fecha_creacion: now,
+      telefono,
+      // Sin teléfono no hay avisos, aunque el checkbox venga marcado.
+      avisos_whatsapp: telefono && body.avisos_whatsapp === 'TRUE' ? 'TRUE' : 'FALSE',
     }
     await appendRow('usuarios', row)
     return NextResponse.json({ id, nombre: row.nombre, email: row.email, rol: row.rol, activo: row.activo }, { status: 201 })
@@ -110,6 +122,7 @@ export async function PATCH(req: NextRequest) {
     }
     const target = rows[idx]
     if (updates.rol !== undefined) updates.rol = normalizarRol(updates.rol)
+    if (updates.telefono !== undefined) updates.telefono = normalizarTelefono(updates.telefono)
     // Password vacío/omitido = no cambiar; si viene, se guarda hasheado
     if (updates.password) {
       updates.password = bcrypt.hashSync(String(updates.password), 10)
@@ -117,6 +130,8 @@ export async function PATCH(req: NextRequest) {
       delete updates.password
     }
     const updated = { ...target, ...updates }
+    // Sin teléfono no hay avisos por WhatsApp (coherencia servidor, no solo UI).
+    if (!updated.telefono) updated.avisos_whatsapp = 'FALSE'
     await updateRow('usuarios', idx, updated)
     return NextResponse.json({ id, nombre: updated.nombre, email: updated.email, rol: updated.rol, activo: updated.activo })
   } catch (e) {
