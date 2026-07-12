@@ -118,6 +118,24 @@ export async function dispararCobroAdicional(cliente: ClienteMin, items: CobroIt
   const monto = validos.reduce((s, i) => s + (i.precio || 0) * (i.qty || 1), 0)
   const detalle = validos.map(i => `${i.qty && i.qty > 1 ? `${i.qty}× ` : ''}${i.nombre}`).join(', ')
 
+  // DEDUP (caso real Morita G106, 2026-07-11: 3 cobros idénticos del mismo
+  // relicario, con 3 correos): si esta ficha YA tiene un cobro adicional IGUAL
+  // (mismo detalle y monto) que aún no está pagado, NO se crea otro — un
+  // re-llamado del bot o un re-guardado de la ficha con estado desactualizado
+  // no debe volver a cobrar lo mismo. Si el anterior ya está pagado, sí se
+  // permite (compra repetida legítima).
+  try {
+    const previos = (await getSheetData(TABLE)).map(toCobro)
+    const dup = previos.find(c =>
+      c.cliente_id === String(cliente.id) && c.tipo === 'adicional' &&
+      c.estado !== 'pagado' && c.detalle === detalle.slice(0, 500) && Number(c.monto) === Math.round(monto)
+    )
+    if (dup) {
+      console.warn(`[cobros] dedup: la ficha ${cliente.id} ya tiene el cobro ${dup.id} ("${detalle}", ${monto}) sin pagar — no se crea otro ni se reenvía el correo.`)
+      return dup.id
+    }
+  } catch { /* best-effort: si la lectura falla, se sigue con el cobro normal */ }
+
   const cobroId = await crearCobro(cliente.id, 'adicional', detalle, monto)
 
   const email = (cliente.email || '').trim()
