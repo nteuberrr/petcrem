@@ -21,26 +21,50 @@ export function buscarPost(posts: Post[], slug: string): Post | undefined {
   return posts.find(p => p.slug === slug && p.publicado === 'TRUE')
 }
 
+/** Fecha ISO → DD/MM/YYYY para la tarjeta (sin depender de lib/dates en el sitio). */
+function fmtFechaCard(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '')
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : ''
+}
+
 function card(p: Post): string {
   const url = `/blog/${escUrl(p.slug)}`
   const img = p.foto_url ? escUrl(p.foto_url) : FALLBACK
-  return '<div role="listitem" class="post-preview-full w-dyn-item"><div class="left-blog-posst">'
-    + `<a href="${url}" class="preview-link-block full-height w-inline-block">`
+  return `<a href="${url}" class="aa-post-card">`
     + `<img src="${esc(img)}" loading="lazy" alt="${esc(p.titulo)}"/>`
-    + `<div style="background-image:url('${img}')" class="hover-image"></div>`
-    + '</a></div>'
-    + '<div class="preview-text-container">'
-    + `<div><a href="${url}" class="category-link">${esc(p.categoria || 'Guías')}</a></div>`
-    + `<div class="preview-link-box"><a href="${url}" class="preview-link">${esc(p.titulo)}</a></div>`
-    + `<div class="preview-link-box"><p class="paragraph-medium">${esc(p.extracto || '')}</p></div>`
-    + '<div class="link-block-box"><div class="mintures-to-read">Leer</div></div>'
-    + '</div></div>'
+    + '<div class="aa-post-body">'
+    + `<div class="aa-post-top"><span class="aa-post-cat">${esc(p.categoria || 'Guías')}</span><span class="aa-post-fecha">${esc(fmtFechaCard(p.fecha))}</span></div>`
+    + `<div class="aa-post-title">${esc(p.titulo)}</div>`
+    + `<p class="aa-post-exc">${esc(p.extracto || '')}</p>`
+    + '<span class="aa-post-leer">Leer artículo →</span>'
+    + '</div></a>'
 }
 
+/**
+ * Grilla de tarjetas propia (cards/boxes), autocontenida: reemplaza el listado
+ * plano de Webflow, que con 15 artículos no distinguía uno de otro (pedido del
+ * dueño 2026-07-12: "que se vea excelente en teléfono y PC, en boxes"). La
+ * tipografía se HEREDA de la página (sin font-family propio); solo paleta de
+ * marca (navy/dorado/crema). 1 columna en móvil, 2-3 en escritorio (auto-fill).
+ */
 export function renderPostsWeb(posts: Post[]): string {
   const pub = postsPublicados(posts)
   if (pub.length === 0) return ''
-  return pub.map(card).join('')
+  const css = '<style>'
+    + '.aa-blog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:24px;margin-top:8px}'
+    + '.aa-post-card{display:flex;flex-direction:column;background:#fff;border:1px solid #e6e0d6;border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(20,60,100,.06);text-decoration:none;transition:transform .15s ease,box-shadow .15s ease}'
+    + '.aa-post-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(20,60,100,.14)}'
+    + '.aa-post-card>img{width:100%;height:185px;object-fit:cover;display:block}'
+    + '.aa-post-body{display:flex;flex-direction:column;gap:9px;padding:18px 20px 20px;flex:1}'
+    + '.aa-post-top{display:flex;align-items:center;justify-content:space-between;gap:8px}'
+    + '.aa-post-cat{background:#F2B84B;color:#143C64;font-size:12px;font-weight:700;border-radius:999px;padding:3px 12px;letter-spacing:.02em}'
+    + '.aa-post-fecha{color:#98a3ad;font-size:12.5px}'
+    + '.aa-post-title{color:#143C64;font-size:19px;font-weight:700;line-height:1.32}'
+    + '.aa-post-exc{color:#5b6b7a;font-size:14.5px;line-height:1.55;margin:0;flex:1;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}'
+    + '.aa-post-leer{color:#2A6DB0;font-weight:600;font-size:14px}'
+    + '@media (max-width:560px){.aa-blog-grid{grid-template-columns:1fr;gap:18px}.aa-post-card>img{height:200px}}'
+    + '</style>'
+  return css + `<div class="aa-blog-grid">${pub.map(card).join('')}</div>`
 }
 
 /**
