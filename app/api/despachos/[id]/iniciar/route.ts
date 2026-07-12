@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { enviarInicioDespacho } from '@/lib/cliente-mailer'
 import { resolverVet, enviarInicioRutaVet } from '@/lib/vet-cremacion-mailer'
+import { avisarClienteWhatsapp } from '@/lib/whatsapp-avisos'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +47,19 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       const destinatarios = mascotas
         .map(c => ({ email: c.email, nombreMascota: c.nombre_mascota, nombreTutor: c.nombre_tutor, clienteId: c.id }))
       await enviarInicioDespacho(destinatarios)
+
+      // Aviso por WhatsApp a cada tutor (texto libre → plantilla entrega_en_camino
+      // si la ventana está cerrada). Best-effort por mascota.
+      for (const c of mascotas) {
+        if (!c.telefono) continue
+        const tutor = (c.nombre_tutor || '').trim().split(/\s+/)[0] || '👋'
+        const mascota = c.nombre_mascota || 'tu mascota'
+        await avisarClienteWhatsapp(
+          c.telefono,
+          `Hola ${tutor}, vamos en camino a entregar las cenizas de ${mascota}. Te avisaremos cuando estemos por llegar. — Crematorio Alma Animal`,
+          { nombre: 'entrega_en_camino', variables: [tutor, mascota] },
+        )
+      }
 
       // Y a los veterinarios de convenio asociados a las mascotas de la ruta
       // (best-effort). Leemos `veterinarios` una sola vez.

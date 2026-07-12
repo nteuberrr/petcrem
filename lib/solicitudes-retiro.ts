@@ -2,7 +2,7 @@ import { getSheetData, updateByIdIf, updateById } from './datastore'
 import { crearClienteBorrador } from './cliente-borrador'
 import { createBorradorToken } from './borrador-token'
 import { enviarRetiroConfirmadoVet } from './vet-cremacion-mailer'
-import { enviarTextoWhatsapp } from './whatsapp'
+import { enviarTextoWhatsapp, enviarPlantillaWhatsapp, renderPlantillaWa, plantillasAprobadas } from './whatsapp'
 import { upsertContacto, getOrCreateConversacion, insertarMensaje, marcarConversacionPorTelefono } from './mensajes'
 import { formatDate, todayISO, formatDateForSheet } from './dates'
 
@@ -226,13 +226,23 @@ export async function resolverSolicitudRetiro(
   }
 
   // Avisar por WhatsApp a quien pidió el retiro + registrar en su conversación.
+  // Si la ventana de 24h ya cerró (p. ej. el admin confirmó al día siguiente),
+  // cae a la plantilla aprobada `retiro_confirmado` (sin el link: al responder,
+  // la persona reabre la ventana y ahí se le puede mandar).
   if (waCliente) {
-    const env = await enviarTextoWhatsapp(waCliente, msgCliente)
+    let env = await enviarTextoWhatsapp(waCliente, msgCliente)
+    let cuerpoEnviado = msgCliente
+    if (!env.ok && env.fuera_de_ventana && confirmado && (await plantillasAprobadas()).has('retiro_confirmado')) {
+      const tutor = (sol.cliente_nombre || '').trim().split(/\s+/)[0] || '👋'
+      const vars = [tutor, sol.nombre_mascota || 'tu mascota', `el ${formatDate(sol.fecha_retiro)} a las ${sol.hora_retiro}`]
+      const envP = await enviarPlantillaWhatsapp(waCliente, 'retiro_confirmado', vars)
+      if (envP.ok) { env = envP; cuerpoEnviado = renderPlantillaWa('retiro_confirmado', vars) }
+    }
     try {
       const cont = await upsertContacto({ wa_id: waCliente, telefono: waCliente, audiencia: 'A' })
       const conv = await getOrCreateConversacion(cont.id, 'whatsapp', cont.audiencia, 'whatsapp')
       await insertarMensaje({
-        conversacion_id: conv.id, direccion: 'saliente', cuerpo: msgCliente,
+        conversacion_id: conv.id, direccion: 'saliente', cuerpo: cuerpoEnviado,
         tipo: 'texto', estado: env.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
       })
     } catch (e) { console.warn('[solicitudes-retiro] no se pudo registrar aviso al cliente:', e) }

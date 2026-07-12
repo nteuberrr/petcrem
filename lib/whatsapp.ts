@@ -58,6 +58,161 @@ export async function enviarTextoWhatsapp(to: string, body: string): Promise<Env
   return postMensaje({ to: to.replace(/[^\d]/g, ''), type: 'text', text: { preview_url: false, body } })
 }
 
+// ─── Plantillas aprobadas (fuera de la ventana de 24h) ─────────────────────────
+// Las plantillas son el ÚNICO mensaje que Meta permite iniciar/enviar con la
+// ventana de 24h cerrada, y se cobran por mensaje (utility barata, marketing más
+// cara). Regla del sistema: texto libre PRIMERO (gratis, dentro de ventana) y
+// plantilla solo como respaldo ante `fuera_de_ventana`. Este catálogo es la única
+// fuente de verdad: lo consumen el script de creación (scripts/crear-plantillas-
+// whatsapp.ts), los senders y el render para registrar el texto real en el inbox.
+// ⚠️ El `texto` debe calzar EXACTO con lo aprobado en Meta: si se edita acá hay
+// que re-crear/re-aprobar la plantilla (Meta rechaza el envío si difiere).
+
+export interface PlantillaWa {
+  nombre: string
+  categoria: 'UTILITY' | 'MARKETING'
+  /** Cuerpo con variables posicionales {{1}}, {{2}}… tal cual se aprueba en Meta. */
+  texto: string
+  /** Valores de ejemplo (los exige Meta al crear, uno por variable). */
+  ejemplos: string[]
+}
+
+export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
+  retomar_conversacion: {
+    nombre: 'retomar_conversacion',
+    categoria: 'UTILITY',
+    texto: 'Hola {{1}}, te escribimos de Crematorio Alma Animal para retomar tu conversación. Tenemos información pendiente sobre tu solicitud. Responde este mensaje y seguimos conversando por aquí.',
+    ejemplos: ['María'],
+  },
+  seguimiento_consulta: {
+    nombre: 'seguimiento_consulta',
+    categoria: 'MARKETING',
+    texto: 'Hola {{1}}, hace poco nos consultaste por nuestros servicios. Quedamos atentos si necesitas ayuda para coordinar un retiro o resolver cualquier duda. Estamos disponibles todos los días de 09:00 a 22:00 hrs.',
+    ejemplos: ['María'],
+  },
+  retiro_confirmado: {
+    nombre: 'retiro_confirmado',
+    categoria: 'UTILITY',
+    texto: 'Hola {{1}}, confirmamos el retiro de {{2}} para {{3}}. Ante cualquier cambio, respóndenos por aquí. Gracias por confiar en Crematorio Alma Animal.',
+    ejemplos: ['María', 'Rocky', 'hoy a las 18:00'],
+  },
+  entrega_en_camino: {
+    nombre: 'entrega_en_camino',
+    categoria: 'UTILITY',
+    texto: 'Hola {{1}}, vamos en camino a entregar las cenizas de {{2}}. Te avisaremos cuando estemos por llegar. — Crematorio Alma Animal',
+    ejemplos: ['María', 'Rocky'],
+  },
+  certificado_disponible: {
+    nombre: 'certificado_disponible',
+    categoria: 'UTILITY',
+    texto: 'Hola {{1}}, el certificado de cremación de {{2}} ya está emitido y fue enviado a tu correo. Si no lo recibes, respóndenos por aquí y te lo reenviamos.',
+    ejemplos: ['María', 'Rocky'],
+  },
+  aviso_operativo: {
+    nombre: 'aviso_operativo',
+    categoria: 'UTILITY',
+    // Meta no permite variables al inicio ni al final del cuerpo → cierre fijo.
+    texto: 'Aviso del sistema Alma Animal: {{1}}. Responde este mensaje para reabrir la conversación con el bot.',
+    ejemplos: ['Nueva solicitud de retiro pendiente de confirmar'],
+  },
+}
+
+const IDIOMA_PLANTILLAS = 'es'
+
+/** Sustituye {{1}}, {{2}}… — para registrar en el inbox el texto real que recibió la persona. */
+export function renderPlantillaWa(nombre: string, variables: string[]): string {
+  const p = PLANTILLAS_WA[nombre]
+  if (!p) return ''
+  return p.texto.replace(/\{\{(\d+)\}\}/g, (_, n) => variables[Number(n) - 1] ?? '')
+}
+
+/**
+ * Envía una plantilla aprobada (funciona con la ventana de 24h cerrada; tiene
+ * costo por mensaje). `nombre` debe existir en PLANTILLAS_WA y estar APROBADA
+ * en Meta. Las variables van posicionales ({{1}}, {{2}}…).
+ */
+export async function enviarPlantillaWhatsapp(to: string, nombre: string, variables: string[]): Promise<EnvioResult> {
+  const p = PLANTILLAS_WA[nombre]
+  if (!p) return { ok: false, error: `Plantilla desconocida: ${nombre}` }
+  const esperadas = (p.texto.match(/\{\{\d+\}\}/g) || []).length
+  if (variables.length < esperadas) return { ok: false, error: `La plantilla ${nombre} espera ${esperadas} variable(s), llegaron ${variables.length}.` }
+  const template: Record<string, unknown> = { name: nombre, language: { code: IDIOMA_PLANTILLAS } }
+  if (esperadas > 0) {
+    template.components = [{ type: 'body', parameters: variables.slice(0, esperadas).map(v => ({ type: 'text', text: String(v).slice(0, 500) })) }]
+  }
+  return postMensaje({ to: to.replace(/[^\d]/g, ''), type: 'template', template })
+}
+
+export interface PlantillaEstado {
+  nombre: string
+  estado: string // APPROVED | PENDING | REJECTED | …
+  categoria: string
+  idioma: string
+}
+
+/** Lista las plantillas de la WABA con su estado de revisión en Meta. */
+export async function listarPlantillasWhatsapp(): Promise<PlantillaEstado[]> {
+  const token = process.env.WHATSAPP_TOKEN
+  const waba = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID
+  if (!token || !waba) return []
+  try {
+    const res = await fetch(`${GRAPH}/${version()}/${waba}/message_templates?fields=name,status,category,language&limit=100`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      console.warn('[whatsapp] no se pudieron listar plantillas:', j?.error?.message || res.status)
+      return []
+    }
+    return (j.data || []).map((t: { name?: string; status?: string; category?: string; language?: string }) => ({
+      nombre: String(t.name || ''), estado: String(t.status || ''), categoria: String(t.category || ''), idioma: String(t.language || ''),
+    }))
+  } catch (e) {
+    console.warn('[whatsapp] error listando plantillas:', e)
+    return []
+  }
+}
+
+/** Nombres de plantillas APROBADAS en Meta (cache corto: evita pegarle a Graph en cada envío). */
+let aprobadasCache: { ts: number; nombres: Set<string> } | null = null
+export async function plantillasAprobadas(): Promise<Set<string>> {
+  if (aprobadasCache && Date.now() - aprobadasCache.ts < 10 * 60_000) return aprobadasCache.nombres
+  const nombres = new Set((await listarPlantillasWhatsapp()).filter(p => p.estado === 'APPROVED').map(p => p.nombre))
+  aprobadasCache = { ts: Date.now(), nombres }
+  return nombres
+}
+
+/**
+ * Crea en Meta las plantillas del catálogo que aún no existan (envío a revisión).
+ * Idempotente: salta las que ya están (cualquier estado). Devuelve el detalle por
+ * plantilla. `allow_category_change` deja que Meta recategorice (p. ej. UTILITY→
+ * MARKETING) en vez de rechazar.
+ */
+export async function crearPlantillasFaltantes(): Promise<{ nombre: string; resultado: string }[]> {
+  const token = process.env.WHATSAPP_TOKEN
+  const waba = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID
+  if (!token || !waba) return Object.keys(PLANTILLAS_WA).map(n => ({ nombre: n, resultado: 'WhatsApp/WABA no configurado' }))
+  const existentes = new Set((await listarPlantillasWhatsapp()).map(p => p.nombre))
+  const out: { nombre: string; resultado: string }[] = []
+  for (const p of Object.values(PLANTILLAS_WA)) {
+    if (existentes.has(p.nombre)) { out.push({ nombre: p.nombre, resultado: 'ya existe (se salta)' }); continue }
+    const body: Record<string, unknown> = { type: 'BODY', text: p.texto }
+    if (p.ejemplos.length) body.example = { body_text: [p.ejemplos] }
+    try {
+      const res = await fetch(`${GRAPH}/${version()}/${waba}/message_templates`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: p.nombre, language: IDIOMA_PLANTILLAS, category: p.categoria, allow_category_change: true, components: [body] }),
+      })
+      const j = await res.json().catch(() => ({}))
+      out.push({ nombre: p.nombre, resultado: res.ok ? `creada (id ${j.id || '?'}, estado ${j.status || 'PENDING'})` : `ERROR: ${j?.error?.error_user_msg || j?.error?.message || res.status}` })
+    } catch (e) {
+      out.push({ nombre: p.nombre, resultado: `ERROR: ${e instanceof Error ? e.message : String(e)}` })
+    }
+  }
+  return out
+}
+
 /**
  * Números de WhatsApp del EQUIPO admin (dueño + socios) que reciben los avisos
  * del bot y pueden confirmar/rechazar/responder. `ADMIN_WHATSAPP` acepta VARIOS
@@ -84,11 +239,19 @@ export function esAdminWhatsapp(num: string): boolean {
 /**
  * Envía un texto a TODOS los admins (best-effort por número: si uno falla, los
  * demás igual reciben). Devuelve los resultados en el mismo orden que adminsWhatsapp().
+ * Si un admin tiene la ventana de 24h cerrada, reintenta con la plantilla
+ * `aviso_operativo` (aprobada) — así los avisos del sistema nunca se pierden.
  */
 export async function avisarAdminsWhatsapp(body: string): Promise<EnvioResult[]> {
   const out: EnvioResult[] = []
   for (const num of adminsWhatsapp()) {
-    try { out.push(await enviarTextoWhatsapp(num, body)) } catch (e) { out.push({ ok: false, error: e instanceof Error ? e.message : String(e) }) }
+    try {
+      let r = await enviarTextoWhatsapp(num, body)
+      if (!r.ok && r.fuera_de_ventana && (await plantillasAprobadas()).has('aviso_operativo')) {
+        r = await enviarPlantillaWhatsapp(num, 'aviso_operativo', [body.slice(0, 500)])
+      }
+      out.push(r)
+    } catch (e) { out.push({ ok: false, error: e instanceof Error ? e.message : String(e) }) }
   }
   return out
 }

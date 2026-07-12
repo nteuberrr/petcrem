@@ -6,6 +6,7 @@ import { todayISO, horaChile } from '@/lib/dates'
 import { getContacto } from '@/lib/email-layout'
 import { buildCertificado } from '@/lib/cliente-mailer'
 import { registrarEnvio } from '@/lib/correos-log'
+import { avisarClienteWhatsapp } from '@/lib/whatsapp-avisos'
 
 const CERT_COLS = [
   'id', 'cliente_id', 'codigo_mascota', 'nombre_mascota',
@@ -117,6 +118,18 @@ export async function POST(
       return NextResponse.json({ error: res.error ?? 'No se pudo enviar el correo' }, { status: 502 })
     }
     await registrarEnvio({ clienteId: cliente.id, tipo: 'certificado', email: cliente.email, messageId: res.message_id, ok: true })
+
+    // Aviso por WhatsApp al tutor (texto libre → plantilla certificado_disponible
+    // si la ventana de 24h está cerrada). Best-effort: el correo ya salió.
+    if (cliente.telefono) {
+      const tutor = (cliente.nombre_tutor || '').trim().split(/\s+/)[0] || '👋'
+      const mascota = cliente.nombre_mascota || 'tu mascota'
+      await avisarClienteWhatsapp(
+        cliente.telefono,
+        `Hola ${tutor}, el certificado de cremación de ${mascota} ya está emitido y fue enviado a tu correo (${cliente.email}). Si no lo recibes, respóndenos por aquí y te lo reenviamos. — Crematorio Alma Animal`,
+        { nombre: 'certificado_disponible', variables: [tutor, mascota] },
+      )
+    }
 
     // Persistir el envío en la fila del certificado para que el front pueda mostrar
     // "Certificado enviado el DD-MM-YYYY" y evitar reenvíos accidentales.

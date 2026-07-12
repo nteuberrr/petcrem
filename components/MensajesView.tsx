@@ -141,7 +141,21 @@ export default function MensajesView() {
         body: JSON.stringify({ cuerpo: texto }),
       })
       const j = await r.json().catch(() => ({}))
-      if (r.ok) { setTexto(''); await abrir(sel); if (j.aviso) alert(j.aviso) }
+      if (r.ok) {
+        setTexto(''); await abrir(sel)
+        if (j.plantilla_disponible) {
+          // Ventana de 24h cerrada: ofrecer la plantilla aprobada de reapertura.
+          if (confirm('La ventana de 24h está cerrada, así que ese texto no se pudo entregar.\n\n¿Enviar la plantilla de reapertura? ("Hola…, te escribimos de Crematorio Alma Animal para retomar tu conversación…")\nTiene un costo pequeño por mensaje; si la persona responde, la conversación se reabre y puedes escribir libre.')) {
+            const r2 = await fetch(`/api/mensajes/${sel}/mensaje`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ plantilla: true }),
+            })
+            const j2 = await r2.json().catch(() => ({}))
+            if (r2.ok) await abrir(sel)
+            else alert(j2.error || 'No se pudo enviar la plantilla')
+          }
+        } else if (j.aviso) alert(j.aviso)
+      }
       else alert(j.error || 'No se pudo registrar el mensaje')
     } finally { pausaRef.current--; setEnviando(false) }
   }

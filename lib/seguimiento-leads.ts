@@ -1,6 +1,6 @@
 import { listConversaciones, getMensajes, marcarSeguimientoEnviado, reclamarBarridoSeguimiento, insertarMensaje, type Mensaje } from './mensajes'
 import { redactarSeguimiento, type TurnoMensaje } from './agente-mensajes'
-import { enviarTextoWhatsapp } from './whatsapp'
+import { enviarTextoWhatsapp, enviarPlantillaWhatsapp, renderPlantillaWa, plantillasAprobadas } from './whatsapp'
 import { getSheetData } from './datastore'
 
 /**
@@ -12,8 +12,10 @@ import { getSheetData } from './datastore'
  * seguimiento cálido para retomar el contacto.
  *
  * Restricción de WhatsApp: fuera de la ventana de 24h del último mensaje del
- * cliente solo se puede escribir con plantilla aprobada (no implementadas), así
- * que solo hacemos seguimiento DENTRO de la ventana. Un solo seguimiento por
+ * cliente solo se puede escribir con PLANTILLA aprobada (categoría marketing,
+ * tiene costo por mensaje). Dentro de la ventana va texto libre redactado por
+ * el agente (gratis); con la ventana cerrada y hasta SEGUIMIENTO_PLANTILLA_MAX_HORAS
+ * (default 72h) va la plantilla `seguimiento_consulta`. Un solo seguimiento por
  * lead (idempotencia por la columna seguimiento_at).
  */
 
@@ -101,22 +103,44 @@ export async function enviarSeguimientosPendientes(opts: { maxEnvios?: number } 
     const horasDesdeUltimo = (ahora - new Date(ultimo.ts).getTime()) / 3600000
     if (horasDesdeUltimo < MIN_HORAS) { salto(`aún reciente (${horasDesdeUltimo.toFixed(1)}h)`); continue }
 
-    // El último mensaje ENTRANTE debe estar dentro de la ventana de 24h.
-    const ultEntrante = [...conTexto].reverse().find(m => m.direccion === 'entrante')
-    if (!ultEntrante) { salto('el cliente nunca escribió'); continue }
-    const horasVentana = (ahora - new Date(ultEntrante.ts).getTime()) / 3600000
-    if (horasVentana > MAX_HORAS) { salto(`fuera de ventana 24h (${horasVentana.toFixed(1)}h)`); continue }
-
     // Lead "tibio": tiene que haber recibido una cotización (algún saliente con precio).
     const cotizó = conTexto.some(m => m.direccion === 'saliente' && (m.cuerpo || '').includes('$'))
     if (!cotizó) { salto('no llegó a cotizar'); continue }
 
-    // Historial para redactar el seguimiento.
+    const nombreCliente = /[a-záéíóúñ]/i.test(nombre) ? nombre : undefined
+
+    // Envío por PLANTILLA (con costo): registra en el inbox el texto real recibido.
+    const enviarPlantillaSeguimiento = async (): Promise<boolean> => {
+      const primerNombre = (nombreCliente || '').split(/\s+/)[0] || '👋'
+      const envio = await enviarPlantillaWhatsapp(telefono, 'seguimiento_consulta', [primerNombre])
+      if (!envio.ok) { salto(`error de plantilla: ${envio.error || 'desconocido'}`); return false }
+      try {
+        await insertarMensaje({ conversacion_id: conv.id, direccion: 'saliente', cuerpo: renderPlantillaWa('seguimiento_consulta', [primerNombre]), enviado_por: 'seguimiento-auto', provider_message_id: envio.message_id ?? null, estado: 'enviado' })
+      } catch { /* el mensaje se envió; si falla el registro, seguimos */ }
+      await marcarSeguimientoEnviado(conv.id).catch(() => {})
+      out.enviados++
+      out.detalle.push({ id: conv.id, nombre, resultado: 'enviado (plantilla)' })
+      return true
+    }
+
+    // ¿La ventana de 24h del último mensaje ENTRANTE sigue abierta?
+    const ultEntrante = [...conTexto].reverse().find(m => m.direccion === 'entrante')
+    if (!ultEntrante) { salto('el cliente nunca escribió'); continue }
+    const horasVentana = (ahora - new Date(ultEntrante.ts).getTime()) / 3600000
+    if (horasVentana > MAX_HORAS) {
+      // Ventana cerrada → plantilla de reenganche, si aplica y está aprobada.
+      const PLANTILLA_MAX_HORAS = num(process.env.SEGUIMIENTO_PLANTILLA_MAX_HORAS, 72)
+      if (horasVentana > PLANTILLA_MAX_HORAS) { salto(`demasiado frío para plantilla (${horasVentana.toFixed(1)}h)`); continue }
+      if (!(await plantillasAprobadas()).has('seguimiento_consulta')) { salto(`fuera de ventana 24h (${horasVentana.toFixed(1)}h) y plantilla no aprobada`); continue }
+      await enviarPlantillaSeguimiento()
+      continue
+    }
+
+    // Ventana abierta → texto libre redactado por el agente (gratis).
     const historial: TurnoMensaje[] = conTexto.map(m => ({
       rol: m.direccion === 'entrante' ? 'cliente' : 'nosotros',
       texto: (m.cuerpo && m.cuerpo.trim()) ? m.cuerpo : `[${m.tipo}]`,
     }))
-    const nombreCliente = /[a-záéíóúñ]/i.test(nombre) ? nombre : undefined
 
     let texto = ''
     try { texto = await redactarSeguimiento(historial, { nombreCliente }) } catch { /* best-effort */ }
@@ -131,9 +155,13 @@ export async function enviarSeguimientosPendientes(opts: { maxEnvios?: number } 
       out.enviados++
       out.detalle.push({ id: conv.id, nombre, resultado: 'enviado' })
     } else if (envio.fuera_de_ventana) {
-      // La ventana se cerró: marcamos para no reintentar (solo reabre si el cliente escribe).
-      await marcarSeguimientoEnviado(conv.id).catch(() => {})
-      salto('fuera de ventana al enviar')
+      // La ventana se cerró entre el cálculo y el envío: intentar la plantilla al vuelo.
+      if ((await plantillasAprobadas()).has('seguimiento_consulta')) {
+        if (!(await enviarPlantillaSeguimiento())) await marcarSeguimientoEnviado(conv.id).catch(() => {})
+      } else {
+        await marcarSeguimientoEnviado(conv.id).catch(() => {})
+        salto('fuera de ventana al enviar')
+      }
     } else {
       // Error transitorio (red / API): NO marcamos, se reintenta en la próxima corrida.
       salto(`error de envío: ${envio.error || 'desconocido'}`)
