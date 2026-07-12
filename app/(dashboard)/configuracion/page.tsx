@@ -1620,8 +1620,8 @@ export default function ConfiguracionPage() {
             </div>
           </div>
           {(() => {
-            const rolPermite = usuarioForm.rol === 'admin' || usuarioForm.rol === 'admin2'
-            const habilitado = usuarioForm.telefono.length === 9 && rolPermite
+            const esAdminRol = usuarioForm.rol === 'admin' || usuarioForm.rol === 'admin2'
+            const habilitado = usuarioForm.telefono.length === 9
             return (
               <label className={`flex items-start gap-2 text-xs ${habilitado ? 'text-gray-700' : 'text-gray-400'}`}>
                 <input type="checkbox" disabled={!habilitado}
@@ -1629,9 +1629,10 @@ export default function ConfiguracionPage() {
                   onChange={e => setUsuarioForm(f => ({ ...f, avisos_whatsapp: e.target.checked ? 'TRUE' : 'FALSE' }))}
                   className="mt-0.5" />
                 <span>
-                  <span className="font-medium">Recibe los avisos del sistema por WhatsApp</span><br />
-                  Solicitudes de retiro con botones ✅/❌, escalamientos del bot y avisos operativos; puede confirmar/rechazar igual que el resto del equipo.
-                  {!rolPermite && <span className="block mt-0.5">Solo disponible para roles Admin y General — lo que viene de Mensajes no es visible para operadores.</span>}
+                  <span className="font-medium">Recibe avisos por WhatsApp</span><br />
+                  {esAdminRol
+                    ? 'Recibe todo lo del bot: solicitudes de retiro con botones ✅/❌, escalamientos, relays y avisos operativos; puede confirmar/rechazar.'
+                    : 'Como Operador, recibe SOLO las solicitudes de retiro con botones ✅/❌ (y puede confirmar/rechazar). El resto de los mensajes del bot es solo para Admin y General.'}
                 </span>
               </label>
             )

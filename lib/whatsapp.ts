@@ -237,42 +237,59 @@ export function esAdminWhatsapp(num: string): boolean {
 }
 
 /**
- * Destinatarios de los avisos/botones del sistema = ADMIN_WHATSAPP (env) +
- * usuarios ACTIVOS con rol admin/admin2, celular y avisos_whatsapp=TRUE
- * (Configuración → Usuarios). Los OPERADORES quedan fuera aunque tengan celular:
- * lo que viene del bot/inbox (solicitudes, escalamientos, relays) es solo del
- * equipo admin. Cache 60s: un cambio en la tabla aplica al minuto.
+ * Dos niveles de destinatarios de los mensajes del sistema (Configuración →
+ * Usuarios; usuarios ACTIVOS con celular y avisos_whatsapp=TRUE, más el env
+ * ADMIN_WHATSAPP siempre):
+ *  - `admins`  → SOLO roles admin/admin2. Reciben todo lo del bot/inbox
+ *    (escalamientos, relays de ETA, avisos operativos).
+ *  - `retiros` → TODO el equipo con avisos ON, incluidos operadores. Reciben
+ *    únicamente las SOLICITUDES DE RETIRO con botones ✅/❌ y cualquiera puede
+ *    resolverlas (decisión del dueño 2026-07-11).
+ * Cache 60s: un cambio en la tabla aplica al minuto.
  */
-let avisosCache: { ts: number; nums: string[] } | null = null
-export async function destinatariosAvisos(): Promise<string[]> {
-  if (avisosCache && Date.now() - avisosCache.ts < 60_000) return avisosCache.nums
-  const nums = new Set(adminsWhatsapp())
+let equipoCache: { ts: number; admins: string[]; retiros: string[] } | null = null
+async function cargarEquipo(): Promise<{ admins: string[]; retiros: string[] }> {
+  if (equipoCache && Date.now() - equipoCache.ts < 60_000) return equipoCache
+  const admins = new Set(adminsWhatsapp())
+  const retiros = new Set(adminsWhatsapp())
   try {
     const [{ getSheetData }, { esAdmin }] = await Promise.all([import('./datastore'), import('./roles')])
     for (const u of await getSheetData('usuarios')) {
-      if (u.activo !== 'TRUE' || u.avisos_whatsapp !== 'TRUE' || !esAdmin(u.rol)) continue
+      if (u.activo !== 'TRUE' || u.avisos_whatsapp !== 'TRUE') continue
       const t = (u.telefono || '').replace(/\D/g, '').slice(-9)
-      if (t.length === 9) nums.add(`56${t}`)
+      if (t.length !== 9) continue
+      retiros.add(`56${t}`)
+      if (esAdmin(u.rol)) admins.add(`56${t}`)
     }
   } catch (e) { console.warn('[whatsapp] no se pudo leer usuarios para los avisos (sigue solo el env):', e) }
-  avisosCache = { ts: Date.now(), nums: [...nums] }
-  return avisosCache.nums
+  equipoCache = { ts: Date.now(), admins: [...admins], retiros: [...retiros] }
+  return equipoCache
 }
 
-/** ¿El número puede recibir/resolver avisos del sistema? (env + usuarios con avisos ON). */
+/** Destinatarios del grueso de los avisos del bot/inbox: env + admin/admin2. */
+export async function destinatariosAvisos(): Promise<string[]> {
+  return (await cargarEquipo()).admins
+}
+
+/** Destinatarios de las SOLICITUDES DE RETIRO: env + todo el equipo con avisos ON. */
+export async function destinatariosRetiros(): Promise<string[]> {
+  return (await cargarEquipo()).retiros
+}
+
+/** ¿Puede recibir/resolver los avisos generales del sistema? (solo admin/admin2 + env). */
 export async function esDestinatarioAvisos(num: string): Promise<boolean> {
   return (await destinatariosAvisos()).includes((num || '').replace(/\D/g, ''))
 }
 
-/**
- * Envía un texto a TODO el equipo (env + usuarios con avisos WhatsApp activados;
- * best-effort por número: si uno falla, los demás igual reciben). Si alguien tiene
- * la ventana de 24h cerrada, reintenta con la plantilla `aviso_operativo`
- * (aprobada) — así los avisos del sistema nunca se pierden.
- */
-export async function avisarAdminsWhatsapp(body: string): Promise<EnvioResult[]> {
+/** ¿Puede recibir/resolver solicitudes de retiro? (todo el equipo con avisos ON). */
+export async function esDestinatarioRetiros(num: string): Promise<boolean> {
+  return (await destinatariosRetiros()).includes((num || '').replace(/\D/g, ''))
+}
+
+/** Texto a una lista de números, con fallback a la plantilla aviso_operativo si la ventana cerró. */
+async function avisarNumeros(nums: string[], body: string): Promise<EnvioResult[]> {
   const out: EnvioResult[] = []
-  for (const num of await destinatariosAvisos()) {
+  for (const num of nums) {
     try {
       let r = await enviarTextoWhatsapp(num, body)
       if (!r.ok && r.fuera_de_ventana && (await plantillasAprobadas()).has('aviso_operativo')) {
@@ -282,6 +299,21 @@ export async function avisarAdminsWhatsapp(body: string): Promise<EnvioResult[]>
     } catch (e) { out.push({ ok: false, error: e instanceof Error ? e.message : String(e) }) }
   }
   return out
+}
+
+/**
+ * Envía un texto a los ADMINS (env + admin/admin2 con avisos ON; best-effort por
+ * número: si uno falla, los demás igual reciben). Si alguien tiene la ventana de
+ * 24h cerrada, reintenta con la plantilla `aviso_operativo` (aprobada) — así los
+ * avisos del sistema nunca se pierden.
+ */
+export async function avisarAdminsWhatsapp(body: string): Promise<EnvioResult[]> {
+  return avisarNumeros(await destinatariosAvisos(), body)
+}
+
+/** Igual que avisarAdminsWhatsapp pero al equipo AMPLIO de retiros (acuses de solicitudes). */
+export async function avisarEquipoRetiros(body: string): Promise<EnvioResult[]> {
+  return avisarNumeros(await destinatariosRetiros(), body)
 }
 
 export interface BotonWa { id: string; title: string }

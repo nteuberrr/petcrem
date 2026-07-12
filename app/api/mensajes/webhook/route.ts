@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { NextRequest, NextResponse, after } from 'next/server'
-import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, enviarMediaWhatsapp, isWhatsappConfigured, esDestinatarioAvisos, avisarAdminsWhatsapp } from '@/lib/whatsapp'
+import { verificarFirmaWebhook, descargarMedia, tipoInterno, enviarTextoWhatsapp, enviarMediaWhatsapp, isWhatsappConfigured, esDestinatarioAvisos, esDestinatarioRetiros, avisarAdminsWhatsapp, avisarEquipoRetiros } from '@/lib/whatsapp'
 import {
   upsertContacto, getOrCreateConversacion, insertarMensaje, getMensajes,
   actualizarConversacion, existeMensajePorProvider, marcarEstadoMensaje, getConversacion,
@@ -167,14 +167,15 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
   if (!br?.id) return false
   const m = /^retiro_(ok|no):(\d+)$/.exec(br.id)
   if (!m) return false
-  // Solo un número del equipo (env + usuarios con avisos WhatsApp) puede confirmar/rechazar.
-  if (!(await esDestinatarioAvisos(msg.from))) return true
+  // Las solicitudes de retiro las puede resolver TODO el equipo con avisos ON
+  // (incluidos operadores), no solo los admins.
+  if (!(await esDestinatarioRetiros(msg.from))) return true
 
   // La lógica de confirmar/rechazar (cierre atómico + efectos + avisos) vive en
-  // lib/solicitudes-retiro y la comparte el PANEL de la app. El acuse va a TODOS
-  // los admins (así el resto del equipo ve quién/qué se resolvió).
+  // lib/solicitudes-retiro y la comparte el PANEL de la app. El acuse va a TODO
+  // el equipo de retiros (los mismos que recibieron los botones ven quién resolvió).
   const { acuseAdmin } = await resolverSolicitudRetiro(m[2], m[1] === 'ok')
-  await avisarAdminsWhatsapp(acuseAdmin)
+  await avisarEquipoRetiros(acuseAdmin)
   return true
 }
 

@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
-import { normalizarRol, esAdmin } from '@/lib/roles'
+import { normalizarRol } from '@/lib/roles'
 
 const EXPECTED_COLS = ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion', 'telefono', 'avisos_whatsapp']
 
@@ -77,8 +77,9 @@ export async function POST(req: NextRequest) {
       activo: 'TRUE',
       fecha_creacion: now,
       telefono,
-      // Avisos solo con teléfono Y rol admin/admin2 (lo del bot/inbox no es de operadores).
-      avisos_whatsapp: telefono && esAdmin(rol) && body.avisos_whatsapp === 'TRUE' ? 'TRUE' : 'FALSE',
+      // Sin teléfono no hay avisos. Con avisos ON: admin/admin2 reciben todo lo
+      // del bot; operadores SOLO las solicitudes de retiro (ver lib/whatsapp).
+      avisos_whatsapp: telefono && body.avisos_whatsapp === 'TRUE' ? 'TRUE' : 'FALSE',
     }
     await appendRow('usuarios', row)
     return NextResponse.json({ id, nombre: row.nombre, email: row.email, rol: row.rol, activo: row.activo }, { status: 201 })
@@ -130,8 +131,8 @@ export async function PATCH(req: NextRequest) {
       delete updates.password
     }
     const updated = { ...target, ...updates }
-    // Avisos por WhatsApp solo con teléfono Y rol admin/admin2 (coherencia servidor, no solo UI).
-    if (!updated.telefono || !esAdmin(updated.rol)) updated.avisos_whatsapp = 'FALSE'
+    // Sin teléfono no hay avisos por WhatsApp (coherencia servidor, no solo UI).
+    if (!updated.telefono) updated.avisos_whatsapp = 'FALSE'
     await updateRow('usuarios', idx, updated)
     return NextResponse.json({ id, nombre: updated.nombre, email: updated.email, rol: updated.rol, activo: updated.activo })
   } catch (e) {
