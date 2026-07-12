@@ -1,7 +1,10 @@
 -- Esquema del módulo "Mensajes" (inbox unificado WhatsApp/IG/FB).
--- Correr una vez en Supabase → SQL Editor (proyecto compartido con mailing).
--- Tablas con prefijo mensajes_ para convivir con el resto. RLS activado sin
--- policies: bloquea acceso anónimo; solo entra el service_role desde el server.
+-- ⚠️ Desde 2026-07-12 estas tablas viven en el proyecto PRINCIPAL («Alma
+-- Animal», ixqharypfqlooogoctdp) — el proyecto separado petcrem-mensajes se
+-- fusionó para ahorrar costo (migración fusion_mensajes_inbox, con identity
+-- BY DEFAULT para preservar ids). Las env MENSAJES_SUPABASE_* apuntan al
+-- principal. Tablas con prefijo mensajes_ para convivir con el resto. RLS
+-- activado sin policies: bloquea anónimo; solo entra el service_role.
 
 create table if not exists mensajes_contactos (
   id          bigint generated always as identity primary key,
