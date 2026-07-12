@@ -9,13 +9,18 @@
  *    en la hora del servicio mientras el vet NO informa la hora de retiro; verde
  *    en la hora de retiro (`hora_retiro_crematorio`) cuando la informa.
  *
- * Regla de agendamiento del bot (1 retiro por hora):
+ * Regla de agendamiento del bot (decisión del dueño 2026-07-11):
  *  - Ventana 09:00–21:00 (la ÚLTIMA hora para agendar un retiro es 21:00).
  *  - No se agenda dentro de la próxima hora (mínimo = hora actual de Chile + 1 h).
- *  - Un bloque horario ocupado no está disponible (bloqueo estricto).
- * Ocupan slot: los retiros (pendiente/confirmada) y las eutanasias que YA tienen
- * hora de retiro informada. Las eutanasias en amarillo (aún sin hora del vet)
- * son un marcador de franja y NO bloquean un retiro de cremación.
+ *  - MÍNIMO 60 MINUTOS entre reservas: una reserva a las 16:00 bloquea todo
+ *    nuevo agendamiento antes de las 17:00 (y simétrico: tampoco 15:30, porque
+ *    quedaría a menos de una hora). Se compara al MINUTO, no por bloque.
+ * Ocupan slot TODAS las reservas visibles de la agenda:
+ *  - retiros (pendiente/confirmada) a su hora;
+ *  - eutanasias SIEMPRE: a la hora del SERVICIO mientras el vet no informa la
+ *    hora de retiro, y a la HORA DE RETIRO (`hora_retiro_crematorio`) cuando la
+ *    informa — el bloqueo se "reajusta" solo (ej.: eutanasia 15:00 bloquea hasta
+ *    las 16:00; el vet confirma retiro 16:00 → pasa a bloquear hasta las 17:00).
  */
 import { getSheetData } from './datastore'
 import { formatDateForSheet, formatHora } from './dates'
@@ -137,17 +142,23 @@ export async function listarAgenda(fromISO?: string, toISO?: string): Promise<Ag
     a.fecha.localeCompare(b.fecha) || (a.hora || '').localeCompare(b.hora || ''))
 }
 
-/** Bloques horarios (hora entera) ocupados en una fecha, para el bloqueo del bot. */
-async function ocupadosDe(fechaISO: string): Promise<Set<number>> {
+/**
+ * Minutos de inicio de TODAS las reservas de una fecha (retiros + eutanasias,
+ * con o sin hora de retiro informada), para el bloqueo del bot al minuto.
+ */
+async function ocupadosDe(fechaISO: string): Promise<number[]> {
   const items = await listarAgenda(fechaISO, fechaISO)
-  const set = new Set<number>()
+  const out: number[] = []
   for (const it of items) {
-    if (it.bloque < HORA_APERTURA || it.bloque > HORA_ULTIMO_RETIRO) continue
-    // Retiros siempre ocupan; eutanasias solo cuando ya tienen hora de retiro.
-    if (it.tipo === 'retiro') set.add(it.bloque)
-    else if (it.tipo === 'eutanasia' && !it.esperandoHoraVet) set.add(it.bloque)
+    const min = horaMin(it.hora)
+    if (min != null) out.push(min)
   }
-  return set
+  return out
+}
+
+/** true si `min` queda a menos de 60 minutos de alguna reserva existente. */
+function choca(min: number, ocupados: number[]): boolean {
+  return ocupados.some(o => Math.abs(o - min) < BUFFER_MIN)
 }
 
 /**
@@ -155,20 +166,22 @@ async function ocupadosDe(fechaISO: string): Promise<Set<number>> {
  * Recorre TODA la ventana 09:00–21:00 (antes se cortaba a las primeras 5 horas
  * libres, lo que escondía la tarde completa cuando la mañana ya tenía 5+ bloques
  * libres — bug real: a un cliente solo se le ofreció hasta las 14:00 habiendo
- * horas libres hasta las 21:00).
+ * horas libres hasta las 21:00). Candidatos: el arranque, cada hora en punto y
+ * cada `reserva + 60 min` (así, con una reserva a las 16:30, se ofrece 17:30 en
+ * vez de perder la franja hasta las 18:00). Se filtran los que chocan (<60 min
+ * de otra reserva).
  */
-function horasLibres(fechaISO: string, hoy: string, ahora: number, ocupados: Set<number>): string[] {
+function horasLibres(fechaISO: string, hoy: string, ahora: number, ocupados: number[]): string[] {
   if (fechaISO < hoy) return []
   const esHoy = fechaISO === hoy
   const startMin = esHoy ? Math.max(MIN_APERTURA, ahora + BUFFER_MIN) : MIN_APERTURA
-  const libres: string[] = []
-  let cursor = startMin
-  while (cursor <= MIN_ULTIMO) {
-    const blk = Math.floor(cursor / 60)
-    if (!ocupados.has(blk)) libres.push(fmtMin(cursor))
-    cursor = (blk + 1) * 60   // avanza a la próxima hora en punto
-  }
-  return libres
+  const candidatos = new Set<number>([startMin])
+  for (let h = Math.ceil(startMin / 60); h * 60 <= MIN_ULTIMO; h++) candidatos.add(h * 60)
+  for (const o of ocupados) candidatos.add(o + BUFFER_MIN)
+  return [...candidatos]
+    .filter(min => min >= startMin && min <= MIN_ULTIMO && !choca(min, ocupados))
+    .sort((a, b) => a - b)
+    .map(fmtMin)
 }
 
 export interface EvalSlot {
@@ -179,9 +192,30 @@ export interface EvalSlot {
 }
 
 /**
+ * Primera hora libre de una FRANJA (AM/PM) en una fecha, para el agendamiento de
+ * eutanasias del bot (el cliente elige franja, no hora exacta; la hora resultante
+ * también debe respetar los 60 min con las demás reservas). Corte AM/PM a las
+ * 13:00, igual que el matcher de vets. Preferencia: lo más cerca de la hora
+ * representativa histórica (10:00 AM / 16:00 PM).
+ */
+export async function horaLibreEnFranja(fechaRaw: string, franja: 'AM' | 'PM'): Promise<{ hora: string | null; libresFranja: string[] }> {
+  const fecha = formatDateForSheet(fechaRaw) || String(fechaRaw || '').trim()
+  const { iso: hoy, min: ahora } = ahoraChile()
+  const ocupados = await ocupadosDe(fecha)
+  const libres = horasLibres(fecha, hoy, ahora, ocupados)
+  const libresFranja = libres.filter(h => {
+    const hh = parseInt(h, 10)
+    return franja === 'AM' ? hh < 13 : hh >= 13
+  })
+  const ref = (franja === 'AM' ? 10 : 16) * 60
+  const orden = [...libresFranja].sort((a, b) => Math.abs((horaMin(a) ?? 0) - ref) - Math.abs((horaMin(b) ?? 0) - ref))
+  return { hora: orden[0] || null, libresFranja }
+}
+
+/**
  * Valida si se puede agendar un retiro en (fecha, hora): ventana 09:00–21:00,
- * fuera de la próxima hora si es hoy, y con el bloque horario libre (1 retiro por
- * hora). Devuelve además las horas libres de ese día.
+ * fuera de la próxima hora si es hoy, y a 60+ minutos de cualquier otra reserva
+ * (retiro o eutanasia). Devuelve además las horas libres de ese día.
  */
 export async function evaluarSlotRetiro(fechaRaw: string, horaRaw: string): Promise<EvalSlot> {
   const fecha = formatDateForSheet(fechaRaw) || String(fechaRaw || '').trim()
@@ -205,8 +239,8 @@ export async function evaluarSlotRetiro(fechaRaw: string, horaRaw: string): Prom
     return { ok: false, motivo: msg, libres }
   }
 
-  if (ocupados.has(bloqueDe(min)))
-    return { ok: false, motivo: `El horario de las ${fmtMin(min)} del ${fecha} ya está tomado (solo un retiro por hora).`, libres }
+  if (choca(min, ocupados))
+    return { ok: false, motivo: `El horario de las ${fmtMin(min)} del ${fecha} no está disponible: queda a menos de 1 hora de otra reserva (dejamos al menos 1 hora entre cada servicio agendado).`, libres }
 
   return { ok: true, libres }
 }

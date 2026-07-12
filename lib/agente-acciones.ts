@@ -7,7 +7,7 @@ import { agregarDiasHabiles, isoFecha } from './dias-habiles'
 import { fmtPrecio } from './format'
 import { precioClienteEutanasia, getConsultaEutanasia } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
-import { evaluarSlotRetiro } from './agenda'
+import { evaluarSlotRetiro, horaLibreEnFranja } from './agenda'
 import { capitalizarNombre } from './nombres'
 import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional } from './cobros'
@@ -364,9 +364,14 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
     }
   }
 
-  // Franja → hora representativa para el matcher (AM=mañana, PM=tarde).
+  // Franja → primera hora LIBRE de esa franja en la agenda (respeta los 60 min
+  // con las demás reservas: retiros y otras eutanasias). AM=mañana, PM=tarde.
   const franja = (a.franja || '').toUpperCase() === 'PM' ? 'PM' : 'AM'
-  const hora = franja === 'PM' ? '16:00' : '10:00'
+  const { hora } = await horaLibreEnFranja(a.fecha, franja)
+  if (!hora) {
+    const otra = franja === 'PM' ? 'la mañana' : 'la tarde'
+    return `NO agendes: la franja de ${franja === 'PM' ? 'la tarde' : 'la mañana'} del ${formatDate(a.fecha)} ya está completa (dejamos al menos 1 hora entre cada servicio agendado). Ofrécele al cliente ${otra} de ese día u otro día, y vuelve a llamar la herramienta cuando elija.`
+  }
   const sinCremacion = (a.tipo_servicio_cremacion || '').toUpperCase() === 'NINGUNA'
   const notas = `Solicitud vía WhatsApp (bot). Franja preferida: ${franja === 'PM' ? 'tarde' : 'mañana'}.` +
     (sinCremacion ? ' SIN cremación (el tutor no la quiere).' : (a.tipo_servicio_cremacion ? ` Cremación elegida: ${a.tipo_servicio_cremacion}.` : ''))
