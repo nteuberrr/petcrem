@@ -23,23 +23,39 @@ export function serviciosPublicados(servicios: Serv[]): Serv[] {
 function tarjeta(s: Serv): string {
   const url = `/servicios/${escUrl(s.slug)}`
   const img = s.foto_url ? escUrl(s.foto_url) : FALLBACK_IMG
-  // Altura FIJA + object-fit en la foto: las imágenes del CMS vienen con
-  // proporciones distintas (retrato/paisaje) y sin esto cada tarjeta quedaba de
-  // un alto diferente — la grilla se veía descuadrada (reporte del dueño 2026-07-12).
-  return '<div role="listitem" class="service w-dyn-item"><div class="div-block">'
-    + `<a href="${url}" class="service-image-block w-inline-block" style="display:block;height:240px;overflow:hidden">`
-    + `<img src="${esc(img)}" loading="lazy" alt="${esc(s.nombre)}" style="width:100%;height:100%;object-fit:cover;object-position:center"/>`
-    + `<div style="background-image:url('${img}');background-size:cover;background-position:center" class="hover-image"><div class="button-hover">Ver servicio</div></div>`
-    + '</a>'
-    + '<div class="services-text-box">'
-    + `<a href="${url}" class="service-preview-link">${esc(s.nombre)}</a>`
-    + `<div class="paragraph-service-box"><p class="paragraph-2">${esc(s.resumen)}</p></div>`
-    + `<div class="button-box _20-pixels"><a href="${url}" class="link-block w-inline-block"><div>Ver servicio</div></a></div>`
-    + '</div></div></div>'
+  return `<a href="${url}" class="aa-serv-card">`
+    + `<img src="${esc(img)}" loading="lazy" alt="${esc(s.nombre)}"/>`
+    + '<div class="aa-serv-body">'
+    + `<div class="aa-serv-title">${esc(s.nombre)}</div>`
+    + `<p class="aa-serv-exc">${esc(s.resumen)}</p>`
+    + '<span class="aa-serv-btn">Ver servicio</span>'
+    + '</div></a>'
 }
 
+/**
+ * Grilla de tarjetas propia (boxes uniformes), igual tratamiento que el blog:
+ * el markup original de Webflow (círculo "Ver servicio" flotante + caja lavanda
+ * con margin-top:-85px superpuesta a la foto) se descuadraba con fotos de
+ * proporciones distintas y quedaba con alturas dispares (reporte del dueño
+ * 2026-07-12 "se sigue viendo mal"). Tipografía HEREDADA de la página; paleta
+ * de marca. 1 columna en móvil, 2 en tablet, 4 en escritorio ancho.
+ */
 export function renderServiciosWeb(servicios: Serv[]): string {
-  return serviciosPublicados(servicios).map(tarjeta).join('')
+  const pub = serviciosPublicados(servicios)
+  if (pub.length === 0) return ''
+  const css = '<style>'
+    + '.aa-serv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:24px;margin-top:8px}'
+    + '.aa-serv-card{display:flex;flex-direction:column;background:#fff;border:1px solid #e6e0d6;border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(20,60,100,.06);text-decoration:none;transition:transform .15s ease,box-shadow .15s ease}'
+    + '.aa-serv-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(20,60,100,.14)}'
+    + '.aa-serv-card>img{width:100%;height:210px;object-fit:cover;object-position:center;display:block}'
+    + '.aa-serv-body{display:flex;flex-direction:column;gap:10px;padding:20px 22px 22px;flex:1}'
+    + '.aa-serv-title{color:#143C64;font-size:20px;font-weight:700;line-height:1.3}'
+    + '.aa-serv-exc{color:#5b6b7a;font-size:14.5px;line-height:1.55;margin:0;flex:1}'
+    + '.aa-serv-btn{display:inline-block;align-self:flex-start;background:#143C64;color:#fff;font-size:14px;font-weight:600;border-radius:999px;padding:9px 22px;transition:background .15s ease}'
+    + '.aa-serv-card:hover .aa-serv-btn{background:#0e2c4b}'
+    + '@media (max-width:560px){.aa-serv-grid{grid-template-columns:1fr;gap:18px}.aa-serv-card>img{height:220px}}'
+    + '</style>'
+  return css + `<div class="aa-serv-grid">${pub.map(tarjeta).join('')}</div>`
 }
 
 /**
