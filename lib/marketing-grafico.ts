@@ -81,6 +81,8 @@ export async function generarGraficoMarca(args: {
   creadoPor?: string
   /** Si la placa es parte de un carrusel/pieza, su campaña reservada → queda C-X.Y. */
   campania?: string
+  /** Pieza deliberadamente SIN logo (pedido del dueño): no estampar el respaldo. */
+  sinLogo?: boolean
 }): Promise<GraficoGenerado> {
   if (!args.html?.trim()) throw new Error('Falta el HTML del gráfico')
   // Renderizar al tamaño REAL del root del HTML (evita el desfase formato↔diseño que
@@ -126,8 +128,9 @@ export async function generarGraficoMarca(args: {
 
   // 4) Logo: el AGENTE lo ubica dentro del diseño (placement libre, en su HTML). Solo si NO
   //    lo puso, lo estampamos como respaldo (mejor variante por contraste, abajo a la derecha).
+  //    Con `sinLogo` (pedido explícito del dueño) NO se estampa nada.
   let conLogo = png
-  if (!agentePusoLogo) {
+  if (!agentePusoLogo && !args.sinLogo) {
     try {
       const r = await aplicarLogoMarca(png, logos, { escala: 0.13 })
       conLogo = r.buffer

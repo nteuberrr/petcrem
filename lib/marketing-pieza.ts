@@ -800,7 +800,7 @@ const TOOL_EDIT_PLACA: Anthropic.Tool = {
   },
 }
 
-async function editarPlacaHtml(html: string, instruccion: string): Promise<{ html: string; fotos: FotoGrafico[] }> {
+async function editarPlacaHtml(html: string, instruccion: string, opciones?: { permitirQuitarLogo?: boolean }): Promise<{ html: string; fotos: FotoGrafico[] }> {
   // Algunas placas (las generadas con el logo ya incrustado) traen imágenes como data
   // URI base64 ENORMES. El modelo NO debe reescribir ese base64: lo trunca/corrompe y
   // al rasterizar tira "Invalid character". Las enmascaramos con un marcador corto,
@@ -816,7 +816,9 @@ async function editarPlacaHtml(html: string, instruccion: string): Promise<{ htm
     max_tokens: 8000, // Edita el HTML de una placa y lo re-emite → margen para no truncar.
     tools: [TOOL_EDIT_PLACA],
     tool_choice: { type: 'tool', name: 'entregar_placa' },
-    system: `${REGLAS_INVIOLABLES}\n\nSos diseñador de Crematorio Alma Animal. Te paso el HTML de una PLACA de marca que se rasteriza con satori. Aplicá EXACTAMENTE el/los cambio(s) pedido(s) manteniendo la estructura, la marca, las fuentes y los colores; cambiá únicamente lo pedido. Devolvés el resultado SOLO con la tool entregar_placa.\n\nREGLAS:\n- Si el pedido menciona MÁS DE UN cambio (aunque estén en la misma frase, separados por "y", coma, etc.), aplicá TODOS y CADA UNO — no ignores ninguno ni prioricés uno sobre otro.\n- El HTML que devolvés en "html" DEBE ser distinto del original en el/los punto(s) pedido(s). Si no podés aplicar un cambio tal cual se pidió, hacé la mejor aproximación posible dentro del diseño — NUNCA devuelvas el HTML sin modificar.\n- Si ves marcadores como __ASSET_0__ (imágenes ya incrustadas, p. ej. el logo), copialos TAL CUAL: no los borres, no los muevas de su <img>, no los reescribas.\n- Si el cambio pide AGREGAR o cambiar una FOTO: reestructurá el layout para que la foto sea protagonista (full-bleed, panel lateral o mascota asomándose, según el menú de layouts), poné un <img src="FOTO:slot" .../> dimensionado con CSS donde va, y devolvé esa foto en "fotos" con un prompt fotorealista on-brand. NO inventes <img> con URLs http: las fotos nuevas SIEMPRE van como FOTO:slot.\n- Conservá el copy/los datos salvo que el cambio pida lo contrario.\n\n${MARCA_GRAFICO}`,
+    system: `${REGLAS_INVIOLABLES}\n\nSos diseñador de Crematorio Alma Animal. Te paso el HTML de una PLACA de marca que se rasteriza con satori. Aplicá EXACTAMENTE el/los cambio(s) pedido(s) manteniendo la estructura, la marca, las fuentes y los colores; cambiá únicamente lo pedido. Devolvés el resultado SOLO con la tool entregar_placa.\n\nREGLAS:\n- Si el pedido menciona MÁS DE UN cambio (aunque estén en la misma frase, separados por "y", coma, etc.), aplicá TODOS y CADA UNO — no ignores ninguno ni prioricés uno sobre otro.\n- El HTML que devolvés en "html" DEBE ser distinto del original en el/los punto(s) pedido(s). Si no podés aplicar un cambio tal cual se pidió, hacé la mejor aproximación posible dentro del diseño — NUNCA devuelvas el HTML sin modificar.\n${opciones?.permitirQuitarLogo
+      ? '- El dueño pidió QUITAR EL LOGO de esta placa: eliminá el <img> del logo COMPLETO (incluido su marcador __ASSET_N__ si lo tiene) y rebalanceá el layout si queda un hueco. Cualquier OTRO marcador __ASSET_N__ (que no sea el logo pedido) copialo TAL CUAL: no lo reescribas.'
+      : '- Si ves marcadores como __ASSET_0__ (imágenes ya incrustadas, p. ej. el logo), copialos TAL CUAL: no los borres, no los muevas de su <img>, no los reescribas.'}\n- Si el cambio pide AGREGAR o cambiar una FOTO: reestructurá el layout para que la foto sea protagonista (full-bleed, panel lateral o mascota asomándose, según el menú de layouts), poné un <img src="FOTO:slot" .../> dimensionado con CSS donde va, y devolvé esa foto en "fotos" con un prompt fotorealista on-brand. NO inventes <img> con URLs http: las fotos nuevas SIEMPRE van como FOTO:slot.\n- Conservá el copy/los datos salvo que el cambio pida lo contrario.\n\n${MARCA_GRAFICO}`,
     messages: [{ role: 'user', content: `HTML actual de la placa:\n\`\`\`html\n${htmlSeguro}\n\`\`\`\n\nCAMBIO PEDIDO (solo esto; el resto queda igual): ${instruccion}` }],
   })
   const call = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'entregar_placa')
@@ -864,7 +866,7 @@ const TOOL_QA: Anthropic.Tool = {
   },
 }
 
-async function qaPieza(resueltas: ImagenResuelta[], item: ItemCalendario): Promise<QAProblema[]> {
+async function qaPieza(resueltas: ImagenResuelta[], item: ItemCalendario, opciones?: { sinLogo?: boolean }): Promise<QAProblema[]> {
   const imgs: Anthropic.ImageBlockParam[] = []
   for (const r of resueltas) {
     const ref = await refDesdeUrl(r.url)
@@ -884,7 +886,7 @@ async function qaPieza(resueltas: ImagenResuelta[], item: ItemCalendario): Promi
 - PALABRAS PEGADAS (dos palabras sin espacio entre medio, ej. "Escríbenosahora") o faltas de ortografía/tildes visibles en una placa — es OBJETIVO y la corrección es reescribir ese texto bien;
 - MONOTONÍA de color: TODAS las slides con fondo navy/azul dominante, o una foto tapada por un velo oscuro que la vuelve un afiche azul liso (el dueño pide alternar crema/blanco/foto y que la foto se VEA) — reportalo tipo "composicion";
 - errores visibles en el texto.
-Marcá cada uno como OBJETIVO (claro y binario) o no. Si es una PLACA de texto con arreglo de texto/diseño, dá la "correccion" exacta. Si está todo bien, problemas: []. Reportá SIEMPRE con reportar_qa.
+Marcá cada uno como OBJETIVO (claro y binario) o no. Si es una PLACA de texto con arreglo de texto/diseño, dá la "correccion" exacta. Si está todo bien, problemas: []. Reportá SIEMPRE con reportar_qa.${opciones?.sinLogo ? '\n\nOJO: esta pieza va deliberadamente SIN logo (pedido explícito del dueño) — NO reportes el logo ausente/faltante como problema.' : ''}
 
 ${GUIA_QA}`
   try {
@@ -908,8 +910,13 @@ ${GUIA_QA}`
  *    (gratis y on-brand), manteniendo la campaña del carrusel.
  *  - Si es una FOTO → edición image-to-image (gemini) de esa sola imagen.
  * `indice` = posición 1-based; en carruseles (2+ imágenes) es OBLIGATORIO: NO edita todas.
+ * `opts.quitarLogo`: la imagen queda deliberadamente SIN logo — se desactivan las
+ * TRES capas que lo fuerzan (re-estampado tras la edición de foto, respaldo del
+ * render de placa y el reporte "logo ausente" del QA). Sin esto, pedir "quita el
+ * logo" no surte efecto (el sistema lo vuelve a poner — pasó en la práctica).
  */
-export async function editarImagenPieza(id: string, instruccion: string, indice?: number, creadoPor?: string): Promise<PiezaGenerada> {
+export async function editarImagenPieza(id: string, instruccion: string, indice?: number, creadoPor?: string, opts?: { quitarLogo?: boolean }): Promise<PiezaGenerada> {
+  const quitarLogo = opts?.quitarLogo === true
   if (!instruccion?.trim()) throw new Error('Falta la instrucción de qué ajustar.')
   const item = await obtenerItem(id)
   if (!item) throw new Error(`ítem ${id} no encontrado`)
@@ -938,7 +945,7 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
     // Si el cambio pide agregar/cambiar una FOTO, editarPlacaHtml devuelve los FOTO:slot
     // y generarGraficoMarca las genera (gemini) e incrusta.
     try {
-      let { html: nuevoHtml, fotos } = await editarPlacaHtml(design.html, instruccion.trim())
+      let { html: nuevoHtml, fotos } = await editarPlacaHtml(design.html, instruccion.trim(), { permitirQuitarLogo: quitarLogo })
       // Chequeo de no-op: si el modelo devolvió el HTML tal cual (normalizando espacios),
       // no aplicó el cambio pedido — mejor fallar explícito que "ajustar" en falso y
       // renderizar/publicar una imagen visualmente idéntica a la anterior.
@@ -951,9 +958,9 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
       const contacto = await getContacto()
       const lintEd = lintCopy({ placas: [extraerTextoHtml(nuevoHtml)], telefono: contacto.telefono })
       if (lintEd.length) {
-        ;({ html: nuevoHtml, fotos } = await editarPlacaHtml(nuevoHtml, `Corregí SOLO esto, sin tocar nada más del diseño: ${lintEd.map(h => h.problema).join(' ')}`))
+        ;({ html: nuevoHtml, fotos } = await editarPlacaHtml(nuevoHtml, `Corregí SOLO esto, sin tocar nada más del diseño: ${lintEd.map(h => h.problema).join(' ')}`, { permitirQuitarLogo: quitarLogo }))
       }
-      const g = await generarGraficoMarca({ formato: design.formato, html: nuevoHtml, fotos, creadoPor, campania })
+      const g = await generarGraficoMarca({ formato: design.formato, html: nuevoHtml, fotos, creadoPor, campania, sinLogo: quitarLogo })
       imgs[ti] = { url: g.url, alt: imgs[ti].alt || '' }
       avisos.push(...g.avisos)
     } catch (e) { avisos.push(`No se pudo ajustar la placa ${ti + 1}: ${e instanceof Error ? e.message : 'error'}`) }
@@ -971,7 +978,8 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
           editar: true, referencias: [baseRef], creadoPor, campania,
         })
         let url = r.imagen.url
-        try { url = await estamparLogoEnUrl(url, banco) } catch { /* best-effort */ }
+        // Con quitarLogo NO se re-estampa: re-estamparlo anulaba el pedido de sacarlo.
+        if (!quitarLogo) { try { url = await estamparLogoEnUrl(url, banco) } catch { /* best-effort */ } }
         imgs[ti] = { url, alt: imgs[ti].alt || '' }
       } catch (e) { avisos.push(`No se pudo regenerar la imagen ${ti + 1}: ${e instanceof Error ? e.message : 'error'}`) }
     }
@@ -982,7 +990,7 @@ export async function editarImagenPieza(id: string, instruccion: string, indice?
   // en vez de shippear una edición peor. La versión mala se des-registra del banco.
   if (imgs[ti].url && imgs[ti].url !== urlPrevia) {
     try {
-      const probs = await qaPieza([{ url: imgs[ti].url, alt: imgs[ti].alt || '', id: '', grafico: !!design }], item)
+      const probs = await qaPieza([{ url: imgs[ti].url, alt: imgs[ti].alt || '', id: '', grafico: !!design }], item, { sinLogo: quitarLogo })
       if (probs.some(p => p.objetivo && p.severidad === 'alta')) {
         const mala = imgs[ti].url
         imgs[ti] = { url: urlPrevia, alt: imgs[ti].alt || '' }

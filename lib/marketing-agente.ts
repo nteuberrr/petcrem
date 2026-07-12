@@ -750,6 +750,7 @@ const TOOL_EDITAR_IMG: Anthropic.Tool = {
       id: { type: 'string', description: 'Id de la pieza del calendario.' },
       instruccion: { type: 'string', description: 'Qué ajustar en esa slide (ej. "cambiá el título a X", "corregí el dato del horario").' },
       indice: { type: 'number', description: 'Posición de la slide a editar (1 = primera). OBLIGATORIO en carruseles (2+ imágenes): se edita SOLO esa.' },
+      quitar_logo: { type: 'boolean', description: 'true SOLO si el dueño pide QUITAR el logo de esta imagen. Sin esto, el sistema re-estampa el logo automáticamente en cada edición (regla de marca) y el pedido de quitarlo NO surte efecto — con true, esa imagen queda deliberadamente sin logo.' },
     },
     required: ['id', 'instruccion'],
   },
@@ -1181,8 +1182,8 @@ export async function generarRespuestaMarketing(
             resultText = partes.join('\n\n') + '\n\nResumí estos números para el dueño de forma clara y dale 2-3 recomendaciones concretas (NO inventes métricas que no estén acá).'
           }
         } else if (tu.name === 'editar_imagen_pieza') {
-          const inp = tu.input as { id?: string; instruccion?: string; indice?: number }
-          const r = await editarImagenPieza(String(inp.id || ''), String(inp.instruccion || ''), inp.indice, opts.creadoPor)
+          const inp = tu.input as { id?: string; instruccion?: string; indice?: number; quitar_logo?: boolean }
+          const r = await editarImagenPieza(String(inp.id || ''), String(inp.instruccion || ''), inp.indice, opts.creadoPor, { quitarLogo: inp.quitar_logo === true })
           cambios = true
           resultText = r.aplicado === false
             ? `NO se pudo aplicar el cambio pedido en la pieza #${r.item.id}: la imagen quedó IGUAL a como estaba.${r.avisos.length ? ' Motivo: ' + r.avisos.join('; ') : ''} Decíselo así de claro al dueño (no digas "listo"/"ajustada"), y sugerile reformular el pedido o dividirlo en pasos si tenía más de un cambio.`
