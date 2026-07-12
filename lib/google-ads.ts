@@ -927,6 +927,92 @@ async function campanaGeoPorDefecto(): Promise<string | null> {
   return mejor?.id || null
 }
 
+// ─── Investigación de keywords (Keyword Planner) ───────────────────────────────
+export interface IdeaKeyword {
+  texto: string
+  busquedasMensuales: number
+  competencia: string
+  competenciaIndex: number
+  pujaBajaClp: number
+  pujaAltaClp: number
+}
+
+/**
+ * Genera ideas de keywords NUEVAS con datos reales de Google (Keyword Planner):
+ * volumen de búsqueda mensual, competencia y rango de puja sugerida. A partir de
+ * palabras semilla y/o una URL de referencia (se combinan si vienen ambas). Sin
+ * geoTargetConstants explícitos, copia la cobertura de la campaña de mayor gasto
+ * (misma lógica que crearCampanaCompleta) — así las ideas ya vienen acotadas a
+ * donde el negocio realmente pauta, sin tener que pasarle comunas a mano.
+ */
+export async function generarIdeasKeywords(opts: {
+  semillas?: string[]
+  url?: string
+  geoTargetConstants?: string[]
+  limite?: number
+}): Promise<{ ideas: IdeaKeyword[]; geoTargetConstants: string[] }> {
+  const semillas = (opts.semillas || []).map(s => s.trim()).filter(Boolean).slice(0, 20)
+  const url = opts.url?.trim()
+  if (!semillas.length && !url) throw new Error('Necesito al menos una palabra semilla o una URL de referencia.')
+
+  let geo = (opts.geoTargetConstants || []).filter(Boolean)
+  if (!geo.length) {
+    const campId = await campanaGeoPorDefecto()
+    geo = campId ? await leerGeoDeCampana(campId) : []
+  }
+  if (!geo.length) throw new Error('No se pudo determinar la cobertura geográfica (no hay campañas activas con ubicaciones). Indicá geoTargetConstants manualmente.')
+
+  const body: Record<string, unknown> = {
+    language: 'languageConstants/1003',
+    geoTargetConstants: geo,
+    includeAdultKeywords: false,
+    keywordPlanNetwork: 'GOOGLE_SEARCH',
+  }
+  if (url && semillas.length) body.keywordAndUrlSeed = { url, keywords: semillas }
+  else if (url) body.urlSeed = { url }
+  else body.keywordSeed = { keywords: semillas }
+
+  const token = await getAccessToken()
+  const customerId = process.env.GOOGLE_ADS_CUSTOMER_ID || ''
+  const loginCustomerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || customerId
+  const res = await fetch(`${BASE}/customers/${customerId}:generateKeywordIdeas`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'developer-token': process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '',
+      'login-customer-id': loginCustomerId,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  const json = await res.json().catch(() => ({})) as {
+    results?: Array<{ text?: string; keywordIdeaMetrics?: Record<string, unknown> }>
+    error?: { message?: string; details?: unknown }
+  }
+  if (!res.ok) {
+    console.error('[google-ads] generateKeywordIdeas error:', JSON.stringify(json.error || json))
+    const detalle = json.error?.details as Array<{ errors?: Array<{ message?: string }> }> | undefined
+    throw new Error(detalle?.[0]?.errors?.[0]?.message || json.error?.message || `Google Ads API: HTTP ${res.status}`)
+  }
+  const limite = opts.limite && opts.limite > 0 ? Math.min(opts.limite, 200) : 40
+  const ideas: IdeaKeyword[] = (json.results || [])
+    .map(r => {
+      const m = r.keywordIdeaMetrics || {}
+      return {
+        texto: String(r.text || ''),
+        busquedasMensuales: num(m.avgMonthlySearches),
+        competencia: String(m.competition || 'UNSPECIFIED'),
+        competenciaIndex: num(m.competitionIndex),
+        pujaBajaClp: clp(m.lowTopOfPageBidMicros),
+        pujaAltaClp: clp(m.highTopOfPageBidMicros),
+      }
+    })
+    .filter(k => k.texto)
+    .sort((a, b) => b.busquedasMensuales - a.busquedasMensuales)
+    .slice(0, limite)
+  return { ideas, geoTargetConstants: geo }
+}
+
 export interface NuevaCampanaParams {
   nombreCampana: string
   presupuestoClpDiario: number

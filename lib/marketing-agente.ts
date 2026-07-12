@@ -25,7 +25,7 @@ import {
   pausarCampanaGoogle, activarCampanaGoogle, ajustarPresupuestoGoogle, pausarKeywordGoogle, activarKeywordGoogle,
   agregarNegativaCampana, listarCampanasGestion, listarListasCompartidas, crearListaNegativasCompartida,
   adjuntarListaATodasLasCampanas, eliminarListaCompartida, listarAds, crearRSA, agregarCallouts,
-  crearCampanaCompleta, type NuevaCampanaParams,
+  crearCampanaCompleta, type NuevaCampanaParams, generarIdeasKeywords,
 } from './google-ads'
 import { auditarCuenta } from './google-ads-audit'
 import {
@@ -541,6 +541,19 @@ const TOOL_GADS_TERMINOS: Anthropic.Tool = {
     required: [],
   },
 }
+const TOOL_GADS_IDEAS_KEYWORDS: Anthropic.Tool = {
+  name: 'gads_ideas_keywords',
+  description: 'Busca IDEAS DE KEYWORDS NUEVAS con datos reales de Google (Keyword Planner): volumen de búsqueda mensual, competencia y rango de puja sugerida, a partir de palabras semilla y/o una URL de referencia. Es de LECTURA (no crea ni cambia nada) — no requiere confirmación. Sin geoTargetConstants, usa automáticamente la cobertura geográfica real de la cuenta (RM/Chile). Semillas deben salir del NEGOCIO REAL (servicios: cremación individual/colectiva, eutanasia a domicilio, urnas/ánforas, retiro a domicilio/clínica; comunas de la RM) — nunca sugieras ni busques temas sin relación con cremación/eutanasia de mascotas. Cruzá el resultado contra gads_keywords/gads_terminos para no repetir lo que ya está activo o ya se negativó.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      semillas: { type: 'array', items: { type: 'string' }, description: 'Palabras/frases semilla (ideal 3-10), en español, específicas del negocio (ej. "cremacion de mascotas", "eutanasia a domicilio santiago", "urna para gato").' },
+      url: { type: 'string', description: 'Opcional: URL de referencia (ej. una landing del sitio) para que Google saque ideas relacionadas a ese contenido.' },
+      limite: { type: 'number', description: 'Máximo de ideas a devolver, default 40.' },
+    },
+    required: [],
+  },
+}
 const TOOL_GADS_AUDITAR: Anthropic.Tool = {
   name: 'gads_auditar',
   description: 'Corre la auditoría completa de la cuenta de Google Ads (bidding vs playbook, valores de conversión incoherentes, RSAs incompletos/sin pinning, recursos insuficientes, keywords basura, Impression Share perdido, negativas, higiene) y devuelve los hallazgos con severidad y $ estimado. Úsala cuando el dueño pida "auditar la cuenta" o un diagnóstico general.',
@@ -839,7 +852,7 @@ export async function generarRespuestaMarketing(
   if (isGoogleAdsConfigurado()) {
     system.push({
       type: 'text',
-      text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa, gads_negativas_lote, gads_crear_lista_negativas_universal, gads_eliminar_lista_negativas, gads_crear_rsa, gads_agregar_callouts) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). Para negativas de términos de búsqueda, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación — para un lote aprobado de una vez usá gads_negativas_lote, no llames gads_negativa repetidas veces). gads_crear_lista_negativas_universal es de ALTO IMPACTO (afecta TODAS las campañas a la vez, no una sola) — avisale eso al dueño explícitamente antes de pedir el sí; revisá primero con gads_listas_negativas que no exista ya una lista similar. gads_crear_rsa SIEMPRE crea un anuncio PAUSADO nuevo, nunca reemplaza el que ya está corriendo — aclaráselo al dueño (revisa y activa él desde Google Ads o pidiéndotelo). gads_crear_campana (wizard de campaña nueva) crea TODO en PAUSA de una vez (presupuesto+campaña+geo+idioma+negativas+grupo+keyword+RSA) y es de ALTO IMPACTO: antes de pedir el sí, mostrale al dueño el resumen COMPLETO (nombre, presupuesto diario, keyword, URL final y los 15 titulares + 4 descripciones) y aclarale que queda en pausa hasta que él la active en Google Ads. Usá gads_auditar cuando te pidan un diagnóstico general.\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
+      text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa, gads_negativas_lote, gads_crear_lista_negativas_universal, gads_eliminar_lista_negativas, gads_crear_rsa, gads_agregar_callouts) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). Para negativas de términos de búsqueda, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación — para un lote aprobado de una vez usá gads_negativas_lote, no llames gads_negativa repetidas veces). gads_crear_lista_negativas_universal es de ALTO IMPACTO (afecta TODAS las campañas a la vez, no una sola) — avisale eso al dueño explícitamente antes de pedir el sí; revisá primero con gads_listas_negativas que no exista ya una lista similar. gads_crear_rsa SIEMPRE crea un anuncio PAUSADO nuevo, nunca reemplaza el que ya está corriendo — aclaráselo al dueño (revisa y activa él desde Google Ads o pidiéndotelo). gads_crear_campana (wizard de campaña nueva) crea TODO en PAUSA de una vez (presupuesto+campaña+geo+idioma+negativas+grupo+keyword+RSA) y es de ALTO IMPACTO: antes de pedir el sí, mostrale al dueño el resumen COMPLETO (nombre, presupuesto diario, keyword, URL final y los 15 titulares + 4 descripciones) y aclarale que queda en pausa hasta que él la active en Google Ads. Usá gads_auditar cuando te pidan un diagnóstico general. Cuando pidan buscar/investigar keywords NUEVAS (no las que ya están corriendo), usá gads_ideas_keywords con semillas del negocio real (servicios + comunas RM) — es de lectura, no requiere confirmación; mostrale al dueño una tabla con volumen de búsqueda, competencia y puja sugerida, y solo si te pide armar campaña con alguna encadená gads_crear_campana (con confirmación).\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
       cache_control: { type: 'ephemeral' },
     })
   }
@@ -866,7 +879,7 @@ export async function generarRespuestaMarketing(
   const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AJUSTAR_EMAIL, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_PLANTILLA, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG, TOOL_NUEVA_IMAGEN, TOOL_REUTILIZAR, TOOL_USAR_IMGS]
   if (isGoogleAdsConfigurado()) {
     tools.push(
-      TOOL_GADS_RESUMEN, TOOL_GADS_KEYWORDS, TOOL_GADS_TERMINOS, TOOL_GADS_AUDITAR,
+      TOOL_GADS_RESUMEN, TOOL_GADS_KEYWORDS, TOOL_GADS_TERMINOS, TOOL_GADS_IDEAS_KEYWORDS, TOOL_GADS_AUDITAR,
       TOOL_GADS_PAUSAR_CAMPANA, TOOL_GADS_ACTIVAR_CAMPANA, TOOL_GADS_PRESUPUESTO,
       TOOL_GADS_KEYWORD_ESTADO, TOOL_GADS_NEGATIVA, TOOL_GADS_NEGATIVAS_LOTE,
       TOOL_GADS_LISTAS_NEGATIVAS, TOOL_GADS_CREAR_LISTA_NEGATIVAS, TOOL_GADS_ELIMINAR_LISTA_NEGATIVAS,
@@ -1234,6 +1247,17 @@ export async function generarRespuestaMarketing(
             const { terminos, moneda } = await terminosBusqueda(inp.periodo || 'last_30d')
             const lineas = terminos.map(t => `- "${t.termino}" (${t.campana}, id campaña=${t.campanaId}): impresiones ${t.impresiones} · gasto ${fmtPrecio(t.gasto)} · conversiones ${t.conversiones}`).join('\n')
             resultText = `TÉRMINOS DE BÚSQUEDA REALES (${moneda}, ordenados por gasto):\n${lineas || '(sin términos con datos)'}\n\nAplicá el workflow de GUIA_GADS_TERMINOS: candidato = ≥100 impresiones y ≥$10.000 sin conversión; mostrale al dueño la tabla con veredicto BAD/KEEP/UNCERTAIN y esperá aprobación antes de llamar gads_negativa.`
+          }
+        } else if (tu.name === 'gads_ideas_keywords') {
+          if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
+          else {
+            const inp = tu.input as { semillas?: string[]; url?: string; limite?: number }
+            const { ideas } = await generarIdeasKeywords({ semillas: inp.semillas, url: inp.url, limite: inp.limite })
+            if (ideas.length === 0) resultText = 'Google no devolvió ideas para esas semillas. Probá con términos más genéricos o una URL de referencia.'
+            else {
+              const lineas = ideas.map(k => `- "${k.texto}": ${k.busquedasMensuales} búsquedas/mes · competencia ${k.competencia} (${k.competenciaIndex}) · puja sugerida ${fmtPrecio(k.pujaBajaClp)}–${fmtPrecio(k.pujaAltaClp)}`).join('\n')
+              resultText = `IDEAS DE KEYWORDS (Keyword Planner, ordenadas por volumen de búsqueda mensual):\n${lineas}\n\nSon ideas NUEVAS con datos reales de Google — para agregarlas a una campaña existente hace falta que el dueño lo pida explícitamente (no hay tool de escritura para esto todavía); para armar una campaña de cero desde acá, se puede usar gads_crear_campana.`
+            }
           }
         } else if (tu.name === 'gads_auditar') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
