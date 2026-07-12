@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { leerTemplate, RUTA_A_TEMPLATE, robotsTxt, construirSitemap } from '@/lib/sitio/render'
 import { getSheetData } from '@/lib/datastore'
 import { renderProductosWeb } from '@/lib/sitio/productos-html'
+import { renderConveniosDescuento } from '@/lib/sitio/convenios-html'
 import { renderServiciosWeb, renderServicioSeo } from '@/lib/sitio/servicios-html'
 import { renderPostsWeb, renderPostDetalle, buscarPost } from '@/lib/sitio/blog-html'
 import { renderTextos } from '@/lib/sitio/paginas-html'
@@ -92,6 +93,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   if (tpl === 'catalogo-anforas' && html.includes('<!--INJECT:productos-->')) {
     const productos = await getSheetData('productos').catch(() => [])
     html = html.replace('<!--INJECT:productos-->', renderProductosWeb(productos))
+  }
+  if (tpl === 'catalogo-anforas' && html.includes('<!--INJECT:convenios-descuento-->')) {
+    const descuentos = await getSheetData('descuentos').catch(() => [])
+    html = html.replace('<!--INJECT:convenios-descuento-->', renderConveniosDescuento(descuentos))
   }
   if (tpl === 'servicios' && html.includes('<!--INJECT:servicios-->')) {
     const servicios = await getSheetData('web_servicios').catch(() => [])
