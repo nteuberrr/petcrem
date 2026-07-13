@@ -5,6 +5,7 @@ import { renderProductosWeb } from '@/lib/sitio/productos-html'
 import { renderConveniosDescuento } from '@/lib/sitio/convenios-html'
 import { renderServiciosWeb, renderServicioSeo } from '@/lib/sitio/servicios-html'
 import { renderPreciosServicio, desdePorSlug, type DatosPrecios } from '@/lib/sitio/precios-html'
+import { renderPorqueElegirnos } from '@/lib/sitio/porque-html'
 import { getFijoEutanasia } from '@/lib/eutanasia-precios'
 import { renderPostsWeb, renderPostDetalle, buscarPost } from '@/lib/sitio/blog-html'
 import { renderTextos } from '@/lib/sitio/paginas-html'
@@ -114,6 +115,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   if (tpl === 'catalogo-anforas' && html.includes('<!--INJECT:convenios-descuento-->')) {
     const descuentos = await getSheetData('descuentos').catch(() => [])
     html = html.replace('<!--INJECT:convenios-descuento-->', renderConveniosDescuento(descuentos))
+  }
+  // Sección SEO "¿Por qué elegirnos?" + FAQ con schema (home, precios vivos).
+  if (tpl === 'home' && html.includes('<!--INJECT:porque-elegirnos-->')) {
+    html = html.replace('<!--INJECT:porque-elegirnos-->', renderPorqueElegirnos(await datosPrecios()))
   }
   if (tpl === 'servicios' && html.includes('<!--INJECT:servicios-->')) {
     const [servicios, precios] = await Promise.all([
