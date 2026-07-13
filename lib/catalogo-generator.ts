@@ -172,7 +172,12 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
   const greda = cats.find(c => esGreda(c.nombre))
   if (greda && greda.items.length) {
     tituloSeccion('Ánfora incluida', 'El ánfora de greda viene incluida por defecto en el servicio, sin costo adicional.')
-    const fotoGreda = greda.items.map(p => p.foto_url).find(Boolean) || matchFoto('greda marmoleada', bancoProd) || matchFoto(greda.items[0]?.nombre || 'greda', bancoProd)
+    // La foto de referencia de la ánfora incluida es la MARMOLEADA MEDIANA
+    // (decisión del cliente 2026-07-13); si no está o no tiene foto, cae a la
+    // primera de la categoría con foto.
+    const normNombre = (s: string) => (s || '').toLowerCase()
+    const marmoleadaMediana = greda.items.find(p => normNombre(p.nombre).includes('marmoleada') && normNombre(p.nombre).includes('median'))
+    const fotoGreda = marmoleadaMediana?.foto_url || greda.items.map(p => p.foto_url).find(Boolean) || matchFoto('greda marmoleada', bancoProd) || matchFoto(greda.items[0]?.nombre || 'greda', bancoProd)
     const img = await cargarImagen(doc, fotoGreda)
     const boxH = 156
     need(boxH + 12)
