@@ -7,8 +7,9 @@
  * dueño 2026-07-13). Los montos salen VIVOS de precios_generales vía
  * DatosPrecios, igual que las tablas de /servicios.
  *
- * ⚠️ No menciona resolución sanitaria ni despedida presencial: pendientes de
- * confirmación del dueño antes de publicarlos.
+ * Datos confirmados por el dueño (2026-07-13): autorización sanitaria,
+ * patente municipal al día, personal técnicamente capacitado, hornos
+ * certificados bajo normativa ISO y proceso sin emisiones contaminantes.
  */
 
 import { type DatosPrecios, filasCremacion, desdeDe, fmtCLP } from './precios-html'
@@ -52,6 +53,18 @@ const TARJETAS: { titulo: string; texto: string }[] = [
     titulo: 'Recuerdos incluidos en cada despedida',
     texto: 'Junto al ánfora entregamos una placa de madera grabada con su nombre, una botella de vidrio con un mechón de pelo y una tarjeta con su huella estampada.',
   },
+  {
+    titulo: 'Autorización sanitaria y patente al día',
+    texto: 'Somos una empresa formalmente constituida: operamos con autorización sanitaria y patente municipal al día. La tranquilidad de despedir a tu mascota en un crematorio establecido y regulado.',
+  },
+  {
+    titulo: 'Hornos certificados y proceso ecológico',
+    texto: 'Nuestros hornos de cremación están certificados bajo normativa ISO y operan sin emisiones contaminantes: una despedida respetuosa con tu mascota y también con el medio ambiente.',
+  },
+  {
+    titulo: 'Equipo técnicamente capacitado',
+    texto: 'Personal capacitado técnicamente en cada etapa: retiro, recepción, conservación, cremación y entrega. Un proceso serio, realizado como corresponde.',
+  },
 ]
 
 function faqs(d: DatosPrecios): { q: string; a: string }[] {
@@ -85,6 +98,10 @@ function faqs(d: DatosPrecios): { q: string; a: string }[] {
     {
       q: '¿Ofrecen eutanasia a domicilio?',
       a: 'Sí. Contamos con una red de veterinarios en convenio que realizan la eutanasia en tu hogar, con acompañamiento y coordinación directa con el servicio de cremación. Puedes ver el detalle en nuestro servicio de eutanasia a domicilio.',
+    },
+    {
+      q: '¿El crematorio cuenta con autorización sanitaria?',
+      a: 'Sí. Operamos con autorización sanitaria y patente municipal al día, en instalaciones propias en Recoleta, con hornos certificados bajo normativa ISO que funcionan sin emisiones contaminantes y un equipo técnicamente capacitado en cada etapa del proceso.',
     },
   ]
 }
