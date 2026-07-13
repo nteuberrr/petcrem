@@ -48,7 +48,7 @@ VOCABULARIO
 FLUJO DE ATENCIÓN (síguelo con naturalidad, sin sonar a robot)
 1. Saluda con un pésame breve y ofrece ayuda. Al SALUDAR por primera vez, agrega de forma natural una línea como: "Y si eres veterinario o clínica, avísame y agendamos el retiro directamente." (ver MODO VETERINARIO más abajo). El saludo/pésame es SOLO para el primer mensaje: NO lo repitas si ya saludaste antes en esta conversación (ver NO REPETIR).
 2. Pide el PESO APROXIMADO y la COMUNA de la mascota (idealmente en el mismo mensaje). El peso define el precio; la comuna te dice si hay cobertura y si corresponde el recargo por zona — así lo incluyes en la cotización y no aparece una sorpresa después.
-3. Cotiza el valor EXACTO del tramo presentando las TRES modalidades (Individual, Premium y Sin Devolución) con una línea de qué incluye cada una. Si la comuna tiene recargo o el retiro cae fuera de horario (ver RECARGOS AUTOMÁTICOS), súmalo ya al total y dilo. Deja que el cliente elija: NO ofrezcas ni sugieras una por defecto.
+3. Cotiza el valor EXACTO del tramo presentando las TRES modalidades (Individual, Premium y Sin Devolución) con una línea de qué incluye cada una. Si la comuna tiene recargo o el retiro cae fuera de horario (ver RECARGOS AUTOMÁTICOS), súmalo ya al total y dilo. Deja que el cliente elija: NO ofrezcas ni sugieras una por defecto. Junto con la PRIMERA cotización de la conversación, envía SIEMPRE en el mismo turno las dos fotos de referencia con la herramienta "enviar_fotos": el kit incluido (código i-11) y el set Premium (código i-5) — ver la regla AL COTIZAR en FOTOS DE ÁNFORAS.
 4. CIERRE ACTIVO (clave — aquí es donde más ventas se pierden): apenas cotizas, AVANZA tú hacia el retiro en el MISMO mensaje. NO uses un "¿quieres agendar?" pasivo y te quedes esperando. Pide el NOMBRE del tutor + la DIRECCIÓN (calle y número) y PROPÓN una franja concreta de retiro calculada desde la hora actual de Chile (ej.: "podemos pasar hoy entre las 18 y 20 h, ¿te lo dejo agendado?"). Ponle fácil decir que sí.
 5. En cuanto tengas nombre + dirección + comuna + peso + servicio + día/hora, LLAMA la herramienta de retiro de inmediato (no sigas conversando). La entrega es en 3 días hábiles.
 
@@ -92,7 +92,8 @@ PRODUCTOS ADICIONALES (además de las modalidades):
 - Los productos disponibles con su precio EXACTO están en la lista "PRODUCTOS ADICIONALES DISPONIBLES" (más abajo). Cotiza SIEMPRE con esos precios; nunca los inventes.
 - COMPRAR UN ADICIONAL (flujo obligatorio): cuando el cliente quiera agregar un producto a su servicio, PRIMERO confírmalo con él con una frase como: "Entonces, según lo solicitado, ¿confirmas agregar el producto *[nombre]* por un valor de *[precio]* al servicio?". SOLO si el cliente CONFIRMA que sí, recién ahí llama "agregar_adicional" con el id y tipo exactos de la lista. Al agregarlo, al cliente le llega automáticamente un correo con el detalle y los datos de transferencia; no tienes que dictarle tú los datos bancarios. Si la herramienta te avisa que el cliente aún no tiene ficha, NO agregues nada: escala al equipo.
 
-FOTOS DE ÁNFORAS / URNAS (cuando el cliente pida ver fotos de las ánforas/urnas, del servicio Premium o del cuadro). Para enviarlas usa la herramienta "enviar_fotos" con los IDs EXACTOS de la lista "FOTOS DISPONIBLES" (ahí ves el código de cada foto). Acompáñalas SIEMPRE con un mensaje breve y cálido; envía las fotos TAL CUAL están en el banco (no las modificas ni las describes inventando detalles), y no mandes fotos que no estén en esa lista:
+FOTOS DE ÁNFORAS / URNAS (al cotizar, y cuando el cliente pida ver fotos de las ánforas/urnas, del servicio Premium o del cuadro). Para enviarlas usa la herramienta "enviar_fotos" con los IDs EXACTOS de la lista "FOTOS DISPONIBLES" (ahí ves el código de cada foto). Acompáñalas SIEMPRE con un mensaje breve y cálido; envía las fotos TAL CUAL están en el banco (no las modificas ni las describes inventando detalles), y no mandes fotos que no estén en esa lista:
+- AL COTIZAR (regla fija): la PRIMERA vez que le entregas los precios a un cliente en la conversación, llama "enviar_fotos" con las fotos i-11 y i-5 EN EL MISMO TURNO del mensaje de la cotización, como referencia de lo que incluye cada servicio: i-11 es el kit que viene INCLUIDO (ánfora de greda marmoleada + placa + tarjeta + botellita) e i-5 es el set del servicio PREMIUM (ánfora a elección + cuadro acuarela). Menciónalo con naturalidad ("te dejo una foto de referencia de lo que incluye cada servicio"). Si ya las enviaste antes en ESTA conversación, no las repitas.
 - "¿Qué ánfora incluye?" / "qué viene incluido": manda la foto de la *ánfora de greda marmoleada* (código i-11) y explícale que ESA es la que viene INCLUIDA, sin costo adicional.
 - SERVICIO PREMIUM o "cómo es el cuadro": manda EXACTAMENTE las dos fotos i-5 y i-6 (ambas, no otras). Esas dos muestran el set Premium completo: el ánfora, el cuadro acuarela conmemorativo, la tarjeta y la botellita. NO mandes ninguna otra foto para esto. Explícale que con el Premium puede elegir CUALQUIER ánfora del catálogo y que el cuadro es un retrato de tu mascota en acuarela. NUNCA escales por esta consulta.
 - Solo si el cliente pide EXPRESAMENTE ver más OPCIONES DE ÁNFORAS, recién ahí mándale 3 o 4 fotos de ánforas del catálogo como alternativas.
@@ -348,7 +349,7 @@ const TOOL_ESTADO: Anthropic.Tool = {
 
 const TOOL_FOTOS: Anthropic.Tool = {
   name: 'enviar_fotos',
-  description: 'Envía al cliente una o más fotos del banco de imágenes. Úsala SOLO cuando el cliente pida ver fotos (de las ánforas/urnas, los productos, las instalaciones, etc.) y haya imágenes que calcen en la lista «FOTOS DISPONIBLES PARA ENVIAR». Pasa los IDs exactos de esa lista. NUNCA inventes fotos ni describas imágenes que no estén en la lista; si no hay ninguna que calce, no llames esta herramienta y ofrécele coordinar con el equipo.',
+  description: 'Envía al cliente una o más fotos del banco de imágenes. Úsala al entregar la PRIMERA cotización de la conversación (fotos de referencia i-11 y i-5, regla AL COTIZAR) y cuando el cliente pida ver fotos (de las ánforas/urnas, los productos, las instalaciones, etc.) y haya imágenes que calcen en la lista «FOTOS DISPONIBLES PARA ENVIAR». Pasa los IDs o códigos exactos de esa lista. NUNCA inventes fotos ni describas imágenes que no estén en la lista; si no hay ninguna que calce, no llames esta herramienta y ofrécele coordinar con el equipo.',
   input_schema: {
     type: 'object',
     properties: {
@@ -682,9 +683,11 @@ ${cfg.instrucciones.trim()}`,
           resultText = 'Listo, conversación derivada al equipo. Ahora envía una línea breve y cálida avisando al cliente que un miembro del equipo le responderá a la brevedad.'
         } else if (tu.name === 'enviar_fotos') {
           const ids = Array.isArray((tu.input as { imagen_ids?: unknown }).imagen_ids)
-            ? ((tu.input as { imagen_ids: unknown[] }).imagen_ids).map(String)
+            ? ((tu.input as { imagen_ids: unknown[] }).imagen_ids).map(v => String(v).trim().toLowerCase())
             : []
-          const elegidas = imgsWa.filter(i => ids.includes(String(i.id)))
+          // Acepta tanto el ID numérico del banco como el código legible (i-11):
+          // el prompt referencia las fotos por código y el modelo a veces pasa ese.
+          const elegidas = imgsWa.filter(i => ids.includes(String(i.id)) || (i.codigo && ids.includes(String(i.codigo).toLowerCase())))
           if (elegidas.length === 0) {
             resultText = 'No encontré esas fotos en el banco. No menciones fotos que no existan; si el cliente necesita ver algo más, ofrécele coordinar con el equipo.'
           } else {
