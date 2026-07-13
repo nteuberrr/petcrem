@@ -17264,8 +17264,11 @@ blockquote {
 .menu-button.w--open { color: #F2B84B; background-color: transparent; }
 .w-nav-overlay .nav-menu, .nav-menu[data-nav-menu-open] { background-color: #143C64; }
 
-/* Logo del navbar: respiro entre huella y wordmark */
-.brand .image-9 { margin-left: 10px; }
+/* Logo del navbar: flex con gap fijo — el export traía márgenes negativos
+   que bajo 480px superponían la huella con el wordmark (visto en iPhone) */
+.brand, .brand.w--current { display: flex; align-items: center; gap: 10px; aspect-ratio: auto; width: auto; padding-top: 0; }
+.brand .image-16 { margin: 0; max-width: none; }
+.brand .image-9 { margin: 0; }
 
 /* Botón Agenda aquí: dorado con texto navy */
 .wa-button { background-color: #F2B84B; color: #143C64; font-weight: 700; font-size: 14.5px; background-image: url('/sitio/assets/paw-navy-boton.png'); padding-top: 15px; }
