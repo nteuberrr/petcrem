@@ -127,6 +127,35 @@ const CSS = '<style>'
   + '@media (max-width:560px){.aa-porque{padding:50px 18px}.aa-porque h2{font-size:25px}.aa-faq h2{font-size:22px}}'
   + '</style>'
 
+/**
+ * Franja de confianza bajo el hero del home: los sellos clave en una línea,
+ * con ancla a la sección completa de abajo (#por-que-elegirnos).
+ */
+export function renderConfianzaStrip(): string {
+  const sellos = [
+    'Autorización sanitaria y patente al día',
+    'Cremación individual garantizada',
+    'Retiro en ~3 horas en toda la RM',
+    'Cenizas en 3 días hábiles',
+    'Video de ingreso incluido',
+    'Todos los días, 9:00 a 22:00',
+  ]
+  const css = '<style>'
+    + '.aa-sellos{background:#143C64;padding:18px 24px}'
+    + '.aa-sellos-inner{max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px 26px}'
+    + '.aa-sello{color:#FBF8F3;font-size:13.5px;font-weight:600;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}'
+    + '.aa-sello::before{content:"✓";color:#F2B84B;font-weight:800;font-size:15px}'
+    + '.aa-sellos-link{color:#F2B84B;font-size:13.5px;font-weight:700;text-decoration:none;white-space:nowrap}'
+    + '.aa-sellos-link:hover{text-decoration:underline}'
+    + '@media (max-width:560px){.aa-sellos{padding:14px 16px}.aa-sellos-inner{gap:6px 16px}.aa-sello{font-size:12.5px;white-space:normal}}'
+    + '</style>'
+  return css
+    + '<div class="aa-sellos"><div class="aa-sellos-inner">'
+    + sellos.map(s => `<span class="aa-sello">${esc(s)}</span>`).join('')
+    + '<a class="aa-sellos-link" href="#por-que-elegirnos">¿Por qué elegirnos? →</a>'
+    + '</div></div>'
+}
+
 export function renderPorqueElegirnos(d: DatosPrecios): string {
   const preguntas = faqs(d)
   const cards = TARJETAS.map(t =>
