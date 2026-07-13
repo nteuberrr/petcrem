@@ -76,7 +76,7 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
   const mascota = escapeHtml(args.nombreMascota)
   // Link al landing público para subir una foto de la mascota (se incluye en el
   // certificado de cremación). Si no hay base URL configurada, omitimos el botón.
-  // Links firmados (HMAC) por ficha + acción, válidos 24 horas — reemplazan el
+  // Links firmados (HMAC) por ficha + acción, válidos 48 horas — reemplazan el
   // "código" adivinable: solo quien recibió este correo puede subir la foto de
   // ESTA mascota o solicitar su video. Sin clienteId no se pueden firmar, así que
   // omitimos el bloque.
@@ -99,7 +99,7 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
     : `Puedes sumar una foto al certificado de ${mascota} y solicitar el video de su proceso:`
   const bloqueFoto = (linkFoto && linkVideo) ? `
       <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:12px;padding:20px;margin:20px 0">
-        <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;color:${BRAND.navy};text-align:center">Dentro de las próximas 24 horas</p>
+        <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;color:${BRAND.navy};text-align:center">Dentro de las próximas 48 horas</p>
         <p style="margin:0 0 16px;font-size:13px;color:${BRAND.muted};text-align:center;line-height:1.5">
           ${introFoto}
         </p>
@@ -113,7 +113,7 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
             🎥 Quiero el video del proceso
           </a>
         </div>
-        <p style="margin:14px 0 0;font-size:12px;color:${BRAND.muted};text-align:center">Estos enlaces vencen en 24 horas.</p>
+        <p style="margin:14px 0 0;font-size:12px;color:${BRAND.muted};text-align:center">Estos enlaces vencen en 48 horas.</p>
       </div>` : ''
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">${saludo(args.nombreTutor)}</p>

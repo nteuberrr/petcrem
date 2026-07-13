@@ -9,6 +9,7 @@ import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseDecimal, parsePeso } from '@/lib/numbers'
 import { findTramo } from '@/lib/tramos'
 import { anforaPremiumIncluida, servicioIncluyeAnforaPremium } from '@/lib/anforas-premium'
+import { aplicaReglaAuto, etiquetaRegla } from '@/lib/adicionales-auto'
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
@@ -16,7 +17,7 @@ type Cliente = {
   especie: string; peso_declarado?: string; peso_ingreso?: string
   tipo_servicio: string; codigo_servicio: string
   estado: string; estado_pago?: string; tipo_pago?: string
-  fecha_retiro: string; fecha_creacion: string; ciclo_id: string
+  fecha_retiro: string; hora_retiro?: string; fecha_creacion: string; ciclo_id: string
   direccion_retiro?: string; direccion_despacho?: string; comuna?: string
   adicionales?: string
   veterinaria_id?: string; notas?: string
@@ -26,7 +27,7 @@ type Cliente = {
 type Especie = { id: string; nombre: string; letra: string; activo: string }
 type Veterinario = { id: string; nombre: string; activo: string; tipo_precios?: string }
 type Producto = { id: string; nombre: string; precio: string; stock: string; categoria?: string; activo: string }
-type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
+type OtroServicio = { id: string; nombre: string; precio: string; activo: string; auto_regla?: string; comunas?: string }
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
@@ -60,6 +61,7 @@ const FORM_DEFAULT = {
   misma_direccion: false,
   comuna: '',
   fecha_retiro: '',
+  hora_retiro: '',
   fecha_defuncion: '',
   especie: '',
   letra_especie: '',
@@ -403,11 +405,41 @@ export default function ClientesPage() {
     if (f && validos.includes(f)) setFiltro(f as typeof filtro)
   }, [])
 
+  // Cargo AUTOMÁTICO de otros servicios (fuera de horario / distancia): según
+  // fecha/hora/comuna del retiro se pre-cargan solos en los adicionales, siempre
+  // deseleccionables. autoAgregados = los puso el efecto (puede sacarlos si la
+  // regla deja de aplicar); autoQuitados = el usuario los desmarcó (no re-agregar).
+  const autoAgregadosRef = useRef<Set<string>>(new Set())
+  const autoQuitadosRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!showModal) return
+    const ctx = { fecha: form.fecha_retiro, hora: form.hora_retiro, comuna: form.comuna }
+    setAdicionales(prev => {
+      let next = prev
+      for (const s of otrosServicios) {
+        if (!(s.auto_regla || '').trim()) continue
+        const aplica = aplicaReglaAuto(s, ctx)
+        const presente = next.some(a => a.tipo === 'servicio' && a.id === s.id)
+        if (aplica && !presente && !autoQuitadosRef.current.has(s.id)) {
+          autoAgregadosRef.current.add(s.id)
+          next = [...next, { tipo: 'servicio' as const, id: s.id, nombre: s.nombre, precio: parseFloat(s.precio) || 0, qty: 1 }]
+        } else if (!aplica && presente && autoAgregadosRef.current.has(s.id)) {
+          autoAgregadosRef.current.delete(s.id)
+          next = next.filter(a => !(a.tipo === 'servicio' && a.id === s.id))
+        }
+      }
+      return next
+    })
+  }, [showModal, form.fecha_retiro, form.hora_retiro, form.comuna, otrosServicios])
+
   function toggleAdicional(tipo: 'producto' | 'servicio', item: { id: string; nombre: string; precio: string }) {
     const existing = adicionales.find(a => a.tipo === tipo && a.id === item.id)
     if (existing) {
+      // Al desmarcar un servicio auto-cargado, recordarlo para no re-agregarlo solo.
+      if (tipo === 'servicio') { autoQuitadosRef.current.add(item.id); autoAgregadosRef.current.delete(item.id) }
       setAdicionales(prev => prev.filter(a => !(a.tipo === tipo && a.id === item.id)))
     } else {
+      if (tipo === 'servicio') autoQuitadosRef.current.delete(item.id)
       setAdicionales(prev => [...prev, { tipo, id: item.id, nombre: item.nombre, precio: parseFloat(item.precio) || 0, qty: 1 }])
     }
   }
@@ -469,6 +501,8 @@ export default function ClientesPage() {
       setForm(FORM_DEFAULT)
       setEsClienteVet(false)
       setAdicionales([])
+      autoAgregadosRef.current = new Set()
+      autoQuitadosRef.current = new Set()
       setShowAdicionales(false)
       setAplicarDescuento(false)
       setDescuentoId('')
@@ -533,7 +567,7 @@ export default function ClientesPage() {
           <p className="text-gray-600 text-sm mt-0.5">Fichas de mascotas</p>
         </div>
         <button
-          onClick={() => { setForm({ ...FORM_DEFAULT, fecha_retiro: todayISO() }); setShowModal(true) }}
+          onClick={() => { setForm({ ...FORM_DEFAULT, fecha_retiro: todayISO() }); autoAgregadosRef.current = new Set(); autoQuitadosRef.current = new Set(); setShowModal(true) }}
           className="bg-brand hover:bg-brand-dark text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors"
         >
           + Nueva ficha
@@ -867,10 +901,11 @@ export default function ClientesPage() {
             <ModalAddressField required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <ModalField required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
             <ModalField required type="date" label="Fecha de defunción" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
             <ModalField required type="date" label="Fecha de retiro" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
+            <ModalField type="time" label="Hora de retiro" value={form.hora_retiro} onChange={v => setForm(f => ({ ...f, hora_retiro: v }))} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1051,6 +1086,9 @@ export default function ClientesPage() {
                             <div key={s.id} className="flex items-center gap-2">
                               <input type="checkbox" checked={!!item} onChange={() => toggleAdicional('servicio', s)} className="w-3.5 h-3.5 rounded border-gray-400 text-brand focus:ring-brand" />
                               <span className="flex-1 text-sm text-gray-800">{s.nombre}</span>
+                              {!!item && autoAgregadosRef.current.has(s.id) && (
+                                <span title={etiquetaRegla(s.auto_regla)} className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">auto</span>
+                              )}
                               <span className="text-xs text-gray-500">{fmtPrecio(s.precio)}</span>
                             </div>
                           )

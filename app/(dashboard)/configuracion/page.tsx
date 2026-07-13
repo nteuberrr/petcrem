@@ -10,6 +10,7 @@ import CorreosConfig from '@/components/CorreosConfig'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 import { formatDate, formatHora } from '@/lib/dates'
 import { esAdmin, esAdminTotal, ROLES, ROL_LABEL } from '@/lib/roles'
+import { comunasDeServicio, etiquetaRegla } from '@/lib/adicionales-auto'
 
 const TABS = ['Precios', 'Artículos', 'Descuentos', 'Jornada', 'Configuración Avanzada'] as const
 type Tab = typeof TABS[number]
@@ -23,7 +24,7 @@ type CategoriaProducto = { id: string; nombre: string; activo: string; fecha_cre
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string; veterinaria_id?: string }
 type Especie = { id: string; nombre: string; letra: string; activo: string }
 type TipoServicio = { id: string; nombre: string; codigo: string; plazo_entrega_dias: string; activo: string }
-type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
+type OtroServicio = { id: string; nombre: string; precio: string; activo: string; auto_regla?: string; comunas?: string }
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string; foto_url?: string }
 type Vet = { id: string; nombre: string; activo: string; tipo_precios: string }
 type Usuario = { id: string; nombre: string; email: string; rol: string; activo: string; telefono?: string; avisos_whatsapp?: string }
@@ -200,7 +201,9 @@ export default function ConfiguracionPage() {
   const [prodForm, setProdForm] = useState({ nombre: '', precio: '', foto_url: '', categoria: '' })
   const [stockDelta, setStockDelta] = useState('')
   const [especieForm, setEspecieForm] = useState({ nombre: '', letra: '' })
-  const [otroForm, setOtroForm] = useState({ nombre: '', precio: '' })
+  // auto_regla: el servicio se pre-carga solo en la ficha ('' | fuera_horario | distancia).
+  // comunas: lista separada por comas (solo para 'distancia') — se persiste como JSON.
+  const [otroForm, setOtroForm] = useState({ nombre: '', precio: '', auto_regla: '', comunas: '' })
   const [tramoForm, setTramoForm] = useState({ peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' })
   const [especialForm, setEspecialForm] = useState({ veterinaria_id: '', peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' })
   const [especialVetFiltro, setEspecialVetFiltro] = useState('')
@@ -780,7 +783,7 @@ export default function ConfiguracionPage() {
         <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Otros Productos</h2>
-            <button onClick={() => { setEditingOtro(null); setOtroForm({ nombre: '', precio: '' }); setShowOtroModal(true) }}
+            <button onClick={() => { setEditingOtro(null); setOtroForm({ nombre: '', precio: '', auto_regla: '', comunas: '' }); setShowOtroModal(true) }}
               className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
@@ -788,13 +791,21 @@ export default function ConfiguracionPage() {
             <tbody className="divide-y divide-gray-100">
               {otros.map(o => (
                 <tr key={o.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{o.nombre}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    {o.nombre}
+                    {(o.auto_regla || '').trim() && (
+                      <span className="ml-2 inline-block text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 align-middle"
+                        title={o.auto_regla === 'distancia' ? `Comunas: ${comunasDeServicio(o.comunas).join(', ') || '—'}` : undefined}>
+                        {etiquetaRegla(o.auto_regla)}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{fmtPrecio(o.precio)}</td>
                   <td className="px-4 py-3"><Toggle checked={o.activo === 'TRUE'} onChange={val => patch('/api/servicios?tipo=otros', { id: o.id, activo: val ? 'TRUE' : 'FALSE' })} /></td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => { setEditingOtro(o); setOtroForm({ nombre: o.nombre, precio: o.precio }); setShowOtroModal(true) }}
+                        onClick={() => { setEditingOtro(o); setOtroForm({ nombre: o.nombre, precio: o.precio, auto_regla: o.auto_regla || '', comunas: comunasDeServicio(o.comunas).join(', ') }); setShowOtroModal(true) }}
                         className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Editar</button>
                       {isAdmin && (
                         <button
@@ -1397,14 +1408,19 @@ export default function ConfiguracionPage() {
         title={editingOtro ? 'Editar servicio adicional' : 'Agregar servicio adicional'}>
         <form onSubmit={async e => {
           e.preventDefault()
+          // comunas se persiste como JSON array; se edita como lista separada por comas.
+          const comunasJson = otroForm.auto_regla === 'distancia'
+            ? JSON.stringify(otroForm.comunas.split(',').map(c => c.trim()).filter(Boolean))
+            : ''
+          const extra = { auto_regla: otroForm.auto_regla, comunas: comunasJson }
           if (editingOtro) {
-            await patch('/api/servicios?tipo=otros', { id: editingOtro.id, nombre: otroForm.nombre, precio: String(parseInt(otroForm.precio) || 0) })
+            await patch('/api/servicios?tipo=otros', { id: editingOtro.id, nombre: otroForm.nombre, precio: String(parseInt(otroForm.precio) || 0), ...extra })
           } else {
-            await post('/api/servicios?tipo=otros', { nombre: otroForm.nombre, precio: parseInt(otroForm.precio) })
+            await post('/api/servicios?tipo=otros', { nombre: otroForm.nombre, precio: parseInt(otroForm.precio), ...extra })
           }
           setShowOtroModal(false)
           setEditingOtro(null)
-          setOtroForm({ nombre: '', precio: '' })
+          setOtroForm({ nombre: '', precio: '', auto_regla: '', comunas: '' })
         }} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>
@@ -1414,6 +1430,24 @@ export default function ConfiguracionPage() {
             <label className="text-xs font-medium text-gray-700">Precio (CLP)</label>
             <input required type="number" min="0" value={otroForm.precio} onChange={e => setOtroForm(f => ({ ...f, precio: e.target.value }))} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700">Cargo automático en la ficha</label>
+            <select value={otroForm.auto_regla} onChange={e => setOtroForm(f => ({ ...f, auto_regla: e.target.value }))}
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+              <option value="">Ninguno (se marca a mano)</option>
+              <option value="fuera_horario">Fuera de horario — retiros desde las 19:00 (L–V) y todo sábado/domingo</option>
+              <option value="distancia">Por comuna (distancia) — según la lista de comunas</option>
+            </select>
+            <p className="mt-1 text-[11px] text-gray-500">Se pre-carga solo en los adicionales de la ficha cuando aplica; siempre se puede desmarcar.</p>
+          </div>
+          {otroForm.auto_regla === 'distancia' && (
+            <div>
+              <label className="text-xs font-medium text-gray-700">Comunas con recargo (separadas por coma)</label>
+              <input value={otroForm.comunas} onChange={e => setOtroForm(f => ({ ...f, comunas: e.target.value }))}
+                placeholder="Lampa, Buin, Colina, Calera de Tango, Paine"
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+          )}
           <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingOtro ? 'Guardar cambios' : 'Guardar'}</button>
         </form>
       </Modal>

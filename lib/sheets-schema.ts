@@ -7,7 +7,9 @@ export const SHEETS: Record<string, string[]> = {
     'id', 'codigo', 'nombre_mascota', 'nombre_tutor',
     'email', 'telefono',
     'direccion_retiro', 'direccion_despacho', 'misma_direccion', 'comuna',
-    'fecha_retiro', 'fecha_defuncion',
+    // hora_retiro (HH:MM): junto con fecha_retiro determina si aplica el recargo
+    // automático "fuera de horario" (>=19:00 L-V, o sáb/dom) — lib/adicionales-auto.ts.
+    'fecha_retiro', 'hora_retiro', 'fecha_defuncion',
     'especie', 'letra_especie',
     'peso_declarado', 'peso_ingreso',
     'tipo_servicio', 'codigo_servicio',
@@ -107,7 +109,10 @@ export const SHEETS: Record<string, string[]> = {
   ],
   especies: ['id', 'nombre', 'letra', 'activo'],
   tipos_servicio: ['id', 'nombre', 'codigo', 'plazo_entrega_dias', 'activo'],
-  otros_servicios: ['id', 'nombre', 'precio', 'activo', 'fecha_creacion'],
+  // auto_regla: '' | 'fuera_horario' | 'distancia' — el servicio se pre-carga solo en
+  // la ficha (deseleccionable) cuando aplica; comunas = JSON array de nombres (solo
+  // para 'distancia'). Reglas en lib/adicionales-auto.ts.
+  otros_servicios: ['id', 'nombre', 'precio', 'activo', 'auto_regla', 'comunas', 'fecha_creacion'],
   // Cobros que perseguimos por ficha: producto ADICIONAL agregado o DIFERENCIA
   // de peso. estado: pendiente → cliente_confirmo → pagado.
   cobros: ['id', 'cliente_id', 'tipo', 'detalle', 'monto', 'estado', 'message_id', 'fecha_creacion', 'fecha_cliente_confirmo', 'fecha_pagado'],

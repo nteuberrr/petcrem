@@ -6,13 +6,13 @@ import crypto from 'crypto'
  * proceso. Reemplaza al "código" de la mascota, que era secuencial y adivinable.
  * Solo quien recibió el correo tiene el token de ESA ficha y ESA acción.
  *
- * Firmado con NEXTAUTH_SECRET. TTL 24 horas: los links de foto/video del correo
- * valen solo un día (decisión del cliente).
+ * Firmado con NEXTAUTH_SECRET. TTL 48 horas: los links de foto/video del correo
+ * valen dos días (decisión del cliente 2026-07-13; antes eran 24 h).
  */
 
 export type AccionTutor = 'subir_foto' | 'solicitar_video' | 'subir_foto_cuadro'
 
-const DEFAULT_TTL_SECONDS = 24 * 3600 // 24 horas
+const DEFAULT_TTL_SECONDS = 48 * 3600 // 48 horas
 
 interface TutorTokenPayload {
   cid: string // cliente id

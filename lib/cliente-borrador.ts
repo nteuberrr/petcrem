@@ -20,6 +20,8 @@ export interface BorradorInput {
   direccion_retiro?: string
   comuna?: string
   fecha_retiro?: string
+  /** HH:MM — junto con la fecha determina el recargo "fuera de horario". */
+  hora_retiro?: string
   peso_declarado?: string | number
   /** CI | CP | SD si el cliente ya eligió. */
   codigo_servicio?: string
@@ -41,7 +43,7 @@ export const NOMBRE_SERVICIO: Record<string, string> = {
 
 /** Crea un cliente borrador (sin código) y devuelve su id. */
 export async function crearClienteBorrador(d: BorradorInput): Promise<string> {
-  await ensureColumns('clientes', ['email', 'telefono', 'origen', 'notas', 'tipo_precios', 'estado_pago', 'veterinaria_id'])
+  await ensureColumns('clientes', ['email', 'telefono', 'origen', 'notas', 'tipo_precios', 'estado_pago', 'veterinaria_id', 'hora_retiro'])
   const id = await getNextId('clientes')
   // Para retiros de VET no guardamos el teléfono del vet en la ficha: así el
   // anti-duplicado por teléfono (bloqueFichaEnProceso) no bloquea a un vet que
@@ -61,6 +63,7 @@ export async function crearClienteBorrador(d: BorradorInput): Promise<string> {
     misma_direccion: 'TRUE',
     comuna: d.comuna ?? '',
     fecha_retiro: d.fecha_retiro ?? '',
+    hora_retiro: d.hora_retiro ?? '',
     peso_declarado: d.peso_declarado != null && d.peso_declarado !== '' ? String(d.peso_declarado) : '',
     tipo_servicio: NOMBRE_SERVICIO[(d.codigo_servicio || '').toUpperCase()] ?? '',
     codigo_servicio: d.codigo_servicio ?? '',

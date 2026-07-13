@@ -191,7 +191,7 @@ async function reprogramarRetiro(a: AccionReprogramar, ctx: CtxAgente): Promise<
 
   await updateByIdIf(SHEET_RETIRO, sol.id, {}, { fecha_retiro: a.fecha, hora_retiro: a.hora })
   if (sol.cliente_id) {
-    try { await updateByIdIf('clientes', sol.cliente_id, {}, { fecha_retiro: a.fecha }) }
+    try { await updateByIdIf('clientes', sol.cliente_id, {}, { fecha_retiro: a.fecha, hora_retiro: a.hora }) }
     catch (e) { console.warn('[agente-acciones] reprogramarRetiro: no se pudo actualizar la ficha:', e) }
   }
 

@@ -10,6 +10,7 @@ import { formatDateForSheet } from '@/lib/dates'
 import { parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { anforaPremiumIncluida, servicioIncluyeAnforaPremium } from '@/lib/anforas-premium'
+import { aplicaReglaAuto } from '@/lib/adicionales-auto'
 import { esAdmin } from '@/lib/roles'
 
 type Certificado = {
@@ -56,6 +57,7 @@ type ClienteDetalle = {
   misma_direccion: string
   comuna: string
   fecha_retiro: string
+  hora_retiro?: string
   especie: string
   letra_especie: string
   peso_declarado: string
@@ -106,7 +108,7 @@ type ClienteDetalle = {
 type Veterinario = { id: string; nombre: string; activo: string; tipo_precios: string }
 type Especie = { id: string; nombre: string; letra: string; activo: string }
 type Producto = { id: string; nombre: string; precio: string; stock: string; categoria?: string; activo: string }
-type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
+type OtroServicio = { id: string; nombre: string; precio: string; activo: string; auto_regla?: string; comunas?: string }
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
 type TramoEspecial = Tramo & { veterinaria_id: string }
 
@@ -543,11 +545,41 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     setSaving(false)
   }
 
+  // Cargo AUTOMÁTICO de otros servicios (fuera de horario / distancia) al completar
+  // un BORRADOR: según fecha/hora/comuna del retiro se pre-cargan solos, siempre
+  // deseleccionables. Solo aplica a fichas en estado 'borrador' (una ficha ya
+  // registrada no cambia sola sus adicionales al editarla).
+  const autoAgregadosRef = useRef<Set<string>>(new Set())
+  const autoQuitadosRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (cliente?.estado !== 'borrador') return
+    const ctx = { fecha: form.fecha_retiro, hora: form.hora_retiro, comuna: form.comuna }
+    setAdicionales(prev => {
+      let next = prev
+      for (const s of otrosServicios) {
+        if (!(s.auto_regla || '').trim()) continue
+        const aplica = aplicaReglaAuto(s, ctx)
+        const presente = next.some(a => a.tipo === 'servicio' && a.id === s.id)
+        if (aplica && !presente && !autoQuitadosRef.current.has(s.id)) {
+          autoAgregadosRef.current.add(s.id)
+          next = [...next, { tipo: 'servicio' as const, id: s.id, nombre: s.nombre, precio: parseFloat(s.precio) || 0, qty: 1 }]
+        } else if (!aplica && presente && autoAgregadosRef.current.has(s.id)) {
+          autoAgregadosRef.current.delete(s.id)
+          next = next.filter(a => !(a.tipo === 'servicio' && a.id === s.id))
+        }
+      }
+      return next
+    })
+  }, [cliente?.estado, form.fecha_retiro, form.hora_retiro, form.comuna, otrosServicios])
+
   function toggleAdicional(tipo: 'producto' | 'servicio', item: { id: string; nombre: string; precio: string }) {
     const existing = adicionales.find(a => a.tipo === tipo && a.id === item.id)
     if (existing) {
+      // Al desmarcar un servicio auto-cargado, recordarlo para no re-agregarlo solo.
+      if (tipo === 'servicio') { autoQuitadosRef.current.add(item.id); autoAgregadosRef.current.delete(item.id) }
       setAdicionales(prev => prev.filter(a => !(a.tipo === tipo && a.id === item.id)))
     } else {
+      if (tipo === 'servicio') autoQuitadosRef.current.delete(item.id)
       setAdicionales(prev => [...prev, { tipo, id: item.id, nombre: item.nombre, precio: parseFloat(item.precio) || 0, qty: 1 }])
     }
   }
@@ -1121,6 +1153,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <AddressField required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
           <Field required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
           <Field required label="Fecha de retiro" type="date" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
+          <Field label="Hora de retiro" type="time" value={form.hora_retiro} onChange={v => setForm(f => ({ ...f, hora_retiro: v }))} />
           <Field label="Fecha de defunción" type="date" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
           <div>
             <label className="text-xs font-semibold text-gray-700">Especie <span className="text-red-500">*</span></label>

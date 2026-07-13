@@ -18,6 +18,7 @@ const ClienteSchema = z.object({
   misma_direccion: z.boolean(),
   comuna: z.string().min(1, 'Comuna requerida'),
   fecha_retiro: z.string().min(1, 'Fecha de retiro requerida'),
+  hora_retiro: z.string().optional(),
   fecha_defuncion: z.string().min(1, 'Fecha de defunción requerida'),
   especie: z.string().min(1, 'Especie requerida'),
   letra_especie: z.string().length(1),
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
       'peso_declarado', 'peso_ingreso', 'despacho_id',
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
       'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
-      'precio_servicio', 'precio_adicionales', 'precio_total',
+      'precio_servicio', 'precio_adicionales', 'precio_total', 'hora_retiro',
     ])
     const codigo = await generarCodigo(data.letra_especie, data.codigo_servicio)
     const id = await getNextId('clientes')
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest) {
       misma_direccion: data.misma_direccion ? 'TRUE' : 'FALSE',
       comuna: data.comuna,
       fecha_retiro: data.fecha_retiro,
+      hora_retiro: data.hora_retiro ?? '',
       fecha_defuncion: data.fecha_defuncion,
       especie: data.especie,
       letra_especie: data.letra_especie,

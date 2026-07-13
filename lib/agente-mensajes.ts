@@ -4,6 +4,7 @@ import { getAgenteConfig } from './mensajes'
 import { fmtPrecio } from './format'
 import { listarImagenesWhatsapp, type ImagenBanco } from './mailing-images'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
+import { comunasDeServicio } from './adicionales-auto'
 
 /**
  * Agente IA del inbox de Mensajes: redacta la respuesta de atención por
@@ -47,7 +48,7 @@ VOCABULARIO
 FLUJO DE ATENCIÓN (síguelo con naturalidad, sin sonar a robot)
 1. Saluda con un pésame breve y ofrece ayuda. Al SALUDAR por primera vez, agrega de forma natural una línea como: "Y si eres veterinario o clínica, avísame y agendamos el retiro directamente." (ver MODO VETERINARIO más abajo). El saludo/pésame es SOLO para el primer mensaje: NO lo repitas si ya saludaste antes en esta conversación (ver NO REPETIR).
 2. Pide el PESO APROXIMADO y la COMUNA de la mascota (idealmente en el mismo mensaje). El peso define el precio; la comuna te dice si hay cobertura y si corresponde el recargo por zona — así lo incluyes en la cotización y no aparece una sorpresa después.
-3. Cotiza el valor EXACTO del tramo presentando las TRES modalidades (Individual, Premium y Sin Devolución) con una línea de qué incluye cada una. Si la comuna tiene recargo (ver COBERTURA), súmalo ya al total y dilo. Deja que el cliente elija: NO ofrezcas ni sugieras una por defecto.
+3. Cotiza el valor EXACTO del tramo presentando las TRES modalidades (Individual, Premium y Sin Devolución) con una línea de qué incluye cada una. Si la comuna tiene recargo o el retiro cae fuera de horario (ver RECARGOS AUTOMÁTICOS), súmalo ya al total y dilo. Deja que el cliente elija: NO ofrezcas ni sugieras una por defecto.
 4. CIERRE ACTIVO (clave — aquí es donde más ventas se pierden): apenas cotizas, AVANZA tú hacia el retiro en el MISMO mensaje. NO uses un "¿quieres agendar?" pasivo y te quedes esperando. Pide el NOMBRE del tutor + la DIRECCIÓN (calle y número) y PROPÓN una franja concreta de retiro calculada desde la hora actual de Chile (ej.: "podemos pasar hoy entre las 18 y 20 h, ¿te lo dejo agendado?"). Ponle fácil decir que sí.
 5. En cuanto tengas nombre + dirección + comuna + peso + servicio + día/hora, LLAMA la herramienta de retiro de inmediato (no sigas conversando). La entrega es en 3 días hábiles.
 
@@ -58,6 +59,7 @@ AGENDAMIENTO (usa las herramientas SOLO cuando tengas TODOS los datos; si falta 
 - HORARIOS DE RETIRO (regla dura): coordinamos los retiros por HORA, de 09:00 a 21:00. La ÚLTIMA hora para agendar un retiro es las 21:00 — NUNCA ofrezcas ni agendes un retiro más tarde. Tampoco agendes dentro de la próxima hora: lo más pronto posible es la HORA ACTUAL de Chile + 1 hora (ej.: si son las 14:30, lo antes es 15:30). Entre una reserva y la siguiente dejamos MÍNIMO 1 HORA (cuenta cualquier servicio agendado: retiros Y eutanasias — ej.: si hay algo a las 16:00, lo siguiente disponible es a las 17:00). Propón siempre un horario realista dentro de esa ventana; al registrar, el sistema valida la hora y, si no sirve o queda muy pegada a otra reserva, te devuelve las horas libres de ese día — ofrécele una de esas y NO insistas con la ocupada. Esto aplica igual a los retiros de tutores y de veterinarios.
 - NO REPITAS PREGUNTAS NI EL SALUDO: antes de pedir cualquier dato, REVISA TODO el historial de la conversación. Si el cliente ya dio un dato (peso, comuna, servicio, nombre, dirección) —aunque haya sido varios mensajes atrás—, reúsalo y NO lo vuelvas a pedir. NUNCA reenvíes el saludo/pésame de bienvenida ni "indícame el peso" si ya saludaste o si el cliente ya está en pleno proceso (ya dio datos o ya dijo "sí"/"confirmo"): retoma justo donde iban. Reenviar el saludo cuando el cliente ya dijo "confirmo" hace que abandone.
 - MASCOTA EN UNA CLÍNICA/VETERINARIA: si quien te escribe es el TUTOR y su mascota está EN una clínica (falleció ahí, o la dejó ahí), es un retiro de TUTOR normal — la dirección de la clínica es simplemente la dirección de retiro. Regístralo con "solicitar_retiro_cremacion" a nombre del tutor, con la dirección de la clínica. NO te trabes preguntando "¿eres el tutor o la clínica?": si la persona habla como dueño de la mascota, es el tutor. El MODO VETERINARIO es SOLO cuando quien escribe habla EN NOMBRE de la clínica/veterinario (es el personal de la clínica coordinando retiros).
+- RECARGO FUERA DE HORARIO (regla dura): los retiros desde las 19:00 de lunes a viernes, y a CUALQUIER hora los sábados y domingos, llevan el recargo "fuera de horario" (monto exacto en RECARGOS AUTOMÁTICOS). Cuando la fecha/hora que el cliente pide o acepta caiga en esa franja, DÍSELO con naturalidad ANTES de registrar el retiro ("como es después de las 19:00 / fin de semana, aplica un recargo de $X") y súmalo al total cotizado — el cliente nunca debe enterarse del recargo después. Lo mismo con el recargo POR DISTANCIA si su comuna está en la lista.
 - HORA "lo antes posible" / sin hora exacta: si el cliente dice "lo antes posible", "cuando puedan", "ahora" o no da una hora precisa, NO insistas pidiendo una hora exacta: calcula la hora a partir de la HORA ACTUAL de Chile (más abajo) + 1 hora (no se agenda dentro de la próxima hora) y registra con esa hora, siempre dentro de la ventana 09:00–21:00. El equipo coordina el detalle al confirmar.
 - EUTANASIA A DOMICILIO (servicio de EVALUACIÓN): si el cliente la pide o la necesita, ofrécela con naturalidad y EXPLÍCALE cómo funciona: nos deja sus datos, buscamos un veterinario de nuestra red que pueda asistir en su comuna y en la fecha/hora que necesita, el veterinario va a la casa, EVALÚA a la mascota y decide si corresponde realizar la eutanasia. Sé claro con los DOS precios (que salen SIEMPRE de la herramienta "cotizar_eutanasia", NUNCA los inventes): si SE REALIZA la eutanasia se cobra el valor según el peso; si al evaluar NO corresponde realizarla, se cobra solo el valor de la CONSULTA. Esos valores YA son los precios finales al cliente; NUNCA expliques cómo se reparten internamente ni uses las tarifas de cremación para esto. Para agendar reúne: nombre del tutor, nombre + especie + peso de la mascota, comuna, DIRECCIÓN (calle y número), fecha, franja (mañana=AM / tarde=PM), el CORREO del tutor (importante: ahí le llegan los avisos y el detalle del servicio) y QUÉ SERVICIO DE CREMACIÓN quiere si la eutanasia se realiza (Individual / Premium / Sin Devolución). La cremación es OPCIONAL: si el cliente dice que NO quiere cremación (p. ej. lo va a enterrar), respétalo sin insistir y agenda con tipo_servicio_cremacion="NINGUNA". Explícale que, si quiere, coordinamos AMBOS servicios: primero la evaluación/eutanasia a domicilio y, si se realiza, la cremación. Con todo listo, agéndala con "agendar_eutanasia"; si la herramienta te avisa que no pudo validar la dirección, pídele que la corrija. Dile que su solicitud quedó INGRESADA y que nos pondremos en contacto apenas un veterinario confirme; NO le digas que ya está confirmada. IMPORTANTE: si ya llamaste "agendar_eutanasia" con éxito en esta conversación (o el estado del cliente dice que ya tiene una solicitud activa), NO la vuelvas a llamar por ningún motivo — ni para "completar un dato" ni si el cliente solo agradece; cualquier corrección se anota y la gestiona el equipo.
 - Si una herramienta no está disponible en este momento, sigue coordinando por mensaje y, si hace falta, escala a un humano.
@@ -80,7 +82,7 @@ REGLAS DURAS
 SOBRE NOSOTROS Y EL SERVICIO (usa lo que aplique para responder dudas; no lo recites entero)
 - Instalaciones PROPIAS y CERTIFICADAS en Recoleta (Santiago): horno de cremación certificado, cámara de refrigeración y vehículo habilitado. Cobertura en toda la Región Metropolitana. No externalizamos: todo bajo control directo.
 - Propuesta de valor: transparencia total, tecnología de punta, rapidez y trazabilidad. Retiro en menos de 3 horas en vehículo habilitado. Entrega en máximo 3 días hábiles. Código de seguimiento durante todo el proceso. Certificado de cremación digital, con el video del proceso adjunto (cuando está disponible).
-- Recargo de $20.000 en comunas fuera de la zona habitual (Lampa, Buin, Colina, Calera de Tango, Paine).
+- Hay recargos automáticos por horario del retiro y por comuna: los montos y comunas EXACTOS están en el bloque RECARGOS AUTOMÁTICOS (no los inventes ni uses valores de memoria).
 
 ${MODALIDADES_SERVICIOS}
 
@@ -140,6 +142,35 @@ Tipos de servicio: ${nombres}. (Lo que incluye cada modalidad está en la secci�
   } catch (e) {
     console.warn('[agente] no se pudieron leer tarifas:', e)
     return 'TARIFAS: (no disponibles ahora — si te piden precio, escala a un humano).'
+  }
+}
+
+/** Recargos automáticos EN VIVO (otros_servicios con auto_regla): fuera de horario
+ *  y por distancia/comuna. El bot los avisa y los suma al cotizar; en la ficha se
+ *  pre-cargan solos con la misma regla (lib/adicionales-auto.ts). */
+async function bloqueRecargos(): Promise<string> {
+  try {
+    const otros = await getSheetData('otros_servicios')
+    const act = (r: Record<string, string>) => (r.activo || '').toUpperCase() === 'TRUE'
+    const fh = otros.find(r => act(r) && (r.auto_regla || '') === 'fuera_horario')
+    const dist = otros.find(r => act(r) && (r.auto_regla || '') === 'distancia')
+    const lineas: string[] = []
+    if (fh) {
+      lineas.push(`- FUERA DE HORARIO: +${fmtPrecio(parseInt(fh.precio, 10) || 0)}. Aplica a los retiros desde las 19:00 (inclusive) de lunes a viernes, y a CUALQUIER hora los sábados y domingos.`)
+    }
+    if (dist) {
+      const comunas = comunasDeServicio(dist.comunas)
+      if (comunas.length > 0) {
+        lineas.push(`- POR DISTANCIA: +${fmtPrecio(parseInt(dist.precio, 10) || 0)} cuando el retiro es en alguna de estas comunas: ${comunas.join(', ')}.`)
+      }
+    }
+    if (lineas.length === 0) return ''
+    return `RECARGOS AUTOMÁTICOS (se SUMAN al valor de la cremación; los descuentos de convenio NO los rebajan; avísalos con naturalidad al cotizar y SIEMPRE antes de agendar):
+${lineas.join('\n')}
+Si aplican ambos, se suman los dos. Estos montos son los vigentes: no uses otros.`
+  } catch (e) {
+    console.warn('[agente] no se pudieron leer recargos:', e)
+    return ''
   }
 }
 
@@ -573,17 +604,18 @@ export async function generarRespuesta(
   // —p.ej. un echo o evento de estado que gatilló el webhook—), no generamos nada:
   // evita el 400 "does not support assistant message prefill" y una respuesta espuria.
   if (base[base.length - 1].role !== 'user') return { mensaje: '', escalar: false, acciones: [] }
-  const [tarifas, productos, descuentos, cfg, imgsWa] = await Promise.all([
+  const [tarifas, recargos, productos, descuentos, cfg, imgsWa] = await Promise.all([
     bloqueTarifas(),
+    bloqueRecargos(),
     bloqueProductos(),
     bloqueDescuentos(),
     getAgenteConfig().catch(() => null),
     listarImagenesWhatsapp().catch(() => [] as ImagenBanco[]),
   ])
 
-  // Bloque base + tarifas: cacheado (estable). Ajustes del operador/calibración: sin caché (cambian seguido).
+  // Bloque base + tarifas + recargos: cacheado (estable). Ajustes del operador/calibración: sin caché (cambian seguido).
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${BASE}\n\n${DIFERENCIADORES}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: `${BASE}\n\n${DIFERENCIADORES}\n\n${tarifas}${recargos ? `\n\n${recargos}` : ''}`, cache_control: { type: 'ephemeral' } },
   ]
   const ajustes = [
     cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO — trátalos como la VERDAD ACTUAL del negocio, no como una nota aparte.

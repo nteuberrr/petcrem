@@ -60,7 +60,7 @@ export async function PATCH(
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
       'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
       'peso_declarado', 'peso_ingreso', 'despacho_id',
-      'precio_servicio', 'precio_adicionales', 'precio_total', 'boleta_id',
+      'precio_servicio', 'precio_adicionales', 'precio_total', 'boleta_id', 'hora_retiro',
     ])
 
     const rows = await getSheetData('clientes')
