@@ -17278,3 +17278,7 @@ blockquote {
 .cvn-final-cta { background-color: #143C64; }
 .cvn-cta-wa { background-color: #F2B84B; color: #143C64; }
 .cvn-cta-wa:hover { background-color: #E0A73F; }
+
+/* Blog: la columna original era 71% (tenía sidebar); la grilla de cards ocupa todo el ancho, centrada */
+.flex.blogg { justify-content: center; }
+.flex.blogg .blog-left { width: 100%; margin-right: 0; }
