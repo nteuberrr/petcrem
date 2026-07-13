@@ -22,6 +22,10 @@ const TARJETAS: { titulo: string; texto: string }[] = [
     texto: 'Tu mascota se crema completamente sola y recibes solo sus cenizas, con devolución exclusiva. También ofrecemos cremación Premium y una alternativa sin devolución, donde las cenizas se destinan a un proceso de reforestación.',
   },
   {
+    titulo: 'Autorización sanitaria y patente comercial al día',
+    texto: 'Somos una empresa formalmente constituida: operamos con autorización sanitaria y patente comercial al día. La tranquilidad de despedir a tu mascota en un crematorio establecido y regulado.',
+  },
+  {
     titulo: 'Certificado de cremación con firma digital',
     texto: 'Cada cremación incluye un certificado con firma digital verificable que respalda la identidad de tu mascota, la fecha y el proceso realizado. Te llega directo a tu correo.',
   },
@@ -52,10 +56,6 @@ const TARJETAS: { titulo: string; texto: string }[] = [
   {
     titulo: 'Recuerdos incluidos en cada despedida',
     texto: 'Junto al ánfora entregamos una placa de madera grabada con su nombre, una botella de vidrio con un mechón de pelo y una tarjeta con su huella estampada.',
-  },
-  {
-    titulo: 'Autorización sanitaria y patente al día',
-    texto: 'Somos una empresa formalmente constituida: operamos con autorización sanitaria y patente municipal al día. La tranquilidad de despedir a tu mascota en un crematorio establecido y regulado.',
   },
   {
     titulo: 'Hornos certificados y proceso ecológico',
@@ -101,7 +101,7 @@ function faqs(d: DatosPrecios): { q: string; a: string }[] {
     },
     {
       q: '¿El crematorio cuenta con autorización sanitaria?',
-      a: 'Sí. Operamos con autorización sanitaria y patente municipal al día, en instalaciones propias en Recoleta, con hornos certificados bajo normativa ISO que funcionan sin emisiones contaminantes y un equipo técnicamente capacitado en cada etapa del proceso.',
+      a: 'Sí. Operamos con autorización sanitaria y patente comercial al día, en instalaciones propias en Recoleta, con hornos certificados bajo normativa ISO que funcionan sin emisiones contaminantes y un equipo técnicamente capacitado en cada etapa del proceso.',
     },
   ]
 }
