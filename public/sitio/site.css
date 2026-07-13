@@ -17264,11 +17264,11 @@ blockquote {
 .menu-button.w--open { color: #F2B84B; background-color: transparent; }
 .w-nav-overlay .nav-menu, .nav-menu[data-nav-menu-open] { background-color: #143C64; }
 
-/* Ícono de la huella (imagen con fondo blanco): redondear sobre el navy */
-.brand .image-16 { border-radius: 10px; }
+/* Logo del navbar: respiro entre huella y wordmark */
+.brand .image-9 { margin-left: 10px; }
 
 /* Botón Agenda aquí: dorado con texto navy */
-.wa-button { background-color: #F2B84B; color: #143C64; font-weight: 700; }
+.wa-button { background-color: #F2B84B; color: #143C64; font-weight: 700; font-size: 14.5px; background-image: url('/sitio/assets/paw-navy-boton.png'); padding-top: 15px; }
 .wa-button:hover { background-color: #E0A73F; color: #143C64; }
 
 /* Convenios: alinear con la paleta (antes verde menta + botón verde) */
