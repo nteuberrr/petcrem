@@ -70,6 +70,11 @@ export async function PATCH(req: NextRequest) {
     if (updates.activo !== undefined) {
       merged.activo = updates.activo === true || updates.activo === 'TRUE' ? 'TRUE' : 'FALSE'
     }
+    // Logo del convenio (subido desde Configuración → Descuentos); es la imagen
+    // que muestra la sección "Convenios con descuento" del sitio público.
+    if (updates.foto_url !== undefined) {
+      merged.foto_url = String(updates.foto_url ?? '')
+    }
     await updateRow(SHEET, idx, merged)
     return NextResponse.json(merged)
   } catch (e) {

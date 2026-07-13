@@ -115,18 +115,6 @@ export default function WebPage() {
     })
   }
 
-  async function subirFotoDescuento(d: Descuento, file: File) {
-    await ejecutar(async () => {
-      const fd = new FormData()
-      fd.append('file', file)
-      const up = await fetch('/api/upload', { method: 'POST', body: fd })
-      const uj = await up.json()
-      if (!up.ok) { setError(uj.error || 'No se pudo subir la imagen'); return }
-      const r = await fetch('/api/web', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entidad: 'descuento', id: d.id, foto_url: uj.url }) })
-      if (r.ok) setDescuentos(prev => prev.map(x => x.id === d.id ? { ...x, foto_url: uj.url } : x))
-    })
-  }
-
   // Productos agrupados por categoría (para mostrarlos como en la web).
   const porCategoria = useMemo(() => {
     const map = new Map<string, Producto[]>()
@@ -240,9 +228,9 @@ export default function WebPage() {
           <Card className="p-4 flex items-start gap-3 bg-cream">
             <span className="text-xl">💡</span>
             <div className="text-sm text-gray-600">
-              Estos son tus <b>convenios/descuentos</b> (de{' '}
-              <Link href="/configuracion" className="text-brand-soft font-semibold underline">Configuración → Descuentos</Link>).
-              Súbeles un <b>logo/imagen</b> y actívalos para mostrarlos en la web. Por defecto están ocultos hasta que los prendas.
+              Espejo de tus <b>convenios/descuentos</b>: se crean y editan (incluido el <b>logo</b>) en{' '}
+              <Link href="/configuracion" className="text-brand-soft font-semibold underline">Configuración → Descuentos</Link>.
+              Acá solo decides <b>cuáles se muestran</b> en la web. Por defecto están ocultos hasta que los prendas.
             </div>
           </Card>
 
@@ -264,11 +252,9 @@ export default function WebPage() {
                       {d.tipo === 'fijo' ? `${fmtPrecio(d.valor)} de descuento` : `${d.valor}% de descuento`}
                       {inactivo(d) && <span className="text-amber-600"> · inactivo</span>}
                     </div>
-                    <label className="inline-flex items-center gap-1.5 mt-2 text-xs text-brand-soft font-semibold cursor-pointer hover:underline">
-                      <span>📷 {d.foto_url ? 'Cambiar logo' : 'Subir logo'}</span>
-                      <input type="file" accept="image/*" className="hidden" disabled={procesando}
-                        onChange={e => { const f = e.target.files?.[0]; if (f) subirFotoDescuento(d, f); e.target.value = '' }} />
-                    </label>
+                    {!d.foto_url && (
+                      <div className="text-[11px] text-amber-600 mt-1">Sin logo — súbelo en Configuración → Descuentos</div>
+                    )}
                   </div>
                   <div className="flex flex-col items-center gap-1 shrink-0">
                     <Switch on={descVisible(d)} disabled={procesando} onClick={() => toggleDescuento(d)} />

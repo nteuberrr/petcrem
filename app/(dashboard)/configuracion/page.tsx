@@ -24,7 +24,7 @@ type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string
 type Especie = { id: string; nombre: string; letra: string; activo: string }
 type TipoServicio = { id: string; nombre: string; codigo: string; plazo_entrega_dias: string; activo: string }
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string }
-type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
+type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string; foto_url?: string }
 type Vet = { id: string; nombre: string; activo: string; tipo_precios: string }
 type Usuario = { id: string; nombre: string; email: string; rol: string; activo: string; telefono?: string; avisos_whatsapp?: string }
 
@@ -819,18 +819,37 @@ export default function ConfiguracionPage() {
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <div>
               <h2 className="font-semibold text-gray-900">Descuentos</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Variable (%) o Fijo (monto en CLP) · Aplica SOLO al precio de la cremación (los adicionales se pagan completos)</p>
+              <p className="text-xs text-gray-400 mt-0.5">Variable (%) o Fijo (monto en CLP) · Aplica SOLO al precio de la cremación (los adicionales se pagan completos) · El logo es el que se muestra en la web (Web → Convenios controla cuáles aparecen)</p>
             </div>
             <button onClick={() => { setEditingDescuento(null); setDescuentoForm({ nombre: '', tipo: 'variable', valor: '' }); setShowDescuentoModal(true) }}
               className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
-            <thead className="bg-gray-50"><tr>{['Nombre', 'Tipo', 'Valor', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
+            <thead className="bg-gray-50"><tr>{['Logo', 'Nombre', 'Tipo', 'Valor', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
             <tbody className="divide-y divide-gray-100">
               {descuentos.map(d => {
                 const valorNum = parseFloat(d.valor) || 0
                 return (
                   <tr key={d.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <label className="group inline-flex items-center gap-1.5 cursor-pointer" title={d.foto_url ? 'Cambiar logo' : 'Subir logo'}>
+                        <span className="w-10 h-10 shrink-0 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
+                          {d.foto_url
+                            // eslint-disable-next-line @next/next/no-img-element
+                            ? <img src={d.foto_url} alt={d.nombre} className="w-full h-full object-contain" />
+                            : <span className="text-gray-300 text-lg">🤝</span>}
+                        </span>
+                        <span className="text-xs text-brand-soft font-semibold group-hover:underline">📷</span>
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={async e => {
+                            const f = e.target.files?.[0]; e.target.value = ''
+                            if (!f) return
+                            const url = await uploadFoto(f)
+                            if (url) await patch('/api/descuentos', { id: d.id, foto_url: url })
+                            else alert('No se pudo subir la imagen')
+                          }} />
+                      </label>
+                    </td>
                     <td className="px-4 py-3 font-medium text-gray-900">{d.nombre}</td>
                     <td className="px-4 py-3">
                       <Badge variant={d.tipo === 'fijo' ? 'blue' : 'purple'}>{d.tipo === 'fijo' ? 'Fijo' : 'Variable'}</Badge>
@@ -853,7 +872,7 @@ export default function ConfiguracionPage() {
                 )
               })}
               {descuentos.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">Sin descuentos registrados</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">Sin descuentos registrados</td></tr>
               )}
             </tbody>
           </table>
