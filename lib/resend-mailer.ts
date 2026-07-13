@@ -175,6 +175,64 @@ export interface SendResult {
   error?: string
 }
 
+/**
+ * Descarga un adjunto remoto (path) a bytes, con reintentos y timeout. Devuelve
+ * null si no se pudo bajar tras `intentos`. La descarga la hace NUESTRO server
+ * (a R2), que es más confiable que dejar que Resend/SES la haga en el momento
+ * del envío.
+ */
+async function descargarAdjunto(url: string, intentos = 3): Promise<Buffer | null> {
+  for (let i = 0; i < intentos; i++) {
+    try {
+      const ctrl = new AbortController()
+      const t = setTimeout(() => ctrl.abort(), 25000)
+      const res = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(t))
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const ab = await res.arrayBuffer()
+      return Buffer.from(ab)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (i === intentos - 1) {
+        console.warn(`[resend-mailer] no se pudo descargar el adjunto ${url} tras ${intentos} intentos: ${msg}`)
+        return null
+      }
+      await sleep(500 * (i + 1))
+    }
+  }
+  return null
+}
+
+/**
+ * Materializa los adjuntos remotos (`path`) a `content` (bytes) ANTES de enviar.
+ *
+ * Motivo: cuando se pasa un `path` (URL), Resend/SES intenta DESCARGAR el archivo
+ * en el momento del envío. Esa descarga remota falla de forma intermitente
+ * (evento email.failed → el correo no se entrega y el tutor no recibe nada),
+ * sobre todo con adjuntos ~10MB como los videos del servicio. Al mandar los
+ * bytes en `content`, Resend solo los relaya: no hay paso de descarga que pueda
+ * fallar. Si NUESTRA descarga falla, dejamos el `path` como fallback (no peor
+ * que antes). `cache` deduplica descargas de una misma URL dentro de un batch.
+ */
+async function materializarAttachments(
+  specs: AttachmentSpec[] | undefined,
+  cache?: Map<string, Promise<Buffer | null>>,
+): Promise<AttachmentSpec[] | undefined> {
+  if (!specs || specs.length === 0) return specs
+  const out: AttachmentSpec[] = []
+  for (const a of specs) {
+    if (a.content !== undefined || !a.path) { out.push(a); continue }
+    let p = cache?.get(a.path)
+    if (!p) { p = descargarAdjunto(a.path); cache?.set(a.path, p) }
+    const buf = await (p ?? descargarAdjunto(a.path))
+    if (buf) {
+      out.push({ ...a, content: buf, path: undefined })
+    } else {
+      out.push(a) // fallback: dejamos el path y que Resend intente bajarlo
+    }
+  }
+  return out
+}
+
 function buildAttachmentsPayload(attachments: AttachmentSpec[] | undefined) {
   if (!attachments || attachments.length === 0) return undefined
   return attachments.map(a => {
@@ -283,6 +341,7 @@ export async function sendEmail(opts: SendOpts): Promise<SendResult> {
   try {
     const client = getClient()
     const bcc = opts.noBcc ? null : await getSeguimientoBcc(opts.seguimiento?.tipo)
+    const materializados = await materializarAttachments(opts.attachments)
     const res = await client.emails.send({
       from: opts.from || getFromAddress(),
       to: opts.to,
@@ -291,7 +350,7 @@ export async function sendEmail(opts: SendOpts): Promise<SendResult> {
       html,
       replyTo: opts.reply_to,
       tags: opts.tags,
-      attachments: buildAttachmentsPayload(opts.attachments),
+      attachments: buildAttachmentsPayload(materializados),
     })
     if (res.error) {
       const error = res.error.message || JSON.stringify(res.error)
@@ -383,6 +442,12 @@ export async function sendBatch(emails: SendOpts[]): Promise<SendResult[]> {
       if (o.seguimiento?.tipo && segCfg.tipos[o.seguimiento.tipo] === false) return undefined
       return segCfg.emails
     }
+    // Materializamos adjuntos remotos a bytes (una sola descarga por URL en todo
+    // el batch) para no depender de la descarga remota de Resend/SES.
+    const attCache = new Map<string, Promise<Buffer | null>>()
+    const attMaterializadas = await Promise.all(
+      validos.map(v => materializarAttachments(v.opts.attachments, attCache)),
+    )
     const payload = validos.map((v, i) => ({
       from: v.opts.from || getFromAddress(),
       to: v.toLimpio,
@@ -391,7 +456,7 @@ export async function sendBatch(emails: SendOpts[]): Promise<SendResult[]> {
       html: htmls[i],
       replyTo: v.opts.reply_to,
       tags: v.opts.tags,
-      attachments: buildAttachmentsPayload(v.opts.attachments),
+      attachments: buildAttachmentsPayload(attMaterializadas[i]),
     }))
     // Intento de batch con retry en caso de rate limit (3 intentos: 0, 2s, 5s)
     let res = await client.batch.send(payload)

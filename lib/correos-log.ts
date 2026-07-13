@@ -21,7 +21,7 @@ export const ESTADOS_PROBLEMA = ['rebotado', 'spam', 'fallido'] as const
 
 /** Rango de avance para no "degradar" el estado ante eventos fuera de orden. */
 const RANK: Record<string, number> = {
-  fallido: 1, enviado: 1, entregado: 2, abierto: 3, clic: 4, rebotado: 5, spam: 6,
+  enviado: 1, entregado: 2, abierto: 3, clic: 4, fallido: 5, rebotado: 5, spam: 6,
 }
 
 export interface CorreoClienteRow {

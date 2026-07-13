@@ -18,6 +18,10 @@ const CERT_COLS = [
   'fecha_creacion',
 ]
 
+// Descargamos el certificado (y a veces un video ~10MB) en el server antes de
+// enviarlos como bytes, así que damos margen de tiempo (Hobby: tope 60s).
+export const maxDuration = 60
+
 const FROM_DEFAULT = 'Crematorio Alma Animal <contacto@crematorioalmaanimal.cl>'
 
 const VIDEO_MIME: Record<string, string> = {

@@ -16,6 +16,7 @@ interface ResendEvent {
     tags?: Record<string, string> | Array<{ name: string; value: string }>
     click?: { link?: string; ipAddress?: string; timestamp?: string }
     bounce?: { message?: string; subType?: string }
+    failed?: { reason?: string }
   }
 }
 
@@ -34,8 +35,19 @@ function estadoTransaccional(tipo: string): string | null {
     case 'email.clicked': return 'clic'
     case 'email.bounced': return 'rebotado'
     case 'email.complained': return 'spam'
+    // El correo NO se pudo entregar (típicamente falla al descargar un adjunto
+    // remoto, o rechazo del proveedor). Antes no se mapeaba → la fila quedaba
+    // clavada en "enviado" y la falla era invisible en la ficha.
+    case 'email.failed': return 'fallido'
     default: return null
   }
+}
+
+/** Motivo legible para los eventos que lo traen (rebote / falla). */
+function motivoEvento(evt: ResendEvent): string {
+  if (evt.type === 'email.bounced') return evt.data.bounce?.message || evt.data.bounce?.subType || ''
+  if (evt.type === 'email.failed') return evt.data.failed?.reason || ''
+  return ''
 }
 
 export async function POST(req: NextRequest) {
@@ -113,8 +125,7 @@ export async function POST(req: NextRequest) {
       const estado = estadoTransaccional(evt.type)
       if (!estado) return NextResponse.json({ ok: true, ignored: true, type: evt.type })
       const ts = evt.created_at || new Date().toISOString()
-      const motivo = evt.type === 'email.bounced' ? (evt.data.bounce?.message || evt.data.bounce?.subType || '') : ''
-      const found = await aplicarEventoCorreo(messageId, estado, motivo, ts)
+      const found = await aplicarEventoCorreo(messageId, estado, motivoEvento(evt), ts)
       return NextResponse.json({ ok: true, transaccional: true, applied: found ? estado : null })
     }
 
@@ -152,8 +163,7 @@ export async function POST(req: NextRequest) {
       const estadoTx = estadoTransaccional(evt.type)
       if (estadoTx) {
         const ts = evt.created_at || new Date().toISOString()
-        const motivo = evt.type === 'email.bounced' ? (evt.data.bounce?.message || evt.data.bounce?.subType || '') : ''
-        const found = await aplicarEventoCorreo(messageId, estadoTx, motivo, ts)
+        const found = await aplicarEventoCorreo(messageId, estadoTx, motivoEvento(evt), ts)
         if (found) return NextResponse.json({ ok: true, transaccional: true, applied: estadoTx })
       }
       // Devolvemos 200 para que Resend no marque failed_attempts. Es esperado:
