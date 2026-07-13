@@ -2079,8 +2079,8 @@ textarea.w-input, textarea.w-select {
 :root {
   --font-color: #7f7f7f;
   --heading: #393939;
-  --link: #7666ca;
-  --navy: #183b65;
+  --link: #2A6DB0;
+  --navy: #143C64;
   --white: white;
   --yellow-bg: #fdf2d9;
   --blue-bg: #e8f7fe;
@@ -3825,8 +3825,8 @@ blockquote {
 .navlink:hover {
   color: var(--font-color);
   text-underline-position: under;
-  -webkit-text-decoration: underline #7666ca;
-  text-decoration: underline #7666ca;
+  -webkit-text-decoration: underline #2A6DB0;
+  text-decoration: underline #2A6DB0;
 }
 
 .navlink.w--current {
@@ -9430,7 +9430,7 @@ blockquote {
 }
 
 .lynx-icon-heading-2 {
-  color: #183b65;
+  color: #143C64;
   margin-top: 0;
   margin-bottom: 0;
   font-family: Open Sans, sans-serif;
@@ -9533,7 +9533,7 @@ blockquote {
 }
 
 .lynx-heading-3 {
-  color: #183b65;
+  color: #143C64;
   max-width: 740px;
   margin-top: 0;
   margin-bottom: 36px;
@@ -9564,7 +9564,7 @@ blockquote {
 }
 
 .cf-features-section-2-heading {
-  color: #183b65;
+  color: #143C64;
   text-align: center;
   max-width: 700px;
   margin-top: -33px;
@@ -9589,7 +9589,7 @@ blockquote {
 }
 
 .cf-service-heading {
-  color: #183b65;
+  color: #143C64;
   text-align: center;
   letter-spacing: -.16px;
   margin-bottom: 16px;
@@ -9600,7 +9600,7 @@ blockquote {
 }
 
 .cf-service-number {
-  color: #183b65;
+  color: #143C64;
   text-align: center;
   letter-spacing: -.16px;
   font-size: 26px;
@@ -9617,7 +9617,7 @@ blockquote {
 }
 
 .cf-service-paragraph {
-  color: #183b65;
+  color: #143C64;
   text-align: left;
   margin-top: 4px;
   margin-bottom: 0;
@@ -10321,7 +10321,7 @@ blockquote {
   width: 100%;
   max-width: 100%;
   transform-style: preserve-3d;
-  background-color: #183b65;
+  background-color: #143C64;
   border-radius: 48px;
   justify-content: center;
   padding: 20px 38px;
@@ -10339,7 +10339,7 @@ blockquote {
 }
 
 .brix---heading-h1-size-2 {
-  color: #183b65;
+  color: #143C64;
   margin-top: 0;
   margin-bottom: 16px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
@@ -10349,7 +10349,7 @@ blockquote {
 }
 
 .brix---text-300-medium-2 {
-  color: #183b65;
+  color: #143C64;
   padding-top: 0;
   padding-bottom: 10px;
   font-size: 20px;
@@ -10572,7 +10572,7 @@ blockquote {
 
 .button-flex-2 {
   opacity: 1;
-  color: #183b65;
+  color: #143C64;
   cursor: auto;
   background-color: #c7dcf8;
   border: 1px #000;
@@ -10644,7 +10644,7 @@ blockquote {
 
 .button-flex-3 {
   opacity: 1;
-  color: #183b65;
+  color: #143C64;
   cursor: auto;
   background-color: #c7dcf8;
   border: 1px #000;
@@ -10916,7 +10916,7 @@ blockquote {
 }
 
 .cvn-section-eyebrow {
-  color: #183b65;
+  color: #143C64;
   text-align: center;
   letter-spacing: .18em;
   text-transform: uppercase;
@@ -11036,7 +11036,7 @@ blockquote {
 
 .cvn-check {
   color: #fff;
-  background-color: #183b65;
+  background-color: #143C64;
   border-radius: 50%;
   flex-shrink: 0;
   justify-content: center;
@@ -11195,7 +11195,7 @@ blockquote {
 }
 
 .cv2-eyebrow {
-  color: #183b65;
+  color: #143C64;
   letter-spacing: .18em;
   text-transform: uppercase;
   margin-bottom: 18px;
@@ -11205,7 +11205,7 @@ blockquote {
 }
 
 .cv2-h1 {
-  color: #183b65;
+  color: #143C64;
   letter-spacing: -.01em;
   margin: 0 0 22px;
   font-family: Inter, system-ui, sans-serif;
@@ -11232,7 +11232,7 @@ blockquote {
 
 .cv2-btn-primary {
   color: #fff;
-  background-color: #183b65;
+  background-color: #143C64;
   border-radius: 8px;
   padding: 15px 28px;
   font-family: Inter, system-ui, sans-serif;
@@ -11244,9 +11244,9 @@ blockquote {
 }
 
 .cv2-btn-secondary {
-  color: #183b65;
+  color: #143C64;
   background-color: #0000;
-  border: 2px solid #183b65;
+  border: 2px solid #143C64;
   border-radius: 8px;
   padding: 13px 26px;
   font-family: Inter, system-ui, sans-serif;
@@ -11269,7 +11269,7 @@ blockquote {
 }
 
 .cv2-section-eyebrow {
-  color: #183b65;
+  color: #143C64;
   text-align: center;
   letter-spacing: .18em;
   text-transform: uppercase;
@@ -11280,7 +11280,7 @@ blockquote {
 }
 
 .cv2-h2 {
-  color: #183b65;
+  color: #143C64;
   text-align: center;
   letter-spacing: -.005em;
   max-width: 720px;
@@ -11311,22 +11311,22 @@ blockquote {
 
 .cv2-bcard {
   background-color: #fff;
-  border-top: 4px solid #183b65;
+  border-top: 4px solid #143C64;
   border-radius: 14px;
   padding: 32px 28px;
   transition: transform .2s;
-  box-shadow: 0 2px 16px #183b650f;
+  box-shadow: 0 2px 16px #143C640f;
 }
 
 .cv2-bicon {
-  color: #183b65;
+  color: #143C64;
   width: 44px;
   height: 44px;
   margin-bottom: 16px;
 }
 
 .cv2-bcard-title {
-  color: #183b65;
+  color: #143C64;
   margin: 0 0 10px;
   font-family: Inter, system-ui, sans-serif;
   font-size: 19px;
@@ -11357,7 +11357,7 @@ blockquote {
 }
 
 .cv2-step {
-  border: 1px solid #183b6514;
+  border: 1px solid #143C6414;
   border-radius: 14px;
   flex-direction: column;
   padding: 32px 26px;
@@ -11382,7 +11382,7 @@ blockquote {
 }
 
 .cv2-step-num {
-  color: #183b65;
+  color: #143C64;
   letter-spacing: -.02em;
   margin-bottom: 14px;
   font-family: Inter, system-ui, sans-serif;
@@ -11392,7 +11392,7 @@ blockquote {
 }
 
 .cv2-step-title {
-  color: #183b65;
+  color: #143C64;
   margin: 0 0 10px;
   font-family: Inter, system-ui, sans-serif;
   font-size: 18px;
@@ -11428,7 +11428,7 @@ blockquote {
   border-radius: 16px;
   width: 100%;
   min-height: 420px;
-  box-shadow: 0 12px 32px #183b6526;
+  box-shadow: 0 12px 32px #143C6426;
 }
 
 .cv-nav-conv2 {
@@ -11449,7 +11449,7 @@ blockquote {
   color: #fff;
   text-align: center;
   cursor: pointer;
-  background-color: #183b65;
+  background-color: #143C64;
   border-style: none;
   border-radius: 8px;
   width: 100%;
@@ -11499,7 +11499,7 @@ blockquote {
 }
 
 .cv-foot-brand-title {
-  color: #183b65;
+  color: #143C64;
   letter-spacing: -.01em;
   margin-bottom: 12px;
   font-size: 20px;
@@ -11534,7 +11534,7 @@ blockquote {
 }
 
 .cv-foot-h {
-  color: #183b65;
+  color: #143C64;
   letter-spacing: .08em;
   text-transform: uppercase;
   margin: 0 0 14px;
@@ -11554,7 +11554,7 @@ blockquote {
 }
 
 .cv-foot-cstrong {
-  color: #183b65;
+  color: #143C64;
   margin-bottom: 2px;
   font-size: 12.5px;
   font-weight: 600;
@@ -11631,7 +11631,7 @@ blockquote {
 
 .cv-pol-hero {
   color: #fff;
-  background-color: #183b65;
+  background-color: #143C64;
   margin-top: 0;
   padding: 98px 0 48px;
 }
@@ -11697,7 +11697,7 @@ blockquote {
 }
 
 .cv-pol-toc-title {
-  color: #183b65;
+  color: #143C64;
   letter-spacing: .08em;
   text-transform: uppercase;
   margin: 0 0 14px;
@@ -11762,7 +11762,7 @@ blockquote {
 }
 
 .cv-ct-eyebrow {
-  color: #183b65;
+  color: #143C64;
   letter-spacing: .04em;
   text-transform: uppercase;
   background-color: #eff6ff;
@@ -11775,7 +11775,7 @@ blockquote {
 }
 
 .cv-ct-h1 {
-  color: #183b65;
+  color: #143C64;
   letter-spacing: -.02em;
   margin: 0 0 14px;
   font-size: 42px;
@@ -11826,7 +11826,7 @@ blockquote {
 }
 
 .cv-ct-card-label {
-  color: #183b65;
+  color: #143C64;
   letter-spacing: .08em;
   text-transform: uppercase;
   font-size: 11px;
@@ -11856,7 +11856,7 @@ blockquote {
 }
 
 .cv-ct-form-title {
-  color: #183b65;
+  color: #143C64;
   margin: 0 0 6px;
   font-size: 22px;
   font-weight: 700;
@@ -11885,7 +11885,7 @@ blockquote {
 .cv-ct-submit, .cv-ct-submit._w-button {
   color: #fff;
   cursor: pointer;
-  background-color: #183b65;
+  background-color: #143C64;
   border-radius: 8px;
   margin-top: 4px;
   padding: 14px 22px;
@@ -11908,7 +11908,7 @@ blockquote {
 }
 
 .cv-ct-map-title {
-  color: #183b65;
+  color: #143C64;
   text-align: center;
   margin: 0 0 14px;
   font-size: 22px;
@@ -11946,7 +11946,7 @@ blockquote {
   grid-column-gap: 14px;
   grid-row-gap: 14px;
   text-align: center;
-  background-image: url("/sitio/assets/6a1f563ad4a050fcae731a77_Mapa.jpg"), linear-gradient(#ffffff1a, #183b6514);
+  background-image: url("/sitio/assets/6a1f563ad4a050fcae731a77_Mapa.jpg"), linear-gradient(#ffffff1a, #143C6414);
   background-position: 50%, 0 0;
   background-repeat: no-repeat, repeat;
   background-size: cover, auto;
@@ -11961,14 +11961,14 @@ blockquote {
 }
 
 .cv-ct-map-pin {
-  background-color: #183b65;
+  background-color: #143C64;
   border-radius: 50%;
   justify-content: center;
   align-items: center;
   width: 64px;
   height: 64px;
   display: flex;
-  box-shadow: 0 8px 24px #183b6540;
+  box-shadow: 0 8px 24px #143C6440;
 }
 
 .cv-ct-map-info {
@@ -11980,11 +11980,11 @@ blockquote {
   flex-direction: column;
   padding: 14px 22px;
   display: flex;
-  box-shadow: 0 4px 16px #183b6514;
+  box-shadow: 0 4px 16px #143C6414;
 }
 
 .cv-ct-map-addr {
-  color: #183b65;
+  color: #143C64;
   font-family: Inter, sans-serif;
   font-size: 16px;
   font-weight: 700;
@@ -11997,7 +11997,7 @@ blockquote {
 }
 
 .cv-ct-map-cta {
-  color: #183b65;
+  color: #143C64;
   margin-top: 6px;
   font-family: Inter, sans-serif;
   font-size: 13px;
@@ -12011,7 +12011,7 @@ blockquote {
 .cv-foot-social {
   grid-column-gap: 8px;
   grid-row-gap: 8px;
-  color: #183b65;
+  color: #143C64;
   background-color: #fff;
   border: 1px solid #d0e0f3;
   border-radius: 999px;
@@ -12052,11 +12052,11 @@ blockquote {
   transition: transform .2s, box-shadow .2s;
   display: flex;
   overflow: hidden;
-  box-shadow: 0 4px 12px #183b650d;
+  box-shadow: 0 4px 12px #143C640d;
 }
 
 .cv-anf-name {
-  color: #183b65;
+  color: #143C64;
   text-align: center;
   margin: 0;
   padding: 18px 16px 4px;
@@ -12087,7 +12087,7 @@ blockquote {
 }
 
 .cv-anf-price {
-  color: #183b65;
+  color: #143C64;
   text-align: center;
   background-color: #0000;
   border-radius: 0;
@@ -12146,7 +12146,7 @@ blockquote {
 
 .cvp-btn-navy {
   color: #fff;
-  background-color: #183b65;
+  background-color: #143C64;
   border-radius: 100px;
   padding: 13px 24px;
   font-size: 15px;
@@ -12167,9 +12167,9 @@ blockquote {
 }
 
 .cvp-btn-ghost {
-  color: #183b65;
+  color: #143C64;
   background-color: #0000;
-  border: 1.5px solid #183b65;
+  border: 1.5px solid #143C64;
   border-radius: 100px;
   padding: 13px 24px;
   font-size: 15px;
@@ -12205,7 +12205,7 @@ blockquote {
 }
 
 .cvp-h1 {
-  color: #183b65;
+  color: #143C64;
   font-family: Lora, serif;
   font-size: 46px;
   font-weight: 600;
@@ -12237,7 +12237,7 @@ blockquote {
 }
 
 .cvp-pl-b {
-  color: #183b65;
+  color: #143C64;
   font-family: Lora, serif;
   font-size: 26px;
   font-weight: 600;
@@ -12285,7 +12285,7 @@ blockquote {
 }
 
 .cvp-eyebrow {
-  color: #183b65;
+  color: #143C64;
   letter-spacing: 2.5px;
   text-transform: uppercase;
   margin-bottom: 12px;
@@ -12295,7 +12295,7 @@ blockquote {
 }
 
 .cvp-h2 {
-  color: #183b65;
+  color: #143C64;
   font-family: Lora, serif;
   font-size: 32px;
   font-weight: 600;
@@ -12323,7 +12323,7 @@ blockquote {
   border: 1px solid #e6e6e6;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 10px 30px #183b6512;
+  box-shadow: 0 10px 30px #143C6412;
 }
 
 .cvp-table {
@@ -12336,7 +12336,7 @@ blockquote {
   text-align: left;
   letter-spacing: .4px;
   text-transform: uppercase;
-  background-color: #183b65;
+  background-color: #143C64;
   padding: 14px 24px;
   font-size: 12.5px;
   font-weight: 600;
@@ -12347,7 +12347,7 @@ blockquote {
   text-align: right;
   letter-spacing: .4px;
   text-transform: uppercase;
-  background-color: #183b65;
+  background-color: #143C64;
   padding: 14px 24px;
   font-size: 12.5px;
   font-weight: 600;
@@ -12361,7 +12361,7 @@ blockquote {
 }
 
 .cvp-td-price {
-  color: #183b65;
+  color: #143C64;
   text-align: right;
   border-bottom: 1px solid #eef1f4;
   padding: 14px 24px;
@@ -12370,7 +12370,7 @@ blockquote {
 }
 
 .cvp-pside-h3 {
-  color: #183b65;
+  color: #143C64;
   font-family: Lora, serif;
   font-size: 24px;
   font-weight: 600;
@@ -12421,14 +12421,14 @@ blockquote {
 
 .cvp-cmp-feat {
   background-color: #fff;
-  border: 2px solid #183b65;
+  border: 2px solid #143C64;
   border-radius: 18px;
   padding: 28px 24px;
-  box-shadow: 0 12px 30px #183b651a;
+  box-shadow: 0 12px 30px #143C641a;
 }
 
 .cvp-cmp-h3 {
-  color: #183b65;
+  color: #143C64;
   font-family: Lora, serif;
   font-size: 21px;
   font-weight: 600;
@@ -12454,7 +12454,7 @@ blockquote {
 }
 
 .cvp-cmp-val {
-  color: #183b65;
+  color: #143C64;
   margin-bottom: 16px;
   font-family: Lora, serif;
   font-size: 24px;
@@ -12466,7 +12466,7 @@ blockquote {
   color: #fff;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  background-color: #183b65;
+  background-color: #143C64;
   border-radius: 100px;
   margin-bottom: 12px;
   padding: 4px 12px;
@@ -12477,7 +12477,7 @@ blockquote {
 
 .cvp-ctafinal {
   text-align: center;
-  background-color: #183b65;
+  background-color: #143C64;
   padding-top: 64px;
   padding-bottom: 64px;
 }
@@ -17240,3 +17240,41 @@ blockquote {
     order: 9999;
   }
 }
+
+
+/* ============================================================
+   ALMA ANIMAL — Overrides de marca corporativa (2026-07-12)
+   Paleta: Navy #143C64 · Dorado #F2B84B · Crema #FBF8F3 · Enlace #2A6DB0
+   (pedido del dueño: franja superior + navbar con colores/tipografía
+   corporativos y unificar el look de convenios con el resto del sitio)
+   ============================================================ */
+
+/* Franja de avisos superior: dorado con texto navy */
+.section-2 { background-color: #F2B84B; }
+.mask-2 { background-color: #F2B84B; }
+.div-block-15 { color: #143C64; font-weight: 600; letter-spacing: .01em; }
+
+/* Navbar: navy corporativo (como el sidebar de la app) */
+.navigation { background-color: #143C64; background-image: linear-gradient(180deg, #16406B, #12365A); }
+.navbar.w-nav { background-color: #143C64; background-image: linear-gradient(180deg, #16406B, #12365A); }
+.navlink, .navlink .text-block-16, .navlink .navbar-element { color: #FBF8F3; font-weight: 600; letter-spacing: .01em; }
+.navlink:hover, .navlink:hover .text-block-16, .navlink:hover .navbar-element { color: #F2B84B; }
+.navlink.w--current, .navlink.w--current .text-block-16, .navlink.w--current .navbar-element { color: #F2B84B; }
+.menu-button { color: #FBF8F3; }
+.menu-button.w--open { color: #F2B84B; background-color: transparent; }
+.w-nav-overlay .nav-menu, .nav-menu[data-nav-menu-open] { background-color: #143C64; }
+
+/* Ícono de la huella (imagen con fondo blanco): redondear sobre el navy */
+.brand .image-16 { border-radius: 10px; }
+
+/* Botón Agenda aquí: dorado con texto navy */
+.wa-button { background-color: #F2B84B; color: #143C64; font-weight: 700; }
+.wa-button:hover { background-color: #E0A73F; color: #143C64; }
+
+/* Convenios: alinear con la paleta (antes verde menta + botón verde) */
+.cv2-benefits { background-color: #FBF8F3; }
+.cv2-bcard { border-top-color: #F2B84B; }
+.cv2-bicon { color: #F2B84B; }
+.cvn-final-cta { background-color: #143C64; }
+.cvn-cta-wa { background-color: #F2B84B; color: #143C64; }
+.cvn-cta-wa:hover { background-color: #E0A73F; }
