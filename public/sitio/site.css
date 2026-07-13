@@ -17298,3 +17298,14 @@ blockquote {
 .aa-serv-fotos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin: 26px 0 10px; }
 .aa-serv-fotos img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 16px; border: 1px solid #e3ddd2; box-shadow: 0 4px 14px rgba(20,60,100,.08); background: #fff; }
 @media (max-width: 560px) { .aa-serv-fotos { grid-template-columns: 1fr 1fr; gap: 12px; } }
+
+/* Nav con 7 secciones: compactar entre 992 y 1439px para que quepa en una fila */
+@media (min-width: 992px) and (max-width: 1439px) {
+  .navlink { margin-right: 9px; font-size: 13.5px; }
+  .wa-button { min-width: 140px; padding-left: 32px; padding-right: 14px; }
+}
+
+@media (min-width: 992px) and (max-width: 1099px) {
+  .navlink { margin-right: 5px; font-size: 12.5px; }
+  .wa-button { min-width: 118px; background-size: 14px; padding-left: 28px; }
+}

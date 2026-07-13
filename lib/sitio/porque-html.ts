@@ -103,6 +103,22 @@ function faqs(d: DatosPrecios): { q: string; a: string }[] {
       q: '¿El crematorio cuenta con autorización sanitaria?',
       a: 'Sí. Operamos con autorización sanitaria y patente comercial al día, en instalaciones propias en Recoleta, con hornos certificados bajo normativa ISO que funcionan sin emisiones contaminantes y un equipo técnicamente capacitado en cada etapa del proceso.',
     },
+    {
+      q: '¿Qué incluye el servicio de cremación individual?',
+      a: 'Incluye el retiro de tu mascota en domicilio o clínica, la cremación completamente individual, un ánfora estándar con sus cenizas, una placa de madera grabada con su nombre, una botella de vidrio con un mechón de pelo, una tarjeta con su huella estampada, el video de ingreso y el certificado de cremación con firma digital.',
+    },
+    {
+      q: '¿Puedo elegir el ánfora?',
+      a: 'Sí. El servicio incluye un ánfora estándar sin costo adicional, y si quieres algo distinto puedes elegir otro modelo de nuestro catálogo de ánforas y relicarios por un valor extra.',
+    },
+    {
+      q: '¿El retiro a domicilio tiene costo?',
+      a: 'Realizamos retiros y entregas a domicilio en toda la Región Metropolitana. El servicio es gratuito dentro de un radio determinado; fuera de esa zona puede tener un costo adicional que te informamos antes de agendar.',
+    },
+    {
+      q: '¿Qué debo hacer si mi mascota ya falleció?',
+      a: 'Coloca a tu mascota en una superficie limpia y fresca, cúbrela con una manta o toalla y evita las fuentes de calor. Luego contáctanos por WhatsApp para coordinar el retiro: nos encargamos de todo el proceso de forma responsable y con cariño.',
+    },
   ]
 }
 
@@ -179,7 +195,7 @@ export function renderPorqueElegirnos(d: DatosPrecios): string {
     + '<h2>¿Por qué elegir Alma Animal para la cremación de tu mascota en Santiago?</h2>'
     + '<p class="aa-porque-sub">Somos un crematorio de mascotas en Recoleta con cobertura en toda la Región Metropolitana. Cremación de perros, gatos y otras mascotas con trazabilidad total, certificado con firma digital y entrega de cenizas en 3 días hábiles.</p>'
     + `<div class="aa-porque-grid">${cards}</div>`
-    + '<div class="aa-faq">'
+    + '<div class="aa-faq" id="preguntas-frecuentes">'
     + '<h2>Preguntas frecuentes sobre cremación de mascotas</h2>'
     + faqHtml
     + '</div></div></section>'

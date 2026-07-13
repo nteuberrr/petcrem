@@ -39,7 +39,10 @@ async function datosPrecios(): Promise<DatosPrecios> {
 // /nosotros…) no navegan. Acá los prefijamos con /sitio para poder recorrer todo.
 // En el dominio real quedan tal cual (el proxy hace el rewrite).
 function prefijarLinksSitio(html: string): string {
-  return html.replace(RUTAS_PUB_RE, 'href="/sitio/$1$2').replace(/href="\/"/g, 'href="/sitio"')
+  return html.replace(RUTAS_PUB_RE, 'href="/sitio/$1$2')
+    .replace(/href="\/"/g, 'href="/sitio"')
+    // anclas al home (menú "Por qué elegirnos" / "Preguntas frecuentes")
+    .replace(/href="\/#/g, 'href="/sitio#')
 }
 
 /**
