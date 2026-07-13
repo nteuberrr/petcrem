@@ -17309,3 +17309,6 @@ blockquote {
   .navlink { margin-right: 5px; font-size: 12.5px; }
   .wa-button { min-width: 118px; background-size: 14px; padding-left: 28px; }
 }
+
+/* Detalle de servicio: la card de precio NO queda pegada al scrollear */
+.work-overview { position: static; }
