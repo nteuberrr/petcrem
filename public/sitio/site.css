@@ -17282,3 +17282,16 @@ blockquote {
 /* Blog: la columna original era 71% (tenía sidebar); la grilla de cards ocupa todo el ancho, centrada */
 .flex.blogg { justify-content: center; }
 .flex.blogg .blog-left { width: 100%; margin-right: 0; }
+
+/* Detalle de servicio: upgrade visual (rango en card, galería, texto legible) */
+.side-block { background: #fff; border: 1px solid #e3ddd2; border-radius: 18px; box-shadow: 0 4px 18px rgba(20,60,100,.08); padding: 24px 26px; }
+.side-title { color: #98a3ad; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.side-block .text-gray { color: #143C64; font-size: 26px; font-weight: 800; line-height: 1.2; margin-top: 6px; }
+.side-block .subtitulo { color: #5b6b7a; font-size: 13px; margin-top: 6px; }
+.heading-5 { color: #143C64; }
+.subtitle { color: #5b6b7a; font-size: 17px; line-height: 1.65; }
+.w-richtext p { color: #4a5a68; font-size: 15.5px; line-height: 1.8; }
+.w-richtext strong { color: #143C64; }
+.aa-serv-fotos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin: 26px 0 10px; }
+.aa-serv-fotos img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 16px; border: 1px solid #e3ddd2; box-shadow: 0 4px 14px rgba(20,60,100,.08); background: #fff; }
+@media (max-width: 560px) { .aa-serv-fotos { grid-template-columns: 1fr 1fr; gap: 12px; } }

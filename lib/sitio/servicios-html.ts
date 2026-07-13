@@ -20,14 +20,22 @@ export function serviciosPublicados(servicios: Serv[]): Serv[] {
     .sort((a, b) => (parseInt(a.orden || '0', 10) || 0) - (parseInt(b.orden || '0', 10) || 0))
 }
 
-function tarjeta(s: Serv): string {
+function tarjeta(s: Serv, desde?: number): string {
   const url = `/servicios/${escUrl(s.slug)}`
   const img = s.foto_url ? escUrl(s.foto_url) : FALLBACK_IMG
+  // "Desde $X" vivo (precios_generales / eutanasia); si no hay dato calculado,
+  // cae al campo manual precio_desde del panel Web. Clave para las landings SEO.
+  const desdeManual = parseFloat(String(s.precio_desde || '').replace(/[^\d]/g, '')) || 0
+  const monto = desde || desdeManual
+  const chip = monto > 0
+    ? `<div class="aa-serv-desde">Desde <b>$${Math.round(monto).toLocaleString('es-CL')}</b></div>`
+    : ''
   return `<a href="${url}" class="aa-serv-card">`
     + `<img src="${esc(img)}" loading="lazy" alt="${esc(s.nombre)}"/>`
     + '<div class="aa-serv-body">'
     + `<div class="aa-serv-title">${esc(s.nombre)}</div>`
     + `<p class="aa-serv-exc">${esc(s.resumen)}</p>`
+    + chip
     + '<span class="aa-serv-btn">Ver servicio</span>'
     + '</div></a>'
 }
@@ -40,7 +48,7 @@ function tarjeta(s: Serv): string {
  * 2026-07-12 "se sigue viendo mal"). Tipografía HEREDADA de la página; paleta
  * de marca. 1 columna en móvil, 2 en tablet, 4 en escritorio ancho.
  */
-export function renderServiciosWeb(servicios: Serv[]): string {
+export function renderServiciosWeb(servicios: Serv[], desdePorSlug: Record<string, number> = {}): string {
   const pub = serviciosPublicados(servicios)
   if (pub.length === 0) return ''
   const css = '<style>'
@@ -51,11 +59,13 @@ export function renderServiciosWeb(servicios: Serv[]): string {
     + '.aa-serv-body{display:flex;flex-direction:column;gap:10px;padding:20px 22px 22px;flex:1}'
     + '.aa-serv-title{color:#143C64;font-size:20px;font-weight:700;line-height:1.3}'
     + '.aa-serv-exc{color:#5b6b7a;font-size:14.5px;line-height:1.55;margin:0;flex:1}'
+    + '.aa-serv-desde{color:#5b6b7a;font-size:13.5px}'
+    + '.aa-serv-desde b{color:#143C64;font-size:19px;font-weight:800;margin-left:2px}'
     + '.aa-serv-btn{display:inline-block;align-self:flex-start;background:#143C64;color:#fff;font-size:14px;font-weight:600;border-radius:999px;padding:9px 22px;transition:background .15s ease}'
     + '.aa-serv-card:hover .aa-serv-btn{background:#0e2c4b}'
     + '@media (max-width:560px){.aa-serv-grid{grid-template-columns:1fr;gap:18px}.aa-serv-card>img{height:220px}}'
     + '</style>'
-  return css + `<div class="aa-serv-grid">${pub.map(tarjeta).join('')}</div>`
+  return css + `<div class="aa-serv-grid">${pub.map(s => tarjeta(s, desdePorSlug[s.slug])).join('')}</div>`
 }
 
 /**

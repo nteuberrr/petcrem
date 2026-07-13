@@ -4,6 +4,8 @@ import { getSheetData } from '@/lib/datastore'
 import { renderProductosWeb } from '@/lib/sitio/productos-html'
 import { renderConveniosDescuento } from '@/lib/sitio/convenios-html'
 import { renderServiciosWeb, renderServicioSeo } from '@/lib/sitio/servicios-html'
+import { renderPreciosServicio, desdePorSlug, type DatosPrecios } from '@/lib/sitio/precios-html'
+import { getFijoEutanasia } from '@/lib/eutanasia-precios'
 import { renderPostsWeb, renderPostDetalle, buscarPost } from '@/lib/sitio/blog-html'
 import { renderTextos } from '@/lib/sitio/paginas-html'
 import { LANDINGS, renderLanding } from '@/lib/sitio/landings'
@@ -19,6 +21,17 @@ function esDominioMarketing(host: string): boolean {
 }
 
 const RUTAS_PUB_RE = /href="\/(servicios|nosotros|convenios|contacto|anforas|catalogo-anforas|blog|terminos-y-condiciones|politicas-de-privacidad|cremacion-de-mascotas|cremacion-de-perros|cremacion-de-gatos|eutanasia-a-domicilio)(["/#?])/g
+
+// Precios VIVOS para /servicios y sus detalles (cremación + eutanasia): se leen
+// en cada render, así un cambio en Configuración → Precios se refleja en la web.
+async function datosPrecios(): Promise<DatosPrecios> {
+  const [tramosGen, tramosEut, fijoEut] = await Promise.all([
+    getSheetData('precios_generales').catch(() => []),
+    getSheetData('precios_eutanasia').catch(() => []),
+    getFijoEutanasia().catch(() => 0),
+  ])
+  return { tramosGen, tramosEut, fijoEut }
+}
 
 // Versión de prueba (host != dominio oficial): el sitio vive bajo /sitio/* y el
 // proxy NO reescribe el dominio, así que los enlaces internos absolutos (/servicios,
@@ -84,9 +97,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   // Título/meta reales del servicio (el CMS ya los tiene cargados en web_servicios;
   // la plantilla estática solo trae un <title>Alma Animal</title> genérico).
   if (servicioSlug) {
-    const servicios = await getSheetData('web_servicios').catch(() => [])
+    const [servicios, precios] = await Promise.all([
+      getSheetData('web_servicios').catch(() => []),
+      datosPrecios(),
+    ])
     const servicio = servicios.find(s => s.slug === servicioSlug)
     html = renderServicioSeo(html, servicio, servicioSlug)
+    html = renderPreciosServicio(html, servicioSlug, precios)
   }
 
   // Inyección de contenido dinámico según la página.
@@ -99,8 +116,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     html = html.replace('<!--INJECT:convenios-descuento-->', renderConveniosDescuento(descuentos))
   }
   if (tpl === 'servicios' && html.includes('<!--INJECT:servicios-->')) {
-    const servicios = await getSheetData('web_servicios').catch(() => [])
-    html = html.replace('<!--INJECT:servicios-->', renderServiciosWeb(servicios))
+    const [servicios, precios] = await Promise.all([
+      getSheetData('web_servicios').catch(() => []),
+      datosPrecios(),
+    ])
+    html = html.replace('<!--INJECT:servicios-->', renderServiciosWeb(servicios, desdePorSlug(precios)))
   }
   if (tpl === 'blog' && html.includes('<!--INJECT:posts-->')) {
     const posts = await getSheetData('web_posts').catch(() => [])
