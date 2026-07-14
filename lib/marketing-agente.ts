@@ -33,6 +33,8 @@ import {
   GUIA_GADS_TERMINOS, GUIA_GADS_QS, NEGATIVAS_UNIVERSALES_ES_CL,
 } from './google-ads-guia'
 import { lintRSA, lintCallout, type HeadlineRsa } from './google-ads-rsa-lint'
+import { registrarDecision, listarDecisiones, formatearDecisiones } from './marketing-decisiones'
+import { reporteRentabilidadTexto, type PeriodoRentabilidad } from './marketing-rentabilidad'
 
 /**
  * AGENTE DE MARKETING / CEO del Crematorio Alma Animal. Un solo agente Claude con
@@ -116,6 +118,14 @@ REGLAS DURAS
 - Nada se publica ni se cambia el perfil por iniciativa propia. Vos PROPONÉS y GENERÁS; PUBLICAR (publicar_pieza) y EDITAR EL PERFIL de Facebook (actualizar_perfil_facebook) son acciones que ejecutás SOLO cuando el dueño te lo pide EXPLÍCITAMENTE. Publicar es público e irreversible: si hay ambigüedad, confirmá antes.
 - NUNCA inventes pantallas, menús, secciones, URLs ni pasos de la app que no existan (por ejemplo "Configuración → Integraciones → Facebook" NO existe). Si una herramienta falla por configuración, reportá EXACTAMENTE el motivo que te dio la herramienta, sin fabricar un flujo de resolución ni instrucciones de UI inventadas.
 
+PRINCIPIO DE RENTABILIDAD (tu norte al reportar y decidir)
+- El objetivo del marketing NO son los clics: es el RESULTADO ECONÓMICO. Distinguí siempre la cadena: tráfico → leads (consultas/conversaciones nuevas) → fichas (ventas reales) → ingresos → margen. Clics, CTR, CPC, alcance y las "conversiones" que registra la plataforma son DIAGNÓSTICO, nunca el veredicto.
+- NUNCA declares exitosa una campaña solo por CTR alto, CPC bajo, muchos clics o conversiones de plataforma. El veredicto sale de los números REALES del negocio: usá "reporte_rentabilidad" (cruza el gasto real de Google+Meta contra los leads del inbox y las fichas/ingresos reales del sistema, y los compara con los objetivos configurados).
+- Cuando reportes "cómo van los anuncios", acompañá las métricas de plataforma con la mirada de negocio (reporte_rentabilidad); si no la tenés, decí EXPLÍCITO que la conclusión es provisional hasta cruzar con ventas.
+- Antes de recomendar ESCALAR presupuesto, verificá: rentabilidad real dentro del objetivo, rendimiento estable ≥2 semanas, y capacidad operacional (¿el equipo llega con más retiros?). Subidas graduales (20-30% por vez) y después 14 días sin tocar la campaña.
+- Diferenciá siempre HECHO medido de hipótesis/estimación, y decilo. La atribución del reporte es blended (aproximada): nunca la presentes como atribución exacta por campaña.
+- Antes de atribuir una mejora o caída a una causa, mirá "consultar_bitacora" (qué cambió en el período) y considerá estacionalidad y demoras de conversión.
+
 CADENCIA RECOMENDADA (para no saturar; ajustable por el equipo en las instrucciones)
 - Email a la base de veterinarios (B2B): máximo 1–2 por mes. Es lo más sensible (saturar genera bajas y rebotes).
 - Instagram: 2–4 posts por semana. Facebook: 1–2 por semana. Mezcla formatos (carrusel educativo, post simple, recordación).
@@ -150,7 +160,7 @@ FLUJO Y HERRAMIENTAS
    - EDITAR una foto existente (cambiar un detalle SIN rehacerla) → "generar_imagen" con editar:true + la referencia (referencia_url del banco, o usar_adjunto:true si la adjuntó el dueño) y en el prompt SOLO el cambio.
    - Si el dueño adjunta una imagen, la VES en su mensaje (podés comentarla y trabajarla).
 4. PUBLICAR / PERFIL (SOLO si lo piden explícito): "publicar_pieza" (IG requiere imagen; el email no se publica acá). Perfil de FACEBOOK: "actualizar_perfil_facebook" (antes "auditar_perfil" y mostrá qué vas a cambiar). El perfil de INSTAGRAM no se edita por API: entregá los textos para pegar a mano.
-5. AUDITAR / REPORTAR: "auditar_perfil" para revisar el estado de FB/IG y recomendar mejoras concretas (bio, datos, destacados, portada, primeras piezas). "reporte_metricas" para números REALES de Meta (Ads + orgánico) con 2-3 recomendaciones accionables; nunca inventes métricas.
+5. AUDITAR / REPORTAR: "auditar_perfil" para revisar el estado de FB/IG y recomendar mejoras concretas (bio, datos, destacados, portada, primeras piezas). "reporte_metricas" para números REALES de Meta (Ads + orgánico) con 2-3 recomendaciones accionables; nunca inventes métricas. "reporte_rentabilidad" para el VEREDICTO de negocio (gasto real vs leads/fichas/ingresos del sistema — es lo que manda sobre cualquier métrica de plataforma). "consultar_bitacora" para ver qué cambios se ejecutaron (con motivo y quién aprobó) antes de atribuir causas o cuando pregunten "qué hiciste/qué cambiamos".
 
 FORMATO DE RESPUESTA (legible y al grano — tus mensajes se muestran con formato, no en crudo)
 - Escribí CONCISO y escaneable. Frases cortas, una idea por bloque. Nada de muros de texto.
@@ -510,6 +520,29 @@ const TOOL_METRICAS: Anthropic.Tool = {
   },
 }
 
+const TOOL_RENTABILIDAD: Anthropic.Tool = {
+  name: 'reporte_rentabilidad',
+  description: 'LA MÉTRICA QUE MANDA: cruza el gasto REAL en ads (Google + Meta) contra los resultados del PROPIO SISTEMA — leads (conversaciones nuevas de tutores en el inbox), fichas nuevas e ingresos reales — y calcula CPA, CPL, ROAS, ticket promedio y tasa de cierre REALES del período, comparados con los objetivos configurados. Úsala SIEMPRE que el dueño pregunte si el marketing funciona / es rentable / cómo venimos, y como veredicto de cualquier reporte (las métricas de plataforma solas no alcanzan). Es de lectura, sin confirmación. La atribución es blended (aproximada): decláralo al reportar.',
+  input_schema: {
+    type: 'object',
+    properties: { periodo: { type: 'string', enum: ['last_7d', 'last_14d', 'last_30d', 'this_month', 'last_month'], description: 'Default last_30d.' } },
+    required: [],
+  },
+}
+
+const TOOL_BITACORA: Anthropic.Tool = {
+  name: 'consultar_bitacora',
+  description: 'Lee la BITÁCORA de decisiones: los cambios que ejecutaste con aprobación del dueño (pausas, presupuestos, negativas, RSAs, campañas nuevas, publicaciones, perfil) con fecha, detalle, motivo y quién aprobó. Úsala ANTES de atribuir una mejora o caída a una causa (¿qué cambió en el período?), cuando el dueño pregunte "qué hiciste / qué cambiamos", y como parte de toda auditoría. Es de lectura.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      dias: { type: 'number', description: 'Cuántos días hacia atrás (default 30, máx 365).' },
+      area: { type: 'string', enum: ['google_ads', 'meta', 'contenido'], description: 'Filtrar por área (opcional).' },
+    },
+    required: [],
+  },
+}
+
 // ─── Google Ads (Fase A del plan de agente Google Ads) ─────────────────────────
 // REGLA DURA: toda tool de ESCRITURA exige el parámetro confirmado=true. El agente
 // debe resumir la acción exacta (qué campaña/keyword/monto) y esperar un sí explícito
@@ -566,6 +599,7 @@ const TOOL_GADS_PAUSAR_CAMPANA: Anthropic.Tool = {
     type: 'object',
     properties: {
       campaignId: { type: 'string', description: 'Id numérico de la campaña (de gads_resumen).' },
+      motivo: { type: 'string', description: 'Por qué se hace este cambio (1 frase; queda en la bitácora de decisiones).' },
       confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
     },
     required: ['campaignId'],
@@ -578,6 +612,7 @@ const TOOL_GADS_ACTIVAR_CAMPANA: Anthropic.Tool = {
     type: 'object',
     properties: {
       campaignId: { type: 'string', description: 'Id numérico de la campaña.' },
+      motivo: { type: 'string', description: 'Por qué se hace este cambio (1 frase; queda en la bitácora de decisiones).' },
       confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
     },
     required: ['campaignId'],
@@ -591,6 +626,7 @@ const TOOL_GADS_PRESUPUESTO: Anthropic.Tool = {
     properties: {
       campaignId: { type: 'string', description: 'Id numérico de la campaña.' },
       montoClp: { type: 'number', description: 'Nuevo presupuesto diario en pesos chilenos.' },
+      motivo: { type: 'string', description: 'Por qué se hace este cambio (1 frase; queda en la bitácora de decisiones).' },
       confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
     },
     required: ['campaignId', 'montoClp'],
@@ -604,6 +640,7 @@ const TOOL_GADS_KEYWORD_ESTADO: Anthropic.Tool = {
     properties: {
       resourceName: { type: 'string', description: 'resourceName exacto de la keyword (viene de gads_keywords).' },
       estado: { type: 'string', enum: ['pausar', 'activar'] },
+      motivo: { type: 'string', description: 'Por qué se hace este cambio (1 frase; queda en la bitácora de decisiones).' },
       confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
     },
     required: ['resourceName', 'estado'],
@@ -618,6 +655,7 @@ const TOOL_GADS_NEGATIVA: Anthropic.Tool = {
       campaignId: { type: 'string', description: 'Id numérico de la campaña (de gads_terminos).' },
       texto: { type: 'string', description: 'Término a negativar.' },
       matchType: { type: 'string', enum: ['EXACT', 'PHRASE', 'BROAD'], description: 'Default PHRASE.' },
+      motivo: { type: 'string', description: 'Por qué se negativa (1 frase; queda en la bitácora de decisiones).' },
       confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
     },
     required: ['campaignId', 'texto'],
@@ -642,6 +680,7 @@ const TOOL_GADS_NEGATIVAS_LOTE: Anthropic.Tool = {
           required: ['campaignId', 'texto'],
         },
       },
+      motivo: { type: 'string', description: 'Por qué se negativa este lote (1 frase; queda en la bitácora de decisiones).' },
       confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño aprobó explícitamente el lote completo en el chat.' },
     },
     required: ['items'],
@@ -659,6 +698,7 @@ const TOOL_GADS_CREAR_LISTA_NEGATIVAS: Anthropic.Tool = {
     type: 'object',
     properties: {
       nombre: { type: 'string', description: 'Nombre de la lista (sugerido: "Negativas universales ES-CL"). Opcional, tiene default.' },
+      motivo: { type: 'string', description: 'Por qué se crea (1 frase; queda en la bitácora de decisiones).' },
       confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat, entendiendo que aplica a TODAS las campañas.' },
     },
     required: [],
@@ -671,6 +711,7 @@ const TOOL_GADS_ELIMINAR_LISTA_NEGATIVAS: Anthropic.Tool = {
     type: 'object',
     properties: {
       resourceName: { type: 'string', description: 'resourceName exacto de la lista (de gads_listas_negativas).' },
+      motivo: { type: 'string', description: 'Por qué se elimina (1 frase; queda en la bitácora de decisiones).' },
       confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
     },
     required: ['resourceName'],
@@ -698,6 +739,7 @@ const TOOL_GADS_CREAR_RSA: Anthropic.Tool = {
       finalUrl: { type: 'string', description: 'URL final — debe coincidir con la del resto de anuncios del mismo grupo (modelo SKAG, ver gads_anuncios).' },
       path1: { type: 'string', description: 'Display URL path1, opcional, ≤15 chars.' },
       path2: { type: 'string', description: 'Display URL path2, opcional, ≤15 chars.' },
+      motivo: { type: 'string', description: 'Por qué se crea este RSA (1 frase; queda en la bitácora de decisiones).' },
       confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente el copy completo en el chat.' },
     },
     required: ['grupoAnuncioId', 'headlines', 'descriptions', 'finalUrl'],
@@ -711,6 +753,7 @@ const TOOL_GADS_AGREGAR_CALLOUTS: Anthropic.Tool = {
     properties: {
       campaignId: { type: 'string', description: 'Id numérico de la campaña.' },
       textos: { type: 'array', items: { type: 'string' }, description: 'Callouts propuestos, cada uno ≤25 caracteres.' },
+      motivo: { type: 'string', description: 'Por qué se agregan (1 frase; queda en la bitácora de decisiones).' },
       confirmado: { type: 'boolean', description: 'true SOLO después de que el dueño confirmó explícitamente en el chat.' },
     },
     required: ['campaignId', 'textos'],
@@ -735,6 +778,7 @@ const TOOL_GADS_CREAR_CAMPANA: Anthropic.Tool = {
       path1: { type: 'string', description: 'Display URL path1, opcional, ≤15 chars.' },
       path2: { type: 'string', description: 'Display URL path2, opcional, ≤15 chars.' },
       geoTemplateCampaignId: { type: 'string', description: 'Id de la campaña de la que copiar la cobertura geográfica (opcional; por defecto la de mayor gasto).' },
+      motivo: { type: 'string', description: 'Por qué se crea esta campaña (1 frase; queda en la bitácora de decisiones).' },
       confirmado: { type: 'boolean', description: 'true SOLO después de mostrarle al dueño el resumen COMPLETO (incluyendo los 15 titulares y 4 descripciones) y recibir el sí explícito.' },
     },
     required: ['nombreCampana', 'presupuestoClpDiario', 'keyword', 'finalUrl', 'headlines', 'descriptions'],
@@ -853,7 +897,7 @@ export async function generarRespuestaMarketing(
   if (isGoogleAdsConfigurado()) {
     system.push({
       type: 'text',
-      text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa, gads_negativas_lote, gads_crear_lista_negativas_universal, gads_eliminar_lista_negativas, gads_crear_rsa, gads_agregar_callouts) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). Para negativas de términos de búsqueda, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación — para un lote aprobado de una vez usá gads_negativas_lote, no llames gads_negativa repetidas veces). gads_crear_lista_negativas_universal es de ALTO IMPACTO (afecta TODAS las campañas a la vez, no una sola) — avisale eso al dueño explícitamente antes de pedir el sí; revisá primero con gads_listas_negativas que no exista ya una lista similar. gads_crear_rsa SIEMPRE crea un anuncio PAUSADO nuevo, nunca reemplaza el que ya está corriendo — aclaráselo al dueño (revisa y activa él desde Google Ads o pidiéndotelo). gads_crear_campana (wizard de campaña nueva) crea TODO en PAUSA de una vez (presupuesto+campaña+geo+idioma+negativas+grupo+keyword+RSA) y es de ALTO IMPACTO: antes de pedir el sí, mostrale al dueño el resumen COMPLETO (nombre, presupuesto diario, keyword, URL final y los 15 titulares + 4 descripciones) y aclarale que queda en pausa hasta que él la active en Google Ads. Usá gads_auditar cuando te pidan un diagnóstico general. Cuando pidan buscar/investigar keywords NUEVAS (no las que ya están corriendo), usá gads_ideas_keywords con semillas del negocio real (servicios + comunas RM) — es de lectura, no requiere confirmación; mostrale al dueño una tabla con volumen de búsqueda, competencia y puja sugerida, y solo si te pide armar campaña con alguna encadená gads_crear_campana (con confirmación).\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
+      text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa, gads_negativas_lote, gads_crear_lista_negativas_universal, gads_eliminar_lista_negativas, gads_crear_rsa, gads_agregar_callouts) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). En TODA escritura pasá también "motivo" (1 frase: por qué se hace) — queda en la BITÁCORA de decisiones junto con el detalle y quién aprobó; esa bitácora (consultar_bitacora) es tu memoria durable de cambios: revisala antes de comparar períodos o atribuir una mejora/caída a una causa. Para negativas de términos de búsqueda, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación — para un lote aprobado de una vez usá gads_negativas_lote, no llames gads_negativa repetidas veces). gads_crear_lista_negativas_universal es de ALTO IMPACTO (afecta TODAS las campañas a la vez, no una sola) — avisale eso al dueño explícitamente antes de pedir el sí; revisá primero con gads_listas_negativas que no exista ya una lista similar. gads_crear_rsa SIEMPRE crea un anuncio PAUSADO nuevo, nunca reemplaza el que ya está corriendo — aclaráselo al dueño (revisa y activa él desde Google Ads o pidiéndotelo). gads_crear_campana (wizard de campaña nueva) crea TODO en PAUSA de una vez (presupuesto+campaña+geo+idioma+negativas+grupo+keyword+RSA) y es de ALTO IMPACTO: antes de pedir el sí, mostrale al dueño el resumen COMPLETO (nombre, presupuesto diario, keyword, URL final y los 15 titulares + 4 descripciones) y aclarale que queda en pausa hasta que él la active en Google Ads. Usá gads_auditar cuando te pidan un diagnóstico general. Cuando pidan buscar/investigar keywords NUEVAS (no las que ya están corriendo), usá gads_ideas_keywords con semillas del negocio real (servicios + comunas RM) — es de lectura, no requiere confirmación; mostrale al dueño una tabla con volumen de búsqueda, competencia y puja sugerida, y solo si te pide armar campaña con alguna encadená gads_crear_campana (con confirmación).\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
       cache_control: { type: 'ephemeral' },
     })
   }
@@ -877,7 +921,7 @@ export async function generarRespuestaMarketing(
   // Reglas inviolables REPETIDAS al final (máxima saliencia; se validan además por código).
   system.push({ type: 'text', text: REGLAS_INVIOLABLES })
 
-  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AJUSTAR_EMAIL, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_PLANTILLA, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_EDITAR_IMG, TOOL_NUEVA_IMAGEN, TOOL_REUTILIZAR, TOOL_USAR_IMGS]
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AJUSTAR_EMAIL, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_PLANTILLA, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_RENTABILIDAD, TOOL_BITACORA, TOOL_EDITAR_IMG, TOOL_NUEVA_IMAGEN, TOOL_REUTILIZAR, TOOL_USAR_IMGS]
   if (isGoogleAdsConfigurado()) {
     tools.push(
       TOOL_GADS_RESUMEN, TOOL_GADS_KEYWORDS, TOOL_GADS_TERMINOS, TOOL_GADS_IDEAS_KEYWORDS, TOOL_GADS_AUDITAR,
@@ -893,6 +937,9 @@ export async function generarRespuestaMarketing(
   let textoFinal = ''
   // Carruseles de disenar_grafico en este turno: identificador → campaña compartida.
   const campaniasCarrusel = new Map<string, string>()
+  // Bitácora: registra cada ESCRITURA ejecutada (best-effort, nunca corta la acción).
+  const anotar = (area: string, accion: string, detalle: string, motivo?: string) =>
+    registrarDecision({ area, accion, detalle, motivo, aprobadoPor: opts.creadoPor })
 
   for (let iter = 0; iter < 8; iter++) {
     const res = await getClient().messages.create({ model: MODEL, max_tokens: 2200, system, messages: convo, tools })
@@ -1143,6 +1190,7 @@ export async function generarRespuestaMarketing(
           resultText = r.yaPublicado
             ? `Esa pieza ya estaba publicada${r.post?.url ? ` (${r.post.url})` : ''}.`
             : `✅ Publicado en ${r.item?.canal || 'la red'}${r.post?.url ? `: ${r.post.url}` : ''}. Pasale el link al dueño.`
+          if (!r.yaPublicado) await anotar('contenido', 'publicar_pieza', `Pieza #${id} publicada en ${r.item?.canal || 'la red'}${r.post?.url ? ` (${r.post.url})` : ''}`)
         } else if (tu.name === 'actualizar_perfil_facebook') {
           if (!isFacebookConfigurado()) {
             resultText = 'No puedo aplicar cambios al perfil: Facebook no figura conectado en este entorno (faltan las variables META_GRAPH_TOKEN / META_PAGE_ID en el servidor/Vercel). NO existe ninguna pantalla de "Integraciones/Facebook" en la app: la conexión se carga en las variables de entorno de Vercel y requiere redeploy. Decile esto al dueño TAL CUAL (sin inventar otro flujo). Igual podés entregarle los textos listos para que los pegue a mano en la Página.'
@@ -1151,6 +1199,7 @@ export async function generarRespuestaMarketing(
             await actualizarPerfilFacebook(campos)
             const aplicados = Object.keys(campos).filter(k => ['about', 'description', 'phone', 'website', 'emails'].includes(k))
             resultText = `Perfil de Facebook actualizado (${aplicados.join(', ') || 'sin cambios'}). Confirmale al dueño qué se cambió.`
+            if (aplicados.length) await anotar('meta', 'actualizar_perfil_facebook', `Campos actualizados: ${aplicados.join(', ')}`)
           }
         } else if (tu.name === 'reporte_metricas') {
           if (!isInsightsConfigurado()) {
@@ -1220,6 +1269,14 @@ export async function generarRespuestaMarketing(
             const aviso = r.noEncontrados.length ? ` (no encontré: ${r.noEncontrados.join(', ')})` : ''
             resultText = `La pieza #${r.item.id} (${r.item.canal}) quedó con ${r.n} imagen(es) de ${codigos.join(', ')}${aviso}, en orden y SIN regenerar.${r.item.imagen_url ? ` Mostrá la primera con ![](${r.item.imagen_url}).` : ''} Si el dueño lo pide, publicala o programala.`
           }
+        } else if (tu.name === 'reporte_rentabilidad') {
+          const inp = tu.input as { periodo?: PeriodoRentabilidad }
+          resultText = await reporteRentabilidadTexto(inp.periodo || 'last_30d')
+        } else if (tu.name === 'consultar_bitacora') {
+          const inp = tu.input as { dias?: number; area?: string }
+          const dias = Math.min(365, Math.max(1, inp.dias || 30))
+          const decs = await listarDecisiones({ dias, area: inp.area, limite: 60 })
+          resultText = `BITÁCORA DE DECISIONES (últimos ${dias} días${inp.area ? `, área ${inp.area}` : ''}):\n${formatearDecisiones(decs)}`
         } else if (tu.name === 'gads_resumen') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
@@ -1263,60 +1320,69 @@ export async function generarRespuestaMarketing(
         } else if (tu.name === 'gads_auditar') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
-            const hallazgos = await auditarCuenta()
+            const [hallazgos, decisiones] = await Promise.all([
+              auditarCuenta(),
+              listarDecisiones({ dias: 30, area: 'google_ads', limite: 30 }).catch(() => []),
+            ])
             if (hallazgos.length === 0) resultText = 'Auditoría sin hallazgos relevantes por ahora.'
             else resultText = hallazgos.map(h => `[${h.severidad.toUpperCase()}] (${h.area}) ${h.titulo}${h.dolaresEstimados ? ` — ~${fmtPrecio(h.dolaresEstimados)}` : ''}\n  ${h.detalle}\n  → ${h.accionSugerida}`).join('\n\n')
+            resultText += `\n\nCAMBIOS RECIENTES EN LA CUENTA (bitácora, últimos 30 días — consideralos antes de atribuir mejoras/caídas a una causa):\n${formatearDecisiones(decisiones)}`
           }
         } else if (tu.name === 'gads_pausar_campana' || tu.name === 'gads_activar_campana') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
-            const inp = tu.input as { campaignId?: string; confirmado?: boolean }
+            const inp = tu.input as { campaignId?: string; motivo?: string; confirmado?: boolean }
             if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (pasá confirmado=true recién después de que diga que sí).'
             else if (!inp.campaignId) resultText = 'Falta el id de la campaña.'
             else {
-              if (tu.name === 'gads_pausar_campana') await pausarCampanaGoogle(inp.campaignId)
+              const pausar = tu.name === 'gads_pausar_campana'
+              if (pausar) await pausarCampanaGoogle(inp.campaignId)
               else await activarCampanaGoogle(inp.campaignId)
-              resultText = `Listo: campaña id=${inp.campaignId} ${tu.name === 'gads_pausar_campana' ? 'pausada' : 'activada'} en Google Ads.`
+              resultText = `Listo: campaña id=${inp.campaignId} ${pausar ? 'pausada' : 'activada'} en Google Ads.`
+              await anotar('google_ads', pausar ? 'pausar_campana' : 'activar_campana', `Campaña id=${inp.campaignId} ${pausar ? 'pausada' : 'activada'}`, inp.motivo)
             }
           }
         } else if (tu.name === 'gads_presupuesto') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
-            const inp = tu.input as { campaignId?: string; montoClp?: number; confirmado?: boolean }
+            const inp = tu.input as { campaignId?: string; montoClp?: number; motivo?: string; confirmado?: boolean }
             if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (pasá confirmado=true recién después de que diga que sí).'
             else if (!inp.campaignId || !inp.montoClp) resultText = 'Faltan datos (campaignId y montoClp).'
             else {
               await ajustarPresupuestoGoogle(inp.campaignId, inp.montoClp)
               resultText = `Listo: presupuesto diario de la campaña id=${inp.campaignId} ajustado a ${fmtPrecio(inp.montoClp)}.`
+              await anotar('google_ads', 'presupuesto', `Presupuesto diario campaña id=${inp.campaignId} → ${fmtPrecio(inp.montoClp)}`, inp.motivo)
             }
           }
         } else if (tu.name === 'gads_keyword_estado') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
-            const inp = tu.input as { resourceName?: string; estado?: string; confirmado?: boolean }
+            const inp = tu.input as { resourceName?: string; estado?: string; motivo?: string; confirmado?: boolean }
             if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (pasá confirmado=true recién después de que diga que sí).'
             else if (!inp.resourceName || !inp.estado) resultText = 'Faltan datos (resourceName y estado).'
             else {
               if (inp.estado === 'pausar') await pausarKeywordGoogle(inp.resourceName)
               else await activarKeywordGoogle(inp.resourceName)
               resultText = `Listo: keyword ${inp.estado === 'pausar' ? 'pausada' : 'activada'}.`
+              await anotar('google_ads', 'keyword_estado', `Keyword ${inp.estado === 'pausar' ? 'pausada' : 'activada'} (${inp.resourceName})`, inp.motivo)
             }
           }
         } else if (tu.name === 'gads_negativa') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
-            const inp = tu.input as { campaignId?: string; texto?: string; matchType?: 'EXACT' | 'PHRASE' | 'BROAD'; confirmado?: boolean }
+            const inp = tu.input as { campaignId?: string; texto?: string; matchType?: 'EXACT' | 'PHRASE' | 'BROAD'; motivo?: string; confirmado?: boolean }
             if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (pasá confirmado=true recién después de que diga que sí, tras mostrar la tabla de candidatos con veredicto).'
             else if (!inp.campaignId || !inp.texto) resultText = 'Faltan datos (campaignId y texto).'
             else {
               await agregarNegativaCampana(inp.campaignId, inp.texto, inp.matchType || 'PHRASE')
               resultText = `Listo: "${inp.texto}" agregada como negativa (${inp.matchType || 'PHRASE'}) en la campaña id=${inp.campaignId}.`
+              await anotar('google_ads', 'negativa', `"${inp.texto}" (${inp.matchType || 'PHRASE'}) → campaña id=${inp.campaignId}`, inp.motivo)
             }
           }
         } else if (tu.name === 'gads_negativas_lote') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
-            const inp = tu.input as { items?: { campaignId?: string; texto?: string; matchType?: 'EXACT' | 'PHRASE' | 'BROAD' }[]; confirmado?: boolean }
+            const inp = tu.input as { items?: { campaignId?: string; texto?: string; matchType?: 'EXACT' | 'PHRASE' | 'BROAD' }[]; motivo?: string; confirmado?: boolean }
             const items = (inp.items || []).filter(i => i?.campaignId && i?.texto)
             if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (pasá confirmado=true recién después de que apruebe el lote completo, tras mostrar la tabla con veredicto).'
             else if (items.length === 0) resultText = 'No recibí términos válidos (cada uno necesita campaignId y texto).'
@@ -1328,6 +1394,7 @@ export async function generarRespuestaMarketing(
                 catch (e) { errores.push(`"${it.texto}": ${e instanceof Error ? e.message : 'error'}`) }
               }
               resultText = `Listo: ${ok}/${items.length} negativas agregadas.${errores.length ? ` Fallaron: ${errores.join('; ')}.` : ''}`
+              if (ok > 0) await anotar('google_ads', 'negativas_lote', `${ok}/${items.length} negativas: ${items.map(i => `"${i.texto}"`).join(', ').slice(0, 600)}`, inp.motivo)
             }
           }
         } else if (tu.name === 'gads_listas_negativas') {
@@ -1341,7 +1408,7 @@ export async function generarRespuestaMarketing(
         } else if (tu.name === 'gads_crear_lista_negativas_universal') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
-            const inp = tu.input as { nombre?: string; confirmado?: boolean }
+            const inp = tu.input as { nombre?: string; motivo?: string; confirmado?: boolean }
             if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción — recordale que esto aplica a TODAS las campañas de la cuenta, no a una sola.'
             else {
               const nombre = inp.nombre?.trim() || 'Negativas universales ES-CL'
@@ -1350,16 +1417,21 @@ export async function generarRespuestaMarketing(
               else {
                 const attach = await adjuntarListaATodasLasCampanas(r.resourceName)
                 resultText = `Lista "${nombre}" creada con ${r.agregados} términos (${r.duplicados} ya existían y se saltaron) y adjuntada a ${attach.adjuntadas} campaña(s)${attach.yaTenian ? ` (${attach.yaTenian} ya la tenían)` : ''}.`
+                await anotar('google_ads', 'crear_lista_negativas', `Lista "${nombre}" (${r.agregados} términos) adjuntada a ${attach.adjuntadas} campaña(s)`, inp.motivo)
               }
             }
           }
         } else if (tu.name === 'gads_eliminar_lista_negativas') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
-            const inp = tu.input as { resourceName?: string; confirmado?: boolean }
+            const inp = tu.input as { resourceName?: string; motivo?: string; confirmado?: boolean }
             if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción.'
             else if (!inp.resourceName) resultText = 'Falta el resourceName de la lista (usá gads_listas_negativas para verlo).'
-            else { await eliminarListaCompartida(inp.resourceName); resultText = 'Lista eliminada y desadjuntada de todas las campañas que la usaban.' }
+            else {
+              await eliminarListaCompartida(inp.resourceName)
+              resultText = 'Lista eliminada y desadjuntada de todas las campañas que la usaban.'
+              await anotar('google_ads', 'eliminar_lista_negativas', `Lista ${inp.resourceName} eliminada`, inp.motivo)
+            }
           }
         } else if (tu.name === 'gads_anuncios') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
@@ -1370,7 +1442,7 @@ export async function generarRespuestaMarketing(
         } else if (tu.name === 'gads_crear_rsa') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
-            const inp = tu.input as { grupoAnuncioId?: string; headlines?: HeadlineRsa[]; descriptions?: string[]; finalUrl?: string; path1?: string; path2?: string; confirmado?: boolean }
+            const inp = tu.input as { grupoAnuncioId?: string; headlines?: HeadlineRsa[]; descriptions?: string[]; finalUrl?: string; path1?: string; path2?: string; motivo?: string; confirmado?: boolean }
             if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de crear el anuncio (mostrale el copy completo primero).'
             else if (!inp.grupoAnuncioId || !inp.finalUrl) resultText = 'Faltan datos (grupoAnuncioId y finalUrl).'
             else {
@@ -1382,13 +1454,14 @@ export async function generarRespuestaMarketing(
               } else {
                 const rn = await crearRSA(inp.grupoAnuncioId, headlines, descriptions, inp.finalUrl, { path1: inp.path1, path2: inp.path2 })
                 resultText = `Listo: RSA nuevo creado en PAUSA (${rn}) en el grupo de anuncios ${inp.grupoAnuncioId}. El anuncio anterior sigue corriendo tal cual — el dueño lo revisa en Google Ads y decide activarlo.`
+                await anotar('google_ads', 'crear_rsa', `RSA nuevo EN PAUSA en grupo ${inp.grupoAnuncioId} → ${inp.finalUrl} (${rn})`, inp.motivo)
               }
             }
           }
         } else if (tu.name === 'gads_agregar_callouts') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
-            const inp = tu.input as { campaignId?: string; textos?: string[]; confirmado?: boolean }
+            const inp = tu.input as { campaignId?: string; textos?: string[]; motivo?: string; confirmado?: boolean }
             const textos = (inp.textos || []).filter(Boolean)
             if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de ejecutar esta acción (mostrale la lista propuesta primero).'
             else if (!inp.campaignId || textos.length === 0) resultText = 'Faltan datos (campaignId y textos).'
@@ -1399,13 +1472,14 @@ export async function generarRespuestaMarketing(
               } else {
                 const n = await agregarCallouts(inp.campaignId, textos)
                 resultText = `Listo: ${n} callout(s) nuevo(s) agregados a la campaña id=${inp.campaignId}.`
+                await anotar('google_ads', 'agregar_callouts', `${n} callout(s) → campaña id=${inp.campaignId}: ${textos.join(' · ').slice(0, 400)}`, inp.motivo)
               }
             }
           }
         } else if (tu.name === 'gads_crear_campana') {
           if (!isGoogleAdsConfigurado()) { resultText = 'Google Ads no está configurado en este entorno.' }
           else {
-            const inp = tu.input as NuevaCampanaParams & { confirmado?: boolean }
+            const inp = tu.input as NuevaCampanaParams & { motivo?: string; confirmado?: boolean }
             if (!inp.confirmado) resultText = 'Falta confirmación explícita del dueño en el chat antes de crear la campaña (mostrale el resumen COMPLETO primero: nombre, presupuesto, keyword, URL y los 15 titulares + 4 descripciones).'
             else if (!inp.nombreCampana || !inp.presupuestoClpDiario || !inp.keyword || !inp.finalUrl) resultText = 'Faltan datos (nombreCampana, presupuestoClpDiario, keyword, finalUrl).'
             else {
@@ -1415,6 +1489,7 @@ export async function generarRespuestaMarketing(
               } else {
                 const r = await crearCampanaCompleta({ ...inp, negativas: NEGATIVAS_UNIVERSALES_ES_CL })
                 resultText = `Listo: campaña "${inp.nombreCampana}" creada COMPLETA y EN PAUSA (${r.campaignResourceName}) — presupuesto ${fmtPrecio(inp.presupuestoClpDiario)}/día, cobertura de ${r.geoComunas} comuna(s), idioma español, ${NEGATIVAS_UNIVERSALES_ES_CL.length} negativas universales, keyword "${inp.keyword}" (${inp.matchType || 'PHRASE'}) y 1 RSA. Nada gasta hasta que el dueño la active en Google Ads (campaña + grupo + anuncio están en pausa).`
+                await anotar('google_ads', 'crear_campana', `Campaña "${inp.nombreCampana}" creada EN PAUSA: ${fmtPrecio(inp.presupuestoClpDiario)}/día, keyword "${inp.keyword}" (${inp.matchType || 'PHRASE'}), ${inp.finalUrl}`, inp.motivo)
               }
             }
           }

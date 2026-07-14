@@ -133,16 +133,23 @@ export default function MarketingParamsConfig() {
         </div>
       </div>
 
-      {/* Ads (pendiente) */}
+      {/* Economía + Ads */}
       <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-300">
-          <h2 className="font-semibold text-gray-900">Publicidad pagada (pendiente de activar)</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Aún no se invierte en ads. Definí tus objetivos en CLP para cuando lo activemos; sin presupuesto, el agente no propone gasto.</p>
+          <h2 className="font-semibold text-gray-900">Economía del negocio y publicidad</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Con ticket promedio y tasa de cierre el agente calcula el valor del lead (ticket × cierre) y juzga la rentabilidad real. Sin presupuesto, no propone gasto en ads. El agente puede sugerirte estos números con datos reales: pedile un «reporte de rentabilidad».</p>
         </div>
         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          <Row label="Ticket promedio (CLP)"><input type="number" min={0} placeholder="—" className="w-32 border border-gray-300 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand" value={p.ticket_promedio_clp ?? ''} onChange={e => set('ticket_promedio_clp', numOrNull(e.target.value))} /></Row>
+          <Row label="Tasa de cierre (%)"><input type="number" min={0} max={100} placeholder="—" className={inputCls} value={p.tasa_cierre_pct ?? ''} onChange={e => set('tasa_cierre_pct', numOrNull(e.target.value))} /></Row>
           <Row label="CPA objetivo (CLP)"><input type="number" min={0} placeholder="—" className={inputCls} value={p.cpa_objetivo_clp ?? ''} onChange={e => set('cpa_objetivo_clp', numOrNull(e.target.value))} /></Row>
           <Row label="CPL objetivo (CLP)"><input type="number" min={0} placeholder="—" className={inputCls} value={p.cpl_objetivo_clp ?? ''} onChange={e => set('cpl_objetivo_clp', numOrNull(e.target.value))} /></Row>
           <Row label="Presupuesto mensual (CLP)"><input type="number" min={0} placeholder="—" className="w-32 border border-gray-300 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand" value={p.presupuesto_mensual_clp ?? ''} onChange={e => set('presupuesto_mensual_clp', numOrNull(e.target.value))} /></Row>
+          {p.ticket_promedio_clp != null && p.ticket_promedio_clp > 0 && p.tasa_cierre_pct != null && p.tasa_cierre_pct > 0 && (
+            <div className="sm:col-span-2 text-xs text-gray-500 bg-cream border border-gray-200 rounded-lg px-3 py-2">
+              Valor del lead ≈ <strong className="text-brand">${Math.round(p.ticket_promedio_clp * p.tasa_cierre_pct / 100).toLocaleString('es-CL')}</strong> (ticket × cierre) — techo racional del CPL y base para los valores de conversión en Google Ads.
+            </div>
+          )}
         </div>
       </div>
 

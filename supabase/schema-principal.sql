@@ -1020,6 +1020,23 @@ create table if not exists "marketing_config" (
 alter table "marketing_config" add column if not exists "parametros" text not null default '';
 alter table "marketing_config" enable row level security;
 
+-- Bitácora de decisiones de marketing (lib/marketing-decisiones.ts): registro
+-- automático de toda ESCRITURA aprobada que ejecuta el agente (Google Ads: pausas,
+-- presupuestos, negativas, RSAs, campañas; Meta: publicar, perfil). Acceso directo
+-- por getSupabase() (no datastore), como mailing_logs/correos_log.
+create table if not exists marketing_decisiones (
+  id          bigint generated always as identity primary key,
+  created_at  timestamptz not null default now(),
+  area        text not null default '',   -- google_ads | meta | contenido
+  accion      text not null default '',   -- ej. pausar_campana, presupuesto, negativas_lote, crear_rsa, crear_campana, publicar_pieza
+  detalle     text not null default '',   -- qué cambió exactamente (campaña/keyword, antes → después, montos)
+  motivo      text not null default '',   -- por qué se hizo (lo aporta el agente al ejecutar)
+  resultado   text not null default '',   -- resultado inmediato reportado por la herramienta
+  aprobado_por text not null default ''   -- usuario del chat que confirmó la acción
+);
+create index if not exists idx_mkdec_created on marketing_decisiones(created_at desc);
+alter table marketing_decisiones enable row level security;
+
 -- Permisos dinámicos por módulo × rol (editable en Configuración Avanzada → Usuarios).
 -- Solo overrides de admin2/operador; lo no listado usa el default de lib/permisos.ts.
 create table if not exists "permisos_modulos" (

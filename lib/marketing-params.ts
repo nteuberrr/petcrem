@@ -25,6 +25,10 @@ export interface MarketingParams {
   pilares: PilarEditorial[]
   /** Regla 80/20: tope de contenido de venta directa. */
   venta_directa_max_pct: number
+  // Economía del negocio (para valor del lead y para juzgar rentabilidad).
+  // valor del lead = ticket_promedio × tasa_cierre. null = pendiente del dueño.
+  ticket_promedio_clp: number | null
+  tasa_cierre_pct: number | null
   // Ads — NO activos aún. Pendientes de los números reales del dueño (null).
   cpa_objetivo_clp: number | null
   cpl_objetivo_clp: number | null
@@ -52,6 +56,8 @@ export const DEFAULT_PARAMS: MarketingParams = {
     { key: 'valores', label: 'Cultura y valores', pct: 5 },
   ],
   venta_directa_max_pct: 20,
+  ticket_promedio_clp: null,
+  tasa_cierre_pct: null,
   cpa_objetivo_clp: null,
   cpl_objetivo_clp: null,
   presupuesto_mensual_clp: null,
@@ -98,9 +104,23 @@ export function bloqueParametros(p: MarketingParams): string {
   const ads = p.presupuesto_mensual_clp
     ? `Presupuesto de pauta ~$${p.presupuesto_mensual_clp.toLocaleString('es-CL')}/mes; reparto Google Search ${p.reparto_pauta_pct.google_search}% · Meta prospección ${p.reparto_pauta_pct.meta_prospeccion}% · remarketing ${p.reparto_pauta_pct.remarketing}% · testeo ${p.reparto_pauta_pct.testeo}%.`
     : 'Pauta pagada: aún SIN presupuesto definido — no propongas gasto en ads hasta que el dueño fije un monto.'
+  const clp = (n: number) => `$${n.toLocaleString('es-CL')}`
+  const objetivos = [
+    p.ticket_promedio_clp && `ticket promedio ${clp(p.ticket_promedio_clp)}`,
+    p.tasa_cierre_pct != null && p.tasa_cierre_pct > 0 && `tasa de cierre ~${p.tasa_cierre_pct}%`,
+    p.cpa_objetivo_clp && `CPA objetivo ${clp(p.cpa_objetivo_clp)}`,
+    p.cpl_objetivo_clp && `CPL objetivo ${clp(p.cpl_objetivo_clp)}`,
+  ].filter(Boolean).join(' · ')
+  const valorLead = p.ticket_promedio_clp && p.tasa_cierre_pct
+    ? ` Valor del lead ≈ ${clp(Math.round(p.ticket_promedio_clp * p.tasa_cierre_pct / 100))} (ticket × cierre) — es el techo racional del CPL y el número para los valores de conversión en Google Ads.`
+    : ''
+  const economia = objetivos
+    ? `ECONOMÍA DEL NEGOCIO (confirmada por el dueño — usala para juzgar rentabilidad, nunca la inventes): ${objetivos}.${valorLead}`
+    : 'ECONOMÍA DEL NEGOCIO: ticket promedio, tasa de cierre y CPA/CPL objetivo aún SIN definir — cuando una decisión dependa de ellos (valores de conversión, juzgar si un CPA es bueno, escalar presupuesto), pedíselos al dueño o calculalos con reporte_rentabilidad; NUNCA los inventes.'
   return `PARÁMETROS VIGENTES DEL PLAN (editables por el equipo; son la cadencia y el mix OPERATIVOS — respetalos al planificar y REEMPLAZAN cualquier cadencia genérica del guion):
 - Frecuencia: Instagram ${p.ig_posts_semana} posts/semana (de esos ~${p.ig_carruseles_semana} carruseles), Facebook ${p.fb_posts_semana}/semana, email a veterinarios ${p.email_por_mes}/mes.
 - Horarios sugeridos de publicación: ${p.horarios_publicacion.join(', ')} (ajustar por métricas propias).
 - MIX de pilares editoriales (repartí el calendario según estos %): ${pilares}. Regla 80/20: MÁXIMO ${p.venta_directa_max_pct}% de venta directa; el resto entrega valor, emoción o comunidad.
-- ${ads}`
+- ${ads}
+- ${economia}`
 }
