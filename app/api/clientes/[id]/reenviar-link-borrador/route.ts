@@ -5,6 +5,7 @@ import { esAdmin } from '@/lib/roles'
 import { getSheetData } from '@/lib/datastore'
 import { createBorradorToken } from '@/lib/borrador-token'
 import { enviarTextoWhatsapp, isWhatsappConfigured } from '@/lib/whatsapp'
+import { upsertContacto, getOrCreateConversacion, insertarMensaje } from '@/lib/mensajes'
 
 /**
  * POST /api/clientes/[id]/reenviar-link-borrador
@@ -36,6 +37,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const link = `${base}/registro-mascota?ficha=${createBorradorToken(String(id))}`
   const soloLink = await req.json().then((b: { soloLink?: boolean }) => b?.soloLink !== false).catch(() => true)
   const cuerpo = soloLink ? link : `Para completar los datos de ${c.nombre_mascota || 'tu mascota'}, entra aquí:\n${link}`
-  const env = await enviarTextoWhatsapp(`56${tel}`, cuerpo)
+  const wa = `56${tel}`
+  const env = await enviarTextoWhatsapp(wa, cuerpo)
+
+  // Registrar el envío en el inbox de Mensajes para que quede VISIBLE en la
+  // conversación (antes se mandaba por WhatsApp pero no aparecía → parecía no enviado).
+  try {
+    const cont = await upsertContacto({ wa_id: wa, telefono: wa, audiencia: 'A' })
+    const conv = await getOrCreateConversacion(cont.id, 'whatsapp', cont.audiencia, 'whatsapp')
+    await insertarMensaje({ conversacion_id: conv.id, direccion: 'saliente', cuerpo, tipo: 'texto', estado: env.ok ? 'enviado' : 'fallido', enviado_por: 'humano' })
+  } catch (e) { console.warn('[reenviar-link-borrador] no se pudo registrar en el inbox:', e) }
+
   return NextResponse.json({ ok: env.ok, enviado: env.ok, link, error: env.ok ? undefined : (env.error || 'no enviado') })
 }
