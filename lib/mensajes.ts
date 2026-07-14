@@ -102,12 +102,56 @@ export async function listConversaciones(opts: {
   if (error) throw new Error(error.message)
   let rows = (data ?? []) as unknown as ConversacionConContacto[]
   if (opts.buscar) {
-    const b = opts.buscar.toLowerCase()
+    const term = opts.buscar.trim()
+    const b = term.toLowerCase()
+    // Búsqueda DENTRO de las conversaciones: ids de conversaciones cuyos mensajes
+    // contienen el término (no solo el nombre/teléfono del contacto).
+    let idsPorMensaje = new Set<number>()
+    try {
+      const { data: msgs } = await sb.from(T_MSG).select('conversacion_id').ilike('cuerpo', `%${term}%`).limit(3000)
+      idsPorMensaje = new Set((msgs ?? []).map((m: { conversacion_id: number }) => Number(m.conversacion_id)))
+    } catch (e) { console.warn('[mensajes] buscar en cuerpos:', e instanceof Error ? e.message : e) }
+    // Las conversaciones que matchean por mensaje pero no estaban entre las
+    // recientes ya cargadas → traerlas (respetando los mismos filtros).
+    const yaCargadas = new Set(rows.map(r => r.id))
+    const faltantes = [...idsPorMensaje].filter(id => !yaCargadas.has(id))
+    if (faltantes.length) {
+      let q2 = sb.from(T_CONV).select('*, contacto:mensajes_contactos(*)').in('id', faltantes.slice(0, 200))
+      if (opts.estado === 'activo') q2 = q2.in('estado', ['activo', 'abierta'])
+      else if (opts.estado === 'cerrado') q2 = q2.in('estado', ['cerrado', 'cerrada'])
+      else if (opts.estado) q2 = q2.eq('estado', opts.estado)
+      if (opts.canal) q2 = q2.eq('canal', opts.canal)
+      if (opts.audiencia) q2 = q2.eq('audiencia', opts.audiencia)
+      const { data: extra } = await q2
+      if (extra?.length) rows = [...rows, ...(extra as unknown as ConversacionConContacto[])]
+    }
     rows = rows.filter(r =>
       (r.contacto?.nombre ?? '').toLowerCase().includes(b) ||
-      (r.contacto?.telefono ?? '').toLowerCase().includes(b))
+      (r.contacto?.telefono ?? '').toLowerCase().includes(b) ||
+      idsPorMensaje.has(r.id))
+    rows.sort((x, y) => (y.ultimo_mensaje_at ?? '').localeCompare(x.ultimo_mensaje_at ?? ''))
   }
   return rows
+}
+
+/**
+ * Cantidad de conversaciones con mensajes SIN LEER agrupadas por categoría
+ * (estado), para mostrar el "(N)" en cada tab del inbox y saber en qué grupo
+ * está el chat sin leer. Normaliza los estados legacy (abierta→activo, etc.).
+ */
+export async function contarNoLeidosPorCategoria(): Promise<Record<string, number>> {
+  try {
+    const sb = getMensajesSupabase()
+    const { data, error } = await sb.from(T_CONV).select('estado').eq('no_leido', true)
+    if (error) return {}
+    const out: Record<string, number> = {}
+    for (const r of (data ?? []) as { estado: string }[]) {
+      const e = r.estado || ''
+      const cat = e === 'abierta' ? 'activo' : e === 'cerrada' ? 'cerrado' : e
+      out[cat] = (out[cat] || 0) + 1
+    }
+    return out
+  } catch { return {} }
 }
 
 export async function getConversacion(id: number): Promise<ConversacionConContacto | null> {

@@ -198,11 +198,13 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
           <>
           <div className={GRID}>
             {recortar(eutanasias, 'eutanasias').map(e => {
-              const tomada = e.estado_cronograma === 'tomada'
-              const cls = tomada ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'
-              const badge = tomada
-                ? <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">🩺 Vet asignado</span>
-                : <span className="text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">⏳ Buscando vet</span>
+              // Verde SOLO cuando el vet confirmó la hora del servicio; hasta
+              // entonces queda en amarillo (aunque un vet ya la haya tomado).
+              const horaConfirmada = !!(e.hora_retiro_crematorio || '').trim()
+              const cls = horaConfirmada ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'
+              const badge = horaConfirmada
+                ? <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">🕒 Hora confirmada</span>
+                : <span className="text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">{e.vet_nombre ? '⏳ Esperando hora del vet' : '⏳ Buscando vet'}</span>
               const cuandoEut = `${e.fecha_servicio ? fmtFecha(e.fecha_servicio) : '—'}${e.hora_servicio ? ` · ${e.hora_servicio}` : ''}`
               return (
                 <div key={e.id}

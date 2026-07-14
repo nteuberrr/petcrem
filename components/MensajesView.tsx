@@ -61,6 +61,7 @@ export default function MensajesView() {
   const [enviando, setEnviando] = useState(false)
   const [subiendo, setSubiendo] = useState(false)
   const [error, setError] = useState('')
+  const [noLeidosCat, setNoLeidosCat] = useState<Record<string, number>>({})
   const fileRef = useRef<HTMLInputElement>(null)
   // >0 mientras hay una mutación del usuario en curso: suprime el polling para que
   // un refresco viejo no sobrescriba el estado recién cambiado (ej. activar el agente).
@@ -81,6 +82,15 @@ export default function MensajesView() {
   }, [estado, buscar])
 
   useEffect(() => { fetchConvs() }, [fetchConvs])
+
+  // No leídos por categoría → "(N)" en cada tab (para saber en qué grupo está el chat sin leer).
+  const fetchNoLeidos = useCallback(async () => {
+    try {
+      const r = await fetch('/api/mensajes/no-leidos-count', { cache: 'no-store' })
+      if (r.ok) { const j = await r.json(); setNoLeidosCat(j.porCategoria || {}) }
+    } catch { /* silencioso */ }
+  }, [])
+  useEffect(() => { fetchNoLeidos() }, [fetchNoLeidos])
 
   const abrir = useCallback(async (id: number) => {
     pausaRef.current++
@@ -120,9 +130,10 @@ export default function MensajesView() {
     const t = setInterval(() => {
       fetchConvs(true)
       refrescarAbierta()
+      fetchNoLeidos()
     }, 5000)
     return () => clearInterval(t)
-  }, [fetchConvs, refrescarAbierta])
+  }, [fetchConvs, refrescarAbierta, fetchNoLeidos])
 
   // Auto-scroll al final cuando llegan/envían mensajes nuevos (no al releer historial).
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -217,15 +228,19 @@ export default function MensajesView() {
       {/* Lista — en móvil se oculta cuando hay una conversación abierta */}
       <div className={`bg-white rounded-xl border border-gray-300 shadow-md flex-col overflow-hidden ${sel !== null ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-3 border-b border-gray-300 space-y-2">
-          <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar por nombre o teléfono…"
+          <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar por nombre, teléfono o texto del chat…"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           <div className="flex flex-wrap gap-1 text-xs">
-            {([...CATEGORIAS.map(c => c.v), ''] as const).map(s => (
+            {([...CATEGORIAS.map(c => c.v), ''] as const).map(s => {
+              // (N) de no leídos por categoría → saber en qué grupo está el chat sin leer.
+              const n = s === '' ? Object.values(noLeidosCat).reduce((a, b) => a + b, 0) : (noLeidosCat[s] || 0)
+              return (
               <button key={s || 'todas'} onClick={() => setEstado(s)}
                 className={`px-2.5 py-1 rounded-md font-medium ${estado === s ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
-                {s === '' ? 'Todas' : CAT_LABEL[s]}
+                {s === '' ? 'Todas' : CAT_LABEL[s]}{n > 0 ? <span className={`ml-1 font-bold ${estado === s ? 'text-white' : 'text-brand'}`}>({n})</span> : ''}
               </button>
-            ))}
+              )
+            })}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
@@ -345,7 +360,13 @@ export default function MensajesView() {
                   {subiendo ? '…' : '+'}
                 </button>
                 <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }}
-                  placeholder="Escribe un mensaje…"
+                  onPaste={e => {
+                    // Pegar una imagen (Ctrl/⌘+V) → se envía como adjunto.
+                    const item = Array.from(e.clipboardData?.items || []).find(i => i.kind === 'file' && i.type.startsWith('image/'))
+                    const file = item?.getAsFile()
+                    if (file) { e.preventDefault(); enviarArchivo(file) }
+                  }}
+                  placeholder="Escribe un mensaje… (o pega una imagen)"
                   className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 <button onClick={enviar} disabled={enviando || subiendo || !texto.trim()}
                   className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
