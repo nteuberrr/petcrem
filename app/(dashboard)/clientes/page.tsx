@@ -346,9 +346,9 @@ export default function ClientesPage() {
       if (filtro === 'pendiente' && !(c.estado === 'pendiente' || !c.estado)) return false
       if (filtro === 'cremado' && c.estado !== 'cremado') return false
       if (filtro === 'despachado' && c.estado !== 'despachado') return false
-      // Los pagos PARCIALES no cuentan como "pago pendiente": su saldo vive en el
-      // chip "pendiente de cobro" (evita que la misma ficha aparezca en 2 avisos).
-      if (filtro === 'pago_pendiente' && (c.estado_pago === 'pagado' || String(c.estado_pago || '').toLowerCase() === 'parcial')) return false
+      // "Pago pendiente" = servicio no pagado O ficha con un cobro pendiente
+      // (incluye el saldo de un pago parcial). Un solo filtro que las muestra todas.
+      if (filtro === 'pago_pendiente' && c.estado_pago === 'pagado' && !idsConCobroPendiente.has(String(c.id))) return false
       if (filtro === 'datos_pendientes' && !tieneDatosPendientes(c)) return false
       if (filtro === 'falta_peso' && !faltaPesoIngreso(c)) return false
       if (filtro === 'diferencia' && !tieneDiferenciaPorCobrar(c)) return false
@@ -386,9 +386,10 @@ export default function ClientesPage() {
   const alertas = useMemo(() => {
     const reales = clientes.filter(c => c.estado !== 'borrador')
     return {
-      // Excluye los pagos PARCIALES: su saldo pendiente se muestra en el chip
-      // "pendiente de cobro" (una sola notificación por ficha, no dos).
-      pagoPendiente: reales.filter(c => c.estado_pago !== 'pagado' && String(c.estado_pago || '').toLowerCase() !== 'parcial').length,
+      // "Pago pendiente" unifica en UNA sola notificación TODO lo cobrable:
+      // servicios no pagados + fichas con un cobro pendiente (adicional / diferencia
+      // de peso / saldo de pago parcial). Antes eran dos chips separados.
+      pagoPendiente: reales.filter(c => c.estado_pago !== 'pagado' || idsConCobroPendiente.has(String(c.id))).length,
       enCamara: reales.filter(c => c.estado === 'pendiente' || !c.estado).length,
       // Los Sin Devolución (SD) NO se despachan (su flujo termina en "cremado"),
       // así que no cuentan como pendientes de despacho.
@@ -401,9 +402,6 @@ export default function ClientesPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientes, preciosGenerales, preciosConvenio, idsConCobroPendiente])
-
-  // Monto total pendiente de cobro (para mostrarlo en el chip).
-  const montoPendienteCobro = useMemo(() => cobrosPend.reduce((s, c) => s + (parseInt(c.monto, 10) || 0), 0), [cobrosPend])
 
   // Permite llegar con un filtro preseleccionado por URL (ej. desde la alerta
   // del dashboard: /clientes?filtro=borrador). Se lee una vez al montar.
@@ -607,14 +605,8 @@ export default function ClientesPage() {
 
       {/* Notificaciones compactas: una fila de chips clickeables que aplican el
           filtro correspondiente. Reemplaza al banner grande de pago pendiente. */}
-      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0 || alertas.pendienteCobro > 0) && (
+      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0) && (
         <div className="mb-5 flex flex-wrap items-center gap-2">
-          {alertas.pendienteCobro > 0 && (
-            <button onClick={() => setFiltro('pendiente_cobro')}
-              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-fuchsia-400 bg-fuchsia-50 hover:bg-fuchsia-100 px-3 py-1.5 text-xs font-bold text-fuchsia-900 shadow-md transition-colors">
-              💳 {alertas.pendienteCobro} pendiente{alertas.pendienteCobro === 1 ? '' : 's'} de cobro{montoPendienteCobro > 0 ? ` · ${fmtPrecio(montoPendienteCobro)}` : ''}
-            </button>
-          )}
           {nBorradores > 0 && (
             <button onClick={() => setFiltro('borrador')}
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-red-300 bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-bold text-red-800 shadow-md transition-colors">
@@ -623,8 +615,8 @@ export default function ClientesPage() {
           )}
           {alertas.pagoPendiente > 0 && (
             <button onClick={() => setFiltro('pago_pendiente')}
-              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 shadow-md transition-colors">
-              ⚠ {alertas.pagoPendiente} con pago pendiente
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-amber-400 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-900 shadow-md transition-colors">
+              💳 {alertas.pagoPendiente} con pago pendiente
             </button>
           )}
           {alertas.enCamara > 0 && (
