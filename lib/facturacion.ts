@@ -2,6 +2,7 @@ import { getSheetData, appendRow, updateByIdIf, getNextId } from './datastore'
 import { todayISO } from './dates'
 import { uploadToR2 } from './cloudflare-r2'
 import { enviarBoletaCliente } from './cliente-mailer'
+import { avisarAdminsWhatsapp } from './whatsapp'
 import {
   emitirDTE, construirDtePayload, construirNcPayload, desglosarIvaIncluido, isOpenFacturaConfigurado,
   DTE_NOTA_CREDITO, DTE_BOLETA_AFECTA, type DteEmisor, type DteReceptor, type LineaItem,
@@ -235,6 +236,43 @@ export async function emitirBoletaFicha(
   }
 
   return r
+}
+
+/**
+ * Emite la boleta automática de una ficha SI corresponde: solo fichas de TUTOR
+ * (sin veterinaria), REGISTRADAS, PAGADAS y SIN boleta previa. Idempotente por
+ * `boleta_id`. Best-effort: ante fallo avisa al admin por WhatsApp y no lanza.
+ * Persiste `boleta_id` en la ficha y lo devuelve si la emitió.
+ *
+ * La usan el PATCH de la ficha (al pasar a 'pagado') y la confirmación del saldo
+ * de un pago parcial (al cerrar el cobro 'saldo' → la ficha queda pagada).
+ */
+export async function emitirBoletaSiCorresponde(
+  ficha: Record<string, string>,
+  meta: { creadoPorNombre?: string } = {},
+): Promise<{ emitida: boolean; boleta_id?: string }> {
+  const esTutor = !String(ficha.veterinaria_id || '').trim()
+  const fichaRegistrada = String(ficha.estado || '') !== 'borrador' && !!String(ficha.codigo || '').trim()
+  const yaTieneBoleta = !!String(ficha.boleta_id || '').trim()
+  const estaPagada = String(ficha.estado_pago || '').toLowerCase() === 'pagado'
+  if (!esTutor || !fichaRegistrada || yaTieneBoleta || !estaPagada) return { emitida: false }
+  const nombre = String(ficha.nombre_mascota || ficha.codigo || ficha.id || '')
+  const avisar = (extra: string) => avisarAdminsWhatsapp(
+    `⚠️ *Boleta SII no emitida*\n\nFicha ${String(ficha.codigo || '#' + ficha.id)} (${nombre}) quedó *pagada* pero ${extra}\n\nReintenta manualmente desde Facturación → "Pagadas sin boleta".`
+  ).catch(e => console.warn('[facturacion] no se pudo avisar al admin por WhatsApp:', e))
+  try {
+    const r = await emitirBoletaFicha(ficha, { creadoPorNombre: meta.creadoPorNombre || 'Automático (pago confirmado)' })
+    if (r.ok && r.documento?.id) {
+      await updateByIdIf('clientes', String(ficha.id), {}, { boleta_id: String(r.documento.id) })
+      return { emitida: true, boleta_id: String(r.documento.id) }
+    }
+    if (!r.ok) avisar(`la boleta automática falló:\n${r.error || 'error desconocido'}`)
+    return { emitida: false }
+  } catch (e) {
+    console.warn('[facturacion] error emitiendo boleta automática (no bloqueante):', e)
+    avisar('la emisión de la boleta automática falló con un error inesperado.')
+    return { emitida: false }
+  }
 }
 
 export interface AnularOpts {

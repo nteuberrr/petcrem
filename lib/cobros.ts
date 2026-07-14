@@ -16,7 +16,10 @@ import { fmtPrecio } from './format'
  */
 
 const TABLE = 'cobros'
-export type TipoCobro = 'adicional' | 'diferencia'
+// 'saldo' = diferencia pendiente de un PAGO PARCIAL de la ficha (el tutor abonó
+// una parte y queda el resto por pagar). Se controla internamente (sin correo);
+// al confirmarlo pagado, la ficha queda 'pagado' y recién ahí se emite la boleta.
+export type TipoCobro = 'adicional' | 'diferencia' | 'saldo'
 export type EstadoCobro = 'pendiente' | 'cliente_confirmo' | 'pagado'
 
 export interface Cobro {
@@ -92,6 +95,34 @@ export async function marcarCobroPagado(id: string): Promise<Cobro | null> {
   if (!c) return null
   await updateById(TABLE, id, { ...c, estado: 'pagado', fecha_pagado: new Date().toISOString() })
   return { ...c, estado: 'pagado' }
+}
+
+/**
+ * PAGO PARCIAL — mantiene UN cobro abierto tipo 'saldo' por el monto `pendiente`
+ * (Total − abono). Crea si no hay ninguno abierto; actualiza el monto si el abono
+ * cambió; no toca los ya pagados. Sin correo/WhatsApp: es control interno (el
+ * equipo confirma el pago desde el banner de la ficha / la notificación).
+ */
+export async function sincronizarSaldoParcial(clienteId: string, pendiente: number): Promise<void> {
+  if (!clienteId || pendiente <= 0) return
+  const monto = Math.round(pendiente)
+  const abierto = (await getSheetData(TABLE)).map(toCobro)
+    .find(c => c.cliente_id === String(clienteId) && c.tipo === 'saldo' && c.estado !== 'pagado')
+  if (abierto) {
+    if (Number(abierto.monto) !== monto) {
+      await updateById(TABLE, abierto.id, { ...abierto, monto: String(monto), detalle: 'Saldo pendiente (pago parcial)' })
+    }
+    return
+  }
+  await crearCobro(clienteId, 'saldo', 'Saldo pendiente (pago parcial)', monto)
+}
+
+/** Cierra (marca pagado) cualquier saldo parcial abierto de una ficha. */
+export async function cerrarSaldoParcial(clienteId: string): Promise<void> {
+  if (!clienteId) return
+  const abiertos = (await getSheetData(TABLE)).map(toCobro)
+    .filter(c => c.cliente_id === String(clienteId) && c.tipo === 'saldo' && c.estado !== 'pagado')
+  for (const c of abiertos) await marcarCobroPagado(c.id)
 }
 
 /** Lee los datos de transferencia de empresa_config (los vacíos se omiten en el correo). */

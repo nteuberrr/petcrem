@@ -80,6 +80,8 @@ type ClienteDetalle = {
   notas: string
   tipo_pago: string
   estado_pago: string
+  precio_total?: string
+  boleta_id?: string
   omitir_evaluacion?: string
   fotos_mascota?: string
   fotos_cuadro?: string
@@ -148,6 +150,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [cobroError, setCobroError] = useState('')
   // Confirmar pago de un cobro pendiente (adicional / diferencia) desde el banner.
   const [pagandoCobroId, setPagandoCobroId] = useState('')
+  // Pago parcial: monto abonado por el tutor (el resto queda como saldo pendiente).
+  const [abono, setAbono] = useState('')
   // Menú "Documentos" (certificados + archivos).
   const [docsOpen, setDocsOpen] = useState(false)
   const docsMenuRef = useRef<HTMLDivElement>(null)
@@ -527,6 +531,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       descuento_valor: desc ? String(parseFloat(desc.valor) || 0) : '',
       descuento_monto: desc ? String(monto) : '',
       ...(registrar ? { registrar: true } : {}),
+      // Pago parcial: el monto abonado se manda para calcular el saldo pendiente
+      // (no se persiste en la ficha; el pendiente vive como cobro 'saldo').
+      ...(form.estado_pago === 'parcial' ? { monto_abonado: abono } : {}),
     }
     const res = await fetch(`/api/clientes/${id}`, {
       method: 'PATCH',
@@ -608,6 +615,17 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       setPagandoCobroId('')
     }
   }
+
+  // Prefill del abono al cargar una ficha en pago parcial: abono = total − saldo pendiente.
+  useEffect(() => {
+    if (!cliente) return
+    if (String(cliente.estado_pago || '').toLowerCase() === 'parcial') {
+      const saldo = (cliente.cobros || []).find(c => c.tipo === 'saldo' && c.estado !== 'pagado')
+      const total = parseInt(String(cliente.precio_total || '0'), 10) || 0
+      const m = saldo ? total - (parseInt(saldo.monto, 10) || 0) : 0
+      setAbono(m > 0 ? String(m) : '')
+    }
+  }, [cliente?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return <div className="p-8 text-gray-400 text-sm">Cargando...</div>
   if (!cliente) return <div className="p-8 text-gray-400 text-sm">Cliente no encontrado</div>
@@ -775,7 +793,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     {' · '}{fmtPrecio(parseInt(cb.monto, 10) || 0)}
                   </p>
                   <p className={`text-xs mt-0.5 ${confirmado ? 'text-emerald-800' : 'text-red-800'}`}>
-                    {cb.tipo === 'diferencia' ? 'Diferencia de peso' : 'Productos adicionales'}
+                    {cb.tipo === 'diferencia' ? 'Diferencia de peso' : cb.tipo === 'saldo' ? 'Saldo pendiente (pago parcial)' : 'Productos adicionales'}
                     {cb.detalle ? ` — ${cb.detalle}` : ''}
                     {confirmado ? '. El cliente marcó que ya transfirió; verifica y confirma.' : '. Enviado al cliente; a la espera de la transferencia.'}
                   </p>
@@ -806,6 +824,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 <Badge variant={estadoVariant}>{cliente.estado === 'borrador' ? 'Por ingresar' : cliente.estado && cliente.estado !== 'pendiente' ? cliente.estado : 'retirado'}</Badge>
                 {cliente.estado !== 'borrador' && (cliente.estado_pago === 'pagado'
                   ? <Badge variant="green">Pagado</Badge>
+                  : cliente.estado_pago === 'parcial'
+                  ? <Badge variant="yellow">Pago parcial</Badge>
                   : <Badge variant="yellow">Pago pendiente</Badge>)}
                 {vetSeleccionada && <Badge variant="blue">{vetSeleccionada.nombre}</Badge>}
               </div>
@@ -1380,10 +1400,39 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
               >
                 <option value="pendiente">Pendiente de pago</option>
+                <option value="parcial">Pago parcial</option>
                 <option value="pagado">Pagado</option>
               </select>
             </div>
           </div>
+
+          {/* Pago parcial: box para indicar cuánto abonó → queda un saldo pendiente. */}
+          {form.estado_pago === 'parcial' && (() => {
+            const abonoNum = parseInt((abono || '').replace(/\D/g, ''), 10) || 0
+            const pendiente = Math.max(0, Math.round(totalServicio) - abonoNum)
+            return (
+              <div className="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700">¿Cuánto pagó? (abono)</label>
+                    <input
+                      type="number" min={0} inputMode="numeric" value={abono}
+                      onChange={e => setAbono(e.target.value)}
+                      placeholder="0"
+                      className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                    />
+                  </div>
+                  <div className="text-sm">
+                    <p className="text-xs text-gray-600">Total del servicio: <span className="font-semibold text-gray-900">{fmtPrecio(Math.round(totalServicio))}</span></p>
+                    <p className="mt-0.5 text-amber-900 font-bold">Pendiente por pagar: {fmtPrecio(pendiente)}</p>
+                  </div>
+                </div>
+                <p className="mt-2 text-[11px] text-amber-800">
+                  Al guardar queda un <strong>saldo pendiente</strong> por la diferencia (aparece arriba en «pendientes de cobro»). La boleta se emite recién cuando confirmes el pago total.
+                </p>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Notas */}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, updateById, updateByIdIf, ensureColumns, deleteRow } from '@/lib/datastore'
+import { getSheetData, updateById, ensureColumns, deleteRow } from '@/lib/datastore'
 import { ajustarStock } from '@/lib/stock'
 import { parseDecimal } from '@/lib/numbers'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
@@ -10,10 +10,9 @@ import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-maile
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
 import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
-import { dispararCobroAdicional, cobrosPendientesPorCliente } from '@/lib/cobros'
+import { dispararCobroAdicional, cobrosPendientesPorCliente, sincronizarSaldoParcial, cerrarSaldoParcial } from '@/lib/cobros'
 import { excluirIncluidos } from '@/lib/anforas-premium'
-import { emitirBoletaFicha } from '@/lib/facturacion'
-import { avisarAdminsWhatsapp } from '@/lib/whatsapp'
+import { emitirBoletaSiCorresponde } from '@/lib/facturacion'
 import { precioClienteEutanasia } from '@/lib/eutanasia-precios'
 
 export async function GET(
@@ -159,6 +158,19 @@ export async function PATCH(
     const nombreServicio = NOMBRE_SERVICIO[String(candidate.codigo_servicio || '').toUpperCase()]
     if (nombreServicio) updated.tipo_servicio = nombreServicio
 
+    // PAGO PARCIAL: el tutor abonó una parte y queda un saldo por pagar. El monto
+    // abonado llega en `body.monto_abonado` (no se persiste en la ficha: el
+    // pendiente se lleva como un cobro 'saldo'). Si el abono cubre el total, la
+    // ficha queda 'pagado' y cae al flujo normal de boleta. `monto_abonado` NO es
+    // columna de `clientes` → rowForWrite lo descarta en el write (a propósito).
+    const totalFicha = parseDecimal(String(updated.precio_total ?? '')) ?? 0
+    const abonoParcial = parseDecimal(String(body.monto_abonado ?? '')) ?? 0
+    let pendienteParcial = 0
+    if (String(updated.estado_pago || '').toLowerCase() === 'parcial') {
+      pendienteParcial = Math.round(totalFicha - abonoParcial)
+      if (pendienteParcial <= 0) updated.estado_pago = 'pagado' // el abono cubre el total → pagado
+    }
+
     // "Registrar" un borrador: cuando la ficha aún no tiene código (cliente
     // creado por el bot, estado 'borrador') y el front pide registrar, genera el
     // código, pasa a 'pendiente' y manda el correo de bienvenida al tutor.
@@ -200,6 +212,17 @@ export async function PATCH(
         updated.codigo = codigoGenerado
       }
     }
+
+    // Sincronizar el saldo del pago parcial con `cobros` (best-effort): mantiene
+    // un cobro 'saldo' abierto por el pendiente, o cierra los abiertos si la ficha
+    // ya no está en pago parcial (se pagó todo o volvió a pendiente).
+    try {
+      if (String(updated.estado_pago || '').toLowerCase() === 'parcial' && pendienteParcial > 0) {
+        await sincronizarSaldoParcial(String(updated.id), pendienteParcial)
+      } else {
+        await cerrarSaldoParcial(String(updated.id))
+      }
+    } catch (e) { console.warn('[clientes PATCH] sync saldo parcial falló:', e) }
 
     // Correo de bienvenida con el código, solo al registrar (best-effort).
     if (codigoGenerado && String(updated.email || '').trim()) {
@@ -247,34 +270,13 @@ export async function PATCH(
     }
 
     // EMISIÓN AUTOMÁTICA DE BOLETA (39) AL TUTOR cuando la ficha pasa a PAGADA.
-    // Solo fichas de TUTOR (sin veterinaria — las de convenio se facturan al vet,
-    // mensual y manual). Best-effort: nunca bloquea el guardado. Guardas contra
-    // doble emisión: (1) transición real pendiente→pagada, (2) columna boleta_id.
+    // Solo en la transición real pendiente/parcial → pagada (el helper aplica el
+    // resto de las guardas: tutor, registrada, sin boleta previa). Best-effort.
     const pagoAntes = String(rows[idx].estado_pago || '').toLowerCase()
     const pagoAhora = String(updated.estado_pago || '').toLowerCase()
-    const esTutor = !String(updated.veterinaria_id || '').trim()
-    const yaTieneBoleta = !!String(rows[idx].boleta_id || '').trim()
-    const fichaRegistrada = String(updated.estado || '') !== 'borrador' && !!String(updated.codigo || '').trim()
-    if (pagoAntes !== 'pagado' && pagoAhora === 'pagado' && esTutor && fichaRegistrada && !yaTieneBoleta) {
-      try {
-        const r = await emitirBoletaFicha(updated as Record<string, string>, { creadoPorNombre: 'Automático (pago confirmado)' })
-        if (r.ok && r.documento?.id) {
-          await updateByIdIf('clientes', String(updated.id), {}, { boleta_id: String(r.documento.id) })
-          updated.boleta_id = String(r.documento.id)
-        } else if (!r.ok) {
-          console.warn('[clientes PATCH] no se pudo emitir la boleta automática:', r.error)
-          const nombre = String(updated.nombre_mascota || updated.codigo || updated.id || '')
-          avisarAdminsWhatsapp(
-            `⚠️ *Boleta SII no emitida*\n\nFicha ${String(updated.codigo || '#' + updated.id)} (${nombre}) quedó *pagada* pero la boleta automática falló:\n${r.error || 'error desconocido'}\n\nReintenta manualmente desde Facturación → "Pagadas sin boleta".`
-          ).catch(e => console.warn('[clientes PATCH] no se pudo avisar al admin por WhatsApp:', e))
-        }
-      } catch (e) {
-        console.warn('[clientes PATCH] error emitiendo boleta automática (no bloqueante):', e)
-        const nombre = String(updated.nombre_mascota || updated.codigo || updated.id || '')
-        avisarAdminsWhatsapp(
-          `⚠️ *Boleta SII no emitida*\n\nFicha ${String(updated.codigo || '#' + updated.id)} (${nombre}) quedó *pagada* pero la emisión de la boleta automática falló con un error inesperado.\n\nReintenta manualmente desde Facturación → "Pagadas sin boleta".`
-        ).catch(werr => console.warn('[clientes PATCH] no se pudo avisar al admin por WhatsApp:', werr))
-      }
+    if (pagoAntes !== 'pagado' && pagoAhora === 'pagado') {
+      const { boleta_id } = await emitirBoletaSiCorresponde(updated as Record<string, string>, { creadoPorNombre: 'Automático (pago confirmado)' })
+      if (boleta_id) updated.boleta_id = boleta_id
     }
 
     return NextResponse.json(updated)
