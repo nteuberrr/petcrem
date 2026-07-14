@@ -39,7 +39,6 @@ const FERIADOS: Record<string, string> = {
   '2027-06-28': 'San Pedro y San Pablo',
   '2027-07-16': 'Virgen del Carmen',
   '2027-08-15': 'Asunción de la Virgen',
-  '2027-09-17': 'Feriado adicional Fiestas Patrias',
   '2027-09-18': 'Independencia Nacional',
   '2027-09-19': 'Glorias del Ejército',
   '2027-10-11': 'Encuentro de Dos Mundos',

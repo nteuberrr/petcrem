@@ -85,19 +85,26 @@ export interface AgendaItem {
  * rango se compara como string ISO. Ordenados por fecha y hora.
  */
 export async function listarAgenda(fromISO?: string, toISO?: string): Promise<AgendaItem[]> {
-  const [retiros, cotis] = await Promise.all([
+  const [retiros, cotis, clientes] = await Promise.all([
     getSheetData('solicitudes_retiro').catch(() => [] as Record<string, string>[]),
     getSheetData('cotizaciones_eutanasia').catch(() => [] as Record<string, string>[]),
+    getSheetData('clientes').catch(() => [] as Record<string, string>[]),
   ])
+  const clientePorId = new Map(clientes.map(c => [String(c.id), c]))
   const inRange = (iso: string) => (!fromISO || iso >= fromISO) && (!toISO || iso <= toISO)
   const out: AgendaItem[] = []
 
   for (const r of retiros) {
     const estado = (r.estado || '').toLowerCase()
     if (estado !== 'pendiente' && estado !== 'confirmada') continue
-    const fecha = formatDateForSheet(r.fecha_retiro)
+    // Si la solicitud ya tiene ficha vinculada (borrador o registrada), la FICHA
+    // es la fuente de verdad de fecha/hora: el equipo puede haberla corregido a
+    // mano y ese cambio debe verse en la agenda (la solicitud es solo el snapshot
+    // del bot). Se usa `||` porque las celdas vacías llegan como '' (no null).
+    const ficha = r.cliente_id ? clientePorId.get(String(r.cliente_id)) : undefined
+    const fecha = formatDateForSheet((ficha?.fecha_retiro || r.fecha_retiro))
     if (!fecha || !inRange(fecha)) continue
-    const min = horaMin(r.hora_retiro)
+    const min = horaMin(ficha?.hora_retiro || r.hora_retiro)
     const esVet = r.origen === 'bot_vet' || !!r.vet_nombre
     out.push({
       id: `r${r.id}`,
@@ -112,6 +119,7 @@ export async function listarAgenda(fromISO?: string, toISO?: string): Promise<Ag
       comuna: r.comuna || '',
       direccion: r.direccion || '',
       tipo_servicio: r.tipo_servicio || '',
+      clienteId: r.cliente_id || '',
     })
   }
 

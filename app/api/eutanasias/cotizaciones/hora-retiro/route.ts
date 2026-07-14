@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, updateRow } from '@/lib/datastore'
+import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
 import { isWhatsappConfigured, avisarAdminsWhatsapp, enviarTextoWhatsapp } from '@/lib/whatsapp'
 import { formatDate } from '@/lib/dates'
@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Esta solicitud fue cancelada.' })
     }
 
-    await updateRow(SHEET_COTI, idx, { ...c, hora_retiro_crematorio: hora })
+    // Update PARCIAL por id (solo esta columna): robusto y sin reescribir la fila.
+    await updateByIdIf(SHEET_COTI, c.id, {}, { hora_retiro_crematorio: hora })
 
     if (isWhatsappConfigured()) {
       try {

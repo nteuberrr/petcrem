@@ -1,6 +1,8 @@
 'use client'
 import { Fragment, useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { Modal } from '@/components/ui/Modal'
+import { useAccionUnica } from '@/lib/use-accion-unica'
 
 type Item = {
   id: string; tipo: 'retiro' | 'eutanasia'; fecha: string; hora: string; bloque: number
@@ -114,7 +116,40 @@ export default function AgendaSemanal() {
   const rango = `${dias[0].num} ${MESES[dias[0].mes]} – ${dias[6].num} ${MESES[dias[6].mes]}`
   const total = items.length
 
-  const abrir = (it: Item) => { if (it.clienteId) router.push(`/clientes/${it.clienteId}`) }
+  // Edición rápida de la hora directamente desde la agenda (sin abrir la ficha,
+  // para no arriesgar un "Registrar ficha" accidental que avise al tutor). Solo
+  // para retiros; las eutanasias las coordina el veterinario → abren la ficha.
+  const [editando, setEditando] = useState<Item | null>(null)
+  const [nuevaHora, setNuevaHora] = useState('')
+  const [errorEdit, setErrorEdit] = useState('')
+  const { ejecutar, procesando } = useAccionUnica()
+
+  const abrir = (it: Item) => {
+    if (it.tipo === 'retiro') {
+      setEditando(it)
+      setNuevaHora(it.hora || '')
+      setErrorEdit('')
+    } else if (it.clienteId) {
+      router.push(`/clientes/${it.clienteId}`)
+    }
+  }
+
+  async function guardarHora() {
+    if (!editando) return
+    const hora = nuevaHora.trim()
+    if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(hora)) { setErrorEdit('Indica una hora válida (HH:MM).'); return }
+    setErrorEdit('')
+    try {
+      const r = await fetch('/api/agenda', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editando.id, hora }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { setErrorEdit(d?.error || 'No se pudo actualizar la hora.'); return }
+      setEditando(null)
+      await cargar()
+    } catch { setErrorEdit('Error de red. Intenta de nuevo.') }
+  }
 
   return (
     <div className="bg-white rounded-2xl shadow-md border border-gray-300 p-4 sm:p-5">
@@ -210,6 +245,51 @@ export default function AgendaSemanal() {
       {cargado && total === 0 && (
         <p className="text-center text-xs text-gray-400 mt-3">Sin agendamientos esta semana.</p>
       )}
+
+      {/* Edición rápida de la hora del retiro (sin abrir la ficha). */}
+      <Modal open={!!editando} onClose={() => setEditando(null)} title="Ajustar hora del retiro">
+        {editando && (
+          <div className="space-y-4">
+            <div>
+              <p className="font-bold text-gray-900">{editando.mascota || editando.quien || 'Retiro'}</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {editando.esVet ? '🏥 ' : '🐾 '}{editando.quien || '—'}
+                {(editando.direccion || editando.comuna) ? ` · ${[editando.direccion, editando.comuna].filter(Boolean).join(', ')}` : ''}
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-center">
+                <p className="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Horario actual</p>
+                <p className="text-2xl font-bold text-gray-500 tabular-nums">{editando.hora || '—'}</p>
+              </div>
+              <span className="text-gray-300 text-2xl">→</span>
+              <div>
+                <label className="text-[11px] uppercase tracking-wide text-brand font-semibold block mb-1">Nuevo horario</label>
+                <input
+                  type="time" value={nuevaHora} onChange={e => setNuevaHora(e.target.value)}
+                  className="rounded-xl border border-gray-300 px-3 py-2 text-lg font-bold text-brand focus:ring-2 focus:ring-brand focus:border-brand outline-none"
+                />
+              </div>
+            </div>
+            {errorEdit && <p className="text-xs text-red-600">{errorEdit}</p>}
+            <p className="text-[11px] text-gray-500">Solo cambia la hora del retiro. No registra la ficha ni envía correos al tutor.</p>
+            <div className="flex items-center justify-between gap-3 pt-1">
+              {editando.clienteId ? (
+                <button onClick={() => router.push(`/clientes/${editando.clienteId}`)}
+                  className="text-xs font-semibold text-brand-soft hover:underline">Abrir ficha completa →</button>
+              ) : <span />}
+              <div className="flex gap-2">
+                <button onClick={() => setEditando(null)}
+                  className="px-4 py-2 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+                <button onClick={() => ejecutar(guardarHora)} disabled={procesando}
+                  className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold disabled:opacity-50">
+                  {procesando ? 'Guardando…' : 'Guardar hora'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

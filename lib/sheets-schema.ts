@@ -312,6 +312,11 @@ export const SHEETS: Record<string, string[]> = {
     'cliente_wa_id',
     'direccion', 'comuna',
     'fecha_servicio', 'hora_servicio',
+    // Hora ACORDADA con el cliente que el vet informa desde su link; la agenda del
+    // crematorio muestra el retiro ~30 min después. ⚠️ Sin esta columna en el mapa,
+    // rowForWrite la descartaba en TODO write → el vet informaba la hora y nunca se
+    // guardaba (la columna sí existe en Postgres y se leía, por eso pasó inadvertido).
+    'hora_retiro_crematorio',
     // Servicio de cremación que el cliente eligió para DESPUÉS de la eutanasia
     // (CI | CP | SD). Se agendan ambos servicios.
     'tipo_servicio_cremacion',
