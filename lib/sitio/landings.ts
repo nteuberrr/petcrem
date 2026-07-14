@@ -12,6 +12,11 @@ const BASE = 'https://www.crematorioalmaanimal.cl'
 const WA = '56963126603'
 const LOGO = '/sitio/assets/68780d4f39586a806a378a9d_Logo.png'
 const GTM = 'GTM-5TWVTZNM'
+// Mismos IDs que el resto del sitio (parity con el Webflow original): GA4 directo
+// + Meta Pixel inline — en las páginas espejo vienen embebidos; las landings son
+// nuestras y hay que inyectarlos explícitos (laguna detectada post-cutover 2026-07-14).
+const GA4 = 'G-NLQBGW0RTP'
+const META_PIXEL = '1324716849538772'
 
 export interface Landing {
   slug: string
@@ -115,6 +120,10 @@ export function renderLanding(l: Landing): string {
 <link rel="stylesheet" href="/sitio/site.css"/>
 <link rel="icon" href="/sitio/assets/6942fb32cec49d2cc665b37f_favicon.png"/>
 <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${GTM}');</script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=${GA4}"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA4}');</script>
+<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${META_PIXEL}');fbq('track','PageView');</script>
+<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=${META_PIXEL}&ev=PageView&noscript=1"/></noscript>
 <style>
 .lp{font-family:Inter,system-ui,sans-serif;color:#143C64;background:#FBF8F3;margin:0}
 .lp-wrap{max-width:1080px;margin:0 auto;padding:0 20px}
