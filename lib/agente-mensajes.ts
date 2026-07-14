@@ -495,21 +495,39 @@ function construirMensajes(historial: TurnoMensaje[]): Anthropic.MessageParam[] 
  */
 function bloqueFechaChile(): string {
   const TZ = 'America/Santiago'
+  // Fecha de HOY en Chile (YYYY-MM-DD), y a partir de ahí construimos cada día
+  // anclando a las 12:00 UTC + i días: así el día de la semana es estable e
+  // inmune a los saltos de horario de verano (no usamos Date.now()+ms, que cerca
+  // de medianoche o de un cambio de hora podía caer en el día equivocado).
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const hoyISO = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  const [Y, M, D] = hoyISO.split('-').map(Number)
   const ref = (offsetDias: number) => {
-    const d = new Date(Date.now() + offsetDias * 86400000)
-    const iso = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
-    const dia = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, weekday: 'long' }).format(d)
+    const d = new Date(Date.UTC(Y, M - 1, D + offsetDias, 12, 0, 0))
+    const iso = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
+    const dia = new Intl.DateTimeFormat('es-CL', { timeZone: 'UTC', weekday: 'long' }).format(d)
     return `${dia} ${iso}`
   }
   const horaActual = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+  // Tabla de los próximos 8 días: día de la semana → fecha exacta.
+  const tabla = Array.from({ length: 8 }, (_, i) => {
+    const etq = i === 0 ? '   ← HOY' : i === 1 ? '   ← mañana' : i === 2 ? '   ← pasado mañana' : ''
+    return `    ${ref(i)}${etq}`
+  }).join('\n')
   return `FECHA Y HORA ACTUAL (Chile, America/Santiago):
 - Hoy es ${ref(0)}.
-- Mañana es ${ref(1)}.
-- Pasado mañana es ${ref(2)}.
 - Ahora son las ${horaActual} hrs.
 - Retiros: solo de 09:00 a 21:00 (última hora para agendar = 21:00) y nunca dentro de la próxima hora (mínimo = ahora + 1 h).
-Resuelve SIEMPRE las fechas Y horas relativas que diga el cliente ("hoy", "mañana", "este viernes", "lo antes posible", "en un rato") en base a ESTO. Pasa las fechas a las herramientas en formato YYYY-MM-DD y las horas en HH:MM (24h). Si pide "lo antes posible" o algo similar y no hay una indicación distinta del equipo, calcula la hora de retiro a partir de la HORA ACTUAL de arriba. NUNCA inventes ni adivines la fecha, el año ni la hora; si hay ambigüedad, confírmasela al cliente antes de agendar.
-ESTE BLOQUE ES SIEMPRE LA VERDAD VIGENTE, incluso si en mensajes anteriores de ESTA MISMA conversación (tuyos o del cliente) se mencionó otra fecha, otro día de la semana u otra hora — por ejemplo, algo dicho pasada la medianoche puede haber quedado desactualizado apenas cambió el día. Antes de repetir, confirmar o reutilizar una fecha/día que aparece en el historial, vuelve a calcularla contra el "Hoy es..." de arriba; si no coincide, usa la de arriba y NO la del historial (nunca le llames "domingo" a un día que HOY es sábado, por ejemplo).`
+
+CALENDARIO DE LOS PRÓXIMOS DÍAS (día de la semana → fecha exacta). Usa SIEMPRE esta tabla para resolver "este jueves", "el viernes", "mañana", etc. NUNCA calcules tú los días de la semana ni sumes días de memoria — LÉELOS de acá:
+${tabla}
+
+REGLAS DE FECHA (duras):
+- Cuando el cliente mencione un día de la semana o una fecha relativa, toma la fecha EXACTA de la tabla de arriba. Pasa las fechas a las herramientas como YYYY-MM-DD y las horas como HH:MM (24h).
+- Si el cliente AFIRMA una fecha (ej.: "es jueves 16") y esa fecha COINCIDE con la tabla, acéptala sin discutir. Solo corrígelo si NO coincide con la tabla, y hazlo mostrándole la fecha correcta de la tabla. (Nos pasó con una clienta: le insistimos que "el jueves era 17" cuando en la tabla era jueves 16 — el error fue nuestro. No repitas eso.)
+- Para "lo antes posible"/"ahora"/"en un rato", calcula la hora desde la HORA ACTUAL de arriba (mínimo +1 h), dentro de 09:00–21:00.
+- NUNCA inventes ni adivines la fecha, el año, el día de la semana ni la hora; ante ambigüedad, confírmala contra la tabla antes de agendar.
+ESTA TABLA ES LA VERDAD VIGENTE aunque en el historial (tuyo o del cliente) se haya mencionado otra fecha/día — algo dicho pasada la medianoche puede haber quedado desactualizado. Antes de reutilizar una fecha del historial, verifícala contra la tabla.`
 }
 
 /** Limpia el texto final del modelo (quita fences y desarma JSON heredado). */

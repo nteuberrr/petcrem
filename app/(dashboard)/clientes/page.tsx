@@ -23,6 +23,8 @@ type Cliente = {
   veterinaria_id?: string; notas?: string
   fotos_cuadro?: string; videos_servicio?: string
   correo_diferencia_fecha?: string
+  precio_servicio?: string; precio_adicionales?: string; precio_total?: string
+  descuento_monto?: string; descuento_nombre?: string
 }
 type Especie = { id: string; nombre: string; letra: string; activo: string }
 type Veterinario = { id: string; nombre: string; activo: string; tipo_precios?: string }
@@ -30,6 +32,9 @@ type Producto = { id: string; nombre: string; precio: string; stock: string; cat
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string; auto_regla?: string; comunas?: string }
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
+
+const NOMBRE_MODALIDAD: Record<string, string> = { CI: 'Cremación Individual', CP: 'Cremación Premium', SD: 'Cremación Sin Devolución' }
+const intCLP = (v: unknown) => parseInt(String(v ?? '').replace(/[^\d-]/g, ''), 10) || 0
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
 type TramoEspecial = Tramo & { veterinaria_id: string }
 type FichaCreada = {
@@ -524,6 +529,28 @@ export default function ClientesPage() {
     anforaPremiumIncluida(form.codigo_servicio, productosDisp.find(p => p.id === a.id)?.categoria)
   const totalAdicionales = adicionales.reduce((sum, a) => sum + (adicionalIncluido(a) ? 0 : a.precio * a.qty), 0)
 
+  // Resumen del servicio para la tarjeta de la lista: servicio + adicionales
+  // (con "Incluido" para el ánfora premium de una Cremación Premium) + total.
+  // null si la ficha no tiene snapshot de precio (borrador/legacy).
+  function resumenServicio(c: Cliente): { lineas: { nombre: string; valor: string; verde?: boolean }[]; total: number } | null {
+    const servicioPrecio = intCLP(c.precio_servicio)
+    const total = intCLP(c.precio_total)
+    if (servicioPrecio <= 0 && total <= 0) return null
+    const cs = (c.codigo_servicio || 'CI').toUpperCase()
+    const lineas: { nombre: string; valor: string; verde?: boolean }[] = [
+      { nombre: NOMBRE_MODALIDAD[cs] || 'Cremación', valor: fmtPrecio(servicioPrecio) },
+    ]
+    let items: AdicionalItem[] = []
+    try { const arr = JSON.parse(c.adicionales || '[]'); if (Array.isArray(arr)) items = arr } catch { /* sin adicionales */ }
+    for (const a of items) {
+      const incluido = a.tipo === 'producto' && anforaPremiumIncluida(cs, productosDisp.find(p => p.id === a.id)?.categoria)
+      lineas.push({ nombre: `${a.nombre}${a.qty > 1 ? ` ×${a.qty}` : ''}`, valor: incluido ? 'Incluido' : fmtPrecio(a.precio * a.qty) })
+    }
+    const desc = intCLP(c.descuento_monto)
+    if (desc > 0) lineas.push({ nombre: `Descuento${c.descuento_nombre ? ` (${c.descuento_nombre})` : ''}`, valor: `−${fmtPrecio(desc)}`, verde: true })
+    return { lineas, total }
+  }
+
   const vetSeleccionada = !noEsVeterinaria ? veterinarias.find(v => v.id === form.veterinaria_id) : undefined
   const tipoPrecios: 'general' | 'convenio' | 'especial' = !vetSeleccionada
     ? 'general'
@@ -704,7 +731,9 @@ export default function ClientesPage() {
       ) : (
         <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 max-h-[640px] overflow-y-auto">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pr-1">
-          {resultados.map(c => (
+          {resultados.map(c => {
+            const resumen = resumenServicio(c)
+            return (
             <button
               key={c.id}
               onClick={() => setSelected(c)}
@@ -714,6 +743,8 @@ export default function ClientesPage() {
                 <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${c.codigo ? 'text-brand bg-brand/10' : 'text-gray-400 bg-gray-100'}`}>{c.codigo || 'sin código'}</span>
                 <Badge variant={c.estado === 'cremado' ? 'green' : c.estado === 'despachado' ? 'blue' : 'yellow'}>{c.estado === 'borrador' ? 'Por ingresar' : c.estado && c.estado !== 'pendiente' ? c.estado : 'retirado'}</Badge>
               </div>
+              <div className="flex gap-3">
+                <div className="flex-1 min-w-0">
               <p className="font-bold text-gray-900 text-base">{c.nombre_mascota || <span className="text-gray-400 italic">Sin nombre</span>}</p>
               <p className="text-sm text-gray-600">{c.nombre_tutor}</p>
               <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -757,8 +788,28 @@ export default function ClientesPage() {
                   ⚠ Pago pendiente
                 </p>
               )}
+                </div>
+                {resumen && (
+                  <div className="w-40 shrink-0 border-l border-gray-200 pl-3">
+                    <p className="text-[10px] uppercase tracking-wide font-bold text-gray-500 mb-1.5">Resumen del servicio</p>
+                    <div className="space-y-1">
+                      {resumen.lineas.map((l, i) => (
+                        <div key={i} className="flex justify-between gap-2 text-[11px] leading-tight">
+                          <span className={`truncate ${l.verde ? 'text-emerald-700' : 'text-gray-600'}`} title={l.nombre}>{l.nombre}</span>
+                          <span className={`shrink-0 font-semibold ${l.verde ? 'text-emerald-700' : 'text-gray-800'}`}>{l.valor}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between gap-2 text-xs pt-1 mt-1 border-t border-gray-200">
+                        <span className="font-bold text-gray-700">Total</span>
+                        <span className="font-bold text-brand">{fmtPrecio(resumen.total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </button>
-          ))}
+            )
+          })}
         </div>
         </div>
       )}
