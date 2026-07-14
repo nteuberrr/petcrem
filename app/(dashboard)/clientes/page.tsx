@@ -91,6 +91,13 @@ export default function ClientesPage() {
   const [filtroVet, setFiltroVet] = useState('') // '' = todas · '__general__' = sin vet · id de vet
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  // Agendamiento manual (retiro registrado a mano → ficha borrador + confirmación WhatsApp)
+  const AGENDA_DEFAULT = { cliente_nombre: '', telefono: '', nombre_mascota: '', direccion: '', comuna: '', codigo_servicio: 'CI', fecha_retiro: '', hora_retiro: '', peso: '' }
+  const [showAgenda, setShowAgenda] = useState(false)
+  const [agendaForm, setAgendaForm] = useState(AGENDA_DEFAULT)
+  const [agendaSaving, setAgendaSaving] = useState(false)
+  const agendaSavingRef = useRef(false)
+  const [agendaError, setAgendaError] = useState('')
   const [selected, setSelected] = useState<Cliente | null>(null)
   const [especies, setEspecies] = useState<Especie[]>([])
   const [veterinarias, setVeterinarias] = useState<Veterinario[]>([])
@@ -593,6 +600,33 @@ export default function ClientesPage() {
     return min === maxPesoMin ? `${min} kg o más` : `${tramoAplicable.peso_min} – ${tramoAplicable.peso_max} kg`
   })() : null
 
+  function abrirAgenda() {
+    setAgendaForm({ ...AGENDA_DEFAULT, fecha_retiro: todayISO() })
+    setAgendaError('')
+    setShowAgenda(true)
+  }
+
+  async function submitAgenda(e: React.FormEvent) {
+    e.preventDefault()
+    if (agendaSavingRef.current) return
+    agendaSavingRef.current = true
+    setAgendaSaving(true); setAgendaError('')
+    try {
+      const res = await fetch('/api/clientes/agendamiento-manual', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(agendaForm),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setAgendaError(data?.error || 'No se pudo registrar el agendamiento.'); return }
+      const mascota = agendaForm.nombre_mascota
+      setShowAgenda(false)
+      setAgendaForm(AGENDA_DEFAULT)
+      await fetchClientes()
+      alert(`✅ Agendamiento registrado. Se creó la ficha "Por ingresar" de ${mascota} y se le envió la confirmación por WhatsApp al tutor.`)
+    } catch { setAgendaError('Error de red. Intenta de nuevo.') }
+    finally { agendaSavingRef.current = false; setAgendaSaving(false) }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -600,12 +634,21 @@ export default function ClientesPage() {
           <h1 className="text-2xl font-extrabold text-brand tracking-tight">Clientes</h1>
           <p className="text-gray-600 text-sm mt-0.5">Fichas de mascotas</p>
         </div>
-        <button
-          onClick={() => { setForm({ ...FORM_DEFAULT, fecha_retiro: todayISO() }); autoAgregadosRef.current = new Set(); autoQuitadosRef.current = new Set(); setShowModal(true) }}
-          className="bg-brand hover:bg-brand-dark text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors"
-        >
-          + Nueva ficha
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={abrirAgenda}
+            title="Registrar a mano un retiro y avisarle al tutor por WhatsApp"
+            className="border-2 border-brand text-brand hover:bg-brand/5 px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+          >
+            📅 Agendamiento manual
+          </button>
+          <button
+            onClick={() => { setForm({ ...FORM_DEFAULT, fecha_retiro: todayISO() }); autoAgregadosRef.current = new Set(); autoQuitadosRef.current = new Set(); setShowModal(true) }}
+            className="bg-brand hover:bg-brand-dark text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors"
+          >
+            + Nueva ficha
+          </button>
+        </div>
       </div>
 
       {/* Notificaciones compactas: una fila de chips clickeables que aplican el
@@ -921,6 +964,75 @@ export default function ClientesPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Modal "Agendamiento manual" */}
+      <Modal open={showAgenda} onClose={() => { setShowAgenda(false); setAgendaError('') }} title="Agendamiento manual">
+        <form onSubmit={submitAgenda} className="space-y-4">
+          <p className="text-xs text-gray-600 -mt-1">
+            Registra un retiro a mano. Se crea la ficha <strong>&laquo;Por ingresar&raquo;</strong> y se le envía la <strong>confirmación por WhatsApp</strong> al tutor (con el link para adelantar los datos de su mascota).
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Tutor <span className="text-red-500">*</span></label>
+              <input required value={agendaForm.cliente_nombre} onChange={e => setAgendaForm(f => ({ ...f, cliente_nombre: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">WhatsApp <span className="text-red-500">*</span></label>
+              <input required inputMode="numeric" placeholder="56961217925" value={agendaForm.telefono} onChange={e => setAgendaForm(f => ({ ...f, telefono: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Mascota <span className="text-red-500">*</span></label>
+              <input required value={agendaForm.nombre_mascota} onChange={e => setAgendaForm(f => ({ ...f, nombre_mascota: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Servicio <span className="text-red-500">*</span></label>
+              <select required value={agendaForm.codigo_servicio} onChange={e => setAgendaForm(f => ({ ...f, codigo_servicio: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                <option value="CI">Cremación Individual</option>
+                <option value="CP">Cremación Premium</option>
+                <option value="SD">Cremación Sin Devolución</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-semibold text-gray-700">Dirección de retiro <span className="text-red-500">*</span></label>
+              <input required value={agendaForm.direccion} onChange={e => setAgendaForm(f => ({ ...f, direccion: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Comuna <span className="text-red-500">*</span></label>
+              <input required value={agendaForm.comuna} onChange={e => setAgendaForm(f => ({ ...f, comuna: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Peso (kg)</label>
+              <input inputMode="decimal" value={agendaForm.peso} onChange={e => setAgendaForm(f => ({ ...f, peso: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Fecha de retiro <span className="text-red-500">*</span></label>
+              <input required type="date" value={agendaForm.fecha_retiro} onChange={e => setAgendaForm(f => ({ ...f, fecha_retiro: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Hora de retiro <span className="text-red-500">*</span></label>
+              <input required type="time" value={agendaForm.hora_retiro} onChange={e => setAgendaForm(f => ({ ...f, hora_retiro: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+          </div>
+          {agendaError && <p className="text-sm text-red-600">{agendaError}</p>}
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => { setShowAgenda(false); setAgendaError('') }}
+              className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors">Cancelar</button>
+            <button type="submit" disabled={agendaSaving}
+              className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50 transition-colors">
+              {agendaSaving ? 'Registrando…' : 'Registrar y avisar al tutor'}
+            </button>
+          </div>
+        </form>
       </Modal>
 
       {/* Modal "Nueva ficha" */}
