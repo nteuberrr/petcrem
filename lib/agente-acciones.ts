@@ -335,6 +335,13 @@ async function cotizarEutanasia(a: AccionCotizarEutanasia): Promise<string> {
 async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<string> {
   a.nombre_tutor = capitalizarNombre(a.nombre_tutor)
   a.nombre_mascota = capitalizarNombre(a.nombre_mascota)
+  // El NOMBRE de la mascota es obligatorio: sin él la ficha y la agenda quedan
+  // con "No Especificado" (pasó con la solicitud de Samuel/Daniella). Si el
+  // modelo no lo trae o manda un placeholder, NO agendamos: pedimos el nombre.
+  const mascotaLimpia = (a.nombre_mascota || '').trim()
+  if (!mascotaLimpia || /^(no\s*especificad|sin\s*nombre|desconocid|no\s*s[eé]|n\/?a|xxx|--)/i.test(mascotaLimpia)) {
+    return 'Falta el NOMBRE de la mascota para agendar la eutanasia. Pídeselo al cliente de forma cálida ANTES de agendar; nunca uses un placeholder como "No Especificado".'
+  }
   const peso = Number(a.peso)
   if (!Number.isFinite(peso) || peso <= 0) {
     return 'Falta el peso de la mascota para agendar la eutanasia. Pídeselo al cliente.'

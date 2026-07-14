@@ -532,7 +532,15 @@ export function renderCoordinarEmail({ vetNombre, c, linkRealizado, linkNoRealiz
         </tbody>
       </table>
 
-      <p style="margin:22px 0 8px;font-size:14px"><strong>Cuando termines la visita, marca el resultado:</strong></p>
+      ${linkHoraRetiro ? `
+      <p style="margin:22px 0 10px;font-size:14px"><strong>1) Apenas coordines la hora de la visita con la familia, infórmanosla</strong> para agendar el retiro del crematorio:</p>
+      <div style="text-align:center;margin:0 0 6px">
+        <a href="${linkHoraRetiro}" style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 30px;border-radius:12px;box-shadow:0 4px 12px rgba(20,60,100,.28)">
+          🕒 Informar la hora del servicio&nbsp;&nbsp;→
+        </a>
+      </div>` : ''}
+
+      <p style="margin:22px 0 8px;font-size:14px"><strong>${linkHoraRetiro ? '2) ' : ''}Cuando termines la visita, marca el resultado:</strong></p>
 
       <div style="text-align:center;margin:14px 0 8px">
         <a href="${linkRealizado}" style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 26px;border-radius:10px;margin:0 6px 10px">
@@ -547,16 +555,6 @@ export function renderCoordinarEmail({ vetNombre, c, linkRealizado, linkNoRealiz
         Marca <strong>"realizada"</strong> si procediste con la eutanasia, o <strong>"no realizada"</strong> si al evaluar no correspondía.
         En ambos casos coordinamos tu pago para el día hábil siguiente. Presiona solo después de la visita.
       </p>
-
-      ${linkHoraRetiro ? `
-      <div style="margin:22px 0 0;padding-top:18px;border-top:1px dashed ${BRAND.hairline}">
-        <p style="margin:0 0 12px;font-size:13px;color:${BRAND.ink};line-height:1.55">Cuando acuerdes la hora con el cliente, avísanos para coordinar el <strong>retiro del crematorio</strong>:</p>
-        <div style="text-align:center">
-          <a href="${linkHoraRetiro}" style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 30px;border-radius:12px;box-shadow:0 4px 12px rgba(20,60,100,.28)">
-            🕒 Informar la hora del servicio&nbsp;&nbsp;→
-          </a>
-        </div>
-      </div>` : ''}
 
       ${linkDatosPago ? `
       <div style="margin:24px 0 0;padding-top:18px;border-top:1px dashed ${BRAND.hairline};text-align:center">

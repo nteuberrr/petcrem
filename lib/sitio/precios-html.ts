@@ -83,10 +83,55 @@ function renderTabla(filas: { peso: string; precio: number }[]): string {
     + '</div><p class="aa-precios-nota">El tramo se determina con el peso de tu mascota al ingreso.</p></div>'
 }
 
+/**
+ * Nota de recargos que pueden sumarse al retiro (fuera de horario + distancia),
+ * de la tabla `otros_servicios`. Va DEBAJO de la tabla de precios de cada
+ * servicio (incl. eutanasia) para que el cliente los conozca antes de cotizar
+ * — mismo criterio que el bot de WhatsApp (pedido del dueño 2026-07-14, tras el
+ * caso de una clienta que se enteró del recargo recién al pagar).
+ */
+function renderRecargos(recargos: Tramo[]): string {
+  const activo = (r: Tramo) => String(r.activo || '').toUpperCase() === 'TRUE'
+  const fh = recargos.find(r => activo(r) && r.auto_regla === 'fuera_horario')
+  const dist = recargos.find(r => activo(r) && r.auto_regla === 'distancia')
+  const items: string[] = []
+  if (fh) {
+    items.push(`<li class="aa-rec-item"><span class="aa-rec-top"><span class="aa-rec-n">Retiro fuera de horario</span><span class="aa-rec-v">+${fmtCLP(num(fh.precio))}</span></span><span class="aa-rec-d">Retiros después de las 19:00 hrs (lunes a viernes) y durante los fines de semana.</span></li>`)
+  }
+  if (dist) {
+    let comunas: string[] = []
+    try { const x = JSON.parse(dist.comunas || '[]'); if (Array.isArray(x)) comunas = x.map(String) } catch { /* comunas mal formadas → sin lista */ }
+    const nota = comunas.length ? `Aplica en: ${comunas.join(', ')}.` : 'Aplica en comunas más alejadas de la Región Metropolitana.'
+    items.push(`<li class="aa-rec-item"><span class="aa-rec-top"><span class="aa-rec-n">Adicional por distancia</span><span class="aa-rec-v">+${fmtCLP(num(dist.precio))}</span></span><span class="aa-rec-d">${nota}</span></li>`)
+  }
+  if (!items.length) return ''
+  const css = '<style>'
+    + '.aa-recargos{max-width:620px;margin:0 auto 30px;padding:0 4px}'
+    + '.aa-recargos-card{background:#FBF8F3;border:1px solid #e3ddd2;border-radius:16px;padding:18px 22px}'
+    + '.aa-recargos-tit{margin:0 0 4px;color:#143C64;font-weight:700;font-size:14px}'
+    + '.aa-recargos-sub{margin:0 0 12px;color:#7c8894;font-size:12.5px}'
+    + '.aa-rec-list{list-style:none;margin:0;padding:0}'
+    + '.aa-rec-item{padding:10px 0;border-top:1px solid #ece6da}'
+    + '.aa-rec-item:first-child{border-top:none}'
+    + '.aa-rec-top{display:flex;justify-content:space-between;gap:12px;align-items:baseline}'
+    + '.aa-rec-n{color:#3d4d5c;font-weight:600;font-size:14.5px}'
+    + '.aa-rec-v{color:#143C64;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}'
+    + '.aa-rec-d{display:block;color:#7c8894;font-size:12.5px;margin-top:2px}'
+    + '</style>'
+  return css
+    + '<div class="aa-recargos"><div class="aa-recargos-card">'
+    + '<p class="aa-recargos-tit">Recargos que pueden sumarse al retiro</p>'
+    + '<p class="aa-recargos-sub">Se avisan siempre antes de coordinar; no son parte del valor base.</p>'
+    + `<ul class="aa-rec-list">${items.join('')}</ul>`
+    + '</div></div>'
+}
+
 export interface DatosPrecios {
   tramosGen: Tramo[]
   tramosEut: Tramo[]
   fijoEut: number
+  /** Filas de `otros_servicios` (para la nota de recargos bajo la tabla). */
+  recargos: Tramo[]
 }
 
 function filasDe(slug: string, d: DatosPrecios): { peso: string; precio: number }[] {
@@ -114,7 +159,7 @@ export function renderPreciosServicio(html: string, slug: string, d: DatosPrecio
   const filas = filasDe(slug, d)
   return html
     .replace('<!--INJECT:rango-precio-->', rangoDe(filas) || 'Cotiza con nosotros')
-    .replace('<!--INJECT:tabla-precios-->', renderTabla(filas))
+    .replace('<!--INJECT:tabla-precios-->', renderTabla(filas) + renderRecargos(d.recargos || []))
     .replace('<!--INJECT:desde-ci-->', fmtCLP(desdeDe(filasCremacion(d.tramosGen, 'precio_ci'))))
     .replace('<!--INJECT:desde-cp-->', fmtCLP(desdeDe(filasCremacion(d.tramosGen, 'precio_cp'))))
     // El 3er bloque comparativo del export no trae margen entre "Desde" y el

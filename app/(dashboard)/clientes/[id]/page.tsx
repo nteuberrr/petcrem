@@ -103,6 +103,15 @@ type ClienteDetalle = {
     numero_global: string
     nota: string
   } | null
+  /** Eutanasia a domicilio asociada (si la ficha vino de ese flujo). El valor se
+   *  cobra aparte y NO va en la boleta (esa es solo por la cremación). */
+  eutanasia?: {
+    id: string
+    hora_servicio: string
+    hora_retiro_crematorio: string
+    estado: string
+    valor_cliente: number
+  } | null
 }
 
 type Veterinario = { id: string; nombre: string; activo: string; tipo_precios: string }
@@ -1131,6 +1140,19 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           ) : (
             <p className="text-sm text-gray-500">Despacho no encontrado (id: {cliente.despacho_id || '—'}).</p>
           )}
+        </div>
+      )}
+
+      {/* Eutanasia a domicilio asociada (solo lectura) */}
+      {cliente.eutanasia && (
+        <div className="bg-white rounded-xl shadow-md border-2 border-amber-300 p-6 mb-6">
+          <h2 className="text-base font-bold text-gray-900 mb-1">🩺 Eutanasia a domicilio</h2>
+          <p className="text-xs text-gray-500 mb-4">Esta ficha viene de una eutanasia a domicilio. El valor de la eutanasia se cobra aparte y <strong>NO se incluye en la boleta</strong> (la boleta es solo por la cremación).</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <InfoField label="Hora Vet (visita)" value={cliente.eutanasia.hora_servicio || '—'} />
+            <InfoField label="Hora Retiro (crematorio)" value={cliente.eutanasia.hora_retiro_crematorio || 'Por confirmar'} />
+            <InfoField label="Valor eutanasia (a cobrar, fuera de boleta)" value={cliente.eutanasia.valor_cliente > 0 ? fmtPrecio(cliente.eutanasia.valor_cliente) : '—'} />
+          </div>
         </div>
       )}
 

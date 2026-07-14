@@ -50,10 +50,10 @@ export default function HoraRetiroPage() {
           {token && (estado === 'inicial' || estado === 'enviando' || (data && !data.ok)) && (
             <form onSubmit={enviar} className="space-y-4">
               <p className="text-sm text-gray-700 leading-relaxed">
-                Indícanos la <strong>hora acordada con el cliente</strong> para que el crematorio pase a retirar a la mascota tras la eutanasia.
+                Indícanos la <strong>hora que acordaste con el cliente</strong> para la visita. Nuestro chofer pasará a retirar a la mascota <strong>dentro de la hora siguiente</strong>, así que confirma que sea la hora que quedaste con la familia.
               </p>
               <div>
-                <label className="block text-sm font-medium text-gray-900 mb-1">Hora de retiro</label>
+                <label className="block text-sm font-medium text-gray-900 mb-1">Hora acordada con el cliente</label>
                 <input
                   type="time" required value={hora} onChange={e => setHora(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-[#143C64]/40"
@@ -75,8 +75,8 @@ export default function HoraRetiroPage() {
               <p className="text-5xl mb-3">🕒</p>
               <h2 className="text-xl font-bold text-gray-900 mb-1">¡Gracias!</h2>
               <p className="text-sm text-gray-600 mt-2">
-                Registramos que el crematorio pasará a las <strong style={{ color: COLOR }}>{data.hora}</strong>
-                {data.mascota_nombre ? ` por ${data.mascota_nombre}` : ''}. Coordinamos el retiro con esa hora.
+                Registramos la hora acordada: <strong style={{ color: COLOR }}>{data.hora}</strong>
+                {data.mascota_nombre ? ` por ${data.mascota_nombre}` : ''}. Nuestro chofer pasará a retirar a la mascota dentro de la hora siguiente.
               </p>
               <p className="text-xs text-gray-500 mt-4">Si necesitas cambiarla, vuelve a abrir este mismo enlace.</p>
             </div>

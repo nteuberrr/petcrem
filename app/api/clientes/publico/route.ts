@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSheetData, appendRow, getNextId, ensureColumns } from '@/lib/datastore'
 import { generarCodigo } from '@/lib/codigo-generator'
-import { enviarRegistroMascota } from '@/lib/cliente-mailer'
+import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-mailer'
 import { todayISO } from '@/lib/dates'
 import { calcularSnapshotFicha } from '@/lib/price-calculator'
 import { capitalizarNombre } from '@/lib/nombres'
@@ -136,6 +136,7 @@ export async function POST(req: NextRequest) {
         codigo: row.codigo,
         clienteId: String(id),
         codigoServicio: String(row.codigo_servicio || ''),
+        resumen: (await resumenCompraDeFicha(row).catch(() => null)) ?? undefined,
       })
     } catch (e) {
       console.warn('[clientes/publico POST] fallo mail registro (no bloqueante):', e)

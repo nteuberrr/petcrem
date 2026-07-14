@@ -26,12 +26,13 @@ const RUTAS_PUB_RE = /href="\/(servicios|nosotros|convenios|contacto|anforas|cat
 // Precios VIVOS para /servicios y sus detalles (cremación + eutanasia): se leen
 // en cada render, así un cambio en Configuración → Precios se refleja en la web.
 async function datosPrecios(): Promise<DatosPrecios> {
-  const [tramosGen, tramosEut, fijoEut] = await Promise.all([
+  const [tramosGen, tramosEut, fijoEut, recargos] = await Promise.all([
     getSheetData('precios_generales').catch(() => []),
     getSheetData('precios_eutanasia').catch(() => []),
     getFijoEutanasia().catch(() => 0),
+    getSheetData('otros_servicios').catch(() => []),
   ])
-  return { tramosGen, tramosEut, fijoEut }
+  return { tramosGen, tramosEut, fijoEut, recargos }
 }
 
 // Versión de prueba (host != dominio oficial): el sitio vive bajo /sitio/* y el
@@ -112,8 +113,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
 
   // Inyección de contenido dinámico según la página.
   if (tpl === 'catalogo-anforas' && html.includes('<!--INJECT:productos-->')) {
-    const productos = await getSheetData('productos').catch(() => [])
-    html = html.replace('<!--INJECT:productos-->', renderProductosWeb(productos))
+    const [productos, otrosServicios] = await Promise.all([
+      getSheetData('productos').catch(() => []),
+      getSheetData('otros_servicios').catch(() => []),
+    ])
+    html = html.replace('<!--INJECT:productos-->', renderProductosWeb(productos, otrosServicios))
   }
   if (tpl === 'catalogo-anforas' && html.includes('<!--INJECT:convenios-descuento-->')) {
     const descuentos = await getSheetData('descuentos').catch(() => [])

@@ -67,10 +67,11 @@ async function cargarPng(doc: PDFDocument, url: string): Promise<PDFImage | null
 }
 
 export async function generarCatalogoPdf(): Promise<Buffer> {
-  const [prodRows, banco, contacto] = await Promise.all([
+  const [prodRows, banco, contacto, otrosRows] = await Promise.all([
     getSheetData('productos'),
     listarImagenes().catch(() => [] as ImagenBanco[]),
     getContacto(),
+    getSheetData('otros_servicios').catch(() => [] as Record<string, string>[]),
   ])
   const bancoProd = banco.filter(b => (b.grupo || '') === 'productos' && b.url)
   const productos = (prodRows as unknown as Producto[]).filter(p => p.activo !== 'FALSE' && (p.nombre || '').trim())
@@ -241,6 +242,36 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
   for (const c of cats) {
     if (esGreda(c.nombre) || esPremium(c.nombre)) continue
     await grilla(c.nombre, c.items)
+  }
+
+  // ── Servicios adicionales (otros_servicios activos: recargos + express) ──
+  const servicios = (otrosRows as Record<string, string>[])
+    .filter(s => String(s.activo || '').toUpperCase() === 'TRUE' && (s.nombre || '').trim())
+  if (servicios.length) {
+    tituloSeccion('Servicios adicionales', 'Servicios opcionales que pueden sumarse a la cremación. Los recargos de retiro se avisan siempre antes de coordinar.')
+    for (const s of servicios) {
+      const precio = parseInt(s.precio, 10) || 0
+      let det = ''
+      if (s.auto_regla === 'fuera_horario') {
+        det = 'Retiros después de las 19:00 hrs (lunes a viernes) y durante los fines de semana.'
+      } else if (s.auto_regla === 'distancia') {
+        let comunas: string[] = []
+        try { const x = JSON.parse(s.comunas || '[]'); if (Array.isArray(x)) comunas = x.map(String) } catch { /* sin lista */ }
+        det = comunas.length ? `Aplica en: ${comunas.join(', ')}.` : 'Aplica en comunas más alejadas de la Región Metropolitana.'
+      }
+      const detLines = det ? wrapText(det, f.regular, 10, CONTENT_W - 180) : []
+      const cardH = Math.max(34, 22 + detLines.length * 13)
+      need(cardH + 9)
+      page.drawRectangle({ x: MARGIN, y: y - cardH, width: CONTENT_W, height: cardH, color: C.white, borderColor: C.line, borderWidth: 1 })
+      page.drawRectangle({ x: MARGIN, y: y - cardH, width: 4, height: cardH, color: C.gold })
+      text(s.nombre, MARGIN + 16, y - 18, 11.5, f.semibold, C.navy)
+      const pTxt = '+' + fmtPrecio(precio)
+      text(pTxt, MARGIN + CONTENT_W - 14 - f.bold.widthOfTextAtSize(pTxt, 12), y - 18, 12, f.bold, C.navy)
+      let yy = y - 34
+      for (const ln of detLines) { text(ln, MARGIN + 16, yy, 10, f.regular, C.muted); yy -= 13 }
+      gap(cardH + 9)
+    }
+    gap(6)
   }
 
   // ── Cierre ──

@@ -30,6 +30,9 @@ export const HORA_ULTIMO_RETIRO = 21   // última hora para agendar un retiro (2
 const MIN_APERTURA = HORA_APERTURA * 60
 const MIN_ULTIMO = HORA_ULTIMO_RETIRO * 60
 const BUFFER_MIN = 60                   // no se agenda dentro de la próxima hora
+// Eutanasia: el vet informa la hora de la VISITA (acordada con el cliente) y
+// nuestro chofer pasa a retirar ~30 min después → la agenda muestra ese desfase.
+const DESFASE_RETIRO_MIN = 30
 
 const TZ = 'America/Santiago'
 
@@ -119,14 +122,19 @@ export async function listarAgenda(fromISO?: string, toISO?: string): Promise<Ag
     if (!fecha || !inRange(fecha)) continue
     const horaRetiro = (c.hora_retiro_crematorio || '').trim()
     const tieneRetiro = !!horaRetiro
-    const min = horaMin(tieneRetiro ? horaRetiro : c.hora_servicio)
+    const realizada = estado === 'realizada'
+    // El vet informa la hora ACORDADA con el cliente (la visita); nuestro chofer
+    // pasa a retirar ~30 min después. La agenda del crematorio muestra ese +30.
+    const baseMin = horaMin(tieneRetiro ? horaRetiro : c.hora_servicio)
+    const min = (baseMin != null && tieneRetiro) ? baseMin + DESFASE_RETIRO_MIN : baseMin
     out.push({
       id: `e${c.id}`,
       tipo: 'eutanasia',
       fecha,
       hora: min != null ? fmtMin(min) : '',
       bloque: bloqueDe(min),
-      estado: tieneRetiro ? 'confirmada' : 'pendiente',
+      // Verde (confirmada) si ya sabemos la hora de retiro O si la eutanasia ya se realizó.
+      estado: (tieneRetiro || realizada) ? 'confirmada' : 'pendiente',
       mascota: c.mascota_nombre || '',
       quien: c.cliente_nombre || '',
       esVet: false,

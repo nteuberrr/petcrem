@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateRow } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
-import { isWhatsappConfigured, avisarAdminsWhatsapp } from '@/lib/whatsapp'
+import { isWhatsappConfigured, avisarAdminsWhatsapp, enviarTextoWhatsapp } from '@/lib/whatsapp'
 import { formatDate } from '@/lib/dates'
+import { esFueraDeHorario } from '@/lib/adicionales-auto'
+import { fmtPrecio } from '@/lib/format'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
 
@@ -54,6 +56,27 @@ export async function POST(req: NextRequest) {
           `*Retiro del crematorio a las ${hora}* · ${c.direccion}, ${c.comuna}`)
       } catch (e) { console.warn('[hora-retiro] aviso admin falló:', e) }
     }
+
+    // Si la hora coordinada cae FUERA DE HORARIO y la ficha lleva cremación, le
+    // avisamos al CLIENTE del cambio de hora + el recargo de $ por fuera de horario,
+    // para que no se sorprenda al cobrar (caso: eutanasia reprogramada a las 19:30).
+    try {
+      const sinCremacion = (c.tipo_servicio_cremacion || '').toUpperCase() === 'NINGUNA'
+      const waCliente = (c.cliente_wa_id || c.cliente_telefono || '').replace(/\D/g, '')
+      if (!sinCremacion && waCliente && isWhatsappConfigured() && esFueraDeHorario(c.fecha_servicio, hora)) {
+        const otros = await getSheetData('otros_servicios').catch(() => [])
+        const fh = otros.find(s => (s.auto_regla || '') === 'fuera_horario' && String(s.activo || '').toUpperCase() === 'TRUE')
+        const monto = fh ? (parseInt(fh.precio, 10) || 0) : 10000
+        const tutor = (c.cliente_nombre || '').trim().split(/\s+/)[0] || '👋'
+        const mascota = c.mascota_nombre && c.mascota_nombre !== 'No Especificado' ? c.mascota_nombre : 'tu mascota'
+        const msg =
+          `Hola ${tutor}, la veterinaria nos informó que la hora del servicio de ${mascota} quedó coordinada para las ${hora} hrs. ` +
+          `Como es después de las 19:00, el retiro para la cremación tiene un recargo adicional de ${fmtPrecio(monto)} por fuera de horario ` +
+          `(queda especificado en nuestra web). Te lo comentamos para que no sea una sorpresa al momento del cobro. ` +
+          `Cualquier duda, quedamos atentos por aquí 🐾 — Crematorio Alma Animal`
+        await enviarTextoWhatsapp(waCliente, msg)
+      }
+    } catch (e) { console.warn('[hora-retiro] aviso fuera de horario al cliente falló:', e) }
 
     return NextResponse.json({ ok: true, hora, mascota_nombre: c.mascota_nombre })
   } catch (e) {

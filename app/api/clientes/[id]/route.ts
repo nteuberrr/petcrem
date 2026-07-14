@@ -6,7 +6,7 @@ import { ajustarStock } from '@/lib/stock'
 import { parseDecimal } from '@/lib/numbers'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 import { generarCodigo } from '@/lib/codigo-generator'
-import { enviarRegistroMascota } from '@/lib/cliente-mailer'
+import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-mailer'
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
 import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
@@ -14,6 +14,7 @@ import { dispararCobroAdicional, cobrosPendientesPorCliente } from '@/lib/cobros
 import { excluirIncluidos } from '@/lib/anforas-premium'
 import { emitirBoletaFicha } from '@/lib/facturacion'
 import { avisarAdminsWhatsapp } from '@/lib/whatsapp'
+import { precioClienteEutanasia } from '@/lib/eutanasia-precios'
 
 export async function GET(
   _req: NextRequest,
@@ -41,7 +42,27 @@ export async function GET(
     // Cobros pendientes (adicional / diferencia) → banner "cobro pendiente".
     const cobros = await cobrosPendientesPorCliente(id).catch(() => [])
 
-    return NextResponse.json({ ...cliente, ciclo, despacho, cobros })
+    // Eutanasia asociada (si la ficha vino de una eutanasia a domicilio): para
+    // mostrar "Hora Vet" / "Hora Retiro" y el VALOR a cobrar por la eutanasia,
+    // que se cobra aparte y NO entra en la boleta (esa es solo por la cremación).
+    let eutanasia = null
+    try {
+      const cotis = await getSheetData('cotizaciones_eutanasia')
+      const cot = cotis.find((c) => String(c.cliente_id) === String(id) && (c.estado || '') !== 'cancelada')
+      if (cot) {
+        let valorCliente = 0
+        try { valorCliente = (await precioClienteEutanasia(parseFloat(cot.peso || '') || 0)).cliente } catch { /* config no disponible */ }
+        eutanasia = {
+          id: cot.id || '',
+          hora_servicio: cot.hora_servicio || '',
+          hora_retiro_crematorio: cot.hora_retiro_crematorio || '',
+          estado: cot.estado || '',
+          valor_cliente: valorCliente,
+        }
+      }
+    } catch { /* best-effort: la ficha se muestra igual sin datos de eutanasia */ }
+
+    return NextResponse.json({ ...cliente, ciclo, despacho, cobros, eutanasia })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
@@ -190,6 +211,7 @@ export async function PATCH(
           codigo: codigoGenerado,
           clienteId: String(updated.id || ''),
           codigoServicio: String(updated.codigo_servicio || ''),
+          resumen: (await resumenCompraDeFicha(updated).catch(() => null)) ?? undefined,
         })
       } catch (e) {
         console.warn('[clientes PATCH] fallo mail registro (no bloqueante):', e)

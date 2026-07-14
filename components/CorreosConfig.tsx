@@ -222,7 +222,8 @@ export default function CorreosConfig() {
       const d = await r.json().catch(() => ({}))
       if (r.ok) {
         const copia = segActivo && segTipos[row.tipo] !== false
-        alert(`Reenviado a ${d.to}${copia ? ' (con copia a tu seguimiento)' : ''}.`)
+        const links = d.links_renovados ? ' Con enlaces nuevos y vigentes (subir foto / video).' : ''
+        alert(`Reenviado a ${d.to}${copia ? ' (con copia a tu seguimiento)' : ''}.${links}`)
         cargarLog({ page: logPage, desde: logDesde, hasta: logHasta, q: logQ }) // aparece el reenvío en el registro
       } else {
         alert(d.error || 'No se pudo reenviar.')

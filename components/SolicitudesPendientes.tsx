@@ -10,6 +10,13 @@ type Solicitud = {
   cliente_id: string
 }
 
+type Eutanasia = {
+  id: string; mascota_nombre: string; cliente_nombre: string; peso: string
+  comuna: string; direccion: string; fecha_servicio: string; hora_servicio: string
+  hora_retiro_crematorio: string; vet_nombre: string; cliente_id: string
+  estado_cronograma: 'esperando' | 'tomada'
+}
+
 const SERVICIO: Record<string, string> = { CI: 'Individual', CP: 'Premium', SD: 'Sin Devolución' }
 
 const GRID = 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3'
@@ -38,6 +45,7 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
   const abrirFicha = (clienteId?: string) => { if (clienteId) router.push(`/clientes/${clienteId}`) }
   const [pendientes, setPendientes] = useState<Solicitud[]>([])
   const [confirmadas, setConfirmadas] = useState<Solicitud[]>([])
+  const [eutanasias, setEutanasias] = useState<Eutanasia[]>([])
   const [cargado, setCargado] = useState(false)
   const [resolviendo, setResolviendo] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string>('')
@@ -60,6 +68,7 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
       const d = await r.json()
       setPendientes(Array.isArray(d?.pendientes) ? d.pendientes : [])
       setConfirmadas(Array.isArray(d?.confirmadas) ? d.confirmadas : [])
+      setEutanasias(Array.isArray(d?.eutanasias) ? d.eutanasias : [])
     } catch { /* red: reintenta en el próximo tick */ } finally { setCargado(true) }
   }, [])
 
@@ -174,6 +183,44 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
             ))}
           </div>
           {verTodas(confirmadas, 'confirmadas')}
+          </>
+        )}
+      </section>
+
+      <section>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-lg">🩺</span>
+          <h2 className="text-sm font-bold text-gray-800">Eutanasias a domicilio ({eutanasias.length})</h2>
+        </div>
+        {eutanasias.length === 0 ? (
+          <p className="text-xs text-gray-500 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 py-2">Sin eutanasias en curso.</p>
+        ) : (
+          <>
+          <div className={GRID}>
+            {recortar(eutanasias, 'eutanasias').map(e => {
+              const tomada = e.estado_cronograma === 'tomada'
+              const cls = tomada ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'
+              const badge = tomada
+                ? <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">🩺 Vet asignado</span>
+                : <span className="text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">⏳ Buscando vet</span>
+              const cuandoEut = `${e.fecha_servicio ? fmtFecha(e.fecha_servicio) : '—'}${e.hora_servicio ? ` · ${e.hora_servicio}` : ''}`
+              return (
+                <div key={e.id}
+                  onClick={() => abrirFicha(e.cliente_id)}
+                  role={e.cliente_id ? 'button' : undefined}
+                  title={e.cliente_id ? 'Abrir ficha del cliente' : undefined}
+                  className={`rounded-xl border-2 ${cls} shadow-sm p-3 flex flex-col gap-1 min-h-[150px] ${e.cliente_id ? 'cursor-pointer hover:brightness-95 transition-all' : ''}`}>
+                  <div className="flex items-center justify-between gap-1">{badge}</div>
+                  <p className="font-bold text-gray-900 text-sm truncate mt-1">{e.mascota_nombre || '—'}</p>
+                  <p className="text-xs text-gray-700 truncate">👤 {e.cliente_nombre || '—'}</p>
+                  {e.vet_nombre && <p className="text-[11px] text-gray-600 truncate">🩺 {e.vet_nombre}</p>}
+                  <p className="text-[11px] text-gray-600 leading-tight mt-auto">🗓 {cuandoEut}{e.hora_retiro_crematorio ? ` · retiro ${e.hora_retiro_crematorio}` : ''}</p>
+                  <p className="text-[11px] text-gray-600 leading-tight truncate">📍 {[e.direccion, e.comuna].filter(Boolean).join(', ') || '—'}</p>
+                </div>
+              )
+            })}
+          </div>
+          {verTodas(eutanasias, 'eutanasias')}
           </>
         )}
       </section>

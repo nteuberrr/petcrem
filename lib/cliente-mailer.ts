@@ -2,6 +2,62 @@ import { sendEmail, sendBatch, isResendConfigured, type SendOpts } from './resen
 import { renderEmailLayout, getContacto, escapeHtml, BRAND, type Contacto } from './email-layout'
 import { registrarEnvio, registrarEnvios, type TipoCorreo } from './correos-log'
 import { createTutorToken } from './tutor-token'
+import { fmtPrecio } from './format'
+import { getSheetData } from './datastore'
+import { servicioIncluyeAnforaPremium, anforaPremiumIncluida } from './anforas-premium'
+
+const NOMBRE_MODALIDAD: Record<string, string> = {
+  CI: 'Cremación Individual', CP: 'Cremación Premium', SD: 'Cremación Sin Devolución',
+}
+
+/** Línea del resumen de compra (para el correo de registro). */
+export interface ResumenCompra {
+  servicioNombre: string
+  servicioPrecio: number
+  adicionales: { nombre: string; precio: number; qty: number; incluida: boolean }[]
+  descuentoNombre: string
+  descuentoMonto: number
+  total: number
+}
+
+const intOf = (v: unknown) => parseInt(String(v ?? '').replace(/[^\d-]/g, ''), 10) || 0
+
+/**
+ * Arma el resumen de compra de una ficha (mismos valores que se ven en la ficha)
+ * para incluirlo en el correo de registro al tutor. Devuelve null si la ficha es
+ * de CONVENIO (paga el veterinario, no el tutor) o si aún no tiene snapshot de
+ * precio. Resuelve los adicionales "incluidos" (ánfora premium en Cremación
+ * Premium → "Incluido"). Best-effort.
+ */
+export async function resumenCompraDeFicha(f: Record<string, unknown>): Promise<ResumenCompra | null> {
+  if (String(f.veterinaria_id ?? '').trim()) return null // convenio: no va resumen al tutor
+  const servicioPrecio = intOf(f.precio_servicio)
+  const total = intOf(f.precio_total)
+  if (servicioPrecio <= 0 && total <= 0) return null // sin snapshot (ficha legacy)
+  const cs = String(f.codigo_servicio ?? '').toUpperCase()
+  let categoriaPorProducto: Map<string, string> | null = null
+  let items: { tipo?: string; id?: string; nombre?: string; precio?: number; qty?: number }[] = []
+  try { const arr = JSON.parse(String(f.adicionales ?? '[]')); if (Array.isArray(arr)) items = arr } catch { /* sin adicionales */ }
+  if (servicioIncluyeAnforaPremium(cs) && items.some(a => a.tipo === 'producto')) {
+    try {
+      const prods = await getSheetData('productos')
+      categoriaPorProducto = new Map(prods.map(p => [String(p.id), String(p.categoria ?? '')]))
+    } catch { categoriaPorProducto = null }
+  }
+  const adicionales = items.map(a => {
+    const incluida = a.tipo === 'producto' && categoriaPorProducto != null &&
+      anforaPremiumIncluida(cs, categoriaPorProducto.get(String(a.id)))
+    return { nombre: String(a.nombre || 'Adicional'), precio: Math.max(0, intOf(a.precio)), qty: Math.max(1, intOf(a.qty) || 1), incluida }
+  })
+  return {
+    servicioNombre: NOMBRE_MODALIDAD[cs] || 'Cremación',
+    servicioPrecio,
+    adicionales,
+    descuentoNombre: String(f.descuento_nombre ?? ''),
+    descuentoMonto: intOf(f.descuento_monto),
+    total,
+  }
+}
 
 /**
  * Correos transaccionales al tutor (dueño de la mascota), enganchados en los
@@ -47,6 +103,8 @@ export interface RegistroArgs {
   /** Código del servicio (CI/CP/SD). Si es CP (Premium), el correo pide también la
    *  foto para el cuadro acuarela conmemorativo. */
   codigoServicio?: string
+  /** Resumen de compra (servicio + adicionales + total) para incluirlo en el correo. */
+  resumen?: ResumenCompra
 }
 
 /**
@@ -115,6 +173,33 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
         </div>
         <p style="margin:14px 0 0;font-size:12px;color:${BRAND.muted};text-align:center">Estos enlaces vencen en 48 horas.</p>
       </div>` : ''
+  // Resumen de compra (mismos valores que la ficha). Va debajo del bloque de
+  // foto/video y arriba de la nota "Sobre el peso" (pedido del dueño 2026-07-14).
+  const r = args.resumen
+  const filaResumen = (nombre: string, valor: string, opt: { top?: boolean; verde?: boolean; bold?: boolean } = {}) => {
+    const bt = opt.top ? `border-top:1px solid ${BRAND.hairline};` : ''
+    const col = opt.verde ? '#16794f' : BRAND.navy
+    return `<tr>`
+      + `<td style="padding:7px 0;font-size:14px;color:${opt.verde ? '#16794f' : '#374151'};${bt}${opt.bold ? 'font-weight:700;' : ''}">${nombre}</td>`
+      + `<td style="padding:7px 0;font-size:${opt.bold ? '16px' : '14px'};text-align:right;white-space:nowrap;font-weight:${opt.bold ? '700' : '600'};color:${col};${bt}">${valor}</td>`
+      + `</tr>`
+  }
+  const bloqueResumen = r ? `
+      <div style="background:#ffffff;border:1px solid ${BRAND.hairline};border-radius:12px;padding:18px 20px;margin:22px 0">
+        <p style="margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;color:${BRAND.navy}">Resumen de tu servicio</p>
+        <table style="width:100%;border-collapse:collapse">
+          <tbody>
+            ${filaResumen(escapeHtml(r.servicioNombre), fmtPrecio(r.servicioPrecio))}
+            ${r.adicionales.map(a => filaResumen(
+              `${escapeHtml(a.nombre)}${a.qty > 1 ? ` ×${a.qty}` : ''}`,
+              a.incluida ? 'Incluido' : fmtPrecio(a.precio * a.qty),
+              { top: true },
+            )).join('')}
+            ${r.descuentoMonto > 0 ? filaResumen(`Descuento${r.descuentoNombre ? ` (${escapeHtml(r.descuentoNombre)})` : ''}`, `−${fmtPrecio(r.descuentoMonto)}`, { top: true, verde: true }) : ''}
+            ${filaResumen('Total', fmtPrecio(r.total), { top: true, bold: true })}
+          </tbody>
+        </table>
+      </div>` : ''
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">${saludo(args.nombreTutor)}</p>
       <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
@@ -129,6 +214,7 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
         Guarda este código: nos permite identificar a ${mascota} durante todo el proceso.
       </p>
       ${bloqueFoto}
+      ${bloqueResumen}
       <p style="margin:18px 0 0;padding-top:14px;border-top:1px solid ${BRAND.hairline};font-size:12px;line-height:1.6;color:${BRAND.muted}">
         <strong>Sobre el peso:</strong> al recibir a ${mascota} verificamos su peso en balanza. Si resultara mayor al
         declarado, el valor se ajusta al tramo que corresponda — te avisaríamos con el detalle y el respaldo, para que
