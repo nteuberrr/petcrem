@@ -17,6 +17,7 @@ export const DIFERENCIADORES = `VALOR AGREGADO Y DIFERENCIADORES (oficiales — 
 - Instalaciones propias y certificadas, con horno certificado; no externalizamos ninguna etapa.
 - Trazabilidad total durante todo el proceso, con código de seguimiento y certificado de cremación.
 - Entrega de cenizas y certificado en 4 días hábiles.
+- Servicio Express (OPCIONAL, con un adicional): entrega en 2 días hábiles en lugar de 4, para quien necesita las cenizas antes. Es un extra que se ofrece SI AMERITA (cliente con apuro / que pregunta por una entrega más rápida), no el plazo por defecto.
 - Retiro directo a domicilio o desde la clínica, habitualmente en menos de 3 horas.
 - Precios convenientes, con variedad de productos y servicios adicionales.
 
@@ -30,7 +31,7 @@ PARA CLÍNICAS / VETERINARIOS (B2B) — cuando la pieza o el mensaje es para cl�
 PRECISIONES (para no cometer errores de marca):
 - Lo CERTIFICADO es el HORNO. La cámara es de REFRIGERACIÓN: NO la llames "cámara certificada" ni "sala certificada".
 - NO digas "cada cremación es individual": "Cremación Individual" es solo el nombre de una de las modalidades.
-- Plazos oficiales que SÍ se pueden afirmar: entrega en 4 días hábiles; retiro habitualmente en menos de 3 horas. No afirmes otros plazos.`
+- Plazos oficiales que SÍ se pueden afirmar: entrega en 4 días hábiles (o 2 días hábiles con el Servicio Express opcional); retiro habitualmente en menos de 3 horas. No afirmes otros plazos.`
 
 /**
  * Qué INCLUYE cada modalidad de cremación — FUENTE ÚNICA, definida por el dueño

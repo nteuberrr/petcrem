@@ -4,13 +4,13 @@ import Link from 'next/link'
 import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
-import { proximosDiasHabiles, agregarDiasHabiles, isoFecha } from '@/lib/dias-habiles'
+import { proximosDiasHabiles, agregarDiasHabiles, isoFecha, tieneExpress, EXPRESS_DIAS } from '@/lib/dias-habiles'
 
 type TipoServicio = { id: string; codigo: string; plazo_entrega_dias: string; activo: string }
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
-  especie: string; estado: string; codigo_servicio?: string
+  especie: string; estado: string; codigo_servicio?: string; adicionales?: string
   direccion_despacho?: string; comuna?: string; telefono?: string
   fecha_retiro?: string
 }
@@ -133,7 +133,7 @@ export default function DespachosTab() {
     const plazoMap = new Map<string, number>()
     for (const t of tiposServicio) {
       const n = parseInt(t.plazo_entrega_dias || '0', 10)
-      plazoMap.set((t.codigo || '').toUpperCase(), Number.isFinite(n) && n > 0 ? n : 3)
+      plazoMap.set((t.codigo || '').toUpperCase(), Number.isFinite(n) && n > 0 ? n : 4)
     }
     const dias = proximosDiasHabiles(new Date(), 5)
     type ClienteEnFecha = Cliente & { fecha_objetivo_iso: string }
@@ -155,7 +155,8 @@ export default function DespachosTab() {
       if (!isoRetiro) continue
       const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
       if (isNaN(fechaRetiro.getTime())) continue
-      const plazo = plazoMap.get(codigo) ?? 3
+      // Servicio Express → 2 días hábiles; si no, el plazo del tipo de servicio.
+      const plazo = tieneExpress(c.adicionales) ? EXPRESS_DIAS : (plazoMap.get(codigo) ?? 4)
       const fechaObjetivo = agregarDiasHabiles(fechaRetiro, plazo)
       const isoObj = isoFecha(fechaObjetivo)
       const enriched: ClienteEnFecha = { ...c, fecha_objetivo_iso: isoObj }

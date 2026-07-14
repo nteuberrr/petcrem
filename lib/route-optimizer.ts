@@ -1,5 +1,5 @@
 import { getSheetData } from '@/lib/datastore'
-import { agregarDiasHabiles, isoFecha, proximosDiasHabiles } from '@/lib/dias-habiles'
+import { agregarDiasHabiles, isoFecha, proximosDiasHabiles, tieneExpress, EXPRESS_DIAS } from '@/lib/dias-habiles'
 import { formatDate, formatDateForSheet } from '@/lib/dates'
 import { geocodeAddress, computeRoute, buildGoogleMapsUrl, type LatLng } from '@/lib/google-maps'
 
@@ -97,7 +97,7 @@ async function clasificarClientes(opts: { dias_recomendadas: number; fecha_base_
   const plazoMap = new Map<string, number>()
   for (const t of tiposServicio) {
     const n = parseInt(t.plazo_entrega_dias || '0', 10)
-    plazoMap.set((t.codigo || '').toUpperCase(), Number.isFinite(n) && n > 0 ? n : 3)
+    plazoMap.set((t.codigo || '').toUpperCase(), Number.isFinite(n) && n > 0 ? n : 4)
   }
 
   const vetById = new Map<string, string>()
@@ -125,7 +125,7 @@ async function clasificarClientes(opts: { dias_recomendadas: number; fecha_base_
     if (!isoRetiro) continue
     const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
     if (isNaN(fechaRetiro.getTime())) continue
-    const plazo = plazoMap.get(codigo) ?? 3
+    const plazo = tieneExpress(c.adicionales) ? EXPRESS_DIAS : (plazoMap.get(codigo) ?? 4)
     const fechaObjetivo = agregarDiasHabiles(fechaRetiro, plazo)
     const isoObj = isoFecha(fechaObjetivo)
 
@@ -171,7 +171,7 @@ function toParada(
   const codigo = (c.row.codigo_servicio || 'CI').toUpperCase()
   const isoRetiro = formatDateForSheet(c.row.fecha_retiro) || ''
   const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
-  const plazo = plazoMap.get(codigo) ?? 3
+  const plazo = tieneExpress(c.row.adicionales) ? EXPRESS_DIAS : (plazoMap.get(codigo) ?? 4)
   const fechaObjetivo = agregarDiasHabiles(fechaRetiro, plazo)
   const isoObj = isoFecha(fechaObjetivo)
   return {

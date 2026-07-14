@@ -19,7 +19,7 @@ export const REGLAS_INVIOLABLES = `REGLAS INVIOLABLES DE MARCA (NO las rompas �
 - NUNCA digas "cada cremación es individual": "Cremación Individual" es SOLO el nombre de una de las modalidades.
 - Qué INCLUYE cada modalidad sale SOLO del bloque "MODALIDADES DE CREMACIÓN" que se te entrega: en tablas/comparativas usa EXACTAMENTE esos ítems, sin inventar ni omitir (ojo: Sin Devolución SÍ incluye certificado de cremación).
 - Decí "ánfora", NUNCA "urna" (vocabulario de marca).
-- NUNCA inventes precios, promociones ni datos. Plazos: SOLO los oficiales (entrega en 4 días hábiles; retiro habitualmente en menos de 3 horas). Ningún otro plazo.
+- NUNCA inventes precios, promociones ni datos. Plazos: SOLO los oficiales (entrega en 4 días hábiles, o 2 días hábiles con el Servicio Express opcional; retiro habitualmente en menos de 3 horas). Ningún otro plazo.
 - Teléfono y web: usá EXACTAMENTE los datos de contacto que se te entregan; no los reescribas de memoria.
 - En PLACAS/gráficos (motor satori): NO uses flechas (→), emojis (🐾 ✅) ni símbolos Unicode raros — el motor los dibuja como cajas rotas. Reemplazalos por texto.`
 

@@ -3,7 +3,8 @@ import { getSheetData } from './datastore'
 import { getAgenteConfig } from './mensajes'
 import { fmtPrecio } from './format'
 import { listarImagenesWhatsapp, type ImagenBanco } from './mailing-images'
-import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
+import { DIFERENCIADORES, MODALIDADES_SERVICIOS, ENTREGA_DIAS } from './diferenciadores'
+import { EXPRESS_DIAS } from './dias-habiles'
 import { comunasDeServicio } from './adicionales-auto'
 import { esFeriado, nombreFeriado } from './feriados'
 
@@ -192,6 +193,19 @@ async function bloqueProductos(): Promise<string> {
     const todo = [...lineasP, ...lineasS]
     if (todo.length === 0) return ''
     return `PRODUCTOS ADICIONALES DISPONIBLES (para ofrecer y para "agregar_adicional" — usa el id y tipo EXACTOS; los PRECIOS son estos, no los inventes):\n${todo.slice(0, 60).join('\n')}`
+  } catch { return '' }
+}
+
+/** Servicio Express (otros_servicios): entrega en 2 días hábiles en vez de 4, por
+ *  un adicional. Se explica aparte para que el bot sepa QUÉ es y lo ofrezca cuando
+ *  el cliente tiene apuro (el precio sale de la fila del servicio, en vivo). */
+async function bloqueExpress(): Promise<string> {
+  try {
+    const otros = await getSheetData('otros_servicios')
+    const exp = otros.find(r => (r.activo || '').toUpperCase() === 'TRUE' && /express/i.test(r.nombre || ''))
+    if (!exp) return ''
+    const precio = fmtPrecio(parseInt(exp.precio, 10) || 0)
+    return `SERVICIO EXPRESS (opcional — id ${exp.id}, tipo servicio): por +${precio} la entrega de las cenizas + certificado pasa a ${EXPRESS_DIAS} días HÁBILES en vez de ${ENTREGA_DIAS}. Ofrécelo SOLO SI AMERITA: cuando el cliente tiene apuro, necesita las cenizas para una fecha, o pregunta por una entrega más rápida. Si lo acepta, agrégalo con "agregar_adicional" usando ese id (tipo servicio). No lo sumes si no lo pidió; y aunque sea express, el plazo siempre se dice en días HÁBILES.`
   } catch { return '' }
 }
 
@@ -631,10 +645,11 @@ export async function generarRespuesta(
   // —p.ej. un echo o evento de estado que gatilló el webhook—), no generamos nada:
   // evita el 400 "does not support assistant message prefill" y una respuesta espuria.
   if (base[base.length - 1].role !== 'user') return { mensaje: '', escalar: false, acciones: [] }
-  const [tarifas, recargos, productos, descuentos, cfg, imgsWa] = await Promise.all([
+  const [tarifas, recargos, productos, express, descuentos, cfg, imgsWa] = await Promise.all([
     bloqueTarifas(),
     bloqueRecargos(),
     bloqueProductos(),
+    bloqueExpress(),
     bloqueDescuentos(),
     getAgenteConfig().catch(() => null),
     listarImagenesWhatsapp().catch(() => [] as ImagenBanco[]),
@@ -657,6 +672,8 @@ ${cfg.instrucciones.trim()}`,
   system.push({ type: 'text', text: bloqueFechaChile() })
   // Productos adicionales disponibles (para ofrecer/cotizar/agregar).
   if (productos) system.push({ type: 'text', text: productos })
+  // Servicio Express (entrega en 2 días hábiles): qué es y cuándo ofrecerlo.
+  if (express) system.push({ type: 'text', text: express })
   // Descuentos/convenios vigentes (para responder "¿tienen descuentos?" sin inventar).
   if (descuentos) system.push({ type: 'text', text: descuentos })
   // Si el cliente ya tiene una ficha de retiro en proceso (borrador visible en

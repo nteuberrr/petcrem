@@ -3,7 +3,7 @@ import { enviarBotonesWhatsapp, destinatariosRetiros, avisarAdminsWhatsapp, envi
 import { crearRelayPendiente } from './relay-retiro'
 import { geocodeAddress, coordEnChile } from './google-maps'
 import { formatDate, formatDateForSheet, todayISO } from './dates'
-import { agregarDiasHabiles, isoFecha } from './dias-habiles'
+import { agregarDiasHabiles, isoFecha, tieneExpress, EXPRESS_DIAS } from './dias-habiles'
 import { fmtPrecio } from './format'
 import { precioClienteEutanasia, getConsultaEutanasia } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
@@ -519,13 +519,14 @@ async function consultarEstadoMascota(a: AccionConsultaEstado): Promise<string> 
       const tipos = await getSheetData('tipos_servicio')
       const t = tipos.find(x => (x.codigo || '').toUpperCase() === codigoServ)
       const n = parseInt(t?.plazo_entrega_dias || '4', 10)
-      const plazo = Number.isFinite(n) && n > 0 ? n : 4
+      const express = tieneExpress(c.adicionales)
+      const plazo = express ? EXPRESS_DIAS : (Number.isFinite(n) && n > 0 ? n : 4)
       const isoRetiro = c.fecha_retiro ? formatDateForSheet(c.fecha_retiro) : ''
       if (isoRetiro) {
         const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
         if (!isNaN(fechaRetiro.getTime())) {
           const obj = agregarDiasHabiles(fechaRetiro, plazo)
-          entregaTxt = ` Fecha de entrega MÁXIMA: ${formatDate(isoFecha(obj))} (hasta ${plazo} días HÁBILES desde el retiro; puede ser antes).`
+          entregaTxt = ` Fecha de entrega MÁXIMA: ${formatDate(isoFecha(obj))} (hasta ${plazo} días HÁBILES desde el retiro${express ? ', con Servicio Express' : ''}; puede ser antes).`
         }
       }
     } catch { /* sin fecha disponible */ }

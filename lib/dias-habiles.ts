@@ -26,6 +26,23 @@ const FERIADOS_CL = new Set<string>([
   '2027-03-26', '2027-03-27', // Viernes y Sábado Santo 2027
 ])
 
+/**
+ * Servicio Express: entrega en 2 días hábiles (en vez de los 4 estándar). Es un
+ * adicional de `otros_servicios` ("Servicio Express"); una ficha que lo contrató
+ * lo lleva en su JSON `adicionales`. El cronograma de entregas usa este plazo
+ * reducido cuando la ficha tiene el express.
+ */
+export const EXPRESS_DIAS = 2
+
+/** True si la ficha contrató el adicional "Servicio Express" (entrega acelerada). */
+export function tieneExpress(adicionalesRaw: string | undefined | null): boolean {
+  if (!adicionalesRaw) return false
+  try {
+    const arr = JSON.parse(adicionalesRaw)
+    return Array.isArray(arr) && arr.some((a) => /express/i.test(String((a && a.nombre) || '')))
+  } catch { return false }
+}
+
 function isoOf(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
