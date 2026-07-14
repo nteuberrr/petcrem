@@ -72,6 +72,9 @@ export async function proxy(req: NextRequest) {
     pathname === '/privacidad' ||
     pathname === '/api/init-sheets' ||
     pathname === '/api/reorder-columns' ||
+    // Reenvío del link de completar-borrador al tutor (auth Bearer CRON_SECRET o
+    // sesión admin DENTRO de la ruta; se llama en prod para firmar el token allí).
+    (pathname.startsWith('/api/clientes/') && pathname.endsWith('/reenviar-link-borrador')) ||
     pathname === '/api/mailing/webhooks/resend' ||
     pathname === '/api/mensajes/webhook' ||
     // Backup automático (lo llama Vercel Cron; auth por Bearer CRON_SECRET dentro de la ruta)
