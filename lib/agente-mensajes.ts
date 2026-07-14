@@ -48,7 +48,7 @@ VOCABULARIO
 FLUJO DE ATENCIÓN (síguelo con naturalidad, sin sonar a robot)
 1. Saluda con un pésame breve y ofrece ayuda. Al SALUDAR por primera vez, agrega de forma natural una línea como: "Y si eres veterinario o clínica, avísame y agendamos el retiro directamente." (ver MODO VETERINARIO más abajo). El saludo/pésame es SOLO para el primer mensaje: NO lo repitas si ya saludaste antes en esta conversación (ver NO REPETIR).
 2. Pide el PESO APROXIMADO y la COMUNA de la mascota (idealmente en el mismo mensaje). El peso define el precio; la comuna te dice si hay cobertura y si corresponde el recargo por zona — así lo incluyes en la cotización y no aparece una sorpresa después.
-3. Cotiza el valor EXACTO del tramo presentando las TRES modalidades (Individual, Premium y Sin Devolución) con una línea de qué incluye cada una. Si la comuna tiene recargo o el retiro cae fuera de horario (ver RECARGOS AUTOMÁTICOS), súmalo ya al total y dilo. Deja que el cliente elija: NO ofrezcas ni sugieras una por defecto. Junto con la PRIMERA cotización de la conversación, envía SIEMPRE en el mismo turno las dos fotos de referencia con la herramienta "enviar_fotos": el kit incluido (código i-11) y el set Premium (código i-5) — ver la regla AL COTIZAR en FOTOS DE ÁNFORAS.
+3. Cotiza el valor EXACTO del tramo escribiendo en el TEXTO los MONTOS de las TRES modalidades (Individual, Premium y Sin Devolución), cada uno con una línea de qué incluye. El precio SIEMPRE va escrito en el mensaje; las fotos son un complemento, nunca el reemplazo. Si la comuna tiene recargo o el retiro cae fuera de horario (ver RECARGOS AUTOMÁTICOS), súmalo ya al total y dilo. Deja que el cliente elija: NO ofrezcas ni sugieras una por defecto. Junto con la PRIMERA cotización de la conversación, envía SIEMPRE en el mismo turno las dos fotos de referencia con la herramienta "enviar_fotos": el kit incluido (código i-11) y el set Premium (código i-5) — ver la regla AL COTIZAR en FOTOS DE ÁNFORAS.
 4. CIERRE ACTIVO (clave — aquí es donde más ventas se pierden): apenas cotizas, AVANZA tú hacia el retiro en el MISMO mensaje. NO uses un "¿quieres agendar?" pasivo y te quedes esperando. Pide el NOMBRE del tutor + la DIRECCIÓN (calle y número) y PROPÓN una franja concreta de retiro calculada desde la hora actual de Chile (ej.: "podemos pasar hoy entre las 18 y 20 h, ¿te lo dejo agendado?"). Ponle fácil decir que sí.
 5. En cuanto tengas nombre + dirección + comuna + peso + servicio + día/hora, LLAMA la herramienta de retiro de inmediato (no sigas conversando). La entrega es en 3 días hábiles.
 
@@ -71,6 +71,7 @@ CUANDO EL CLIENTE DUDA O NO CIERRA (no lo dejes ir con un frío "cualquier duda 
 
 REGLAS DURAS
 - NUNCA inventes precios, plazos ni servicios. Usa SOLO la tabla "TARIFAS VIGENTES" que te entrego abajo. Si no tienes el peso, pídelo antes de cotizar.
+- COTIZAR = DAR EL PRECIO EN EL TEXTO (regla dura — esto se estaba fallando): cuando el cliente pide precio, dice "¿cuánto vale?", "precios", "valor", o elige una modalidad, y YA tienes el peso, tu mensaje SIEMPRE debe incluir los MONTOS EXACTOS de las tres modalidades (Individual, Premium y Sin Devolución) de ese tramo, con los recargos sumados si aplican. Las fotos de referencia son un COMPLEMENTO y NUNCA reemplazan el precio: JAMÁS respondas a un pedido de precio solo con fotos y "dime tu nombre y dirección" — primero van los precios escritos, en el MISMO mensaje. Si el cliente vuelve a preguntar el precio, es porque no se lo diste: dáselo de inmediato y no repitas las fotos.
 - NUNCA afirmes que "cada cremación es individual" ni uses "individual" como característica general del proceso, del horno ni del seguimiento. "Cremación Individual" es SOLO el NOMBRE de una de las modalidades.
 - TRAMO EN EL BORDE: si el peso cae JUSTO en el límite entre dos tramos (ej. 5 kg entre "2–5" y "5–10"), usa SIEMPRE el tramo de MENOR peso (en el ejemplo, "2–5").
 - Las TARIFAS VIGENTES son SOLO de cremación. NO las uses para cotizar una eutanasia a domicilio (la eutanasia tiene otro precio, que se entrega por separado).
@@ -659,14 +660,19 @@ ${cfg.instrucciones.trim()}`,
   const acciones: string[] = []
   const imagenesAEnviar: { url: string; alt?: string }[] = []
   let escalar = false
-  let textoFinal = ''
+  // Acumulamos el texto de TODAS las rondas del loop (no sobrescribimos): el
+  // modelo suele escribir la cotización con precios en la MISMA ronda en que
+  // llama enviar_fotos, y luego agrega el cierre en la ronda siguiente. Si nos
+  // quedáramos solo con el último texto, perderíamos el mensaje con los precios
+  // (bug real: el cliente recibía fotos + "dime tu nombre" pero nunca el valor).
+  const textos: string[] = []
 
   // Loop agéntico: el modelo puede encadenar herramienta → resultado → texto.
   for (let iter = 0; iter < 5; iter++) {
     const res = await getClient().messages.create({ model: MODEL, max_tokens: 700, system, messages: convo, tools })
 
     const texto = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
-    if (texto) textoFinal = texto
+    if (texto && texto !== textos[textos.length - 1]) textos.push(texto)
 
     if (res.stop_reason !== 'tool_use') break
     const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
@@ -694,7 +700,7 @@ ${cfg.instrucciones.trim()}`,
             for (const im of elegidas.slice(0, 6)) {
               if (!imagenesAEnviar.some(x => x.url === im.url)) imagenesAEnviar.push({ url: im.url, alt: im.alt || im.descripcion || '' })
             }
-            resultText = `Listo, se enviarán ${imagenesAEnviar.length} foto(s) al cliente (${elegidas.slice(0, 6).map(e => e.descripcion || e.alt || `ID ${e.id}`).join('; ')}). Acompáñalas con un mensaje breve y cálido presentándolas; no describas detalles que no se vean en las fotos.`
+            resultText = `Listo, se enviarán ${imagenesAEnviar.length} foto(s) al cliente (${elegidas.slice(0, 6).map(e => e.descripcion || e.alt || `ID ${e.id}`).join('; ')}). Estas fotos son SOLO un complemento visual de referencia: en tu mensaje de texto responde lo que el cliente pidió y, si estás cotizando o te preguntó el precio, incluye SIEMPRE los MONTOS EXACTOS de las TRES modalidades (Individual, Premium y Sin Devolución) del tramo de peso —súmale los recargos si aplican—. NUNCA reemplaces la cotización por una simple presentación de las fotos, ni respondas un pedido de precio solo con fotos y pidiendo nombre/dirección. No describas detalles que no se vean en las fotos.`
           }
         } else if (tu.name === 'solicitar_retiro_cremacion' && opts.handlers?.solicitarRetiro) {
           resultText = await opts.handlers.solicitarRetiro(tu.input as unknown as AccionRetiro, opts.ctx ?? {})
@@ -729,7 +735,7 @@ ${cfg.instrucciones.trim()}`,
   // herramienta en la última iteración y se cortó el loop sin redactar el cierre),
   // igual le respondemos algo al cliente según lo que pasó — nunca lo dejamos
   // sin acuse tras una acción.
-  let mensaje = limpiarTexto(textoFinal)
+  let mensaje = limpiarTexto(textos.join('\n\n'))
   if (!mensaje) {
     if (escalar) {
       mensaje = 'Gracias por escribirnos. Un miembro de nuestro equipo te responderá a la brevedad. 🐾'
