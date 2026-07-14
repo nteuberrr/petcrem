@@ -182,7 +182,7 @@ Toda pantalla nueva y todo retoque visual debe salir en el **estándar Alma Anim
 Fuente de verdad completa: **`C:\dev\alma-animal-marketing/_docs/biblia-visual-alma-animal.md`** (repo separado del sistema de marketing — léela antes de escribir/rediseñar piezas de cara al público). Resumen accionable para el copy que vive en este repo (correos, landing `/convenio-eutanasias`, textos de UI):
 
 - **Qué es:** Crematorio Alma Animal — cremación de mascotas en Recoleta (Santiago), cobertura RM, todos los días 09:00–22:00. Tagline (ya en el logo): **"Huellas que no se borran"**.
-- **Promesa / diferenciadores a comunicar:** servicio cercano, rápido y responsable, todo bajo control directo, con respeto absoluto. Puntos duros: **entrega en 3 días hábiles**, **instalaciones propias** (no se externaliza), **trazabilidad total**, **tecnología de punta**.
+- **Promesa / diferenciadores a comunicar:** servicio cercano, rápido y responsable, todo bajo control directo, con respeto absoluto. Puntos duros: **entrega en 4 días hábiles**, **instalaciones propias** (no se externaliza), **trazabilidad total**, **tecnología de punta**.
 - **Dos audiencias (toda pieza declara cuál):**
   - **Tutores (B2C)** — adultos ~28–60 en duelo, serios y sensibles; buscan información y confianza, no consuelo. Voz: **tuteo, cercano pero contenido, profesional y humano**; nunca infantil ni solemne en exceso.
   - **Veterinarios (B2B)** — clínicas en convenio; son el motor comercial. Voz: **profesional, técnica, eficiente**, de socio confiable (datos, plazos, procesos), con menos adornos emocionales.

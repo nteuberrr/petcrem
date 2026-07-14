@@ -152,7 +152,7 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
   // Mantener alineado con MODALIDADES_SERVICIOS (lib/diferenciadores.ts), la
   // fuente única de qué incluye cada servicio.
   const modalidades: [string, string][] = [
-    ['Individual', 'Certificado de cremación digital, ánfora de greda marmoleada, botellita con mechón de pelo, etiqueta de madera con el nombre, retiro en domicilio o clínica y entrega en 3 días hábiles.'],
+    ['Individual', 'Certificado de cremación digital, ánfora de greda marmoleada, botellita con mechón de pelo, etiqueta de madera con el nombre, retiro en domicilio o clínica y entrega en 4 días hábiles.'],
     ['Premium', 'Todo lo de Individual y, además, un cuadro en acuarela conmemorativo y ánfora premium a elección de esta selección.'],
     ['Sin Devolución', 'Certificado de cremación y retiro en domicilio o clínica, sin devolución de cenizas (la opción más económica).'],
   ]

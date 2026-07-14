@@ -2750,7 +2750,7 @@ function GenerarCampanaModal({ open, onClose, categoriaInicial, onUsar }: {
         <div>
           <label className="text-xs font-semibold text-gray-700">¿De qué se trata la campaña? *</label>
           <textarea value={instruccion} onChange={e => setInstruccion(e.target.value)} rows={4}
-            placeholder="Ej: invitar a las clínicas de la zona oriente a sumarse al convenio, destacando la entrega en 3 días hábiles, el retiro desde la clínica y la trazabilidad total. Cerrar con un botón para coordinar una reunión."
+            placeholder="Ej: invitar a las clínicas de la zona oriente a sumarse al convenio, destacando la entrega en 4 días hábiles, el retiro desde la clínica y la trazabilidad total. Cerrar con un botón para coordinar una reunión."
             className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
 

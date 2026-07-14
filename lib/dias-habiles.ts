@@ -56,10 +56,10 @@ export function proximosDiasHabiles(desde: Date, cantidad: number): Date[] {
 
 /**
  * Suma N días hábiles a una fecha. Útil para calcular fecha límite de entrega
- * desde fecha_retiro: agregarDiasHabiles(fecha_retiro, 3) = 3er día hábil.
+ * desde fecha_retiro: agregarDiasHabiles(fecha_retiro, 4) = 4º día hábil.
  *
- * Si fecha_retiro=lunes, +3 hábiles = jueves.
- * Si fecha_retiro=viernes, +3 hábiles = miércoles.
+ * Si fecha_retiro=lunes, +4 hábiles = viernes.
+ * Si fecha_retiro=viernes, +4 hábiles = jueves.
  *
  * Día 0 es la fecha de retiro misma; cuenta hacia adelante.
  */

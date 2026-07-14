@@ -92,7 +92,7 @@ const BANCO_VISIBLE = 40
 
 const VOZ_AUDIENCIA: Record<string, string> = {
   tutores: `AUDIENCIA: TUTORES (B2C), adultos en duelo por su mascota. Voz: tuteo cálido pero sobrio, cercana y humana, profesional. Inspira confianza, NO lástima. Sin clichés del rubro ("puente del arcoíris", "angelito", "ya no sufre"), sin humor, sin religión. A la mascota por su nombre cuando aplique; genérico "tu mascota".`,
-  veterinarios: `AUDIENCIA: VETERINARIOS / CLÍNICAS (B2B). Voz: profesional, técnica, eficiente, de socio confiable (datos, plazos, procesos). Cercana pero sobria. Los argumentos que MANDAN, en este orden (dueño): retiro en menos de 3 horas, operamos de lunes a domingo, entrega en 3 días hábiles, precios convenientes y trazabilidad total; complementos: instalaciones propias y red de eutanasia a domicilio.`,
+  veterinarios: `AUDIENCIA: VETERINARIOS / CLÍNICAS (B2B). Voz: profesional, técnica, eficiente, de socio confiable (datos, plazos, procesos). Cercana pero sobria. Los argumentos que MANDAN, en este orden (dueño): retiro en menos de 3 horas, operamos de lunes a domingo, entrega en 4 días hábiles, precios convenientes y trazabilidad total; complementos: instalaciones propias y red de eutanasia a domicilio.`,
   ambos: `AUDIENCIA: MIXTA (tutores y veterinarios). Voz cercana y profesional, español neutro de Chile. Sin clichés del rubro, sin humor, sin religión.`,
 }
 
@@ -240,7 +240,7 @@ const TOOL_POST: Anthropic.Tool = {
                 titulo_destacado: { type: 'string', description: '2ª línea del titular; sale en DORADO, en su propia línea.' },
                 bajada: { type: 'string', description: 'Una frase de apoyo, corta.' },
                 bullets: { type: 'array', items: { type: 'string' }, description: 'Solo "contenido": 2-4 bullets MUY cortos.' },
-                dato: { type: 'string', description: 'Solo "dato": el número/palabra grande (ej. "3 días").' },
+                dato: { type: 'string', description: 'Solo "dato": el número/palabra grande (ej. "4 días").' },
                 dato_label: { type: 'string', description: 'Solo "dato": qué es esa cifra.' },
                 cta: { type: 'string', description: 'Llamado a la acción corto o teléfono (portada/cierre).' },
                 cta_secundario: { type: 'string', description: 'Web o dato secundario del CTA.' },

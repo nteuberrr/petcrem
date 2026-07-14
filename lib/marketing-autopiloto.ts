@@ -97,7 +97,7 @@ CANALES: instagram y facebook = público general (tutores y comunidad); email = 
 PILARES EDITORIALES (repartí las ideas según estos %): ${pilares}. Regla 80/20: MÁXIMO ${params.venta_directa_max_pct}% de venta directa; el resto entrega valor, emoción o comunidad.
 ${DIFERENCIADORES}
 ${MODALIDADES_SERVICIOS}
-REGLAS: no inventes precios, promociones ni plazos; ideas CONCRETAS y accionables (no genéricas); variá temas y ángulos entre piezas; para veterinarios usá voz B2B (retiro en menos de 3 horas, atención de lunes a domingo, entrega en 3 días hábiles, precios convenientes, trazabilidad total, red de eutanasia a domicilio). Considerá fechas relevantes de Chile si caen en la semana. Devolvé SIEMPRE con la herramienta proponer_plan.`
+REGLAS: no inventes precios, promociones ni plazos; ideas CONCRETAS y accionables (no genéricas); variá temas y ángulos entre piezas; para veterinarios usá voz B2B (retiro en menos de 3 horas, atención de lunes a domingo, entrega en 4 días hábiles, precios convenientes, trazabilidad total, red de eutanasia a domicilio). Considerá fechas relevantes de Chile si caen en la semana. Devolvé SIEMPRE con la herramienta proponer_plan.`
 
   const instruccion = `Semana ${ventana.lunes} a ${ventana.domingo}. Días disponibles: ${fechas.join(', ')}.
 Ya planificado (respetalo, NO dupliques ni satures esos días):

@@ -250,7 +250,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   p('Ofrecemos cremación trazable en tres modalidades, para adaptarnos a las necesidades y posibilidades de cada familia. En todos los casos el proceso es trazable y con seguimiento documentado.')
   // Mantener alineado con MODALIDADES_SERVICIOS (lib/diferenciadores.ts), la
   // fuente única de qué incluye cada servicio.
-  defItem('Cremación Individual', 'Certificado de cremación digital, ánfora de greda marmoleada, botellita con mechón de pelo, etiqueta de madera con el nombre, retiro en domicilio o clínica y entrega en 3 días hábiles.')
+  defItem('Cremación Individual', 'Certificado de cremación digital, ánfora de greda marmoleada, botellita con mechón de pelo, etiqueta de madera con el nombre, retiro en domicilio o clínica y entrega en 4 días hábiles.')
   defItem('Cremación Premium', 'Incluye todo lo de la modalidad Individual y, además, un cuadro en acuarela conmemorativo y ánfora premium a elección de nuestra selección.')
   defItem('Cremación Sin Devolución', 'Certificado de cremación y retiro en domicilio o clínica, sin devolución de cenizas. Es la alternativa más económica, manteniendo el mismo estándar de proceso y respeto.')
   p('Servicio complementario: coordinamos eutanasia a domicilio a través de una red de médicos veterinarios en convenio, que acuden al domicilio de la familia y permiten gestionar en un mismo proceso la eutanasia y la posterior cremación. Se cotiza por caso según las características del servicio.', { color: C.muted, size: 10 })
@@ -259,7 +259,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   p('Valores en pesos chilenos (CLP), por tramo de peso de la mascota y modalidad de servicio. Las tarifas se administran en nuestro sistema y se mantienen siempre actualizadas; este documento refleja los valores vigentes a la fecha de emisión.')
   if (tramos.length) tablaPrecios(tramos)
   bullets([
-    'La entrega de cenizas y certificado se realiza en un máximo de 3 días hábiles.',
+    'La entrega de cenizas y certificado se realiza en un máximo de 4 días hábiles.',
     'Recargo de $20.000 por retiro en comunas fuera de la zona habitual (Lampa, Buin, Colina, Calera de Tango y Paine).',
     'Para mascotas de peso superior al último tramo, el valor se cotiza de forma individual.',
   ])
@@ -270,7 +270,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   defItem('2. Retiro', 'Retiramos a la mascota a domicilio o desde la clínica veterinaria en un vehículo habilitado, habitualmente en menos de 3 horas.')
   defItem('3. Refrigeración', 'La mascota ingresa a nuestra cámara de refrigeración hasta el momento de la cremación, preservando las condiciones sanitarias.')
   defItem('4. Cremación trazable', 'Se realiza en horno certificado, con un código de seguimiento único asignado a cada caso.')
-  defItem('5. Entrega', 'Entregamos las cenizas junto al certificado digital de cremación en un máximo de 3 días hábiles. Disponemos de video del proceso para quien lo solicite.')
+  defItem('5. Entrega', 'Entregamos las cenizas junto al certificado digital de cremación en un máximo de 4 días hábiles. Disponemos de video del proceso para quien lo solicite.')
 
   h1('Trazabilidad, certificación y control')
   p('La trazabilidad es uno de los pilares de nuestro servicio y un diferenciador clave frente a alternativas que externalizan la operación.')
@@ -323,7 +323,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   bullets([
     'Instalaciones propias en Recoleta: no externalizamos ninguna etapa del proceso.',
     'Trazabilidad total con código de seguimiento y certificado digital firmado.',
-    'Entrega garantizada en un máximo de 3 días hábiles.',
+    'Entrega garantizada en un máximo de 4 días hábiles.',
     'Retiro a domicilio y desde clínicas, habitualmente en menos de 3 horas.',
     'Atención todos los días, 09:00 a 22:00 h, con contacto permanente por WhatsApp y correo.',
     'Tecnología propia de gestión, trazabilidad y comunicación.',

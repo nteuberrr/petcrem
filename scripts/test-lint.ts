@@ -29,7 +29,7 @@ const casos: { nombre: string; args: Parameters<typeof lintCopy>[0]; esperaHalla
   },
   {
     nombre: 'placa limpia (no debe marcar acentos ni puntuación normal)',
-    args: { placas: ['Entrega de cenizas y certificado. Recibes las cenizas junto al certificado digital de cremación, en un máximo de 3 días hábiles. ¿Dudas? Estamos aquí — todos los días.'] },
+    args: { placas: ['Entrega de cenizas y certificado. Recibes las cenizas junto al certificado digital de cremación, en un máximo de 4 días hábiles. ¿Dudas? Estamos aquí — todos los días.'] },
     esperaHallazgo: false,
   },
   {

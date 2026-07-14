@@ -87,7 +87,7 @@ export type NombrePlantilla = (typeof PLANTILLAS)[number]
 export const PLANTILLAS_INFO = `PLANTILLAS DISPONIBLES (elegí UNA y llená sus slots; el layout ya es on-brand y no se rompe):
 - "portada": gancho/apertura. slots: eyebrow (corto, ej. "PARA VETERINARIOS"), titulo (2-4 palabras), titulo_destacado (2ª línea, sale en dorado), bajada (1 frase corta, máx ~120 car), foto {prompt} (opcional; va en banda arriba), cta + cta_secundario (opcional). NO lleva bullets.
 - "contenido": una idea con apoyos. slots: eyebrow (opcional), titulo, bullets (2-4, MUY cortos), bajada (opcional), foto {prompt} (opcional), fondo. Para láminas de carrusel educativas.
-- "dato": una cifra/palabra fuerte. slots: dato (el número/palabra grande, ej. "3 días"), dato_label (qué es), bajada (1 línea de apoyo), fondo.
+- "dato": una cifra/palabra fuerte. slots: dato (el número/palabra grande, ej. "4 días"), dato_label (qué es), bajada (1 línea de apoyo), fondo.
 - "foto": foto protagonista, casi sin texto. slots: foto {prompt} (obligatoria), titulo (UNA frase corta encima), fondo. Para piezas emocionales/estéticas.
 - "cierre": llamado a la acción final. slots: titulo, cta (ej. teléfono), cta_secundario (web), bajada (opcional), fondo, foto {prompt} (opcional, banda arriba).
 Reglas: textos CORTOS (si no caben, se recortan). El fondo alterna navy/crema/blanco entre piezas. La foto: mascota viva y feliz o tutor con su mascota, cálida; NUNCA instalaciones. El logo se coloca solo.`

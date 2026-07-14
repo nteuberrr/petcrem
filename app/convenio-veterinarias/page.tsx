@@ -32,7 +32,7 @@ function precioNum(s: string): number { return parseInt((s ?? '').replace(/\D/g,
 const BENEFICIOS = [
   { icono: '⏱️', titulo: 'Retiro en menos de 3 horas', detalle: 'Retiramos directamente desde tu clínica, habitualmente en menos de 3 horas.' },
   { icono: '📅', titulo: 'Lunes a domingo', detalle: 'Operamos todos los días, de 09:00 a 22:00 h.' },
-  { icono: '🚚', titulo: 'Entrega en 3 días hábiles', detalle: 'Cenizas y certificado de cremación de vuelta en máximo 3 días hábiles.' },
+  { icono: '🚚', titulo: 'Entrega en 4 días hábiles', detalle: 'Cenizas y certificado de cremación de vuelta en máximo 4 días hábiles.' },
   { icono: '💛', titulo: 'Precios convenientes', detalle: 'Al inscribirte accedes automáticamente a las tarifas preferentes del convenio.' },
   { icono: '🔎', titulo: 'Trazabilidad total', detalle: 'Código de seguimiento y certificado digital; instalaciones propias y horno certificado.' },
 ]
@@ -142,7 +142,7 @@ export default function ConvenioVeterinariasPage() {
               Cuando un paciente fallece, nos avisas por WhatsApp o teléfono y retiramos en tu clínica — habitualmente en menos de 3 horas.
             </Card>
             <Card num="3" titulo="Nosotros hacemos el resto">
-              Cremación con código de seguimiento, y entrega de cenizas + certificado en máximo 3 días hábiles. Te informamos cada hito por correo.
+              Cremación con código de seguimiento, y entrega de cenizas + certificado en máximo 4 días hábiles. Te informamos cada hito por correo.
             </Card>
           </div>
         </section>

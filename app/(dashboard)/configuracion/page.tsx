@@ -185,7 +185,7 @@ export default function ConfiguracionPage() {
   const [editingEspecie, setEditingEspecie] = useState<Especie | null>(null)
   const [showTipoServicioModal, setShowTipoServicioModal] = useState(false)
   const [editingTipoServicio, setEditingTipoServicio] = useState<TipoServicio | null>(null)
-  const [tipoServicioForm, setTipoServicioForm] = useState({ nombre: '', codigo: '', plazo_entrega_dias: '3' })
+  const [tipoServicioForm, setTipoServicioForm] = useState({ nombre: '', codigo: '', plazo_entrega_dias: '4' })
   const [showOtroModal, setShowOtroModal] = useState(false)
   const [editingOtro, setEditingOtro] = useState<OtroServicio | null>(null)
   const [showDescuentoModal, setShowDescuentoModal] = useState(false)
@@ -744,7 +744,7 @@ export default function ConfiguracionPage() {
         <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Tipos de servicio</h2>
-            <button onClick={() => { setEditingTipoServicio(null); setTipoServicioForm({ nombre: '', codigo: '', plazo_entrega_dias: '3' }); setShowTipoServicioModal(true) }}
+            <button onClick={() => { setEditingTipoServicio(null); setTipoServicioForm({ nombre: '', codigo: '', plazo_entrega_dias: '4' }); setShowTipoServicioModal(true) }}
               className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
@@ -759,7 +759,7 @@ export default function ConfiguracionPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => { setEditingTipoServicio(t); setTipoServicioForm({ nombre: t.nombre, codigo: t.codigo, plazo_entrega_dias: t.plazo_entrega_dias || '3' }); setShowTipoServicioModal(true) }}
+                        onClick={() => { setEditingTipoServicio(t); setTipoServicioForm({ nombre: t.nombre, codigo: t.codigo, plazo_entrega_dias: t.plazo_entrega_dias || '4' }); setShowTipoServicioModal(true) }}
                         className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Editar</button>
                       {isAdmin && (
                         <button
@@ -1383,7 +1383,7 @@ export default function ConfiguracionPage() {
           }
           setShowTipoServicioModal(false)
           setEditingTipoServicio(null)
-          setTipoServicioForm({ nombre: '', codigo: '', plazo_entrega_dias: '3' })
+          setTipoServicioForm({ nombre: '', codigo: '', plazo_entrega_dias: '4' })
         }} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>

@@ -518,8 +518,8 @@ async function consultarEstadoMascota(a: AccionConsultaEstado): Promise<string> 
     try {
       const tipos = await getSheetData('tipos_servicio')
       const t = tipos.find(x => (x.codigo || '').toUpperCase() === codigoServ)
-      const n = parseInt(t?.plazo_entrega_dias || '3', 10)
-      const plazo = Number.isFinite(n) && n > 0 ? n : 3
+      const n = parseInt(t?.plazo_entrega_dias || '4', 10)
+      const plazo = Number.isFinite(n) && n > 0 ? n : 4
       const isoRetiro = c.fecha_retiro ? formatDateForSheet(c.fecha_retiro) : ''
       if (isoRetiro) {
         const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)

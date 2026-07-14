@@ -76,7 +76,7 @@ export async function getTarifasContexto(): Promise<TarifasContexto> {
     const nombres = ts.map(t => `${t.codigo}=${t.nombre}`).join(', ')
 
     return {
-      texto: `TARIFAS GENERALES de cremación (para TUTORES; CLP, por peso):\n${textoDe(gen)}\nTipos de servicio: ${nombres}. Entrega en hasta 3 días hábiles.`,
+      texto: `TARIFAS GENERALES de cremación (para TUTORES; CLP, por peso):\n${textoDe(gen)}\nTipos de servicio: ${nombres}. Entrega en hasta 4 días hábiles.`,
       tablaHtml: tablaDe(gen),
       hayTarifas: true,
       textoConvenio: conv.length ? `TARIFAS DE CONVENIO (preferentes, para VETERINARIOS/clínicas; CLP, por peso):\n${textoDe(conv)}` : '',
