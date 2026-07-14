@@ -108,6 +108,8 @@ export default function ClientesPage() {
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)  // guard anti doble-click al crear ficha (ver handleSubmit)
   const [form, setForm] = useState(FORM_DEFAULT)
+  // Pago parcial en el alta manual: monto abonado (el resto queda como saldo pendiente).
+  const [abonoNueva, setAbonoNueva] = useState('')
   const [formError, setFormError] = useState('')
   const [preciosGenerales, setPreciosGenerales] = useState<Tramo[]>([])
   const [preciosConvenio, setPreciosConvenio] = useState<Tramo[]>([])
@@ -477,6 +479,8 @@ export default function ClientesPage() {
       descuento_tipo: descuentoElegido ? descuentoElegido.tipo : '',
       descuento_valor: descuentoElegido ? String(descuentoValorNum) : '',
       descuento_monto: descuentoElegido ? String(montoDescuento) : '',
+      // Pago parcial: monto abonado (el saldo pendiente lo calcula el backend).
+      ...(form.estado_pago === 'parcial' ? { monto_abonado: abonoNueva } : {}),
     }
     const res = await fetch('/api/clientes', {
       method: 'POST',
@@ -506,6 +510,7 @@ export default function ClientesPage() {
       })
       setShowModal(false)
       setForm(FORM_DEFAULT)
+      setAbonoNueva('')
       setEsClienteVet(false)
       setAdicionales([])
       autoAgregadosRef.current = new Set()
@@ -1015,10 +1020,39 @@ export default function ClientesPage() {
               <select required value={form.estado_pago} onChange={e => setForm(f => ({ ...f, estado_pago: e.target.value }))}
                 className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                 <option value="pendiente">Pendiente de pago</option>
+                <option value="parcial">Pago parcial</option>
                 <option value="pagado">Pagado</option>
               </select>
             </div>
           </div>
+
+          {/* Pago parcial: box para indicar cuánto abonó → queda un saldo pendiente. */}
+          {form.estado_pago === 'parcial' && (() => {
+            const abonoNum = parseInt((abonoNueva || '').replace(/\D/g, ''), 10) || 0
+            const pendiente = Math.max(0, Math.round(totalServicio) - abonoNum)
+            return (
+              <div className="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700">¿Cuánto pagó? (abono)</label>
+                    <input
+                      type="number" min={0} inputMode="numeric" value={abonoNueva}
+                      onChange={e => setAbonoNueva(e.target.value)}
+                      placeholder="0"
+                      className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                    />
+                  </div>
+                  <div className="text-sm">
+                    <p className="text-xs text-gray-600">Total del servicio: <span className="font-semibold text-gray-900">{fmtPrecio(Math.round(totalServicio))}</span></p>
+                    <p className="mt-0.5 text-amber-900 font-bold">Pendiente por pagar: {fmtPrecio(pendiente)}</p>
+                  </div>
+                </div>
+                <p className="mt-2 text-[11px] text-amber-800">
+                  Al crear la ficha queda un <strong>saldo pendiente</strong> por la diferencia (aparece en «pago pendiente»). La boleta se emite recién cuando confirmes el pago total.
+                </p>
+              </div>
+            )
+          })()}
 
           {/* Veterinaria derivante (lógica invertida) */}
           <div className="border-t-2 border-gray-300 pt-4">

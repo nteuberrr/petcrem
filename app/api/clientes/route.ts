@@ -7,6 +7,7 @@ import { resolverVet, enviarCodigoVet } from '@/lib/vet-cremacion-mailer'
 import { todayISO } from '@/lib/dates'
 import { calcularSnapshotFicha, type AdicionalItem } from '@/lib/price-calculator'
 import { capitalizarNombre } from '@/lib/nombres'
+import { sincronizarSaldoParcial } from '@/lib/cobros'
 
 const ClienteSchema = z.object({
   nombre_mascota: z.string().min(1, 'Nombre de mascota requerido'),
@@ -93,6 +94,18 @@ export async function POST(req: NextRequest) {
       descuento_valor: data.descuento_valor as number | string | undefined,
     })
 
+    // PAGO PARCIAL en el alta: el tutor abonó una parte; el resto queda como saldo
+    // pendiente (cobro 'saldo'). Si el abono cubre el total, la ficha nace 'pagado'.
+    // `monto_abonado` no es columna de clientes: solo sirve para calcular el saldo.
+    let estadoPagoFinal = data.estado_pago
+    let pendienteParcial = 0
+    if (String(data.estado_pago).toLowerCase() === 'parcial') {
+      const totalFicha = Number(snapshot.precio_total) || 0
+      const abono = Math.round(parseFloat(String((body as { monto_abonado?: unknown }).monto_abonado ?? '')) || 0)
+      pendienteParcial = Math.round(totalFicha - abono)
+      if (pendienteParcial <= 0) estadoPagoFinal = 'pagado' // el abono cubre el total → pagado
+    }
+
     const row = {
       id,
       codigo,
@@ -128,10 +141,16 @@ export async function POST(req: NextRequest) {
       precio_adicionales: snapshot.precio_adicionales,
       precio_total: snapshot.precio_total,
       tipo_pago: data.tipo_pago,
-      estado_pago: data.estado_pago,
+      estado_pago: estadoPagoFinal,
       fecha_creacion: now,
     }
     await appendRow('clientes', row)
+
+    // Saldo del pago parcial → cobro 'saldo' (banner + notificación "pago pendiente").
+    if (estadoPagoFinal === 'parcial' && pendienteParcial > 0) {
+      try { await sincronizarSaldoParcial(String(id), pendienteParcial) }
+      catch (e) { console.warn('[clientes POST] no se pudo crear el saldo parcial:', e) }
+    }
 
     // Mail de bienvenida al tutor con el código de su mascota (best-effort:
     // no bloquea la creación de la ficha si Resend falla o no está configurado).
