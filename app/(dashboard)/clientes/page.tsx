@@ -346,7 +346,9 @@ export default function ClientesPage() {
       if (filtro === 'pendiente' && !(c.estado === 'pendiente' || !c.estado)) return false
       if (filtro === 'cremado' && c.estado !== 'cremado') return false
       if (filtro === 'despachado' && c.estado !== 'despachado') return false
-      if (filtro === 'pago_pendiente' && c.estado_pago === 'pagado') return false
+      // Los pagos PARCIALES no cuentan como "pago pendiente": su saldo vive en el
+      // chip "pendiente de cobro" (evita que la misma ficha aparezca en 2 avisos).
+      if (filtro === 'pago_pendiente' && (c.estado_pago === 'pagado' || String(c.estado_pago || '').toLowerCase() === 'parcial')) return false
       if (filtro === 'datos_pendientes' && !tieneDatosPendientes(c)) return false
       if (filtro === 'falta_peso' && !faltaPesoIngreso(c)) return false
       if (filtro === 'diferencia' && !tieneDiferenciaPorCobrar(c)) return false
@@ -384,7 +386,9 @@ export default function ClientesPage() {
   const alertas = useMemo(() => {
     const reales = clientes.filter(c => c.estado !== 'borrador')
     return {
-      pagoPendiente: reales.filter(c => c.estado_pago !== 'pagado').length,
+      // Excluye los pagos PARCIALES: su saldo pendiente se muestra en el chip
+      // "pendiente de cobro" (una sola notificación por ficha, no dos).
+      pagoPendiente: reales.filter(c => c.estado_pago !== 'pagado' && String(c.estado_pago || '').toLowerCase() !== 'parcial').length,
       enCamara: reales.filter(c => c.estado === 'pendiente' || !c.estado).length,
       // Los Sin Devolución (SD) NO se despachan (su flujo termina en "cremado"),
       // así que no cuentan como pendientes de despacho.
