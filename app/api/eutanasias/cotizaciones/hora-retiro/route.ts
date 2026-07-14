@@ -4,6 +4,7 @@ import { verifyToken } from '@/lib/eutanasia-tokens'
 import { isWhatsappConfigured, avisarAdminsWhatsapp, enviarTextoWhatsapp } from '@/lib/whatsapp'
 import { formatDate } from '@/lib/dates'
 import { esFueraDeHorario } from '@/lib/adicionales-auto'
+import { esFeriado, nombreFeriado } from '@/lib/feriados'
 import { fmtPrecio } from '@/lib/format'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
@@ -69,9 +70,13 @@ export async function POST(req: NextRequest) {
         const monto = fh ? (parseInt(fh.precio, 10) || 0) : 10000
         const tutor = (c.cliente_nombre || '').trim().split(/\s+/)[0] || '👋'
         const mascota = c.mascota_nombre && c.mascota_nombre !== 'No Especificado' ? c.mascota_nombre : 'tu mascota'
+        const dSem = new Date(`${c.fecha_servicio}T12:00:00`).getDay()
+        const motivo = esFeriado(c.fecha_servicio) ? `por ser feriado (${nombreFeriado(c.fecha_servicio)})`
+          : (dSem === 0 || dSem === 6) ? 'por ser fin de semana'
+          : 'por ser después de las 19:00'
         const msg =
           `Hola ${tutor}, la veterinaria nos informó que la hora del servicio de ${mascota} quedó coordinada para las ${hora} hrs. ` +
-          `Como es después de las 19:00, el retiro para la cremación tiene un recargo adicional de ${fmtPrecio(monto)} por fuera de horario ` +
+          `El retiro para la cremación tiene un recargo adicional de ${fmtPrecio(monto)} por fuera de horario (${motivo}) ` +
           `(queda especificado en nuestra web). Te lo comentamos para que no sea una sorpresa al momento del cobro. ` +
           `Cualquier duda, quedamos atentos por aquí 🐾 — Crematorio Alma Animal`
         await enviarTextoWhatsapp(waCliente, msg)

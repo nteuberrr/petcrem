@@ -1,4 +1,5 @@
 import { normalizar } from './comunas'
+import { esFeriado } from './feriados'
 
 /**
  * Reglas de CARGO AUTOMÁTICO de "otros servicios" en la ficha de cremación.
@@ -38,9 +39,10 @@ export function comunasDeServicio(comunasJson: string | undefined): string[] {
 }
 
 /**
- * ¿El retiro es fuera de horario? Sábado/domingo siempre; L-V desde las 19:00
- * (inclusive). Sin fecha no se puede saber → false. Sin hora en día de semana → false
- * (se asume dentro de horario hasta que se coordine la hora).
+ * ¿El retiro es fuera de horario? Sábado/domingo y FERIADOS siempre (todo el
+ * día); L-V hábil desde las 19:00 (inclusive). Sin fecha no se puede saber →
+ * false. Sin hora en día de semana hábil → false (se asume dentro de horario
+ * hasta que se coordine la hora).
  */
 export function esFueraDeHorario(fechaISO: string | undefined, horaHHMM: string | undefined): boolean {
   const fecha = (fechaISO || '').trim()
@@ -48,7 +50,8 @@ export function esFueraDeHorario(fechaISO: string | undefined, horaHHMM: string 
   const d = new Date(`${fecha}T12:00:00`) // mediodía: inmune a corrimientos de TZ
   if (isNaN(d.getTime())) return false
   const dia = d.getDay() // 0=domingo, 6=sábado
-  if (dia === 0 || dia === 6) return true
+  // Fin de semana o feriado (aunque sea día de semana) → recargo TODO el día.
+  if (dia === 0 || dia === 6 || esFeriado(fecha)) return true
   const hora = (horaHHMM || '').trim()
   if (!/^\d{1,2}:\d{2}/.test(hora)) return false
   return hora.padStart(5, '0') >= HORA_FUERA_HORARIO
@@ -74,7 +77,7 @@ export function aplicaReglaAuto(
 
 /** Etiqueta corta de la regla (UI de Configuración y hints de la ficha). */
 export function etiquetaRegla(regla: string | undefined): string {
-  if (regla === 'fuera_horario') return 'Auto: fuera de horario (19:00+ y fin de semana)'
+  if (regla === 'fuera_horario') return 'Auto: fuera de horario (19:00+, fin de semana y feriados)'
   if (regla === 'distancia') return 'Auto: por comuna (distancia)'
   return ''
 }
