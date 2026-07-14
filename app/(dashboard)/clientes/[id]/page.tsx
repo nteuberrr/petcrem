@@ -152,6 +152,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [pagandoCobroId, setPagandoCobroId] = useState('')
   // Pago parcial: monto abonado por el tutor (el resto queda como saldo pendiente).
   const [abono, setAbono] = useState('')
+  // Toast centrado "Cambios guardados correctamente" (se auto-oculta a los 3s).
+  const [toastOk, setToastOk] = useState(false)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Menú "Documentos" (certificados + archivos).
   const [docsOpen, setDocsOpen] = useState(false)
   const docsMenuRef = useRef<HTMLDivElement>(null)
@@ -508,6 +511,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     }
   }
 
+  // Muestra el toast centrado y lo oculta a los 3s (reinicia el timer si ya estaba).
+  function mostrarGuardado() {
+    setToastOk(true)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToastOk(false), 3000)
+  }
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current) }, [])
+
   async function handleSave(opts?: { registrar?: boolean }) {
     const registrar = opts?.registrar === true
     setSaving(true)
@@ -554,6 +565,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       // valores viejos (así se duplicaba el correo de bienvenida).
       setForm(norm)
       if (registrar) alert(`Ficha registrada. Código generado: ${updated.codigo}. Le enviamos el correo al tutor.`)
+      else mostrarGuardado()
     } else {
       const e = await res.json().catch(() => ({}))
       alert(e?.error || 'No se pudo guardar la ficha.')
@@ -762,6 +774,16 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
   return (
     <div className="max-w-4xl">
+      {/* Toast centrado "cambios guardados" (auto-oculta a los 3s). */}
+      {toastOk && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-2xl bg-white border-2 border-emerald-300 shadow-xl px-6 py-4 animate-in fade-in zoom-in-95 duration-200">
+            <span className="flex items-center justify-center w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 text-lg">✓</span>
+            <p className="text-sm font-semibold text-gray-900">Cambios guardados correctamente</p>
+          </div>
+        </div>
+      )}
+
       <button onClick={() => router.back()}
         className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors mb-3"
         title="Volver">
