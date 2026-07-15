@@ -13,7 +13,29 @@ async function ensure() {
 export async function GET() {
   try {
     await ensure()
-    const rows = await getSheetData(HOJA)
+    let rows = await getSheetData(HOJA)
+
+    // Auto-reparación: las categorías que los productos YA usan pero que no
+    // tienen fila acá (p. ej. tipeadas libres en el form de producto, o las
+    // ánforas históricas) se agregan solas, para que el panel muestre TODAS.
+    try {
+      const productos = await getSheetData('productos')
+      const existentes = new Set(rows.map(c => (c.nombre || '').trim().toLowerCase()))
+      const faltantes = new Map<string, string>()
+      for (const p of productos) {
+        const cat = (p.categoria || '').trim()
+        if (cat && !existentes.has(cat.toLowerCase())) faltantes.set(cat.toLowerCase(), cat)
+      }
+      // Secuencial con getNextId fresco por fila (regla del repo: nunca ids en JS).
+      for (const nombre of faltantes.values()) {
+        const id = await getNextId(HOJA)
+        await appendRow(HOJA, { id, nombre, activo: 'TRUE', fecha_creacion: todayISO() })
+      }
+      if (faltantes.size > 0) rows = await getSheetData(HOJA)
+    } catch (e) {
+      console.warn('[categorias-productos GET] auto-reparación falló (se listan las existentes):', e)
+    }
+
     return NextResponse.json(rows)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
