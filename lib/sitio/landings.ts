@@ -41,7 +41,7 @@ export const LANDINGS: Record<string, Landing> = {
     faqs: [
       { q: '¿Cuánto demora la entrega de las cenizas?', a: 'La entrega es en 4 días hábiles, con retiro a domicilio y devolución en un ánfora.' },
       { q: '¿Retiran a domicilio?', a: 'Sí, retiramos tu mascota en tu casa o en la clínica veterinaria, en toda la Región Metropolitana.' },
-      { q: '¿La cremación es individual?', a: 'Ofrecemos cremación individual (con devolución de cenizas) y comunitaria. Tú eliges la modalidad.' },
+      { q: '¿Qué modalidades de cremación ofrecen?', a: 'Tres: Cremación Individual (con devolución de cenizas), Cremación Premium (incluye ánfora a elección y cuadro conmemorativo) y Cremación Sin Devolución, la opción más económica. Tú eliges la modalidad.' },
     ],
   },
   'eutanasia-a-domicilio': {
@@ -54,6 +54,7 @@ export const LANDINGS: Record<string, Landing> = {
     waMsg: 'Hola! Necesito información sobre la eutanasia a domicilio de mi mascota',
     faqs: [
       { q: '¿La eutanasia se realiza en mi casa?', a: 'Sí, un médico veterinario acude a tu domicilio para que la despedida sea tranquila y sin trasladar a tu mascota.' },
+      { q: '¿El veterinario evalúa antes de realizar el procedimiento?', a: 'Sí. Es un servicio con evaluación profesional: el veterinario examina a tu mascota en tu casa y confirma si corresponde realizar la eutanasia. Si al evaluar no corresponde, se cobra solo la consulta.' },
       { q: '¿Incluye la cremación?', a: 'Podemos hacernos cargo de la cremación después del procedimiento, con devolución de cenizas si lo deseas.' },
       { q: '¿En qué comunas atienden?', a: 'Atendemos en toda la Región Metropolitana, todos los días de 09:00 a 22:00.' },
     ],
