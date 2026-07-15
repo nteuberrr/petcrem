@@ -108,6 +108,15 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
     texto: 'Hola {{1}}, el certificado de cremación de {{2}} ya está emitido y fue enviado a tu correo. Si no lo recibes, respóndenos por aquí y te lo reenviamos.',
     ejemplos: ['María', 'Rocky'],
   },
+  evaluacion_entrega: {
+    nombre: 'evaluacion_entrega',
+    categoria: 'UTILITY',
+    // Al confirmar la ENTREGA del ánfora: agradecimiento + link "Evalúanos aquí"
+    // (el mismo google_review_url del correo de entrega). NO se envía si la ficha
+    // está marcada "no pedir evaluación" (clientes.omitir_evaluacion).
+    texto: 'Hola {{1}}, ya entregamos el ánfora de {{2}}. Fue un honor acompañarte en este proceso. Si quieres, puedes dejarnos tu evaluación aquí: {{3}} — te toma menos de un minuto y nos ayuda muchísimo. Gracias por confiar en Crematorio Alma Animal.',
+    ejemplos: ['María', 'Rocky', 'https://g.page/r/CXXXXXXXXXXX/review'],
+  },
   aviso_operativo: {
     nombre: 'aviso_operativo',
     categoria: 'UTILITY',

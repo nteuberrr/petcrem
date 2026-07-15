@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateById, updateByIdIf } from '@/lib/datastore'
 import { enviarEntregaConfirmada } from '@/lib/cliente-mailer'
 import { resolverVet, enviarEntregaVet } from '@/lib/vet-cremacion-mailer'
+import { avisarClienteWhatsapp } from '@/lib/whatsapp-avisos'
+import { getContacto } from '@/lib/email-layout'
 import { marcarConversacionPorTelefono } from '@/lib/mensajes'
 import { todayISO } from '@/lib/dates'
 
@@ -129,6 +131,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         })
       } catch (e) {
         console.warn('[despachos/entregar] fallo correo entrega (no bloqueante):', e)
+      }
+      // WhatsApp al tutor con el link "Evalúanos aquí" (el mismo del correo).
+      // Texto libre primero (gratis); con la ventana de 24h cerrada —lo habitual
+      // en la entrega, que suele llegar 72h+ después del último contacto— cae a
+      // la plantilla aprobada `evaluacion_entrega`. Si la ficha está marcada
+      // "no pedir evaluación" (omitir_evaluacion) NO se envía ningún WhatsApp.
+      try {
+        const sinEvaluacion = String(cliente.omitir_evaluacion || '').toUpperCase() === 'TRUE'
+        const reviewUrl = sinEvaluacion ? '' : (await getContacto()).googleReviewUrl
+        if (!sinEvaluacion && reviewUrl && cliente.telefono) {
+          const tutor = (cliente.nombre_tutor || '').trim().split(/\s+/)[0] || '👋'
+          const mascota = cliente.nombre_mascota || 'tu mascota'
+          await avisarClienteWhatsapp(
+            cliente.telefono,
+            `Hola ${tutor}, ya entregamos el ánfora de ${mascota}. Fue un honor acompañarte en este proceso. Si quieres, puedes dejarnos tu evaluación aquí: ${reviewUrl} — te toma menos de un minuto y nos ayuda muchísimo. Gracias por confiar en Crematorio Alma Animal.`,
+            { nombre: 'evaluacion_entrega', variables: [tutor, mascota, reviewUrl] },
+          )
+        }
+      } catch (e) {
+        console.warn('[despachos/entregar] fallo WhatsApp evaluación (no bloqueante):', e)
       }
       // Y al veterinario de convenio asociado, si lo hay (best-effort).
       try {
