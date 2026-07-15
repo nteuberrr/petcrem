@@ -387,7 +387,7 @@ export default function ConfiguracionPage() {
       {/* Sub-pestañas de Artículos */}
       {tab === 'Artículos' && (
         <div className="flex gap-2 flex-wrap mb-4">
-          {([['servicios', 'Servicios Generales'], ['bodega', 'Bodega'], ['otros', 'Otros Productos']] as const).map(([k, label]) => (
+          {([['servicios', 'Servicios Generales'], ['bodega', 'Bodega'], ['otros', 'Otros Productos/Servicios']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setArticuloTab(k)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${articuloTab === k ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
               {label}
@@ -782,7 +782,7 @@ export default function ConfiguracionPage() {
       {tab === 'Artículos' && articuloTab === 'otros' && (
         <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
-            <h2 className="font-semibold text-gray-900">Otros Productos</h2>
+            <h2 className="font-semibold text-gray-900">Otros Productos/Servicios</h2>
             <button onClick={() => { setEditingOtro(null); setOtroForm({ nombre: '', precio: '', auto_regla: '', comunas: '' }); setShowOtroModal(true) }}
               className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
