@@ -200,4 +200,37 @@ export function renderPorqueElegirnos(d: DatosPrecios): string {
     + faqHtml
     + '</div></div></section>'
     + `<script type="application/ld+json">${jsonLd}</script>`
+    // Corrección de anclas: el smooth-scroll de Webflow calcula su propio
+    // destino (ignora scroll-margin-top) y, según cuándo carguen las imágenes
+    // del hero, deja el título tapado por el navbar fijo. Interceptamos el click
+    // de estas dos anclas (fase captura, antes de Webflow) y desplazamos con el
+    // offset del navbar; al cargar con #hash se re-alinea 2 veces (las imágenes
+    // tardías corren el layout). Si el id no está en la página (link desde otra
+    // sección del sitio), se navega normal.
+    + `<script>(function(){
+var IDS=['por-que-elegirnos','preguntas-frecuentes'];
+function off(){var n=document.querySelector('.navbar.w-nav');return(n?n.getBoundingClientRect().height:100)+22}
+function goTo(id,smooth){var el=document.getElementById(id);if(!el)return;var y=el.getBoundingClientRect().top+window.pageYOffset-off();if(smooth){window.scrollTo({top:y,behavior:'smooth'})}else{window.scrollTo(0,y)}}
+function fix(id){var el=document.getElementById(id);if(!el)return;var d=el.getBoundingClientRect().top-off();if(Math.abs(d)>8){window.scrollTo(0,window.pageYOffset+d)}}
+function irCorrigiendo(id){
+goTo(id,true);
+// Las imágenes lazy que van cargando al pasar corren el layout y desplazan el
+// destino: re-alinear cuando termina la animación (solo si quedó desviado).
+setTimeout(function(){fix(id)},1100);
+setTimeout(function(){fix(id)},2200);
+setTimeout(function(){fix(id)},3400);
+}
+document.addEventListener('click',function(e){
+var t=e.target;var a=t&&t.closest?t.closest('a[href*="#"]'):null;if(!a)return;
+var id=(a.getAttribute('href')||'').split('#')[1];if(IDS.indexOf(id)===-1)return;
+if(!document.getElementById(id))return;
+e.preventDefault();e.stopImmediatePropagation();
+irCorrigiendo(id);
+try{history.replaceState(null,'','#'+id)}catch(err){}
+},true);
+window.addEventListener('load',function(){
+var id=(location.hash||'').slice(1);
+if(IDS.indexOf(id)!==-1){setTimeout(function(){goTo(id,false)},350);setTimeout(function(){fix(id)},1300);setTimeout(function(){fix(id)},2500)}
+});
+})()</script>`
 }
