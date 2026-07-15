@@ -41,6 +41,11 @@ export const SHEETS: Record<string, string[]> = {
     // id de la boleta (39) emitida AL TUTOR al pagar la ficha; vacío = no emitida
     // (guard de idempotencia del auto-emisor).
     'boleta_id',
+    // Ánfora de greda descontada del stock por esta ficha (solo Cremación
+    // Individual, por tramo de peso: 0-10 S / 10-30 M / 30+ L — lib/greda-stock.ts).
+    // '' = ficha legada (sin tracking, no tocar) · '-' = tracked pero sin greda
+    // (otro servicio / sin peso) · '<id>' = producto de Bodega descontado.
+    'greda_descontada',
     'origen', 'fecha_creacion',
   ],
   ciclos: [

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSheetData, appendRow, getNextId, ensureColumns } from '@/lib/datastore'
+import { ajustarStockAdicionales } from '@/lib/stock'
+import { gredaEsperada, aplicarCambioGreda, SIN_GREDA } from '@/lib/greda-stock'
 import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-mailer'
 import { resolverVet, enviarCodigoVet } from '@/lib/vet-cremacion-mailer'
@@ -74,6 +76,7 @@ export async function POST(req: NextRequest) {
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
       'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
       'precio_servicio', 'precio_adicionales', 'precio_total', 'hora_retiro',
+      'greda_descontada',
     ])
     const codigo = await generarCodigo(data.letra_especie, data.codigo_servicio)
     const id = await getNextId('clientes')
@@ -143,8 +146,23 @@ export async function POST(req: NextRequest) {
       tipo_pago: data.tipo_pago,
       estado_pago: estadoPagoFinal,
       fecha_creacion: now,
+      greda_descontada: SIN_GREDA, // se resuelve tras el insert (abajo)
     }
+
+    // Greda incluida (solo CI): resolver el producto por tramo de peso ANTES del
+    // insert para persistir qué unidad consume esta ficha (lib/greda-stock.ts).
+    let gredaFicha = SIN_GREDA
+    try { gredaFicha = await gredaEsperada(row) } catch (e) { console.warn('[clientes POST] greda no resuelta:', e) }
+    row.greda_descontada = gredaFicha
+
     await appendRow('clientes', row)
+
+    // Descontar stock (best-effort, no bloquea la creación): la greda del tramo
+    // + los productos adicionales elegidos al crear (ánfora premium, relicarios…).
+    // Antes este descuento solo existía al EDITAR la ficha (PATCH) — los
+    // adicionales seleccionados en el alta nunca descontaban.
+    try { await aplicarCambioGreda(SIN_GREDA, gredaFicha) } catch (e) { console.warn('[clientes POST] stock greda:', e) }
+    try { await ajustarStockAdicionales([], parsedAdicionales) } catch (e) { console.warn('[clientes POST] stock adicionales:', e) }
 
     // Saldo del pago parcial → cobro 'saldo' (banner + notificación "pago pendiente").
     if (estadoPagoFinal === 'parcial' && pendienteParcial > 0) {

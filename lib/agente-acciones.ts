@@ -12,6 +12,7 @@ import { capitalizarNombre } from './nombres'
 import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional } from './cobros'
 import { anforaPremiumIncluida } from './anforas-premium'
+import { ajustarStockAdicionales } from './stock'
 import { generarCatalogoPdf } from './catalogo-generator'
 import { uploadToR2 } from './cloudflare-r2'
 import { upsertContacto, getOrCreateConversacion, insertarMensaje } from './mensajes'
@@ -638,6 +639,12 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
     console.warn('[agente-acciones] agregarAdicional: no se pudo actualizar la ficha:', e)
     return 'No pude agregar el producto a la ficha en este momento. Discúlpate brevemente y dile al cliente que el equipo lo coordina en seguida (escala a un humano).'
   }
+
+  // Descontar stock de los productos agregados (los 'servicio' no llevan stock).
+  // Antes el bot escribía la ficha directo (sin pasar por el PATCH) y la venta
+  // nunca descontaba de Bodega. Best-effort: no bloquea la venta.
+  try { await ajustarStockAdicionales([], resueltos.filter(r => r.tipo === 'producto')) }
+  catch (e) { console.warn('[agente-acciones] agregarAdicional: stock no ajustado:', e) }
 
   // Cobro: correo (con datos de transferencia + botón confirmar) + WhatsApp.
   // No cobrar ánforas premium INCLUIDAS en Cremación Premium (bug real: se llegó

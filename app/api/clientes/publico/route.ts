@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSheetData, appendRow, getNextId, ensureColumns } from '@/lib/datastore'
+import { gredaEsperada, aplicarCambioGreda, SIN_GREDA } from '@/lib/greda-stock'
 import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-mailer'
 import { todayISO } from '@/lib/dates'
@@ -72,6 +73,7 @@ export async function POST(req: NextRequest) {
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
       'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
       'precio_servicio', 'precio_adicionales', 'precio_total', 'origen',
+      'greda_descontada',
     ])
     const codigo = await generarCodigo(data.letra_especie, data.codigo_servicio)
     const id = await getNextId('clientes')
@@ -124,8 +126,18 @@ export async function POST(req: NextRequest) {
       estado_pago: 'pendiente',
       origen: 'registro_publico',
       fecha_creacion: now,
+      greda_descontada: SIN_GREDA,
     }
+
+    // Greda incluida (solo CI): descuento por tramo de peso (lib/greda-stock.ts).
+    let gredaFicha = SIN_GREDA
+    try { gredaFicha = await gredaEsperada(row) } catch (e) { console.warn('[clientes/publico POST] greda no resuelta:', e) }
+    row.greda_descontada = gredaFicha
+
     await appendRow('clientes', row)
+
+    try { await aplicarCambioGreda(SIN_GREDA, gredaFicha) }
+    catch (e) { console.warn('[clientes/publico POST] stock greda:', e) }
 
     // Mail de bienvenida con el código (best-effort).
     try {

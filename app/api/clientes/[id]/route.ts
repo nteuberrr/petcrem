@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, updateById, ensureColumns, deleteRow } from '@/lib/datastore'
-import { ajustarStock } from '@/lib/stock'
+import { ajustarStock, ajustarStockAdicionales } from '@/lib/stock'
+import { gredaEsperada, aplicarCambioGreda } from '@/lib/greda-stock'
 import { parseDecimal } from '@/lib/numbers'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 import { generarCodigo } from '@/lib/codigo-generator'
@@ -81,6 +82,7 @@ export async function PATCH(
       'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
       'peso_declarado', 'peso_ingreso', 'despacho_id',
       'precio_servicio', 'precio_adicionales', 'precio_total', 'boleta_id', 'hora_retiro',
+      'greda_descontada',
     ])
 
     const rows = await getSheetData('clientes')
@@ -91,7 +93,7 @@ export async function PATCH(
     if (body.adicionales !== undefined) {
       const oldAdicionales = parseAdicionales(rows[idx].adicionales)
       const newAdicionales = parseAdicionales(body.adicionales)
-      await adjustProductStock(oldAdicionales, newAdicionales)
+      await ajustarStockAdicionales(oldAdicionales, newAdicionales)
     }
 
     // Normalizar pesos: aceptar coma decimal y guardar como number
@@ -107,6 +109,7 @@ export async function PATCH(
       'id', 'codigo', 'estado', 'ciclo_id', 'despacho_id', 'origen', 'fecha_creacion',
       'fotos_mascota', 'fotos_cuadro', 'videos_servicio', 'fotos_evidencia',
       'correo_diferencia_fecha', 'correo_diferencia_monto',
+      'greda_descontada', // lo administra el sync de greda de abajo, nunca el form
     ]
     for (const k of CAMPOS_SISTEMA) delete normalizedBody[k]
     for (const k of ['peso_declarado', 'peso_ingreso']) {
@@ -192,6 +195,21 @@ export async function PATCH(
       if (!updated.estado || updated.estado === 'borrador') updated.estado = 'pendiente'
     }
 
+    // GREDA incluida (CI): sincronizar el descuento por tramo de peso. Solo para
+    // fichas ya TRACKED (greda_descontada != '') o que se REGISTRAN en este
+    // request; las fichas legadas (creadas antes de esta funcionalidad) quedan
+    // en '' y no se tocan, para no descontar retroactivamente inventario que ya
+    // se contó a mano. Cubre: registro de borrador, cambio de peso que cruza de
+    // tramo (S↔M↔L) y cambio de servicio (CI↔CP/SD devuelve/descuenta la greda).
+    const gredaPrevia = String(rows[idx].greda_descontada || '')
+    let gredaNueva: string | null = null
+    if (gredaPrevia !== '' || (body.registrar === true && esBorrador)) {
+      try {
+        gredaNueva = await gredaEsperada(updated)
+        updated.greda_descontada = gredaNueva
+      } catch (e) { console.warn('[clientes PATCH] greda no resuelta (se mantiene la previa):', e) }
+    }
+
     // Escribir. generarCodigo hace max+1 (no atómico): dos registros simultáneos
     // de la misma especie podrían generar el mismo código. Si existe el índice
     // único de `clientes.codigo` (ver supabase/schema-principal.sql), el segundo
@@ -211,6 +229,13 @@ export async function PATCH(
         codigoGenerado = await generarCodigo(String(candidate.letra_especie || '').trim(), String(candidate.codigo_servicio || 'CI'))
         updated.codigo = codigoGenerado
       }
+    }
+
+    // Aplicar en Bodega el cambio de greda (devolver la previa / descontar la
+    // nueva), recién DESPUÉS del write exitoso de la ficha (best-effort).
+    if (gredaNueva !== null && gredaNueva !== gredaPrevia) {
+      try { await aplicarCambioGreda(gredaPrevia, gredaNueva) }
+      catch (e) { console.warn('[clientes PATCH] stock greda:', e) }
     }
 
     // Sincronizar el saldo del pago parcial con `cobros` (best-effort): mantiene
@@ -314,7 +339,14 @@ export async function DELETE(
     // 1) Revertir stock de productos adicionales (devolver lo que consumió esta ficha)
     const items = parseAdicionales(cliente.adicionales)
     if (items.length > 0) {
-      await adjustProductStock(items, [])
+      await ajustarStockAdicionales(items, [])
+    }
+
+    // 1b) Devolver la greda descontada por tramo de peso (si la ficha era tracked)
+    const gredaDescontada = String(cliente.greda_descontada || '')
+    if (gredaDescontada && gredaDescontada !== '-') {
+      try { await ajustarStock(gredaDescontada, +1) }
+      catch (e) { console.warn('[clientes/delete] no se pudo devolver la greda al stock:', e) }
     }
 
     // 2) Limpiar referencia en el ciclo (si tenía uno)
@@ -394,23 +426,5 @@ function parseJsonSafe<T>(raw: string | undefined, fallback: T): T {
   try { const x = JSON.parse(raw || ''); return (x ?? fallback) as T } catch { return fallback }
 }
 
-async function adjustProductStock(
-  oldItems: AdicionalItem[],
-  newItems: AdicionalItem[]
-) {
-  // Build qty maps for products only
-  const oldQty: Record<string, number> = {}
-  const newQty: Record<string, number> = {}
-  oldItems.filter(a => a.tipo === 'producto').forEach(a => { oldQty[a.id] = (oldQty[a.id] || 0) + (a.qty ?? 1) })
-  newItems.filter(a => a.tipo === 'producto').forEach(a => { newQty[a.id] = (newQty[a.id] || 0) + (a.qty ?? 1) })
-
-  const allIds = new Set([...Object.keys(oldQty), ...Object.keys(newQty)])
-  // Secuencial (no Promise.all): cada ajuste es un compare-and-set atómico que
-  // relee el stock, así no se pierden unidades entre productos ni frente a otra
-  // venta/edición concurrente del mismo producto.
-  for (const pid of allIds) {
-    const delta = (oldQty[pid] || 0) - (newQty[pid] || 0) // positive = freed, negative = consumed
-    if (delta === 0) continue
-    await ajustarStock(pid, delta)
-  }
-}
+// (el diff de stock de adicionales vive en lib/stock.ts → ajustarStockAdicionales,
+// compartido con clientes POST y el agregar_adicional del bot)

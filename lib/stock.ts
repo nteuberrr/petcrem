@@ -33,3 +33,25 @@ export async function ajustarStock(productoId: string, delta: number): Promise<n
   }
   return null
 }
+
+export type ItemStock = { tipo?: string; id?: string; qty?: number }
+
+/**
+ * Ajusta el stock de productos según el DIFF entre dos listas de adicionales de
+ * una ficha (solo ítems tipo 'producto'; los 'servicio' no llevan stock).
+ * Casos: crear ficha → ajustarStockAdicionales([], nuevos) · editar → (viejos,
+ * nuevos) · eliminar ficha → (viejos, []). Secuencial (no Promise.all): cada
+ * ajuste es un compare-and-set que relee el stock.
+ */
+export async function ajustarStockAdicionales(oldItems: ItemStock[], newItems: ItemStock[]): Promise<void> {
+  const oldQty: Record<string, number> = {}
+  const newQty: Record<string, number> = {}
+  for (const a of oldItems) if (a.tipo === 'producto' && a.id) oldQty[a.id] = (oldQty[a.id] || 0) + (a.qty ?? 1)
+  for (const a of newItems) if (a.tipo === 'producto' && a.id) newQty[a.id] = (newQty[a.id] || 0) + (a.qty ?? 1)
+  const allIds = new Set([...Object.keys(oldQty), ...Object.keys(newQty)])
+  for (const pid of allIds) {
+    const delta = (oldQty[pid] || 0) - (newQty[pid] || 0) // positivo = devuelve, negativo = consume
+    if (delta === 0) continue
+    await ajustarStock(pid, delta)
+  }
+}
