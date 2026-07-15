@@ -89,7 +89,7 @@ const SERVICIOS = [
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [buscar, setBuscar] = useState('')
-  const [filtro, setFiltro] = useState<'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado' | 'pago_pendiente' | 'este_mes' | 'esta_semana' | 'datos_pendientes' | 'falta_peso' | 'diferencia' | 'pendiente_cobro'>('todos')
+  const [filtro, setFiltro] = useState<'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado' | 'pago_pendiente' | 'este_mes' | 'esta_semana' | 'datos_pendientes' | 'falta_peso' | 'diferencia' | 'pendiente_cobro' | 'correo_malo'>('todos')
   const [filtroVet, setFiltroVet] = useState('') // '' = todas · '__general__' = sin vet · id de vet
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -167,6 +167,18 @@ export default function ClientesPage() {
     } catch { setCobrosPend([]) }
   }, [])
   useEffect(() => { fetchCobros() }, [fetchCobros])
+
+  // Correos de tutores con problemas de entrega (rebotó / spam / falló) según
+  // correos_cliente: control para corregir la dirección en la ficha. Deja de
+  // aparecer solo cuando la ficha queda con OTRA dirección.
+  const [correosMalos, setCorreosMalos] = useState<{ cliente_id: string; codigo: string; nombre_mascota: string; nombre_tutor: string; email: string; estado: string }[]>([])
+  useEffect(() => {
+    fetch('/api/clientes/correos-problema')
+      .then(r => r.json())
+      .then(d => setCorreosMalos(Array.isArray(d) ? d : []))
+      .catch(() => setCorreosMalos([]))
+  }, [clientes])
+  const idsCorreoMalo = useMemo(() => new Set(correosMalos.map(c => String(c.cliente_id))), [correosMalos])
 
   useEffect(() => {
     fetch('/api/especies').then(r => r.json()).then(d => setEspecies(Array.isArray(d) ? d.filter((e: Especie) => e.activo === 'TRUE') : []))
@@ -372,6 +384,7 @@ export default function ClientesPage() {
       if (filtro === 'falta_peso' && !faltaPesoIngreso(c)) return false
       if (filtro === 'diferencia' && !tieneDiferenciaPorCobrar(c)) return false
       if (filtro === 'pendiente_cobro' && !idsConCobroPendiente.has(String(c.id))) return false
+      if (filtro === 'correo_malo' && !idsCorreoMalo.has(String(c.id))) return false
       // Filtro por veterinaria (independiente del filtro de estado)
       if (filtroVet === '__general__' && (c.veterinaria_id || '').trim()) return false
       if (filtroVet && filtroVet !== '__general__' && c.veterinaria_id !== filtroVet) return false
@@ -396,7 +409,7 @@ export default function ClientesPage() {
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buscar, filtro, filtroVet, clientes, preciosGenerales, preciosConvenio, cobrosPend])
+  }, [buscar, filtro, filtroVet, clientes, preciosGenerales, preciosConvenio, cobrosPend, idsCorreoMalo])
 
   const nBorradores = useMemo(() => clientes.filter(c => c.estado === 'borrador').length, [clientes])
 
@@ -667,7 +680,7 @@ export default function ClientesPage() {
 
       {/* Notificaciones compactas: una fila de chips clickeables que aplican el
           filtro correspondiente. Reemplaza al banner grande de pago pendiente. */}
-      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0) && (
+      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0 || correosMalos.length > 0) && (
         <div className="mb-5 flex flex-wrap items-center gap-2">
           {nBorradores > 0 && (
             <button onClick={() => setFiltro('borrador')}
@@ -711,6 +724,13 @@ export default function ClientesPage() {
               💰 {alertas.diferencia} con diferencia por cobrar
             </button>
           )}
+          {correosMalos.length > 0 && (
+            <button onClick={() => setFiltro('correo_malo')}
+              title="Correos de tutores que rebotaron o fallaron — corrígelos en la ficha"
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-red-400 bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-bold text-red-900 shadow-md transition-colors">
+              ✉️ {correosMalos.length} correo{correosMalos.length === 1 ? '' : 's'} de tutor rebotado{correosMalos.length === 1 ? '' : 's'}
+            </button>
+          )}
         </div>
       )}
 
@@ -739,6 +759,7 @@ export default function ClientesPage() {
             { id: 'cremado', label: '✓ Cremados' },
             { id: 'despachado', label: '📦 Despachados' },
             { id: 'pago_pendiente', label: '⚠ Pago pendiente' },
+            { id: 'correo_malo', label: '✉️ Correo rebotado' },
             { id: 'este_mes', label: 'Este mes' },
             { id: 'esta_semana', label: 'Esta semana' },
             { id: 'datos_pendientes', label: '📝 Datos pendientes' },
@@ -835,6 +856,11 @@ export default function ClientesPage() {
                     </span>
                   )}
                 </div>
+              )}
+              {idsCorreoMalo.has(String(c.id)) && (
+                <p className="mt-2 text-xs font-semibold text-red-800 bg-red-50 border border-red-200 rounded px-2 py-1" title={c.email || ''}>
+                  ✉️ El correo del tutor rebotó — corrígelo en la ficha
+                </p>
               )}
               {c.estado === 'borrador' && (
                 <p className="mt-2 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">

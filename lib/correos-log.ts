@@ -137,6 +137,29 @@ export async function listarPorCliente(clienteId: string): Promise<CorreoCliente
  * dirección de email, o null. El rebote es propiedad del email, no del cliente,
  * por eso se busca por email. Para la alerta del campo email en la ficha.
  */
+/**
+ * TODOS los registros problemáticos (rebotado/spam/fallido), más reciente
+ * primero. Para el aviso global de "correos con problemas" en /clientes: el
+ * caller cruza contra la ficha (solo alerta si el email VIGENTE del cliente
+ * sigue siendo el que rebotó) y dedupe por cliente. Best-effort.
+ */
+export async function problemasGlobal(limit = 300): Promise<CorreoClienteRow[]> {
+  if (!isSupabaseConfigured()) return []
+  try {
+    const { data, error } = await getSupabase()
+      .from(TABLE)
+      .select('*')
+      .in('estado', ESTADOS_PROBLEMA as unknown as string[])
+      .order('id', { ascending: false })
+      .limit(limit)
+    if (error) { console.warn('[correos-log] problemasGlobal:', error.message); return [] }
+    return (data ?? []) as CorreoClienteRow[]
+  } catch (e) {
+    console.warn('[correos-log] problemasGlobal:', e instanceof Error ? e.message : String(e))
+    return []
+  }
+}
+
 export async function problemaPorEmail(email: string): Promise<CorreoClienteRow | null> {
   const e = (email || '').trim()
   if (!e || !isSupabaseConfigured()) return null
