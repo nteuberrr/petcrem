@@ -4,7 +4,7 @@ import { getSheetData } from '@/lib/datastore'
 import { renderProductosWeb } from '@/lib/sitio/productos-html'
 import { renderConveniosDescuento } from '@/lib/sitio/convenios-html'
 import { renderServiciosWeb, renderServicioSeo } from '@/lib/sitio/servicios-html'
-import { renderPreciosServicio, desdePorSlug, type DatosPrecios } from '@/lib/sitio/precios-html'
+import { renderPreciosServicio, desdePorSlug, fmtCLP, type DatosPrecios } from '@/lib/sitio/precios-html'
 import { renderPorqueElegirnos, renderConfianzaStrip } from '@/lib/sitio/porque-html'
 import { getFijoEutanasia } from '@/lib/eutanasia-precios'
 import { renderPostsWeb, renderPostDetalle, buscarPost } from '@/lib/sitio/blog-html'
@@ -130,6 +130,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   }
   if (tpl === 'home' && html.includes('<!--INJECT:confianza-->')) {
     html = html.replace('<!--INJECT:confianza-->', renderConfianzaStrip())
+  }
+  // Precios "Desde" de las tarjetas del hero de la home (y la meta description):
+  // marcadores %%DESDE:<slug>%% → tarifa VIVA, la misma fuente que /servicios
+  // (antes estaban hardcodeados en el template y quedaban desactualizados).
+  if (tpl === 'home' && html.includes('%%DESDE:')) {
+    const desde = desdePorSlug(await datosPrecios())
+    html = html.replace(/%%DESDE:([a-z-]+)%%/g, (_m, slug: string) =>
+      desde[slug] > 0 ? fmtCLP(desde[slug]) : 'Consultar')
   }
   if (tpl === 'servicios' && html.includes('<!--INJECT:servicios-->')) {
     const [servicios, precios] = await Promise.all([
