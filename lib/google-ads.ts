@@ -365,6 +365,7 @@ export async function listarKeywords(periodo: string, limite = 30): Promise<{ mo
              metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.average_cpc
       FROM keyword_view
       WHERE ${where} AND ad_group_criterion.status IN ('ENABLED', 'PAUSED')
+        AND ad_group_criterion.negative = FALSE
     `),
     monedaCuenta(),
   ])
