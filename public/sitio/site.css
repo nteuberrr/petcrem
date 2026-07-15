@@ -17316,3 +17316,19 @@ blockquote {
 /* Hero home: el export traía .subscript{left:17px} bajo 480px — empujaba la página
    12px a la derecha (scroll lateral en celulares). En móvil/tablet va sin offset. */
 @media (max-width: 767px) { .subscript { left: 0; } }
+
+/* Hero home (desktop): centrar verticalmente el bloque de texto en el área de la
+   imagen — antes quedaba pegado abajo y en pantallas anchas topaba con la franja
+   navy de sellos. El section mantiene su alto; el contenedor centra su contenido. */
+@media (min-width: 992px) {
+  .waves-section-hero-5 { display: flex; flex-direction: column; }
+  .waves-section-hero-5 > .waves---main-container-4 { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; flex-direction: column; justify-content: center; }
+  .waves-title-wrap-hero-5 { flex: 0 1 auto; grid-row-gap: 0; }
+  .hero-home.new { margin: 0; padding-top: 0; padding-bottom: 0; }
+  .home-hero-center.home-new { margin: 0; }
+}
+/* Entre 992 y 1439 el section NO tiene alto fijo (crece con el contenido): un
+   respiro abajo para que el texto no quede pegado a la franja navy. */
+@media (min-width: 992px) and (max-width: 1439px) {
+  .waves-section-hero-5 { padding-bottom: 56px; }
+}
