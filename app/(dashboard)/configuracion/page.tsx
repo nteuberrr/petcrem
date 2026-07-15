@@ -198,7 +198,7 @@ export default function ConfiguracionPage() {
   const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null)
   const [mostrarPassword, setMostrarPassword] = useState(false)
 
-  const [prodForm, setProdForm] = useState({ nombre: '', precio: '', foto_url: '', categoria: '' })
+  const [prodForm, setProdForm] = useState({ nombre: '', precio: '', foto_url: '', categoria: '', stock: '' })
   const [stockDelta, setStockDelta] = useState('')
   const [especieForm, setEspecieForm] = useState({ nombre: '', letra: '' })
   // auto_regla: el servicio se pre-carga solo en la ficha ('' | fuera_horario | distancia).
@@ -628,7 +628,7 @@ export default function ConfiguracionPage() {
                 className="inline-flex items-center gap-1.5 border border-brand text-brand hover:bg-brand/5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                 📄 Descargar catálogo de productos
               </a>
-              <button onClick={() => { setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '' }); setShowProdModal(true) }}
+              <button onClick={() => { setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '', stock: '' }); setShowProdModal(true) }}
                 className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
             </div>
           </div>
@@ -679,7 +679,7 @@ export default function ConfiguracionPage() {
                               <Toggle checked={p.activo === 'TRUE'} onChange={val => patch('/api/productos', { id: p.id, activo: val ? 'TRUE' : 'FALSE' })} />
                               <div className="flex items-center gap-2 ml-3">
                                 <button
-                                  onClick={() => { setEditingProducto(p); setProdForm({ nombre: p.nombre, precio: p.precio, foto_url: p.foto_url, categoria: p.categoria ?? '' }); setShowProdModal(true) }}
+                                  onClick={() => { setEditingProducto(p); setProdForm({ nombre: p.nombre, precio: p.precio, foto_url: p.foto_url, categoria: p.categoria ?? '', stock: p.stock ?? '' }); setShowProdModal(true) }}
                                   className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Editar</button>
                                 {isAdmin && (
                                   <button
@@ -1216,7 +1216,7 @@ export default function ConfiguracionPage() {
         )}
       </Modal>
 
-      <Modal open={showProdModal} onClose={() => { setShowProdModal(false); setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '' }) }}
+      <Modal open={showProdModal} onClose={() => { setShowProdModal(false); setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '', stock: '' }) }}
         title={editingProducto ? 'Editar producto' : 'Agregar producto'}>
         <form onSubmit={async e => {
           e.preventDefault()
@@ -1225,14 +1225,17 @@ export default function ConfiguracionPage() {
             alert('La categoría es obligatoria. Escribe una existente o crea una nueva (ej: Ánforas, Relicarios).')
             return
           }
+          // Stock ABSOLUTO: lo que se escribe acá queda como la cantidad disponible
+          // (deja '' para no tocarlo al editar).
+          const stockAbs = prodForm.stock.trim() === '' ? undefined : String(Math.max(0, parseInt(prodForm.stock) || 0))
           if (editingProducto) {
-            await patch('/api/productos', { id: editingProducto.id, nombre: prodForm.nombre, categoria, precio: String(parseInt(prodForm.precio) || 0), foto_url: prodForm.foto_url })
+            await patch('/api/productos', { id: editingProducto.id, nombre: prodForm.nombre, categoria, precio: String(parseInt(prodForm.precio) || 0), foto_url: prodForm.foto_url, ...(stockAbs !== undefined ? { stock: stockAbs } : {}) })
           } else {
-            await post('/api/productos', { nombre: prodForm.nombre, categoria, precio: parseInt(prodForm.precio), foto_url: prodForm.foto_url })
+            await post('/api/productos', { nombre: prodForm.nombre, categoria, precio: parseInt(prodForm.precio), foto_url: prodForm.foto_url, stock: stockAbs !== undefined ? parseInt(stockAbs) : 0 })
           }
           setShowProdModal(false)
           setEditingProducto(null)
-          setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '' })
+          setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '', stock: '' })
         }} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>
@@ -1258,9 +1261,16 @@ export default function ConfiguracionPage() {
             </datalist>
             <p className="text-[10px] text-gray-500 mt-0.5">Elige una existente o escribe una nueva. Las categorías se gestionan arriba.</p>
           </div>
-          <div>
-            <label className="text-xs font-medium text-gray-700">Precio (CLP)</label>
-            <input required type="number" min="0" value={prodForm.precio} onChange={e => setProdForm(f => ({ ...f, precio: e.target.value }))} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-700">Precio (CLP)</label>
+              <input required type="number" min="0" value={prodForm.precio} onChange={e => setProdForm(f => ({ ...f, precio: e.target.value }))} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700">Stock (unidades)</label>
+              <input type="number" min="0" value={prodForm.stock} onChange={e => setProdForm(f => ({ ...f, stock: e.target.value }))} placeholder={editingProducto ? String(editingProducto.stock ?? '0') : '0'} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              <p className="text-[10px] text-gray-500 mt-0.5">Cantidad disponible que queda. Vacío = no cambiar.</p>
+            </div>
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Foto</label>
