@@ -138,3 +138,21 @@ export async function valorClienteCotizacion(cot: { peso?: string; precio_snapsh
   const peso = num(cot.peso)
   return peso > 0 ? (await precioClienteEutanasia(peso)).cliente : 0
 }
+
+/**
+ * Valor de eutanasia A COBRAR asociado a una ficha de cremación (0 si la ficha
+ * no vino de una eutanasia, o si la cotización quedó cancelada/no realizada).
+ * Es el monto que se suma al "total a cobrar" del retiro — SIEMPRE fuera de la
+ * boleta (que cubre solo la cremación). Best-effort.
+ */
+export async function valorEutanasiaPorCliente(clienteId: string): Promise<number> {
+  if (!clienteId) return 0
+  try {
+    const cotis = await getSheetData('cotizaciones_eutanasia')
+    const cot = cotis.find(c =>
+      String(c.cliente_id) === String(clienteId) &&
+      !['cancelada', 'no_realizada'].includes(String(c.estado || ''))
+    )
+    return cot ? await valorClienteCotizacion(cot) : 0
+  } catch { return 0 }
+}

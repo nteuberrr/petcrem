@@ -14,7 +14,7 @@ import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
 import { dispararCobroAdicional, cobrosPendientesPorCliente, sincronizarSaldoParcial, cerrarSaldoParcial } from '@/lib/cobros'
 import { excluirIncluidos } from '@/lib/anforas-premium'
 import { emitirBoletaSiCorresponde } from '@/lib/facturacion'
-import { valorClienteCotizacion } from '@/lib/eutanasia-precios'
+import { valorClienteCotizacion, valorEutanasiaPorCliente } from '@/lib/eutanasia-precios'
 
 export async function GET(
   _req: NextRequest,
@@ -166,7 +166,10 @@ export async function PATCH(
     // pendiente se lleva como un cobro 'saldo'). Si el abono cubre el total, la
     // ficha queda 'pagado' y cae al flujo normal de boleta. `monto_abonado` NO es
     // columna de `clientes` → rowForWrite lo descarta en el write (a propósito).
-    const totalFicha = parseDecimal(String(updated.precio_total ?? '')) ?? 0
+    // El TOTAL A COBRAR incluye la eutanasia a domicilio asociada (se cobra junto
+    // al retiro, aunque va FUERA de la boleta — esa sigue solo por precio_total).
+    const eutanasiaFicha = await valorEutanasiaPorCliente(id).catch(() => 0)
+    const totalFicha = (parseDecimal(String(updated.precio_total ?? '')) ?? 0) + eutanasiaFicha
     const abonoParcial = parseDecimal(String(body.monto_abonado ?? '')) ?? 0
     let pendienteParcial = 0
     if (String(updated.estado_pago || '').toLowerCase() === 'parcial') {

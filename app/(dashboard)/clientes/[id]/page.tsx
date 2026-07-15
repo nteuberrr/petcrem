@@ -1436,10 +1436,13 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             </div>
           </div>
 
-          {/* Pago parcial: box para indicar cuánto abonó → queda un saldo pendiente. */}
+          {/* Pago parcial: box para indicar cuánto abonó → queda un saldo pendiente.
+              El total A COBRAR incluye la eutanasia asociada (fuera de boleta). */}
           {form.estado_pago === 'parcial' && (() => {
             const abonoNum = parseInt((abono || '').replace(/\D/g, ''), 10) || 0
-            const pendiente = Math.max(0, Math.round(totalServicio) - abonoNum)
+            const eutanasiaValor = cliente?.eutanasia?.valor_cliente ?? 0
+            const totalACobrar = Math.round(totalServicio) + eutanasiaValor
+            const pendiente = Math.max(0, totalACobrar - abonoNum)
             return (
               <div className="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
@@ -1453,7 +1456,13 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     />
                   </div>
                   <div className="text-sm">
-                    <p className="text-xs text-gray-600">Total del servicio: <span className="font-semibold text-gray-900">{fmtPrecio(Math.round(totalServicio))}</span></p>
+                    <p className="text-xs text-gray-600">Cremación: <span className="font-semibold text-gray-900">{fmtPrecio(Math.round(totalServicio))}</span></p>
+                    {eutanasiaValor > 0 && (
+                      <>
+                        <p className="text-xs text-gray-600">Eutanasia a domicilio <span className="text-gray-400">(fuera de boleta)</span>: <span className="font-semibold text-gray-900">{fmtPrecio(eutanasiaValor)}</span></p>
+                        <p className="text-xs text-gray-600">Total a cobrar: <span className="font-semibold text-gray-900">{fmtPrecio(totalACobrar)}</span></p>
+                      </>
+                    )}
                     <p className="mt-0.5 text-amber-900 font-bold">Pendiente por pagar: {fmtPrecio(pendiente)}</p>
                   </div>
                 </div>

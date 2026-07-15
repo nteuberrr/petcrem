@@ -60,15 +60,8 @@ export async function resumenCompraDeFicha(f: Record<string, unknown>): Promise<
   const clienteId = String(f.id ?? '').trim()
   if (clienteId) {
     try {
-      const cotis = await getSheetData('cotizaciones_eutanasia')
-      const cot = cotis.find(c =>
-        String(c.cliente_id) === clienteId &&
-        !['cancelada', 'no_realizada'].includes(String(c.estado || ''))
-      )
-      if (cot) {
-        const { valorClienteCotizacion } = await import('./eutanasia-precios')
-        eutanasia = await valorClienteCotizacion(cot)
-      }
+      const { valorEutanasiaPorCliente } = await import('./eutanasia-precios')
+      eutanasia = await valorEutanasiaPorCliente(clienteId)
     } catch { /* best-effort: el resumen sale sin la línea de eutanasia */ }
   }
 

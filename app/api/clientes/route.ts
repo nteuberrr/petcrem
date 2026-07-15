@@ -56,6 +56,26 @@ export async function GET(req: NextRequest) {
           r.codigo?.toLowerCase().includes(q)
       )
     }
+
+    // eutanasia_valor (NO persistido): valor a cobrar de la eutanasia a domicilio
+    // asociada a la ficha, para que el resumen de la lista muestre el total real
+    // a cobrar. Fuera de boleta (esa sigue solo por precio_total). Best-effort.
+    try {
+      const cotis = await getSheetData('cotizaciones_eutanasia')
+      const activas = cotis.filter(c => c.cliente_id && !['cancelada', 'no_realizada'].includes(String(c.estado || '')))
+      if (activas.length) {
+        const { valorClienteCotizacion } = await import('@/lib/eutanasia-precios')
+        const valores = new Map<string, number>()
+        for (const cot of activas) {
+          valores.set(String(cot.cliente_id), await valorClienteCotizacion(cot))
+        }
+        rows = rows.map(r => {
+          const v = valores.get(String(r.id))
+          return v && v > 0 ? { ...r, eutanasia_valor: String(v) } : r
+        })
+      }
+    } catch { /* la lista sale igual, sin la línea de eutanasia */ }
+
     return NextResponse.json(rows)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

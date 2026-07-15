@@ -24,6 +24,8 @@ type Cliente = {
   fotos_cuadro?: string; videos_servicio?: string
   correo_diferencia_fecha?: string
   precio_servicio?: string; precio_adicionales?: string; precio_total?: string
+  /** Valor a cobrar de la eutanasia a domicilio asociada (fuera de boleta); lo agrega el GET de la lista. */
+  eutanasia_valor?: string
   descuento_monto?: string; descuento_nombre?: string
 }
 type Especie = { id: string; nombre: string; letra: string; activo: string }
@@ -570,7 +572,11 @@ export default function ClientesPage() {
     }
     const desc = intCLP(c.descuento_monto)
     if (desc > 0) lineas.push({ nombre: `Descuento${c.descuento_nombre ? ` (${c.descuento_nombre})` : ''}`, valor: `−${fmtPrecio(desc)}`, verde: true })
-    return { lineas, total }
+    // Eutanasia a domicilio asociada: se COBRA junto al retiro (el Total pasa a
+    // ser el total a cobrar), pero va fuera de la boleta.
+    const eutanasia = intCLP(c.eutanasia_valor)
+    if (eutanasia > 0) lineas.push({ nombre: 'Eutanasia a domicilio (fuera de boleta)', valor: fmtPrecio(eutanasia) })
+    return { lineas, total: total + eutanasia }
   }
 
   const vetSeleccionada = !noEsVeterinaria ? veterinarias.find(v => v.id === form.veterinaria_id) : undefined
