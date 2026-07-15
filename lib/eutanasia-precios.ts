@@ -124,3 +124,17 @@ export async function precioClienteEutanasia(peso: number): Promise<PrecioEutana
   const [vet, fijo] = await Promise.all([precioVetEutanasia(peso), getFijoEutanasia()])
   return { vet, fijo, cliente: vet + fijo }
 }
+
+/**
+ * Valor a COBRAR al cliente por una cotización de eutanasia concreta. Usa el
+ * `precio_snapshot` congelado en la cotización (lo pactado con el vet) + el fijo
+ * vigente; si la cotización no tiene snapshot (legacy), cae a la tabla por peso.
+ * Es el valor que la ficha de cremación asociada muestra como "fuera de boleta"
+ * y el que se suma al total a cobrar del retiro.
+ */
+export async function valorClienteCotizacion(cot: { peso?: string; precio_snapshot?: string }): Promise<number> {
+  const snap = num(cot.precio_snapshot)
+  if (snap > 0) return snap + (await getFijoEutanasia())
+  const peso = num(cot.peso)
+  return peso > 0 ? (await precioClienteEutanasia(peso)).cliente : 0
+}

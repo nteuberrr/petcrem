@@ -1760,9 +1760,24 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           </div>
 
           <div className="flex items-center justify-between pt-3 mt-2 border-t-2 border-gray-300">
-            <p className="text-base font-bold text-gray-900">Total</p>
+            <p className="text-base font-bold text-gray-900">Total{(cliente?.eutanasia?.valor_cliente ?? 0) > 0 ? ' cremación (boleta)' : ''}</p>
             <p className="text-lg font-bold text-brand">{fmtPrecio(totalServicio)}</p>
           </div>
+
+          {/* Eutanasia asociada: se cobra JUNTO al retiro pero va fuera de la boleta
+              (la boleta es solo por la cremación). Acá se ve el total real a cobrar. */}
+          {(cliente?.eutanasia?.valor_cliente ?? 0) > 0 && (
+            <>
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-sm text-gray-700">Eutanasia a domicilio <span className="text-xs text-gray-400">(fuera de boleta)</span></p>
+                <p className="text-sm font-semibold text-gray-900">{fmtPrecio(cliente!.eutanasia!.valor_cliente)}</p>
+              </div>
+              <div className="flex items-center justify-between pt-3 mt-2 border-t-2 border-brand/30 bg-cream -mx-2 px-2 py-2 rounded-lg">
+                <p className="text-base font-bold text-brand">Total a cobrar al cliente</p>
+                <p className="text-xl font-bold text-brand">{fmtPrecio(totalServicio + cliente!.eutanasia!.valor_cliente)}</p>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

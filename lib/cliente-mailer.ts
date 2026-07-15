@@ -18,6 +18,10 @@ export interface ResumenCompra {
   descuentoNombre: string
   descuentoMonto: number
   total: number
+  /** Eutanasia a domicilio asociada (si la ficha vino de ese flujo): valor a
+   *  cobrar al cliente. Se muestra APARTE y se suma al total a pagar, pero la
+   *  boleta se emite solo por la cremación (`total`). 0/ausente = sin eutanasia. */
+  eutanasia?: number
 }
 
 const intOf = (v: unknown) => parseInt(String(v ?? '').replace(/[^\d-]/g, ''), 10) || 0
@@ -49,6 +53,25 @@ export async function resumenCompraDeFicha(f: Record<string, unknown>): Promise<
       anforaPremiumIncluida(cs, categoriaPorProducto.get(String(a.id)))
     return { nombre: String(a.nombre || 'Adicional'), precio: Math.max(0, intOf(a.precio)), qty: Math.max(1, intOf(a.qty) || 1), incluida }
   })
+  // Eutanasia a domicilio asociada: si la ficha nació de ese flujo, el valor de
+  // la eutanasia se COBRA JUNTO al retiro pero va fuera de la boleta (que es solo
+  // por la cremación). Se muestra aparte en el resumen y se suma al total a pagar.
+  let eutanasia = 0
+  const clienteId = String(f.id ?? '').trim()
+  if (clienteId) {
+    try {
+      const cotis = await getSheetData('cotizaciones_eutanasia')
+      const cot = cotis.find(c =>
+        String(c.cliente_id) === clienteId &&
+        !['cancelada', 'no_realizada'].includes(String(c.estado || ''))
+      )
+      if (cot) {
+        const { valorClienteCotizacion } = await import('./eutanasia-precios')
+        eutanasia = await valorClienteCotizacion(cot)
+      }
+    } catch { /* best-effort: el resumen sale sin la línea de eutanasia */ }
+  }
+
   return {
     servicioNombre: NOMBRE_MODALIDAD[cs] || 'Cremación',
     servicioPrecio,
@@ -56,6 +79,7 @@ export async function resumenCompraDeFicha(f: Record<string, unknown>): Promise<
     descuentoNombre: String(f.descuento_nombre ?? ''),
     descuentoMonto: intOf(f.descuento_monto),
     total,
+    eutanasia: eutanasia > 0 ? eutanasia : undefined,
   }
 }
 
@@ -184,6 +208,18 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
       + `<td style="padding:7px 0;font-size:${opt.bold ? '16px' : '14px'};text-align:right;white-space:nowrap;font-weight:${opt.bold ? '700' : '600'};color:${col};${bt}">${valor}</td>`
       + `</tr>`
   }
+  // Con eutanasia asociada, el detalle muestra la cremación (lo que va en boleta),
+  // la eutanasia APARTE y el total a pagar sumado. Sin eutanasia, un solo "Total".
+  const conEutanasia = (r?.eutanasia ?? 0) > 0
+  const filasTotales = !r ? '' : conEutanasia
+    ? filaResumen('Total cremación', fmtPrecio(r.total), { top: true })
+      + filaResumen('Eutanasia a domicilio', fmtPrecio(r.eutanasia!), { top: true })
+      + filaResumen('Total a pagar', fmtPrecio(r.total + r.eutanasia!), { top: true, bold: true })
+    : filaResumen('Total', fmtPrecio(r.total), { top: true, bold: true })
+  const notaEutanasia = conEutanasia ? `
+        <p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:${BRAND.muted}">
+          La boleta se emite por el servicio de cremación (${fmtPrecio(r!.total)}); la eutanasia a domicilio se cobra por separado.
+        </p>` : ''
   const bloqueResumen = r ? `
       <div style="background:#ffffff;border:1px solid ${BRAND.hairline};border-radius:12px;padding:18px 20px;margin:22px 0">
         <p style="margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;color:${BRAND.navy}">Resumen de tu servicio</p>
@@ -196,9 +232,9 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
               { top: true },
             )).join('')}
             ${r.descuentoMonto > 0 ? filaResumen(`Descuento${r.descuentoNombre ? ` (${escapeHtml(r.descuentoNombre)})` : ''}`, `−${fmtPrecio(r.descuentoMonto)}`, { top: true, verde: true }) : ''}
-            ${filaResumen('Total', fmtPrecio(r.total), { top: true, bold: true })}
+            ${filasTotales}
           </tbody>
-        </table>
+        </table>${notaEutanasia}
       </div>` : ''
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">${saludo(args.nombreTutor)}</p>
