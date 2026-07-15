@@ -109,6 +109,14 @@ export default function ClientesPage() {
   const noEsVeterinaria = !esClienteVet
   const [adicionales, setAdicionales] = useState<AdicionalItem[]>([])
   const [showAdicionales, setShowAdicionales] = useState(false)
+  // Categorías de productos expandidas dentro de "Adicionales" (cerradas por
+  // defecto: colapsadas muestran solo lo ya seleccionado).
+  const [catsAbiertas, setCatsAbiertas] = useState<Set<string>>(new Set())
+  const toggleCat = (cat: string) => setCatsAbiertas(s => {
+    const n = new Set(s)
+    if (n.has(cat)) n.delete(cat); else n.add(cat)
+    return n
+  })
   const [descuentosDisp, setDescuentosDisp] = useState<Descuento[]>([])
   const [aplicarDescuento, setAplicarDescuento] = useState(false)
   const [descuentoId, setDescuentoId] = useState('')
@@ -1233,11 +1241,28 @@ export default function ClientesPage() {
                           </p>
                         )}
                         <div className="space-y-3">
-                          {orden.map(cat => (
+                          {orden.map(cat => {
+                            const itemsCat = grupos.get(cat)!
+                            const abierta = catsAbiertas.has(cat)
+                            const elegidos = itemsCat.filter(pp => adicionales.some(a => a.tipo === 'producto' && a.id === pp.id))
+                            // Colapsada: solo los productos ya seleccionados (si hay).
+                            const visibles = abierta ? itemsCat : elegidos
+                            return (
                             <div key={cat}>
-                              <p className="text-[11px] font-bold text-brand uppercase tracking-wide mb-1.5 border-b border-brand/20 pb-1">{cat}</p>
+                              <button type="button" onClick={() => toggleCat(cat)}
+                                className="w-full flex items-center justify-between gap-2 mb-1.5 border-b border-brand/20 pb-1 text-left hover:bg-gray-50 rounded transition-colors">
+                                <span className="text-[11px] font-bold text-brand uppercase tracking-wide">{cat}</span>
+                                <span className="flex items-center gap-2">
+                                  {elegidos.length > 0 && (
+                                    <span className="text-[10px] font-semibold text-brand bg-brand/10 rounded-full px-1.5 py-0.5">{elegidos.length} elegido(s)</span>
+                                  )}
+                                  <span className="text-[10px] text-gray-400">{itemsCat.length} producto(s)</span>
+                                  <span className="text-gray-400 text-xs">{abierta ? '▲' : '▼'}</span>
+                                </span>
+                              </button>
+                              {visibles.length > 0 && (
                               <div className="space-y-1.5 pl-1">
-                                {grupos.get(cat)!.map(p => {
+                                {visibles.map(p => {
                                   const item = adicionales.find(a => a.tipo === 'producto' && a.id === p.id)
                                   const stockNum = parseInt(p.stock || '0')
                                   const sinStock = stockNum <= 0
@@ -1262,8 +1287,10 @@ export default function ClientesPage() {
                                   )
                                 })}
                               </div>
+                              )}
                             </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
                     )
