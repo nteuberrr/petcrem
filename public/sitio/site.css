@@ -17312,3 +17312,7 @@ blockquote {
 
 /* Detalle de servicio: la card de precio NO queda pegada al scrollear */
 .work-overview { position: static; }
+
+/* Hero home: el export traía .subscript{left:17px} bajo 480px — empujaba la página
+   12px a la derecha (scroll lateral en celulares). En móvil/tablet va sin offset. */
+@media (max-width: 767px) { .subscript { left: 0; } }

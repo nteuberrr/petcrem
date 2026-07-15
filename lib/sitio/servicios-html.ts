@@ -12,7 +12,7 @@ type Serv = Record<string, string>
 const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const escUrl = (s: unknown) => String(s ?? '').replace(/['"\\<>]/g, '')
 const FALLBACK_IMG = '/sitio/assets/68780d4f39586a806a378a45_Work-Bg-2.jpg'
-const LOGO = '/sitio/assets/68780d4f39586a806a378a9d_Logo.png'
+const LOGO = '/sitio/assets/693382370d947890b33787fd_Logotipo-editable-Alma-Animal.ai-1-.png'
 
 export function serviciosPublicados(servicios: Serv[]): Serv[] {
   return servicios

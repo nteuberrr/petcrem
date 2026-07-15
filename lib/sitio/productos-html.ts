@@ -82,6 +82,15 @@ const ESTILOS = '<style>'
   + '.aa-serv-name{color:#2b3a47;font-weight:700;font-size:15px}'
   + '.aa-serv-price{color:#143C64;font-weight:700;white-space:nowrap}'
   + '.aa-serv-det{margin:6px 0 0;color:#7c8894;font-size:13px;line-height:1.5}'
+  // Móvil: 2 columnas (no 1 tarjeta gigante por fila) e imagen cuadrada para que
+  // la foto del producto no salga recortada por el alto fijo de escritorio.
+  + '@media(max-width:640px){'
+  + '.aa-cat-grid{grid-template-columns:repeat(2,1fr);gap:12px}'
+  + '.aa-cat-img{height:auto;aspect-ratio:1/1}'
+  + '.aa-cat-body{padding:10px 12px}'
+  + '.aa-cat-name{font-size:13.5px}'
+  + '.aa-cat-price{margin-top:4px;font-size:14px}'
+  + '}'
   + '</style>'
 
 /**

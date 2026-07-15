@@ -10,7 +10,7 @@
 
 const BASE = 'https://www.crematorioalmaanimal.cl'
 const WA = '56963126603'
-const LOGO = '/sitio/assets/68780d4f39586a806a378a9d_Logo.png'
+const LOGO = '/sitio/assets/693382370d947890b33787fd_Logotipo-editable-Alma-Animal.ai-1-.png'
 const GTM = 'GTM-5TWVTZNM'
 // Mismos IDs que el resto del sitio (parity con el Webflow original): GA4 directo
 // + Meta Pixel inline — en las páginas espejo vienen embebidos; las landings son
@@ -129,7 +129,10 @@ export function renderLanding(l: Landing): string {
 .lp{font-family:Inter,system-ui,sans-serif;color:#143C64;background:#FBF8F3;margin:0}
 .lp-wrap{max-width:1080px;margin:0 auto;padding:0 20px}
 .lp-head{display:flex;align-items:center;justify-content:space-between;padding:16px 0}
-.lp-head img{height:52px;width:auto}
+.lp-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:#143C64}
+.lp-brand img{height:46px;width:auto}
+.lp-brand b{font-weight:800;font-size:17px;letter-spacing:.01em;line-height:1.15}
+.lp-brand small{display:block;font-weight:500;font-size:11px;color:#5B7288;letter-spacing:.04em}
 .lp-head a.cta-sm{background:#143C64;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px}
 .lp-hero{text-align:center;padding:48px 0 40px}
 .lp-hero h1{font-size:clamp(28px,5vw,46px);line-height:1.1;margin:0 0 16px;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
@@ -144,7 +147,7 @@ export function renderLanding(l: Landing): string {
 .dif{background:#fff;border:1px solid #E7E0D6;border-radius:18px;padding:22px}
 .dif .ic{font-size:26px}.dif h3{margin:10px 0 6px;font-size:16px}.dif p{margin:0;font-size:14px;color:#5B7288;line-height:1.5}
 .lp-cta2{text-align:center;background:#143C64;color:#fff;border-radius:24px;padding:44px 24px;margin:0 0 48px}
-.lp-cta2 h2{margin:0 0 10px;font-size:26px}.lp-cta2 p{margin:0 0 22px;color:#CBD9E6}
+.lp-cta2 h2{margin:0 0 10px;font-size:26px;color:#fff}.lp-cta2 p{margin:0 0 22px;color:#CBD9E6}
 .faq{max-width:760px;margin:0 auto;padding:0 0 56px}
 .faq h2{text-align:center;font-size:26px;margin:0 0 22px}
 .faq details{background:#fff;border:1px solid #E7E0D6;border-radius:14px;padding:16px 20px;margin-bottom:12px}
@@ -158,7 +161,7 @@ export function renderLanding(l: Landing): string {
 <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=${GTM}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 <div class="lp-wrap">
   <header class="lp-head">
-    <a href="/"><img src="${LOGO}" alt="Crematorio Alma Animal"/></a>
+    <a class="lp-brand" href="/"><img src="${LOGO}" alt="Crematorio Alma Animal"/><b>Alma Animal<small>Huellas que no se borran</small></b></a>
     <a class="cta-sm" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>
   </header>
   <section class="lp-hero">
