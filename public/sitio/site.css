@@ -17335,5 +17335,5 @@ blockquote {
 
 /* Anclas del menú (¿Por qué elegirnos? / Preguntas frecuentes): dejar espacio
    para el navbar fijo — sin esto el título quedaba tapado por la barra. */
-#por-que-elegirnos, #preguntas-frecuentes { scroll-margin-top: 122px; }
-@media (max-width: 479px) { #por-que-elegirnos, #preguntas-frecuentes { scroll-margin-top: 92px; } }
+#por-que-elegirnos, #preguntas-frecuentes { scroll-margin-top: 100px; }
+@media (max-width: 479px) { #por-que-elegirnos, #preguntas-frecuentes { scroll-margin-top: 70px; } }

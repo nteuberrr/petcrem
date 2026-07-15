@@ -209,7 +209,7 @@ export function renderPorqueElegirnos(d: DatosPrecios): string {
     // sección del sitio), se navega normal.
     + `<script>(function(){
 var IDS=['por-que-elegirnos','preguntas-frecuentes'];
-function off(){var n=document.querySelector('.navbar.w-nav');return(n?n.getBoundingClientRect().height:100)+22}
+function off(){var n=document.querySelector('.navbar.w-nav');return n?Math.max(0,n.getBoundingClientRect().bottom):100}
 function goTo(id,smooth){var el=document.getElementById(id);if(!el)return;var y=el.getBoundingClientRect().top+window.pageYOffset-off();if(smooth){window.scrollTo({top:y,behavior:'smooth'})}else{window.scrollTo(0,y)}}
 function fix(id){var el=document.getElementById(id);if(!el)return;var d=el.getBoundingClientRect().top-off();if(Math.abs(d)>8){window.scrollTo(0,window.pageYOffset+d)}}
 function irCorrigiendo(id){
