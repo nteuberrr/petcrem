@@ -219,10 +219,6 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
       + filaResumen('Eutanasia a domicilio', fmtPrecio(r.eutanasia!), { top: true })
       + filaResumen('Total a pagar', fmtPrecio(r.total + r.eutanasia!), { top: true, bold: true })
     : filaResumen('Total', fmtPrecio(r.total), { top: true, bold: true })
-  const notaEutanasia = conEutanasia ? `
-        <p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:${BRAND.muted}">
-          La boleta se emite por el servicio de cremación (${fmtPrecio(r!.total)}); la eutanasia a domicilio se cobra por separado.
-        </p>` : ''
   const bloqueResumen = r ? `
       <div style="background:#ffffff;border:1px solid ${BRAND.hairline};border-radius:12px;padding:18px 20px;margin:22px 0">
         <p style="margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;color:${BRAND.navy}">Resumen de tu servicio</p>
@@ -237,7 +233,7 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
             ${r.descuentoMonto > 0 ? filaResumen(`Descuento${r.descuentoNombre ? ` (${escapeHtml(r.descuentoNombre)})` : ''}`, `−${fmtPrecio(r.descuentoMonto)}`, { top: true, verde: true }) : ''}
             ${filasTotales}
           </tbody>
-        </table>${notaEutanasia}
+        </table>
       </div>` : ''
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">${saludo(args.nombreTutor)}</p>
