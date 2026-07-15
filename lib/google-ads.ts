@@ -541,6 +541,7 @@ export async function listarKeywordsConQS(periodo: string, limite = 200): Promis
              metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.average_cpc
       FROM keyword_view
       WHERE ${where} AND ad_group_criterion.status = 'ENABLED'
+        AND ad_group_criterion.negative = FALSE
     `),
     monedaCuenta(),
   ])
@@ -691,6 +692,58 @@ export async function listarAds(): Promise<AdGoogle[]> {
       finalUrl: finalUrls[0] || '',
     }
   })
+}
+
+// ─── Lecturas para la vigilancia diaria (lib/gads-vigilancia.ts) ────────────────
+export interface AdConProblema {
+  campana: string
+  grupoAnuncio: string
+  approvalStatus: string
+  reviewStatus: string
+}
+
+/** Anuncios ACTIVOS cuya aprobación tiene problemas (rechazado o aprobado con límites).
+ *  UNKNOWN/en revisión NO cuenta como problema (es el estado normal de un anuncio recién creado). */
+export async function listarAdsConProblemas(): Promise<AdConProblema[]> {
+  const rows = await gaqlSearch(`
+    SELECT campaign.name, ad_group.name,
+           ad_group_ad.policy_summary.approval_status, ad_group_ad.policy_summary.review_status
+    FROM ad_group_ad
+    WHERE ad_group_ad.status = 'ENABLED' AND campaign.status = 'ENABLED'
+  `)
+  const MALOS = new Set(['DISAPPROVED', 'AREA_OF_INTEREST_ONLY', 'APPROVED_LIMITED'])
+  return rows
+    .map(r => {
+      const ps = ((r.adGroupAd || {}) as Record<string, unknown>).policySummary as Record<string, unknown> | undefined
+      return {
+        campana: String(r.campaign?.name || ''),
+        grupoAnuncio: String(r.adGroup?.name || ''),
+        approvalStatus: String(ps?.approvalStatus || ''),
+        reviewStatus: String(ps?.reviewStatus || ''),
+      }
+    })
+    .filter(a => MALOS.has(a.approvalStatus))
+}
+
+export interface GastoAyerCampana {
+  nombre: string
+  gasto: number
+  presupuesto: number
+}
+
+/** Gasto de AYER por campaña activa, junto al presupuesto diario — para detectar campañas
+ *  frenadas (gasto $0 con presupuesto asignado: pago rechazado, rechazo masivo de ads, etc.). */
+export async function gastoDeAyerPorCampana(): Promise<GastoAyerCampana[]> {
+  const rows = await gaqlSearch(`
+    SELECT campaign.name, campaign_budget.amount_micros, metrics.cost_micros
+    FROM campaign
+    WHERE campaign.status = 'ENABLED' AND segments.date DURING YESTERDAY
+  `)
+  return rows.map(r => ({
+    nombre: String(r.campaign?.name || ''),
+    gasto: clp(((r.metrics || {}) as Record<string, unknown>).costMicros),
+    presupuesto: clp(((r.campaignBudget || {}) as Record<string, unknown>).amountMicros),
+  }))
 }
 
 /** Crea un RSA NUEVO (siempre PAUSED) en un grupo de anuncios existente — nunca reemplaza

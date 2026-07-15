@@ -5,16 +5,20 @@ import { authOptions } from '@/lib/auth'
 import { esAdmin } from '@/lib/roles'
 import { archivarConversacionesInactivas } from '@/lib/mensajes'
 import { enviarSeguimientosPendientes } from '@/lib/seguimiento-leads'
+import { vigilanciaGoogleAds } from '@/lib/gads-vigilancia'
 import { pingHealthcheck } from '@/lib/healthcheck'
 
 /**
- * Cron diario de mantenimiento del inbox (Vercel). Hace dos cosas, en orden:
+ * Cron diario de mantenimiento (Vercel; Hobby permite solo 2 crons → aquí se encadena
+ * todo lo diario). Hace tres cosas, en orden:
  *  1) SEGUIMIENTO: escribe a los leads tibios (cotizaron y no cerraron) que
  *     siguen dentro de la ventana de 24h — antes de archivar, para no perderlos.
  *  2) ARCHIVAR: mueve a 'archivado' las conversaciones ACTIVAS de WhatsApp con
  *     más de 2 días sin actividad. Las de negocio (cliente/cerrado) o vets no se tocan.
- * Corre en horario hábil de Chile para que los mensajes de seguimiento salgan a
- * buena hora. Auth: Bearer CRON_SECRET (Vercel) o sesión admin.
+ *  3) VIGILANCIA GOOGLE ADS (lib/gads-vigilancia): guardia diaria silenciosa (solo
+ *     avisa al ADMIN_WHATSAPP si hay algo urgente) + informe semanal los lunes.
+ * Corre en horario hábil de Chile para que los mensajes salgan a buena hora.
+ * Auth: Bearer CRON_SECRET (Vercel) o sesión admin.
  */
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -40,8 +44,11 @@ export async function GET(req: NextRequest) {
     try { seguimiento = await enviarSeguimientosPendientes() } catch (e) { console.error('[cron-archivar] seguimiento', e) }
     // 2) Archivar inactivas.
     const n = await archivarConversacionesInactivas(2)
+    // 3) Vigilancia de Google Ads (guardia diaria + informe los lunes). Best-effort.
+    let vigilancia = null
+    try { vigilancia = await vigilanciaGoogleAds() } catch (e) { console.error('[cron-archivar] vigilancia gads', e) }
     await pingHealthcheck('HEALTHCHECK_URL_ARCHIVAR')
-    return NextResponse.json({ ok: true, archivadas: n, seguimiento })
+    return NextResponse.json({ ok: true, archivadas: n, seguimiento, vigilancia })
   } catch (e) {
     console.error('[cron-archivar]', e)
     await pingHealthcheck('HEALTHCHECK_URL_ARCHIVAR', { fail: true })
