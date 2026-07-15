@@ -213,6 +213,9 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
   const conEutanasia = (r?.eutanasia ?? 0) > 0
   const filasTotales = !r ? '' : conEutanasia
     ? filaResumen('Total cremación', fmtPrecio(r.total), { top: true })
+      // Espacio en blanco entre la cremación y la eutanasia: son dos servicios
+      // distintos (la boleta cubre solo el primero).
+      + `<tr><td colspan="2" style="padding:11px 0 0"></td></tr>`
       + filaResumen('Eutanasia a domicilio', fmtPrecio(r.eutanasia!), { top: true })
       + filaResumen('Total a pagar', fmtPrecio(r.total + r.eutanasia!), { top: true, bold: true })
     : filaResumen('Total', fmtPrecio(r.total), { top: true, bold: true })
