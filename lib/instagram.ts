@@ -1,4 +1,4 @@
-import { getPageToken, isFacebookConfigurado } from './meta-publish'
+import { getPageToken as pageTokenPublicaciones, isFacebookConfigurado } from './meta-publish'
 
 /**
  * Mensajería de Instagram (Messenger API for Instagram, Graph API de Meta).
@@ -29,7 +29,30 @@ export interface EnvioIgResult {
 }
 
 export function isInstagramMensajesConfigurado(): boolean {
-  return isFacebookConfigurado() // META_GRAPH_TOKEN + META_PAGE_ID (el page token sale de ahí)
+  return !!process.env.META_PAGE_ID && !!(process.env.WHATSAPP_TOKEN || isFacebookConfigurado())
+}
+
+/**
+ * Page token para MENSAJERÍA: derivado del token de la app "Alma Animal
+ * Marketing" (WHATSAPP_TOKEN) — es la app suscrita al webhook de IG y donde
+ * viven los roles de tester; enviar con el token de "Publicaciones" da (#200)
+ * "el usuario destinatario no tiene ningún rol" mientras no haya acceso
+ * avanzado. Fallback: el page token de Publicaciones (post-App Review da igual).
+ */
+let ptCache: { token: string; exp: number } | null = null
+async function getPageToken(): Promise<string> {
+  if (ptCache && Date.now() < ptCache.exp) return ptCache.token
+  const wt = process.env.WHATSAPP_TOKEN || ''
+  if (wt) {
+    const res = await fetch(`${GRAPH}/${process.env.META_PAGE_ID}?fields=access_token&access_token=${encodeURIComponent(wt)}`)
+    const j = await res.json().catch(() => ({})) as { access_token?: string }
+    if (res.ok && j.access_token) {
+      ptCache = { token: j.access_token, exp: Date.now() + 55 * 60_000 }
+      return j.access_token
+    }
+    console.warn('[instagram] no se pudo derivar page token de WHATSAPP_TOKEN, uso el de Publicaciones')
+  }
+  return pageTokenPublicaciones()
 }
 
 async function enviarPayload(igsid: string, message: Record<string, unknown>): Promise<EnvioIgResult> {
