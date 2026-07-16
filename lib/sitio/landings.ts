@@ -201,7 +201,8 @@ export function renderLanding(l: Landing): string {
 </div>
 <footer class="lp-foot">
   Crematorio Alma Animal · Recoleta, Santiago · <a href="${wa}" target="_blank" rel="noopener">WhatsApp ${WA}</a><br/>
-  Huellas que no se borran · <a href="/">Ir al sitio</a>
+  Huellas que no se borran · <a href="/">Ir al sitio</a><br/>
+  ${Object.values(LANDINGS).filter(x => x.slug !== l.slug).map(x => `<a href="/${x.slug}">${esc(x.h1.replace(/ en Santiago| para perros y gatos/g, ''))}</a>`).join(' · ')}
 </footer>
 <script type="application/ld+json">${JSON.stringify(faqSchema)}</script>
 </body></html>`
