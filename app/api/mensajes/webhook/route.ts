@@ -7,6 +7,7 @@ import {
   normalizarEstado, type Conversacion, type Contacto,
 } from '@/lib/mensajes'
 import { esTelefonoVet } from '@/lib/vet-lookup'
+import { isInstagramMensajesConfigurado, enviarTextoInstagram, enviarImagenInstagram, perfilInstagram } from '@/lib/instagram'
 import { isAgenteConfigurado, generarRespuesta, redactarRelayCliente } from '@/lib/agente-mensajes'
 import { handlersAgente } from '@/lib/agente-acciones'
 import { buscarRelayPendientePorMsg, buscarRelayPendienteUnico, marcarRelayRespondida } from '@/lib/relay-retiro'
@@ -24,15 +25,21 @@ const DEBOUNCE_MS = 5000
 
 /**
  * Auto-respuesta del agente IA (corre en after(), tras devolver 200 a Meta).
- * Guardrails: kill-switch global (AGENTE_AUTO_RESPONDER), agente + WhatsApp
- * configurados, canal whatsapp, y la conversación no pausada (etiqueta 'pausado').
+ * Guardrails: kill-switch global (AGENTE_AUTO_RESPONDER), agente + canal
+ * configurados, y la conversación no pausada (etiqueta 'pausado').
+ * Canales: whatsapp (flujo completo, con tools de agendamiento) e instagram
+ * (informa/cotiza/escala; sin tools de agendamiento — esos corren por WhatsApp).
  */
 async function autoResponder(conv: Conversacion, contacto: Contacto) {
   if (process.env.AGENTE_AUTO_RESPONDER === 'false') return
-  if (!isAgenteConfigurado() || !isWhatsappConfigured()) return
-  if (conv.canal !== 'whatsapp') return
+  if (!isAgenteConfigurado()) return
+  const esIg = conv.canal === 'instagram'
+  if (conv.canal !== 'whatsapp' && !esIg) return
+  if (esIg ? !isInstagramMensajesConfigurado() : !isWhatsappConfigured()) return
   if ((conv.etiquetas || []).includes('pausado')) return
-  const destino = (contacto.wa_id || contacto.telefono || '').replace(/\D/g, '')
+  const destino = esIg
+    ? (contacto.instagram || '')
+    : (contacto.wa_id || contacto.telefono || '').replace(/\D/g, '')
   if (!destino) return
 
   // ── Debounce anti-ráfaga ──────────────────────────────────────────────────
@@ -60,8 +67,13 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
   let r
   try {
     r = await generarRespuesta(historial, {
-      handlers: handlersAgente(),
-      ctx: { waId: destino, nombreContacto: contacto.nombre ?? undefined },
+      // En Instagram no se inyectan las tools de agendamiento (retiro/eutanasia
+      // corren por WhatsApp con botones al admin + links firmados): el agente
+      // informa, cotiza, pide el WhatsApp y escala. escalar_a_humano va siempre.
+      handlers: esIg ? undefined : handlersAgente(),
+      ctx: esIg
+        ? { nombreContacto: contacto.nombre ?? undefined, canal: 'instagram' }
+        : { waId: destino, nombreContacto: contacto.nombre ?? undefined },
     })
   } catch (e) { console.error('[agente] generarRespuesta:', e); return }
   if (!r.mensaje && !(r.imagenes && r.imagenes.length)) return
@@ -77,11 +89,15 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
     }
   } catch (e) { console.warn('[agente] no se pudo re-verificar pausa antes de enviar:', e) }
 
+  // El provider id se guarda para el dedupe de echoes de IG (los envíos por API
+  // también llegan como echo al webhook; con el id registrado no se duplican).
+  const pid = (e: { id?: string; message_id?: string }) => e.id ?? e.message_id ?? null
   if (r.mensaje) {
-    const env = await enviarTextoWhatsapp(destino, r.mensaje)
+    const env = esIg ? await enviarTextoInstagram(destino, r.mensaje) : await enviarTextoWhatsapp(destino, r.mensaje)
     await insertarMensaje({
       conversacion_id: conv.id, direccion: 'saliente', cuerpo: r.mensaje,
       tipo: 'texto', estado: env.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
+      provider_message_id: env.ok ? pid(env as { id?: string; message_id?: string }) : null,
     })
   }
 
@@ -89,10 +105,13 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
   // después del texto y se registran en el inbox como mensajes de imagen.
   if (r.imagenes && r.imagenes.length) {
     for (const img of r.imagenes) {
-      const me = await enviarMediaWhatsapp(destino, { tipo: 'image', link: img.url })
+      const me = esIg
+        ? await enviarImagenInstagram(destino, img.url)
+        : await enviarMediaWhatsapp(destino, { tipo: 'image', link: img.url })
       await insertarMensaje({
         conversacion_id: conv.id, direccion: 'saliente', cuerpo: img.alt || '',
         tipo: 'imagen', media_url: img.url, estado: me.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
+        provider_message_id: me.ok ? pid(me as { id?: string; message_id?: string }) : null,
       })
     }
   }
@@ -106,8 +125,9 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
     try {
       const ultimoCliente = [...historial].reverse().find(h => h.rol === 'cliente')?.texto || ''
       const nombre = contacto.nombre || 'Cliente'
+      const donde = esIg ? `Instagram: ${contacto.nombre || 'DM'} (responder desde el inbox)` : `WhatsApp: +${destino}`
       const aviso = `⚠️ *Atención requerida* — el bot derivó una conversación a una persona.\n\n` +
-        `Cliente: ${nombre}\nWhatsApp: +${destino}\n` +
+        `Cliente: ${nombre}\n${donde}\n` +
         (ultimoCliente ? `Último mensaje: "${ultimoCliente.slice(0, 220)}"\n` : '') +
         `\nLa pauso para que la retomes tú desde el inbox.`
       await avisarAdminsWhatsapp(aviso)
@@ -346,6 +366,112 @@ async function procesarEcho(echo: MetaMsg) {
   }
 }
 
+// ─── Instagram (Messenger API for Instagram) ─────────────────────────────────
+interface IgEvento {
+  sender?: { id?: string }
+  recipient?: { id?: string }
+  timestamp?: number
+  message?: {
+    mid?: string
+    text?: string
+    is_echo?: boolean
+    is_deleted?: boolean
+    attachments?: Array<{ type?: string; payload?: { url?: string } }>
+  }
+  read?: unknown
+  reaction?: unknown
+  postback?: unknown
+}
+
+const IG_TIPO: Record<string, string> = { image: 'imagen', video: 'video', audio: 'audio', file: 'documento' }
+
+/** DM entrante de Instagram → contacto/conversación canal 'instagram' + agente. */
+async function procesarEntranteIG(ev: IgEvento) {
+  const msg = ev.message
+  const igsid = ev.sender?.id
+  if (!msg?.mid || !igsid || msg.is_deleted) return
+  if (await existeMensajePorProvider(msg.mid)) return // dedupe (at-least-once)
+
+  // Echo (mensaje NUESTRO): si no lo registramos nosotros (el agente guarda su
+  // provider id), lo mandó un humano desde la app de Instagram → registrarlo y
+  // PAUSAR la conversación (mismo guardrail que coexistence de WhatsApp).
+  if (msg.is_echo) {
+    const cliente = ev.recipient?.id
+    if (!cliente) return
+    const contacto = await upsertContacto({ instagram: cliente, audiencia: 'A' })
+    const conv = await getOrCreateConversacion(contacto.id, 'instagram', contacto.audiencia, 'instagram')
+    try {
+      await insertarMensaje({
+        conversacion_id: conv.id, direccion: 'saliente', cuerpo: msg.text ?? '[mensaje]',
+        tipo: 'texto', provider_message_id: msg.mid, estado: 'enviado', enviado_por: 'humano',
+        ts: new Date(ev.timestamp || Date.now()).toISOString(),
+      })
+    } catch (e) {
+      const m = String(e).toLowerCase()
+      if ((m.includes('duplicate') || m.includes('unique')) && m.includes('provider')) return
+      throw e
+    }
+    if (!(conv.etiquetas || []).includes('pausado')) {
+      await actualizarConversacion(conv.id, { etiquetas: Array.from(new Set([...(conv.etiquetas || []), 'pausado'])) })
+    }
+    return
+  }
+
+  // Nombre/username del perfil (best-effort; en dev mode puede no venir).
+  let nombre: string | null = null
+  try {
+    const p = await perfilInstagram(igsid)
+    nombre = p.nombre ? (p.username ? `${p.nombre} (@${p.username})` : p.nombre) : (p.username ? `@${p.username}` : null)
+  } catch { /* best-effort */ }
+
+  const contacto = await upsertContacto({ instagram: igsid, nombre, audiencia: 'A' })
+  const conv = await getOrCreateConversacion(contacto.id, 'instagram', contacto.audiencia, 'instagram')
+  try {
+    const estadoActual = normalizarEstado(conv.estado)
+    if (estadoActual === 'archivado' || estadoActual === 'cerrado') {
+      await actualizarConversacion(conv.id, { estado: 'activo' })
+    }
+  } catch (e) { console.warn('[webhook ig] reactivación falló:', e) }
+
+  let cuerpo: string | null = msg.text ?? null
+  let tipo = 'texto'
+  let mediaUrl: string | null = null
+  const adj = (msg.attachments || [])[0]
+  if (adj?.payload?.url) {
+    tipo = IG_TIPO[adj.type || ''] || 'documento'
+    if (!cuerpo) cuerpo = null
+    // El CDN de IG entrega URLs públicas temporales → persistimos en R2.
+    try {
+      const res = await fetch(adj.payload.url)
+      if (res.ok) {
+        const mime = res.headers.get('content-type') || 'application/octet-stream'
+        const ext = EXT[mime] || 'bin'
+        const buf = Buffer.from(await res.arrayBuffer())
+        const r = await uploadToR2(buf, `mensajes/media/ig-${msg.mid.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80)}.${ext}`, mime)
+        mediaUrl = r.url
+      }
+    } catch (e) { console.warn('[webhook ig] media falló', e) }
+    if (!mediaUrl) cuerpo = cuerpo ?? `[${tipo}]`
+  }
+  if (!cuerpo && !mediaUrl) cuerpo = '[mensaje]'
+
+  try {
+    await insertarMensaje({
+      conversacion_id: conv.id, direccion: 'entrante', cuerpo, tipo,
+      media_url: mediaUrl, provider_message_id: msg.mid,
+      ts: new Date(ev.timestamp || Date.now()).toISOString(),
+    })
+  } catch (e) {
+    const m = String(e).toLowerCase()
+    if ((m.includes('duplicate') || m.includes('unique')) && m.includes('provider')) return
+    throw e
+  }
+
+  if (msg.text) {
+    after(() => autoResponder(conv, contacto).catch(e => console.error('[agente ig] autoResponder:', e)))
+  }
+}
+
 /** Coexistence — avisos de desconexión/reconexión del número. Best-effort. */
 async function avisarCoexistence(field: string) {
   const txt = field === 'account_offboarded'
@@ -361,8 +487,21 @@ export async function POST(req: NextRequest) {
   if (!verificarFirmaWebhook(raw, sig)) {
     return NextResponse.json({ error: 'firma inválida' }, { status: 401 })
   }
-  let body: { entry?: Array<{ changes?: Array<{ field?: string; value?: Record<string, unknown> }> }> }
+  let body: { object?: string; entry?: Array<{ changes?: Array<{ field?: string; value?: Record<string, unknown> }>; messaging?: IgEvento[] }> }
   try { body = JSON.parse(raw) } catch { return NextResponse.json({ ok: true }) }
+
+  // Instagram: los DMs llegan con object='instagram' y formato messaging[] (no changes[]).
+  if (body.object === 'instagram') {
+    try {
+      for (const entry of body.entry ?? []) {
+        for (const ev of entry.messaging ?? []) {
+          if (ev.read || ev.reaction || ev.postback) continue // eventos sin cuerpo: ignorar
+          await procesarEntranteIG(ev)
+        }
+      }
+    } catch (e) { console.error('[instagram webhook] error procesando:', e) }
+    return NextResponse.json({ ok: true })
+  }
 
   try {
     for (const entry of body.entry ?? []) {

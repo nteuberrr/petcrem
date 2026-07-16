@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getConversacion, insertarMensaje, actualizarConversacion } from '@/lib/mensajes'
 import { isWhatsappConfigured, enviarTextoWhatsapp, enviarPlantillaWhatsapp, renderPlantillaWa, plantillasAprobadas } from '@/lib/whatsapp'
+import { isInstagramMensajesConfigurado, enviarTextoInstagram } from '@/lib/instagram'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,6 +64,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           aviso = 'Fuera de la ventana de 24h: WhatsApp exige una plantilla aprobada para reabrir la conversación.'
         } else {
           aviso = `No se pudo enviar por WhatsApp: ${res.error}`
+        }
+      }
+    } else if (conv.canal === 'instagram') {
+      // DM de Instagram: solo texto libre dentro de la ventana de 24h (IG no
+      // tiene plantillas de reapertura como WhatsApp).
+      const igsid = conv.contacto?.instagram || ''
+      if (!isInstagramMensajesConfigurado()) {
+        aviso = 'Instagram aún no está conectado: el mensaje quedó registrado pero no se envió.'
+      } else if (!igsid) {
+        aviso = 'Este contacto no tiene ID de Instagram: el mensaje quedó registrado.'
+      } else {
+        const res = await enviarTextoInstagram(igsid, cuerpo)
+        if (res.ok) { estado = 'enviado'; providerId = res.id ?? null }
+        else {
+          estado = 'fallido'
+          aviso = res.fuera_de_ventana
+            ? 'Fuera de la ventana de 24h: Instagram solo permite responder hasta 24h después del último mensaje del cliente (no hay plantillas de reapertura).'
+            : `No se pudo enviar por Instagram: ${res.error}`
         }
       }
     } else if (!isWhatsappConfigured()) {

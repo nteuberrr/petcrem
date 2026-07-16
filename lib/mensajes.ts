@@ -287,16 +287,21 @@ export async function insertarMensaje(m: {
   return data as Mensaje
 }
 
-/** Busca un contacto por wa_id / teléfono o lo crea. */
+/** Busca un contacto por wa_id / teléfono / instagram (IGSID) o lo crea. */
 export async function upsertContacto(c: {
   wa_id?: string | null
   telefono?: string | null
+  /** IGSID (id de usuario de Instagram con respecto a nuestra página). */
+  instagram?: string | null
   nombre?: string | null
   audiencia?: Audiencia
 }): Promise<Contacto> {
   const sb = getMensajesSupabase()
   if (c.wa_id) {
     const { data } = await sb.from(T_CONTACTOS).select('*').eq('wa_id', c.wa_id).maybeSingle()
+    if (data) return data as Contacto
+  } else if (c.instagram) {
+    const { data } = await sb.from(T_CONTACTOS).select('*').eq('instagram', c.instagram).maybeSingle()
     if (data) return data as Contacto
   } else if (c.telefono) {
     const { data } = await sb.from(T_CONTACTOS).select('*').eq('telefono', c.telefono).maybeSingle()
@@ -306,6 +311,7 @@ export async function upsertContacto(c: {
     nombre: c.nombre ?? null,
     telefono: c.telefono ?? null,
     wa_id: c.wa_id ?? null,
+    instagram: c.instagram ?? null,
     audiencia: c.audiencia ?? 'A',
   }).select('*').single()
   if (error) throw new Error(error.message)

@@ -249,6 +249,9 @@ export interface CtxAgente {
   waId?: string
   /** Nombre del contacto según el inbox, como respaldo si el modelo no lo captó. */
   nombreContacto?: string
+  /** Canal de la conversación (default whatsapp). En 'instagram' el agente no
+   *  agenda: cotiza/informa, pide el WhatsApp para coordinar y escala. */
+  canal?: 'whatsapp' | 'instagram'
 }
 
 export interface AccionRetiro {
@@ -681,6 +684,16 @@ ${cfg.instrucciones.trim()}`,
   if (opts.ctx?.waId) {
     const notaFicha = await bloqueFichaEnProceso(opts.ctx.waId)
     if (notaFicha) system.push({ type: 'text', text: notaFicha })
+  }
+  // Canal Instagram: el agente informa/cotiza pero NO agenda (los flujos de
+  // retiro/eutanasia corren por WhatsApp: botones al admin + links firmados).
+  if (opts.ctx?.canal === 'instagram') {
+    system.push({
+      type: 'text', text: `CANAL: estás respondiendo un mensaje directo de INSTAGRAM (no WhatsApp).
+- Responde igual que siempre (voz de marca, precios de la tabla, breve y cálido).
+- Para AGENDAR un retiro o una eutanasia NO puedes registrar la solicitud por este canal: pídele al cliente su número de WhatsApp (o invítalo a escribirnos al +56 9 6312 6603) y usa "escalar_a_humano" con el resumen y el teléfono para que el equipo lo contacte de inmediato. Dile que por WhatsApp coordinamos el retiro al tiro.
+- No prometas enviar links ni botones por Instagram.`,
+    })
   }
   // Fotos que el equipo habilitó para WhatsApp → el agente puede enviarlas.
   const bloqueFotos = bloqueImagenesWhatsapp(imgsWa)
