@@ -21,7 +21,7 @@ function esDominioMarketing(host: string): boolean {
   return h === 'crematorioalmaanimal.cl' || h.endsWith('.crematorioalmaanimal.cl')
 }
 
-const RUTAS_PUB_RE = /href="\/(servicios|nosotros|convenios|contacto|anforas|catalogo-anforas|blog|terminos-y-condiciones|politicas-de-privacidad|cremacion-de-mascotas|cremacion-de-perros|cremacion-de-gatos|eutanasia-a-domicilio)(["/#?])/g
+const RUTAS_PUB_RE = /href="\/(servicios|nosotros|convenios|contacto|anforas|catalogo-anforas|blog|terminos-y-condiciones|politicas-de-privacidad|cremacion-de-mascotas|cremacion-de-perros|cremacion-de-gatos|funeraria-de-mascotas|eutanasia-a-domicilio)(["/#?])/g
 
 // Precios VIVOS para /servicios y sus detalles (cremación + eutanasia): se leen
 // en cada render, así un cambio en Configuración → Precios se refleja en la web.

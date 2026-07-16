@@ -73,6 +73,21 @@ export const LANDINGS: Record<string, Landing> = {
       { q: '¿Atienden perros de todo tamaño?', a: 'Sí, atendemos perros de todos los tamaños. Escríbenos y te orientamos según el caso.' },
     ],
   },
+  'funeraria-de-mascotas': {
+    slug: 'funeraria-de-mascotas',
+    title: 'Funeraria de Mascotas en Santiago | Alma Animal',
+    meta: 'Funeraria de mascotas en Santiago: nos encargamos de todo — retiro a domicilio, cremación con trazabilidad y entrega de las cenizas con certificado. Todos los días de 9:00 a 22:00.',
+    h1: 'Funeraria de mascotas en Santiago',
+    subtitulo: 'Nos hacemos cargo de todo el servicio funerario de tu mascota: retiro, cremación y entrega de sus cenizas.',
+    intro: 'Cuando tu mascota parte, hay muchas decisiones que tomar en un momento difícil. En Alma Animal nos encargamos del servicio completo: retiro en tu casa o clínica, cremación en <strong>instalaciones propias</strong> con trazabilidad total, y entrega de sus cenizas en un ánfora junto al certificado de cremación. Cobertura en toda la Región Metropolitana, todos los días de 09:00 a 22:00.',
+    waMsg: 'Hola! Necesito información sobre el servicio funerario para mi mascota',
+    faqs: [
+      { q: '¿Qué incluye el servicio funerario?', a: 'Retiro de tu mascota a domicilio o en la clínica veterinaria, cremación en la modalidad que elijas y entrega de las cenizas en un ánfora, con certificado de cremación.' },
+      { q: '¿Cuánto cuesta?', a: 'Depende del peso de tu mascota y de la modalidad de cremación (Individual, Premium o Sin Devolución). Escríbenos por WhatsApp y te cotizamos de inmediato.' },
+      { q: '¿Atienden fines de semana y festivos?', a: 'Sí, atendemos todos los días de 09:00 a 22:00, en toda la Región Metropolitana. El retiro habitualmente se coordina en menos de 3 horas.' },
+      { q: '¿Me entregan un certificado?', a: 'Sí. Cada cremación incluye certificado y código de seguimiento, con trazabilidad total durante el proceso.' },
+    ],
+  },
   'cremacion-de-gatos': {
     slug: 'cremacion-de-gatos',
     title: 'Cremación de Gatos en Santiago | Alma Animal',
@@ -119,7 +134,7 @@ export function renderLanding(l: Landing): string {
 <meta property="og:description" content="${esc(l.meta)}"/><meta property="og:url" content="${url}"/>
 <meta property="og:image" content="${BASE}${LOGO}"/><meta property="og:locale" content="es_CL"/>
 <link rel="stylesheet" href="/sitio/site.css"/>
-<link rel="icon" href="/sitio/assets/6942fb32cec49d2cc665b37f_favicon.png"/>
+<link rel="icon" type="image/png" sizes="96x96" href="/sitio/assets/favicon-96.png"/>
 <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${GTM}');</script>
 <script async src="https://www.googletagmanager.com/gtag/js?id=${GA4}"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA4}');</script>
