@@ -27,6 +27,8 @@ export interface Landing {
   intro: string
   waMsg: string
   faqs: { q: string; a: string }[]
+  /** Inyecta tarjetas de precios VIVOS (desdePorSlug): 'cremacion' = 3 modalidades. */
+  bloquePrecios?: 'cremacion'
 }
 
 export const LANDINGS: Record<string, Landing> = {
@@ -73,6 +75,64 @@ export const LANDINGS: Record<string, Landing> = {
       { q: '¿Atienden perros de todo tamaño?', a: 'Sí, atendemos perros de todos los tamaños. Escríbenos y te orientamos según el caso.' },
     ],
   },
+  'precios-cremacion-mascotas': {
+    slug: 'precios-cremacion-mascotas',
+    title: 'Precios de Cremación de Mascotas en Santiago | Alma Animal',
+    meta: 'Precios claros de cremación de mascotas en Santiago, según peso y modalidad: Individual, Premium y Sin Devolución. Retiro a domicilio en la RM. Cotiza por WhatsApp.',
+    h1: 'Precios de cremación de mascotas',
+    subtitulo: 'Valores claros según el peso de tu mascota y la modalidad que elijas. Sin costos ocultos.',
+    intro: 'Trabajamos con <strong>precios publicados por peso y modalidad</strong>, para que decidas con toda la información. El servicio incluye el retiro en tu domicilio o clínica, la cremación con trazabilidad total y el certificado. Escríbenos por WhatsApp con el peso aproximado de tu mascota y te cotizamos de inmediato.',
+    waMsg: 'Hola! Quiero cotizar la cremación de mi mascota',
+    bloquePrecios: 'cremacion',
+    faqs: [
+      { q: '¿De qué depende el precio?', a: 'Del peso de tu mascota y de la modalidad: Cremación Individual (con devolución de cenizas), Premium (ánfora a elección y cuadro conmemorativo) o Sin Devolución, la opción más económica.' },
+      { q: '¿El precio incluye el ánfora?', a: 'La Cremación Individual incluye ánfora de greda marmoleada, botellita con mechón de pelo y etiqueta de madera con el nombre. En la Premium eliges un ánfora premium.' },
+      { q: '¿El retiro tiene costo extra?', a: 'El retiro en domicilio o clínica está incluido en la Región Metropolitana; según la comuna puede aplicar un recargo por distancia, que te informamos antes de agendar.' },
+    ],
+  },
+  'eutanasia-de-perros': {
+    slug: 'eutanasia-de-perros',
+    title: 'Eutanasia para Perros a Domicilio en Santiago | Alma Animal',
+    meta: 'Eutanasia para perros a domicilio en Santiago, con evaluación veterinaria previa y opción de cremación. Una despedida tranquila en casa. Escríbenos por WhatsApp.',
+    h1: 'Eutanasia para perros a domicilio',
+    subtitulo: 'Una despedida tranquila para tu perro, en la comodidad de su casa, con acompañamiento veterinario.',
+    intro: 'Cuando tu perro está sufriendo y llega el momento de despedirlo, te acompañamos con un servicio de <strong>eutanasia a domicilio</strong> respetuoso y sin apuros: un veterinario de nuestra red lo evalúa primero en tu casa y, si corresponde, realiza el procedimiento ahí mismo, sin traslados estresantes. Después podemos encargarnos también de la cremación.',
+    waMsg: 'Hola! Necesito información sobre la eutanasia a domicilio para mi perro',
+    faqs: [
+      { q: '¿El veterinario evalúa a mi perro antes?', a: 'Sí. El veterinario lo examina en tu casa y confirma si corresponde realizar la eutanasia. Si al evaluar no corresponde, se cobra solo la consulta.' },
+      { q: '¿Puedo estar presente?', a: 'Sí, puedes acompañar a tu perro durante todo el procedimiento — la idea es justamente que la despedida sea en su entorno, con su familia.' },
+      { q: '¿Incluye la cremación?', a: 'Podemos hacernos cargo de la cremación después del procedimiento, con devolución de cenizas si lo deseas.' },
+      { q: '¿En qué horario atienden?', a: 'Todos los días de 09:00 a 22:00, en toda la Región Metropolitana.' },
+    ],
+  },
+  'eutanasia-de-gatos': {
+    slug: 'eutanasia-de-gatos',
+    title: 'Eutanasia para Gatos a Domicilio en Santiago | Alma Animal',
+    meta: 'Eutanasia para gatos a domicilio en Santiago, con evaluación veterinaria previa y opción de cremación. Sin traslados que lo estresen. Escríbenos por WhatsApp.',
+    h1: 'Eutanasia para gatos a domicilio',
+    subtitulo: 'Una despedida tranquila para tu gato, en su casa y sin traslados que lo estresen.',
+    intro: 'Los traslados estresan especialmente a los gatos. Por eso realizamos la <strong>eutanasia a domicilio</strong>: un veterinario de nuestra red evalúa a tu gato en tu casa y, si corresponde, realiza el procedimiento ahí mismo, con respeto y sin apuros. Después podemos encargarnos también de la cremación.',
+    waMsg: 'Hola! Necesito información sobre la eutanasia a domicilio para mi gato',
+    faqs: [
+      { q: '¿El veterinario evalúa a mi gato antes?', a: 'Sí. El veterinario lo examina en tu casa y confirma si corresponde realizar la eutanasia. Si al evaluar no corresponde, se cobra solo la consulta.' },
+      { q: '¿Por qué a domicilio?', a: 'Para los gatos, salir de su territorio es muy estresante. En casa la despedida es tranquila, en su entorno y con su familia.' },
+      { q: '¿Incluye la cremación?', a: 'Podemos hacernos cargo de la cremación después del procedimiento, con devolución de cenizas si lo deseas.' },
+    ],
+  },
+  'incineracion-de-mascotas': {
+    slug: 'incineracion-de-mascotas',
+    title: 'Incineración de Mascotas en Santiago | Alma Animal',
+    meta: 'Incineración de mascotas en Santiago con retiro a domicilio, devolución de cenizas y entrega en 4 días hábiles. Instalaciones propias con horno certificado.',
+    h1: 'Incineración de mascotas en Santiago',
+    subtitulo: 'Incineración con trazabilidad total, retiro a domicilio y entrega de las cenizas en 4 días hábiles.',
+    intro: 'La incineración —también llamada cremación— es la forma más digna y responsable de despedir a tu mascota. En Alma Animal la realizamos en <strong>instalaciones propias con horno certificado</strong>, con trazabilidad total del proceso y devolución de las cenizas en un ánfora. Retiro en tu casa o clínica, en toda la Región Metropolitana.',
+    waMsg: 'Hola! Necesito información sobre la incineración de mi mascota',
+    faqs: [
+      { q: '¿Incineración y cremación son lo mismo?', a: 'Sí, son el mismo proceso. En Alma Animal lo realizamos en instalaciones propias con horno certificado, sin externalizar ninguna etapa.' },
+      { q: '¿Me devuelven las cenizas?', a: 'En la modalidad Individual te devolvemos las cenizas en un ánfora en 4 días hábiles, junto al certificado.' },
+      { q: '¿Retiran a domicilio?', a: 'Sí, retiramos tu mascota en tu casa o en la clínica veterinaria, todos los días de 09:00 a 22:00 en toda la RM.' },
+    ],
+  },
   'funeraria-de-mascotas': {
     slug: 'funeraria-de-mascotas',
     title: 'Funeraria de Mascotas en Santiago | Alma Animal',
@@ -117,7 +177,23 @@ const DIFERENCIADORES = [
   { i: '🚗', t: 'Retiro a domicilio', d: 'En tu casa o clínica, en toda la RM, de 09:00 a 22:00.' },
 ]
 
-export function renderLanding(l: Landing): string {
+const fmtCLP = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
+
+/** Tarjetas de precios "Desde" (tarifas VIVAS de precios_generales, misma fuente que /servicios). */
+function bloquePreciosHtml(desde: Record<string, number>): string {
+  const cards = [
+    { slug: 'cremacion-individual', n: 'Cremación Individual', d: 'Con devolución de cenizas en ánfora de greda, mechón de pelo y certificado.' },
+    { slug: 'cremacion-premium', n: 'Cremación Premium', d: 'Todo lo de Individual, más ánfora premium a elección y cuadro conmemorativo.' },
+    { slug: 'cremacion-sin-devolucion-de-cenizas', n: 'Cremación Sin Devolución', d: 'Con certificado y retiro incluido; sin devolución de cenizas. La opción más económica.' },
+  ]
+  return `<section class="precios">
+    <h2>Nuestras modalidades y precios</h2>
+    ${cards.map(c => `<div class="pre-card"><h3>${c.n}</h3><div class="pre-desde">Desde ${desde[c.slug] > 0 ? fmtCLP(desde[c.slug]) : 'Consultar'}</div><p>${c.d}</p></div>`).join('')}
+    <p class="pre-nota">El valor final depende del peso de tu mascota. <a href="/servicios">Ver la tabla completa de precios</a></p>
+  </section>`
+}
+
+export function renderLanding(l: Landing, desde?: Record<string, number>): string {
   const wa = waLink(l.waMsg)
   const url = `${BASE}/${l.slug}`
   const faqSchema = {
@@ -168,6 +244,15 @@ export function renderLanding(l: Landing): string {
 .faq details{background:#fff;border:1px solid #E7E0D6;border-radius:14px;padding:16px 20px;margin-bottom:12px}
 .faq summary{font-weight:700;cursor:pointer;list-style:none}.faq summary::-webkit-details-marker{display:none}
 .faq p{color:#5B7288;line-height:1.6;margin:10px 0 0}
+.precios{max-width:860px;margin:0 auto;padding:0 0 48px;display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:760px){.precios{grid-template-columns:repeat(3,1fr)}}
+.precios h2{grid-column:1/-1;text-align:center;font-size:26px;margin:0 0 8px}
+.pre-card{background:#fff;border:1px solid #E7E0D6;border-radius:18px;padding:22px;text-align:center}
+.pre-card h3{margin:0 0 6px;font-size:16px}
+.pre-desde{font-size:24px;font-weight:800;color:#143C64;margin:4px 0 10px}
+.pre-card p{margin:0;font-size:13.5px;color:#5B7288;line-height:1.55}
+.pre-nota{grid-column:1/-1;text-align:center;font-size:13px;color:#5B7288;margin:4px 0 0}
+.pre-nota a{color:#2A6DB0;font-weight:600}
 .lp-foot{background:#0B2845;color:#B9C9D8;text-align:center;padding:28px 20px;font-size:13px}
 .lp-foot a{color:#F2B84B;text-decoration:none;font-weight:600}
 </style>
@@ -186,6 +271,7 @@ export function renderLanding(l: Landing): string {
     <div class="trust">Atención todos los días · 09:00 a 22:00 · Cobertura Región Metropolitana</div>
   </section>
   <p class="lp-intro">${l.intro}</p>
+  ${l.bloquePrecios && desde ? bloquePreciosHtml(desde) : ''}
   <section class="difs">
     ${DIFERENCIADORES.map(d => `<div class="dif"><div class="ic">${d.i}</div><h3>${d.t}</h3><p>${d.d}</p></div>`).join('')}
   </section>

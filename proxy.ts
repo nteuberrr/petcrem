@@ -15,7 +15,8 @@ const SITIO_EXACT = new Set([
   '/sitemap.xml', '/robots.txt',
   // Landings de captación (Google Ads + SEO).
   '/cremacion-de-mascotas', '/eutanasia-a-domicilio', '/cremacion-de-perros', '/cremacion-de-gatos',
-  '/funeraria-de-mascotas',
+  '/funeraria-de-mascotas', '/precios-cremacion-mascotas', '/eutanasia-de-perros', '/eutanasia-de-gatos',
+  '/incineracion-de-mascotas',
 ])
 const SITIO_PREFIX = ['/servicios/', '/blog/']
 function esRutaSitioPublico(p: string): boolean {

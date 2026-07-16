@@ -21,7 +21,7 @@ function esDominioMarketing(host: string): boolean {
   return h === 'crematorioalmaanimal.cl' || h.endsWith('.crematorioalmaanimal.cl')
 }
 
-const RUTAS_PUB_RE = /href="\/(servicios|nosotros|convenios|contacto|anforas|catalogo-anforas|blog|terminos-y-condiciones|politicas-de-privacidad|cremacion-de-mascotas|cremacion-de-perros|cremacion-de-gatos|funeraria-de-mascotas|eutanasia-a-domicilio)(["/#?])/g
+const RUTAS_PUB_RE = /href="\/(servicios|nosotros|convenios|contacto|anforas|catalogo-anforas|blog|terminos-y-condiciones|politicas-de-privacidad|cremacion-de-mascotas|cremacion-de-perros|cremacion-de-gatos|funeraria-de-mascotas|precios-cremacion-mascotas|eutanasia-de-perros|eutanasia-de-gatos|incineracion-de-mascotas|eutanasia-a-domicilio)(["/#?])/g
 
 // Precios VIVOS para /servicios y sus detalles (cremación + eutanasia): se leen
 // en cada render, así un cambio en Configuración → Precios se refleja en la web.
@@ -74,9 +74,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     })
   }
 
-  // Landings de captación (Google Ads + SEO).
+  // Landings de captación (Google Ads + SEO). La de precios lleva tarifas VIVAS.
   if (LANDINGS[key]) {
-    return fin(renderLanding(LANDINGS[key]))
+    const desde = LANDINGS[key].bloquePrecios ? desdePorSlug(await datosPrecios()) : undefined
+    return fin(renderLanding(LANDINGS[key], desde))
   }
 
   // Detalle de post: /blog/<slug> → shell post-detalle + contenido de web_posts.
