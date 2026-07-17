@@ -3,6 +3,9 @@ import { todayISO } from './dates'
 import { uploadToR2 } from './cloudflare-r2'
 import { enviarBoletaCliente } from './cliente-mailer'
 import { avisarAdminsWhatsapp } from './whatsapp'
+import { sendEmail } from './resend-mailer'
+import { renderEmailLayout, getContacto, escapeHtml } from './email-layout'
+import { fmtPrecio } from './format'
 import {
   emitirDTE, construirDtePayload, construirNcPayload, desglosarIvaIncluido, isOpenFacturaConfigurado,
   DTE_NOTA_CREDITO, DTE_BOLETA_AFECTA, type DteEmisor, type DteReceptor, type LineaItem,
@@ -272,6 +275,68 @@ export async function emitirBoletaSiCorresponde(
     console.warn('[facturacion] error emitiendo boleta automática (no bloqueante):', e)
     avisar('la emisión de la boleta automática falló con un error inesperado.')
     return { emitida: false }
+  }
+}
+
+/** Correo del dueño para la COPIA de revisión de facturas: email_seguimiento (1º de la lista) o ADMIN_EMAIL. */
+async function getOwnerEmail(): Promise<string> {
+  try {
+    const rows = await getSheetData('empresa_config')
+    const row = rows.find(r => r.id === '1') || rows[0] || {}
+    const raw = String(row.email_seguimiento || '').split(/[,;]/)[0]?.trim()
+    if (raw) return raw
+  } catch { /* cae al env */ }
+  return (process.env.ADMIN_EMAIL || '').trim()
+}
+
+/**
+ * Envía al DUEÑO una copia de una factura recién emitida, para revisar el
+ * formato / lo que se le cobra a la veterinaria. Best-effort (nunca rompe la
+ * emisión ya confirmada). El PDF real del DTE de factura no siempre llega
+ * sincrónico desde Haulmer (queda en validación SII) → se enlaza el documento.
+ */
+export async function enviarCopiaFacturaOwner(
+  doc: DocumentoRow,
+  extra: { vetNombre: string; mesLabel?: string; fichas: Array<{ codigo: string; nombre_mascota: string; monto: number }>; preview?: boolean },
+): Promise<void> {
+  try {
+    const to = await getOwnerEmail()
+    if (!to) return
+    const contacto = await getContacto()
+    const encabezado = extra.preview
+      ? `<strong style="color:#B45309">VISTA PREVIA</strong> — así se verá la copia de la factura a <strong>${escapeHtml(extra.vetNombre)}</strong>${extra.mesLabel ? ` (${escapeHtml(extra.mesLabel)})` : ''}. No se ha emitido ningún documento al SII.`
+      : `Copia interna de la factura emitida a <strong>${escapeHtml(extra.vetNombre)}</strong>${extra.mesLabel ? ` (${escapeHtml(extra.mesLabel)})` : ''}, para revisar el formato.`
+    const filas = extra.fichas.map(f => `
+      <tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;color:#555">${escapeHtml(f.codigo)} — ${escapeHtml(f.nombre_mascota || 'mascota')}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;color:#222;text-align:right;white-space:nowrap">${fmtPrecio(f.monto)}</td>
+      </tr>`).join('')
+    const linkDoc = doc.pdf_url || doc.openfactura_url
+    const bodyHtml = `
+      <p style="margin:0 0 14px;font-size:15px;color:#222">${encabezado}</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 12px">
+        <tr><td style="font-size:13px;color:#666">Folio</td><td style="font-size:13px;color:#222;text-align:right">${doc.folio ? escapeHtml(doc.folio) : '— (en validación SII)'}</td></tr>
+        <tr><td style="font-size:13px;color:#666">RUT receptor</td><td style="font-size:13px;color:#222;text-align:right">${escapeHtml(doc.receptor_rut)}</td></tr>
+        <tr><td style="font-size:13px;color:#666">Fecha</td><td style="font-size:13px;color:#222;text-align:right">${escapeHtml(doc.fecha_emision)}</td></tr>
+      </table>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:0 0 12px">
+        ${filas}
+        <tr><td style="padding:8px 10px;font-size:13px;color:#666">Neto</td><td style="padding:8px 10px;font-size:13px;color:#222;text-align:right">${fmtPrecio(parseInt(doc.monto_neto, 10) || 0)}</td></tr>
+        <tr><td style="padding:2px 10px;font-size:13px;color:#666">IVA (19%)</td><td style="padding:2px 10px;font-size:13px;color:#222;text-align:right">${fmtPrecio(parseInt(doc.monto_iva, 10) || 0)}</td></tr>
+        <tr><td style="padding:8px 10px;font-size:15px;color:#111;font-weight:700">Total</td><td style="padding:8px 10px;font-size:15px;color:#111;font-weight:700;text-align:right">${fmtPrecio(parseInt(doc.monto_total, 10) || 0)}</td></tr>
+      </table>
+      ${linkDoc ? `<p style="margin:0"><a href="${escapeHtml(linkDoc)}" style="display:inline-block;background:#143C64;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600">Ver documento</a></p>` : ''}
+    `
+    const html = renderEmailLayout({ titulo: 'Copia de factura', bodyHtml, contacto, contexto: 'Facturación · Revisión' })
+    await sendEmail({
+      to,
+      subject: (extra.preview ? `Vista previa factura — ${extra.vetNombre}` : `Copia factura ${doc.folio || ''} — ${extra.vetNombre}`).trim(),
+      html,
+      preview_text: extra.preview ? 'Vista previa del formato de factura (no emitida).' : 'Copia interna para revisar el formato de la factura.',
+      noBcc: true,
+    })
+  } catch (e) {
+    console.warn('[facturacion] no se pudo enviar la copia de factura al dueño:', e)
   }
 }
 

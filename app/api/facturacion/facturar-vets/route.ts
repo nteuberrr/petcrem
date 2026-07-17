@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { esAdminTotal } from '@/lib/roles'
 import { construirPropuestaMes } from '@/lib/facturacion-vets'
-import { emitirDocumento } from '@/lib/facturacion'
+import { emitirDocumento, enviarCopiaFacturaOwner } from '@/lib/facturacion'
 import { DTE_FACTURA_AFECTA, type LineaItem } from '@/lib/openfactura'
 
 const MESES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -102,6 +102,14 @@ export async function POST(req: NextRequest) {
     if (!r.ok) {
       resultados.push({ veterinaria_id: sel.veterinaria_id, nombre: vetProp.nombre, ok: false, error: r.error })
     } else {
+      if (r.documento) {
+        // eslint-disable-next-line no-await-in-loop
+        await enviarCopiaFacturaOwner(r.documento, {
+          vetNombre: vetProp.nombre,
+          mesLabel,
+          fichas: fichas.map(f => ({ codigo: f.codigo, nombre_mascota: f.nombre_mascota, monto: f.monto })),
+        })
+      }
       resultados.push({
         veterinaria_id: sel.veterinaria_id,
         nombre: vetProp.nombre,
