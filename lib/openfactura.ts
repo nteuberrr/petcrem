@@ -49,7 +49,7 @@ export interface DteDetalle {
 }
 export interface DteTotales {
   MntNeto?: number
-  TasaIVA?: string
+  TasaIVA?: string | number
   IVA?: number
   MntExe?: number
   MntTotal: number
@@ -60,9 +60,12 @@ export interface DtePayload {
   dte: {
     Encabezado: {
       IdDoc: { TipoDTE: number; FchEmis: string; [k: string]: unknown }
-      Emisor: DteEmisor
+      // DteEmisor (self-service, RznSocEmisor/GiroEmisor) o el emisor DIRECTO
+      // (RznSoc/GiroEmis, ver emisorDirecto) para factura/NC.
+      Emisor: DteEmisor | Record<string, unknown>
       Receptor?: DteReceptor
       Totales: DteTotales
+      [k: string]: unknown
     }
     Detalle: DteDetalle[]
     [k: string]: unknown
@@ -78,22 +81,27 @@ export interface DtePayload {
   [k: string]: unknown
 }
 
-// ─── Builder ficha → payload (estructura PROBADA en sandbox 2026-07-07) ───────
-// Aprendizajes clave del sandbox (3 emisiones reales probadas: boleta 39, factura
-// 33 con Receptor, NC 61 anulando la boleta — las tres con folio + selfServiceUrl):
-//  - Se usa el modo SELF-SERVICE (OpenFactura completa IndServicio/timbre/esquema
-//    SII y hostea una página pública). El modo "directo" (sin selfService) exige
-//    el esquema SII estricto con orden de campos propio — no lo usamos.
-//  - El Detalle va con montos BRUTOS (IVA incluido) — OpenFactura deriva el neto
-//    (MntNeto = bruto/1,19); mandar el neto tira "Monto erróneo".
-//  - documentReference.ID debe ser NUMÉRICO (usar el id de la ficha).
-//  - Para una NC que ANULA un documento: la referencia va en
-//    `selfService.documentReference` con `type` = TipoDTE del documento ORIGINAL
-//    (ej. "39" si anula una boleta) — NO usar `dte.Referencia` (eso da error
-//    "Incluir referencias solo en objeto 'selfService'"). `type: "801"` es para
-//    referencias normales (ej. orden de compra), no para anulaciones.
-//  - `response: ['FOLIO','SELF_SERVICE','PDF']` trae los tres a la vez: el PDF
-//    llega en `raw.PDF` como base64 (decodificar con Buffer.from(x,'base64')).
+// ─── Builder ficha → payload ─────────────────────────────────────────────────
+// DOS modos según el documento (probado en sandbox):
+//
+// • BOLETA (39/41) → SELF-SERVICE con `issueBoleta:true`: OpenFactura EMITE la
+//   boleta al instante (devuelve FOLIO + PDF). El Detalle va en BRUTO (IVA incl.);
+//   OpenFactura deriva el neto. `documentReference.ID` numérico (id de la ficha).
+//
+// • FACTURA (33/34) y NC (61) → EMISIÓN DIRECTA (SIN `selfService`). ⚠️ El modo
+//   self-service para facturas NO emitía: solo mandaba al receptor un link para
+//   ELEGIR/generar el documento (pantalla "Obtén tu documento tributario") → el DTE
+//   nunca llegaba al SII (bug real, factura de Cooldogs 2026-07-17). La emisión
+//   directa exige:
+//     - Emisor con nombres SII ESTRICTOS: RznSoc / GiroEmis (no RznSocEmisor/
+//       GiroEmisor) → ver `emisorDirecto()`.
+//     - Detalle en NETO (PrcItem/MontoItem netos); el IVA lo suma la factura.
+//       MntNeto = Σ Detalle; IVA = bruto − MntNeto; MntTotal = bruto (así el total
+//       cuadra con lo cotizado y el SII lo acepta).
+//     - IdDoc.FmaPago = 1 (contado).
+//     - NC: la referencia al documento anulado va en `dte.Referencia`
+//       ([{TpoDocRef, FolioRef, FchRef, CodRef:1 (anula), RazonRef}]).
+//   Devuelve FOLIO + PDF (base64 en raw.PDF) + XML de forma SÍNCRONA.
 
 export interface LineaItem {
   /** Nombre del ítem (NmbItem, máx 80). */
@@ -117,38 +125,89 @@ export interface ConstruirDteOpts {
   permitirFactura?: boolean
 }
 
-/** Arma el payload de emisión desde datos de negocio (precios con IVA incluido). */
-export function construirDtePayload(o: ConstruirDteOpts): DtePayload {
-  const detalle: DteDetalle[] = o.lineas.map((l, i) => {
+/** Emisor con los nombres ESTRICTOS del esquema SII (para emisión DIRECTA de factura/NC). */
+function emisorDirecto(e: DteEmisor) {
+  return {
+    RUTEmisor: e.RUTEmisor,
+    RznSoc: e.RznSocEmisor,
+    GiroEmis: e.GiroEmisor,
+    ...(e.Acteco ? { Acteco: e.Acteco } : {}),
+    DirOrigen: e.DirOrigen,
+    CmnaOrigen: e.CmnaOrigen,
+    ...(e.CdgSIISucur ? { CdgSIISucur: e.CdgSIISucur } : {}),
+  }
+}
+
+/** Detalle en NETO (para factura/NC): PrcItem/MontoItem netos = round(bruto/1,19). */
+function detalleNeto(lineas: LineaItem[]): DteDetalle[] {
+  return lineas.map((l, i) => {
     const qty = l.cantidad ?? 1
+    const netoUnit = Math.round(l.montoBruto / 1.19)
     return {
       NroLinDet: i + 1,
       NmbItem: (l.nombre || 'Ítem').slice(0, 80),
       QtyItem: qty,
-      PrcItem: Math.round(l.montoBruto),
-      MontoItem: Math.round(l.montoBruto * qty),
+      PrcItem: netoUnit,
+      MontoItem: netoUnit * qty,
       ...(l.descripcion ? { DscItem: l.descripcion.slice(0, 990) } : {}),
     }
   })
-  const bruto = detalle.reduce((s, d) => s + d.MontoItem, 0)
-  const { neto, iva, total } = desglosarIvaIncluido(bruto)
+}
+
+/** Arma el payload de emisión desde datos de negocio (precios con IVA incluido). */
+export function construirDtePayload(o: ConstruirDteOpts): DtePayload {
   const esBoleta = o.tipo === DTE_BOLETA_AFECTA || o.tipo === DTE_BOLETA_EXENTA
+
+  // ── BOLETA: SELF-SERVICE con issueBoleta:true → OpenFactura la EMITE al toque.
+  if (esBoleta) {
+    const detalle: DteDetalle[] = o.lineas.map((l, i) => {
+      const qty = l.cantidad ?? 1
+      return {
+        NroLinDet: i + 1,
+        NmbItem: (l.nombre || 'Ítem').slice(0, 80),
+        QtyItem: qty,
+        PrcItem: Math.round(l.montoBruto),
+        MontoItem: Math.round(l.montoBruto * qty),
+        ...(l.descripcion ? { DscItem: l.descripcion.slice(0, 990) } : {}),
+      }
+    })
+    const bruto = detalle.reduce((s, d) => s + d.MontoItem, 0)
+    const { neto, iva, total } = desglosarIvaIncluido(bruto)
+    return {
+      response: ['FOLIO', 'SELF_SERVICE', 'PDF'],
+      dte: {
+        Encabezado: {
+          IdDoc: { TipoDTE: o.tipo, FchEmis: o.fecha },
+          Emisor: o.emisor,
+          ...(o.receptor ? { Receptor: o.receptor } : {}),
+          Totales: { MntNeto: neto, TasaIVA: '19.00', IVA: iva, MntTotal: total },
+        },
+        Detalle: detalle,
+      },
+      ...(o.cliente ? { customer: { fullName: o.cliente.nombre, email: o.cliente.email } } : {}),
+      selfService: {
+        issueBoleta: true,
+        allowFactura: !!o.permitirFactura,
+        documentReference: [{ type: '801', ID: String(o.referenciaId), date: o.fecha }],
+      },
+    }
+  }
+
+  // ── FACTURA: EMISIÓN DIRECTA (sin selfService). Detalle en NETO, emisor SII estricto.
+  const detalle = detalleNeto(o.lineas)
+  const bruto = o.lineas.reduce((s, l) => s + Math.round(l.montoBruto) * (l.cantidad ?? 1), 0)
+  const mntNeto = detalle.reduce((s, d) => s + d.MontoItem, 0)
+  const iva = bruto - mntNeto
   return {
-    response: ['FOLIO', 'SELF_SERVICE', 'PDF'],
+    response: ['FOLIO', 'XML', 'PDF'],
     dte: {
       Encabezado: {
-        IdDoc: { TipoDTE: o.tipo, FchEmis: o.fecha },
-        Emisor: o.emisor,
+        IdDoc: { TipoDTE: o.tipo, FchEmis: o.fecha, FmaPago: 1 },
+        Emisor: emisorDirecto(o.emisor),
         ...(o.receptor ? { Receptor: o.receptor } : {}),
-        Totales: { MntNeto: neto, TasaIVA: '19.00', IVA: iva, MntTotal: total },
+        Totales: { MntNeto: mntNeto, TasaIVA: 19, IVA: iva, MntTotal: bruto },
       },
       Detalle: detalle,
-    },
-    ...(o.cliente ? { customer: { fullName: o.cliente.nombre, email: o.cliente.email } } : {}),
-    selfService: {
-      issueBoleta: esBoleta,
-      allowFactura: !!o.permitirFactura,
-      documentReference: [{ type: '801', ID: String(o.referenciaId), date: o.fecha }],
     },
   }
 }
@@ -165,36 +224,32 @@ export interface ConstruirNcOpts {
   fechaOriginal: string
 }
 
-/** Arma el payload de una Nota de Crédito (61) que ANULA un documento existente. */
+/** Arma el payload de una Nota de Crédito (61) que ANULA un documento existente. Emisión DIRECTA. */
 export function construirNcPayload(o: ConstruirNcOpts): DtePayload {
-  const detalle: DteDetalle[] = o.lineas.map((l, i) => {
-    const qty = l.cantidad ?? 1
-    return {
-      NroLinDet: i + 1,
-      NmbItem: (l.nombre || 'Ítem').slice(0, 80),
-      QtyItem: qty,
-      PrcItem: Math.round(l.montoBruto),
-      MontoItem: Math.round(l.montoBruto * qty),
-      ...(l.descripcion ? { DscItem: l.descripcion.slice(0, 990) } : {}),
-    }
-  })
-  const bruto = detalle.reduce((s, d) => s + d.MontoItem, 0)
-  const { neto, iva, total } = desglosarIvaIncluido(bruto)
+  const detalle = detalleNeto(o.lineas)
+  const bruto = o.lineas.reduce((s, l) => s + Math.round(l.montoBruto) * (l.cantidad ?? 1), 0)
+  const mntNeto = detalle.reduce((s, d) => s + d.MontoItem, 0)
+  const iva = bruto - mntNeto
   return {
-    response: ['FOLIO', 'SELF_SERVICE', 'PDF'],
+    response: ['FOLIO', 'XML', 'PDF'],
     dte: {
       Encabezado: {
         IdDoc: { TipoDTE: DTE_NOTA_CREDITO, FchEmis: o.fecha },
-        Emisor: o.emisor,
+        Emisor: emisorDirecto(o.emisor),
         ...(o.receptor ? { Receptor: o.receptor } : {}),
-        Totales: { MntNeto: neto, TasaIVA: '19.00', IVA: iva, MntTotal: total },
+        Totales: { MntNeto: mntNeto, TasaIVA: 19, IVA: iva, MntTotal: bruto },
       },
       Detalle: detalle,
-    },
-    selfService: {
-      issueBoleta: false,
-      allowFactura: false,
-      documentReference: [{ type: String(o.tipoDocumentoOriginal), ID: String(o.folioOriginal), date: o.fechaOriginal }],
+      // Referencia al documento que se anula (CodRef 1 = anula). En emisión directa
+      // va en dte.Referencia (en self-service iba en selfService.documentReference).
+      Referencia: [{
+        NroLinRef: 1,
+        TpoDocRef: String(o.tipoDocumentoOriginal),
+        FolioRef: String(o.folioOriginal),
+        FchRef: o.fechaOriginal,
+        CodRef: 1,
+        RazonRef: 'Anula documento',
+      }],
     },
   }
 }
