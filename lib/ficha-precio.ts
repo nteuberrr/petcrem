@@ -57,14 +57,17 @@ export function calcularPrecioFicha(
     .join(', ')
 
   const esVet = !!String(c.veterinaria_id || '').trim()
-  const tieneSnapshot = snapTotal > 0 || snapServ > 0 || snapAdi > 0
 
-  // TUTOR con snapshot → precio de VENTA CONGELADO (su boleta no debe cambiar).
-  if (!esVet && tieneSnapshot) {
+  // Snapshot CONGELADO (tutor Y vet): el precio de facturación NO cambia una vez
+  // creada la ficha — las tarifas del vet quedan fijas al momento del servicio.
+  // (Los pocos tiers mal congelados —vets que pasaron de convenio a especial luego
+  // de crear la ficha— se corrigieron por dato, recomputando su snapshot al tier
+  // correcto; ver reconciliación 2026-07-17.)
+  if (snapTotal > 0 || snapServ > 0 || snapAdi > 0) {
     return { servicio: snapServ, adicionales: snapAdi, descuento: snapDesc, total: snapTotal, adicionalesLabel }
   }
 
-  // Servicio EN VIVO con el tier que corresponde HOY (regla del dueño): ficha de
+  // Legacy SIN snapshot: recomputar en vivo con el tier que corresponde. Ficha de
   // CONVENIO (tiene veterinaria_id) → ESPECIAL si el vet tiene filas especiales, si
   // no CONVENIO; ficha de TUTOR → GENERAL. La existencia de filas especiales manda.
   const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
@@ -78,21 +81,6 @@ export function calcularPrecioFicha(
     tabla = tablas.convenio
   }
   const servicio = precioDelTramo(findTramo(tabla, peso), codigo)
-
-  // VET con snapshot → recomputar SOLO el servicio con el tier actual; conservar
-  // adicionales y descuento congelados. Corrige el tier viejo (ej. Cooldogs, que se
-  // pasó de convenio a especial después de crear la ficha) sin recalcular el resto.
-  if (esVet && tieneSnapshot) {
-    return {
-      servicio: Math.round(servicio),
-      adicionales: snapAdi,
-      descuento: snapDesc,
-      total: Math.round(Math.max(0, servicio + snapAdi - snapDesc)),
-      adicionalesLabel,
-    }
-  }
-
-  // Legacy SIN snapshot (tutor o vet): recomputar TODO en vivo.
   const adi = items.reduce((s, a) => s + Math.max(0, parseMonto(a.precio)) * Math.max(0, a.qty ?? 1), 0)
   // Descuento SOLO sobre el servicio de cremación, nunca sobre los adicionales.
   let descuento = 0
