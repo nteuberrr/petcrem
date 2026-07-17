@@ -84,46 +84,33 @@ export interface SnapshotInput {
 export async function calcularSnapshotFicha(input: SnapshotInput): Promise<PrecioSnapshot> {
   const { peso, codigo_servicio, adicionales } = input
 
-  // 1) Determinar tipo_precios efectivo
+  // 1+2) Determinar el tipo_precios efectivo Y su tabla.
+  // REGLA DEL NEGOCIO (dueño): para un veterinario, lo que MANDA es la existencia
+  // de filas de precios ESPECIALES — si tiene ≥1 fila especial cobra ESPECIAL; si no
+  // tiene ninguna, avanza con PRECIOS DE CONVENIO. El campo `veterinarios.tipo_precios`
+  // (que podía quedar desactualizado al cargar especiales sin actualizarlo) YA NO
+  // decide el tramo: la fuente de verdad es la tabla precios_especiales.
   let tipo: 'general' | 'convenio' | 'especial' = 'general'
-  const explicit = (input.tipo_precios ?? '').toLowerCase()
-  if (explicit === 'convenio' || explicit === 'especial' || explicit === 'general') {
-    tipo = explicit
-  } else if (input.veterinaria_id) {
-    try {
-      const vets = await getSheetData('veterinarios')
-      const vet = vets.find(v => v.id === input.veterinaria_id)
-      if (vet) tipo = vet.tipo_precios === 'precios_especiales' ? 'especial' : 'convenio'
-    } catch (e) {
-      // Degradamos a 'general', pero dejamos rastro: una ficha de convenio
-      // cotizada con tarifa general sin log es indetectable después.
-      console.error(`[price-calculator] no se pudo leer veterinarios (veterinaria_id=${input.veterinaria_id}); snapshot con tarifa GENERAL:`, e)
-    }
-  }
-  // REGLA DURA: un veterinario con precios ESPECIALES cobra SIEMPRE el precio especial,
-  // pase lo que pase en el payload (defensa en profundidad — el form ya lo bloquea).
-  if (input.veterinaria_id && tipo !== 'especial') {
-    try {
-      const vets = await getSheetData('veterinarios')
-      const vet = vets.find(v => v.id === input.veterinaria_id)
-      if (vet?.tipo_precios === 'precios_especiales') tipo = 'especial'
-    } catch { /* si falla la lectura, respetamos lo ya resuelto */ }
-  }
-
-  // 2) Cargar tabla aplicable
   let tabla: TramoRaw[] = []
-  if (tipo === 'especial' && input.veterinaria_id) {
-    const rows = await getSheetData('precios_especiales')
-    tabla = rows.filter(r => r.veterinaria_id === input.veterinaria_id) as unknown as TramoRaw[]
-    // Fallback: si la vet no tiene tramos especiales cargados, caemos a convenio
-    if (tabla.length === 0) {
-      tabla = (await getSheetData('precios_convenio')) as unknown as TramoRaw[]
-      tipo = 'convenio'
+  const explicit = (input.tipo_precios ?? '').toLowerCase()
+
+  if (input.veterinaria_id) {
+    let especialesDeVet: TramoRaw[] = []
+    try {
+      const rows = await getSheetData('precios_especiales')
+      especialesDeVet = rows.filter(r => r.veterinaria_id === input.veterinaria_id) as unknown as TramoRaw[]
+    } catch (e) {
+      console.error(`[price-calculator] no se pudo leer precios_especiales (veterinaria_id=${input.veterinaria_id}); caigo a convenio:`, e)
     }
-  } else if (tipo === 'convenio') {
-    tabla = (await getSheetData('precios_convenio')) as unknown as TramoRaw[]
+    if (especialesDeVet.length > 0) {
+      tipo = 'especial'; tabla = especialesDeVet
+    } else {
+      tipo = 'convenio'; tabla = (await getSheetData('precios_convenio')) as unknown as TramoRaw[]
+    }
+  } else if (explicit === 'convenio') {
+    tipo = 'convenio'; tabla = (await getSheetData('precios_convenio')) as unknown as TramoRaw[]
   } else {
-    tabla = (await getSheetData('precios_generales')) as unknown as TramoRaw[]
+    tipo = 'general'; tabla = (await getSheetData('precios_generales')) as unknown as TramoRaw[]
   }
 
   // 3) Encontrar tramo y precio del servicio

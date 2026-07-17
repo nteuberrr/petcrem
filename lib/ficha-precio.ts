@@ -35,10 +35,15 @@ export interface TablasPrecios {
   especialesDeVet: Tramo[]
 }
 
-/** Calcula el precio de una ficha de cliente. `vetTipoPrecios` = veterinarios.tipo_precios del vet asociado (si tiene). */
+/**
+ * Calcula el precio de una ficha de cliente. El 2º argumento queda por
+ * compatibilidad de firma pero YA NO decide el tramo: la regla usa la EXISTENCIA
+ * de filas de precios especiales del vet (tablas.especialesDeVet) + si la ficha
+ * tiene veterinaria_id. (Los callers pasan vet.tipo_precios; se ignora.)
+ */
 export function calcularPrecioFicha(
   c: Record<string, string>,
-  vetTipoPrecios: string | undefined,
+  _vetTipoPrecios: string | undefined,
   tablas: TablasPrecios,
 ): PrecioFichaCalculado {
   const snapTotal = parseDecimalOr0(c.precio_total)
@@ -58,12 +63,17 @@ export function calcularPrecioFicha(
   // Fallback en vivo (ficha legacy sin snapshot).
   const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
   const codigo = c.codigo_servicio || 'CI'
-  let tabla: Tramo[] = tablas.convenio
-  const explicit = c.tipo_precios
-  // Un vet con precios especiales cobra SIEMPRE el especial (prima sobre lo guardado).
-  if (vetTipoPrecios === 'precios_especiales') tabla = tablas.especialesDeVet
-  else if (explicit === 'especial') tabla = tablas.especialesDeVet
-  else if (explicit === 'general') tabla = tablas.generales
+  // REGLA (dueño): ficha de CONVENIO (tiene veterinaria_id) → precio ESPECIAL si el
+  // vet tiene filas de precios especiales; si no, CONVENIO. Ficha de TUTOR (sin vet)
+  // → GENERAL. La existencia de filas especiales manda sobre cualquier campo.
+  let tabla: Tramo[] = tablas.generales
+  if (String(c.veterinaria_id || '').trim()) {
+    tabla = tablas.especialesDeVet.length > 0 ? tablas.especialesDeVet : tablas.convenio
+  } else if (c.tipo_precios === 'convenio') {
+    tabla = tablas.convenio
+  } else if (c.tipo_precios === 'especial') {
+    tabla = tablas.especialesDeVet.length > 0 ? tablas.especialesDeVet : tablas.convenio
+  }
   const tramo = findTramo(tabla, peso)
   const servicio = precioDelTramo(tramo, codigo)
   const adi = items.reduce((s, a) => s + Math.max(0, parseMonto(a.precio)) * Math.max(0, a.qty ?? 1), 0)

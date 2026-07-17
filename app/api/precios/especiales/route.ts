@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns, ensureSheet } from '@/lib/datastore'
+import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureColumns, ensureSheet, updateByIdIf } from '@/lib/datastore'
 
 const EXPECTED_COLS = ['id', 'veterinaria_id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd']
+
+/**
+ * Mantiene sincronizado `veterinarios.tipo_precios` con la realidad: un vet con
+ * ≥1 fila de precios especiales queda como 'precios_especiales'; sin filas, como
+ * 'precios_convenio'. Así el badge/display y cualquier lector del campo no se
+ * desincronizan (el cálculo de precio ya deriva de las filas, esto es para la UI).
+ * Best-effort: no rompe el CRUD de precios si falla.
+ */
+async function sincronizarTipoPreciosVet(veterinariaId: string): Promise<void> {
+  const vetId = String(veterinariaId || '').trim()
+  if (!vetId) return
+  try {
+    const rows = await getSheetData('precios_especiales')
+    const tiene = rows.some(r => String(r.veterinaria_id) === vetId)
+    await updateByIdIf('veterinarios', vetId, {}, { tipo_precios: tiene ? 'precios_especiales' : 'precios_convenio' })
+  } catch (e) {
+    console.warn('[precios/especiales] no se pudo sincronizar tipo_precios del vet:', e)
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -33,6 +52,7 @@ export async function POST(req: NextRequest) {
       precio_sd: String(body.precio_sd),
     }
     await appendRow('precios_especiales', row)
+    await sincronizarTipoPreciosVet(row.veterinaria_id)
     return NextResponse.json(row, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })
@@ -47,7 +67,9 @@ export async function DELETE(req: NextRequest) {
     const rows = await getSheetData('precios_especiales')
     const idx = rows.findIndex(r => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    const vetIdDeLaFila = rows[idx].veterinaria_id
     await deleteRow('precios_especiales', idx)
+    await sincronizarTipoPreciosVet(vetIdDeLaFila)
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

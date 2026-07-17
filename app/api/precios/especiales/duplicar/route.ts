@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, getNextId, deleteById, ensureSheet, ensureColumns } from '@/lib/datastore'
+import { getSheetData, appendRow, getNextId, deleteById, ensureSheet, ensureColumns, updateByIdIf } from '@/lib/datastore'
 
 const EXPECTED_COLS = ['id', 'veterinaria_id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd']
 
@@ -61,6 +61,12 @@ export async function POST(req: NextRequest) {
         precio_sd: String(t.precio_sd ?? ''),
       })
       copiados++
+    }
+
+    // La vet destino ahora tiene precios especiales → reflejarlo en su tipo_precios.
+    if (copiados > 0) {
+      try { await updateByIdIf('veterinarios', destino, {}, { tipo_precios: 'precios_especiales' }) }
+      catch (e) { console.warn('[precios/especiales/duplicar] no se pudo sincronizar tipo_precios:', e) }
     }
 
     return NextResponse.json({ ok: true, copiados, reemplazados })
