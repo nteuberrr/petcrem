@@ -56,30 +56,45 @@ export function calcularPrecioFicha(
     .map(a => `${a.nombre ?? a.id}${(a.qty ?? 1) > 1 ? ' × ' + (a.qty ?? 1) : ''}`)
     .join(', ')
 
-  if (snapTotal > 0 || snapServ > 0 || snapAdi > 0) {
+  const esVet = !!String(c.veterinaria_id || '').trim()
+  const tieneSnapshot = snapTotal > 0 || snapServ > 0 || snapAdi > 0
+
+  // TUTOR con snapshot → precio de VENTA CONGELADO (su boleta no debe cambiar).
+  if (!esVet && tieneSnapshot) {
     return { servicio: snapServ, adicionales: snapAdi, descuento: snapDesc, total: snapTotal, adicionalesLabel }
   }
 
-  // Fallback en vivo (ficha legacy sin snapshot).
+  // Servicio EN VIVO con el tier que corresponde HOY (regla del dueño): ficha de
+  // CONVENIO (tiene veterinaria_id) → ESPECIAL si el vet tiene filas especiales, si
+  // no CONVENIO; ficha de TUTOR → GENERAL. La existencia de filas especiales manda.
   const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
   const codigo = c.codigo_servicio || 'CI'
-  // REGLA (dueño): ficha de CONVENIO (tiene veterinaria_id) → precio ESPECIAL si el
-  // vet tiene filas de precios especiales; si no, CONVENIO. Ficha de TUTOR (sin vet)
-  // → GENERAL. La existencia de filas especiales manda sobre cualquier campo.
   let tabla: Tramo[] = tablas.generales
-  if (String(c.veterinaria_id || '').trim()) {
+  if (esVet) {
+    tabla = tablas.especialesDeVet.length > 0 ? tablas.especialesDeVet : tablas.convenio
+  } else if (c.tipo_precios === 'especial') {
     tabla = tablas.especialesDeVet.length > 0 ? tablas.especialesDeVet : tablas.convenio
   } else if (c.tipo_precios === 'convenio') {
     tabla = tablas.convenio
-  } else if (c.tipo_precios === 'especial') {
-    tabla = tablas.especialesDeVet.length > 0 ? tablas.especialesDeVet : tablas.convenio
   }
-  const tramo = findTramo(tabla, peso)
-  const servicio = precioDelTramo(tramo, codigo)
+  const servicio = precioDelTramo(findTramo(tabla, peso), codigo)
+
+  // VET con snapshot → recomputar SOLO el servicio con el tier actual; conservar
+  // adicionales y descuento congelados. Corrige el tier viejo (ej. Cooldogs, que se
+  // pasó de convenio a especial después de crear la ficha) sin recalcular el resto.
+  if (esVet && tieneSnapshot) {
+    return {
+      servicio: Math.round(servicio),
+      adicionales: snapAdi,
+      descuento: snapDesc,
+      total: Math.round(Math.max(0, servicio + snapAdi - snapDesc)),
+      adicionalesLabel,
+    }
+  }
+
+  // Legacy SIN snapshot (tutor o vet): recomputar TODO en vivo.
   const adi = items.reduce((s, a) => s + Math.max(0, parseMonto(a.precio)) * Math.max(0, a.qty ?? 1), 0)
-  const subtotal = servicio + adi
-  // Descuento SOLO sobre el servicio de cremación, nunca sobre los adicionales
-  // (mismo criterio que calcularSnapshotFicha en price-calculator.ts).
+  // Descuento SOLO sobre el servicio de cremación, nunca sobre los adicionales.
   let descuento = 0
   const dVal = parseMonto(c.descuento_valor)
   if (dVal > 0) {
@@ -90,7 +105,7 @@ export function calcularPrecioFicha(
     servicio: Math.round(servicio),
     adicionales: Math.round(adi),
     descuento: Math.round(descuento),
-    total: Math.round(Math.max(0, subtotal - descuento)),
+    total: Math.round(Math.max(0, servicio + adi - descuento)),
     adicionalesLabel,
   }
 }
