@@ -125,6 +125,18 @@ export interface ConstruirDteOpts {
   permitirFactura?: boolean
 }
 
+/** Emisor para BOLETA directa: nombres originales, SIN Acteco (el esquema de boleta no lo acepta). */
+function emisorBoleta(e: DteEmisor) {
+  return {
+    RUTEmisor: e.RUTEmisor,
+    RznSocEmisor: e.RznSocEmisor,
+    GiroEmisor: e.GiroEmisor,
+    ...(e.CdgSIISucur ? { CdgSIISucur: e.CdgSIISucur } : {}),
+    DirOrigen: e.DirOrigen,
+    CmnaOrigen: e.CmnaOrigen,
+  }
+}
+
 /** Emisor con los nombres ESTRICTOS del esquema SII (para emisión DIRECTA de factura/NC). */
 function emisorDirecto(e: DteEmisor) {
   return {
@@ -158,7 +170,12 @@ function detalleNeto(lineas: LineaItem[]): DteDetalle[] {
 export function construirDtePayload(o: ConstruirDteOpts): DtePayload {
   const esBoleta = o.tipo === DTE_BOLETA_AFECTA || o.tipo === DTE_BOLETA_EXENTA
 
-  // ── BOLETA: SELF-SERVICE con issueBoleta:true → OpenFactura la EMITE al toque.
+  // ── BOLETA (39/41): EMISIÓN DIRECTA. ⚠️ Antes se usaba SELF-SERVICE, que emitía
+  //    DOS documentos por boleta (el real + un artefacto self-service, folio N-1) →
+  //    duplicados en el SII (RCV julio 2026: 18 boletas de más). La directa emite UN
+  //    solo documento (probado: no devuelve SELF_SERVICE.url). Detalle en BRUTO,
+  //    IndServicio:3 (venta y servicios), emisor con nombres originales (sin Acteco),
+  //    receptor consumidor final (66666666-6).
   if (esBoleta) {
     const detalle: DteDetalle[] = o.lineas.map((l, i) => {
       const qty = l.cantidad ?? 1
@@ -172,23 +189,17 @@ export function construirDtePayload(o: ConstruirDteOpts): DtePayload {
       }
     })
     const bruto = detalle.reduce((s, d) => s + d.MontoItem, 0)
-    const { neto, iva, total } = desglosarIvaIncluido(bruto)
+    const { neto, iva } = desglosarIvaIncluido(bruto)
     return {
-      response: ['FOLIO', 'SELF_SERVICE', 'PDF'],
+      response: ['FOLIO', 'PDF'],
       dte: {
         Encabezado: {
-          IdDoc: { TipoDTE: o.tipo, FchEmis: o.fecha },
-          Emisor: o.emisor,
-          ...(o.receptor ? { Receptor: o.receptor } : {}),
-          Totales: { MntNeto: neto, TasaIVA: '19.00', IVA: iva, MntTotal: total },
+          IdDoc: { TipoDTE: o.tipo, IndServicio: 3, FchEmis: o.fecha },
+          Emisor: emisorBoleta(o.emisor),
+          Receptor: { RUTRecep: o.receptor?.RUTRecep || '66666666-6' },
+          Totales: { MntNeto: neto, IVA: iva, MntTotal: bruto },
         },
         Detalle: detalle,
-      },
-      ...(o.cliente ? { customer: { fullName: o.cliente.nombre, email: o.cliente.email } } : {}),
-      selfService: {
-        issueBoleta: true,
-        allowFactura: !!o.permitirFactura,
-        documentReference: [{ type: '801', ID: String(o.referenciaId), date: o.fecha }],
       },
     }
   }
