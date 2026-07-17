@@ -4,7 +4,7 @@ import { registrarEnvio, registrarEnvios, type TipoCorreo } from './correos-log'
 import { createTutorToken } from './tutor-token'
 import { fmtPrecio } from './format'
 import { getSheetData } from './datastore'
-import { servicioIncluyeAnforaPremium, anforaPremiumIncluida } from './anforas-premium'
+import { servicioIncluyeAnforaPremium, repartirAnforasPremium } from './anforas-premium'
 
 const NOMBRE_MODALIDAD: Record<string, string> = {
   CI: 'Cremación Individual', CP: 'Cremación Premium', SD: 'Cremación Sin Devolución',
@@ -48,10 +48,15 @@ export async function resumenCompraDeFicha(f: Record<string, unknown>): Promise<
       categoriaPorProducto = new Map(prods.map(p => [String(p.id), String(p.categoria ?? '')]))
     } catch { categoriaPorProducto = null }
   }
-  const adicionales = items.map(a => {
-    const incluida = a.tipo === 'producto' && categoriaPorProducto != null &&
-      anforaPremiumIncluida(cs, categoriaPorProducto.get(String(a.id)))
-    return { nombre: String(a.nombre || 'Adicional'), precio: Math.max(0, intOf(a.precio)), qty: Math.max(1, intOf(a.qty) || 1), incluida }
+  // En CP la primera ánfora premium va incluida y las siguientes se cobran: una
+  // línea "incluida" + otra "cobrada" cuando corresponda (fuente única: repartir).
+  const adicionales = repartirAnforasPremium(cs, items, categoriaPorProducto ?? new Map()).flatMap(r => {
+    const nombre = String(r.item.nombre || 'Adicional')
+    const precio = Math.max(0, intOf(r.item.precio))
+    const lineas: { nombre: string; precio: number; qty: number; incluida: boolean }[] = []
+    if (r.qtyIncluida > 0) lineas.push({ nombre, precio, qty: r.qtyIncluida, incluida: true })
+    if (r.qtyCobrable > 0) lineas.push({ nombre, precio, qty: r.qtyCobrable, incluida: false })
+    return lineas
   })
   // Eutanasia a domicilio asociada: si la ficha nació de ese flujo, el valor de
   // la eutanasia se COBRA JUNTO al retiro pero va fuera de la boleta (que es solo

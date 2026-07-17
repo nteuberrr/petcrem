@@ -1,7 +1,7 @@
 import { getSheetData } from './datastore'
 import { PrecioTramo } from '@/types'
 import { findTramo, precioDelTramo, numTramo as num } from './tramos'
-import { servicioIncluyeAnforaPremium, anforaPremiumIncluida } from './anforas-premium'
+import { servicioIncluyeAnforaPremium, repartirAnforasPremium } from './anforas-premium'
 
 export async function calcularPrecio(
   peso: number,
@@ -132,8 +132,8 @@ export async function calcularSnapshotFicha(input: SnapshotInput): Promise<Preci
 
   // 4) Sumar adicionales — precio y cantidad acotados a ≥0 para que un item con
   // valores negativos (manipulación del payload) no reste del total.
-  // Excepción: en Cremación Premium (CP) las ánforas premium van INCLUIDAS
-  // (costo 0); igual consumen stock (lo maneja adjustProductStock por cantidad).
+  // Excepción: en Cremación Premium (CP) va incluida UNA ánfora premium (costo 0);
+  // las adicionales se cobran. El stock se consume por cada unidad (adjustProductStock).
   // Cargamos las categorías de productos solo si hace falta resolver la inclusión.
   let categoriaPorProducto: Map<string, string> | null = null
   if (servicioIncluyeAnforaPremium(codigo_servicio) && adicionales.some(a => a.tipo === 'producto')) {
@@ -144,12 +144,10 @@ export async function calcularSnapshotFicha(input: SnapshotInput): Promise<Preci
       categoriaPorProducto = null // si falla, no incluimos (se cobra normal)
     }
   }
-  const precio_adicionales = adicionales.reduce((s, a) => {
-    const incluida = a.tipo === 'producto' && categoriaPorProducto != null &&
-      anforaPremiumIncluida(codigo_servicio, categoriaPorProducto.get(String(a.id)))
-    const precioUnit = incluida ? 0 : Math.max(0, num(a.precio))
-    return s + precioUnit * Math.max(0, a.qty ?? 1)
-  }, 0)
+  // En CP va incluida UNA ánfora premium; las unidades premium adicionales SÍ se
+  // cobran (fuente única: repartirAnforasPremium).
+  const precio_adicionales = repartirAnforasPremium(codigo_servicio, adicionales, categoriaPorProducto ?? new Map())
+    .reduce((s, r) => s + Math.max(0, num(r.item.precio)) * r.qtyCobrable, 0)
 
   const subtotal = precio_servicio + precio_adicionales
 

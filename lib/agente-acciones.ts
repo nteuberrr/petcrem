@@ -11,7 +11,7 @@ import { evaluarSlotRetiro, horaLibreEnFranja } from './agenda'
 import { capitalizarNombre } from './nombres'
 import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional } from './cobros'
-import { anforaPremiumIncluida } from './anforas-premium'
+import { repartirAnforasPremium } from './anforas-premium'
 import { ajustarStockAdicionales } from './stock'
 import { generarCatalogoPdf } from './catalogo-generator'
 import { uploadToR2 } from './cloudflare-r2'
@@ -647,9 +647,12 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
   catch (e) { console.warn('[agente-acciones] agregarAdicional: stock no ajustado:', e) }
 
   // Cobro: correo (con datos de transferencia + botón confirmar) + WhatsApp.
-  // No cobrar ánforas premium INCLUIDAS en Cremación Premium (bug real: se llegó
-  // a cobrar un ánfora incluida por su precio de catálogo).
-  const cobrables = resueltos.filter(r => !(r.tipo === 'producto' && anforaPremiumIncluida(ficha.codigo_servicio, r.categoria)))
+  // En Cremación Premium va incluida UNA ánfora premium; las adicionales SÍ se
+  // cobran (fuente única: repartirAnforasPremium — misma regla que el snapshot).
+  const catMap = new Map(resueltos.filter(r => r.id).map(r => [String(r.id), String(r.categoria || '')]))
+  const cobrables = repartirAnforasPremium(ficha.codigo_servicio, resueltos, catMap)
+    .filter(r => r.qtyCobrable > 0)
+    .map(r => ({ ...r.item, qty: r.qtyCobrable }))
   const monto = cobrables.reduce((s, r) => s + r.precio * r.qty, 0)
   if (cobrables.length > 0) {
     try {

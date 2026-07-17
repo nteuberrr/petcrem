@@ -9,7 +9,7 @@ import { fmtLitros, fmtPrecio, fmtFecha } from '@/lib/format'
 import { formatDateForSheet } from '@/lib/dates'
 import { parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
-import { anforaPremiumIncluida, servicioIncluyeAnforaPremium } from '@/lib/anforas-premium'
+import { anforaPremiumIncluida, servicioIncluyeAnforaPremium, repartirAnforasPremium } from '@/lib/anforas-premium'
 import { aplicaReglaAuto } from '@/lib/adicionales-auto'
 import { esAdmin } from '@/lib/roles'
 
@@ -655,12 +655,13 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     : null
 
   const vetSeleccionada = veterinarias.find(v => v.id === cliente.veterinaria_id)
-  // Cremación Premium (CP) incluye sin costo cualquier ánfora premium: su línea
-  // suma $0 (igual descuenta stock). Se resuelve por la categoría del producto.
-  const adicionalIncluido = (a: AdicionalItem) =>
-    a.tipo === 'producto' &&
-    anforaPremiumIncluida(form.codigo_servicio, productosDisp.find(p => p.id === a.id)?.categoria)
-  const totalAdicionales = adicionales.reduce((sum, a) => sum + (adicionalIncluido(a) ? 0 : a.precio * a.qty), 0)
+  // Cremación Premium (CP) incluye UNA ánfora premium sin costo; las adicionales
+  // se cobran. `repartoAdic` va alineado 1:1 con `adicionales`.
+  const repartoAdic = repartirAnforasPremium(
+    form.codigo_servicio, adicionales,
+    new Map(productosDisp.map(p => [String(p.id), String(p.categoria ?? '')])),
+  )
+  const totalAdicionales = repartoAdic.reduce((sum, r) => sum + Math.max(0, r.item.precio) * r.qtyCobrable, 0)
 
   // Resolver tabla de precios según tipo_precios del formulario
   const tablaPrecios: Tramo[] = form.tipo_precios === 'especial'
@@ -1721,17 +1722,23 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           {adicionales.length > 0 && (
             <>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">Adicionales</p>
-              {adicionales.map(a => (
+              {adicionales.map((a, i) => {
+                const r = repartoAdic[i]
+                const monto = Math.max(0, a.precio) * r.qtyCobrable
+                return (
                 <div key={`${a.tipo}-${a.id}`} className="flex items-center justify-between py-1">
                   <p className="text-sm text-gray-700">
                     {a.nombre}
                     {a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
                   </p>
-                  {adicionalIncluido(a)
+                  {r.qtyIncluida > 0 && r.qtyCobrable === 0
                     ? <p className="text-sm font-medium text-emerald-600">Incluida</p>
-                    : <p className="text-sm text-gray-700">{fmtPrecio(a.precio * a.qty)}</p>}
+                    : r.qtyIncluida > 0
+                      ? <p className="text-sm text-gray-700"><span className="font-medium text-emerald-600">{r.qtyIncluida} incluida</span> · {fmtPrecio(monto)}</p>
+                      : <p className="text-sm text-gray-700">{fmtPrecio(monto)}</p>}
                 </div>
-              ))}
+                )
+              })}
               <div className="flex items-center justify-between py-1 border-t border-gray-300 pt-2">
                 <p className="text-xs text-gray-500">Subtotal adicionales</p>
                 <p className="text-sm font-medium text-gray-700">{fmtPrecio(totalAdicionales)}</p>

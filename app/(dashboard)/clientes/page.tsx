@@ -8,7 +8,7 @@ import { fmtKg, fmtPrecio, fmtFecha } from '@/lib/format'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseDecimal, parsePeso } from '@/lib/numbers'
 import { findTramo } from '@/lib/tramos'
-import { anforaPremiumIncluida, servicioIncluyeAnforaPremium } from '@/lib/anforas-premium'
+import { anforaPremiumIncluida, servicioIncluyeAnforaPremium, repartirAnforasPremium } from '@/lib/anforas-premium'
 import { aplicaReglaAuto, etiquetaRegla } from '@/lib/adicionales-auto'
 
 type Cliente = {
@@ -559,12 +559,13 @@ export default function ClientesPage() {
     }
   }
 
-  // Cremación Premium (CP) incluye sin costo cualquier ánfora premium: su línea
-  // suma $0 (igual descuenta stock). Se resuelve por la categoría del producto.
-  const adicionalIncluido = (a: AdicionalItem) =>
-    a.tipo === 'producto' &&
-    anforaPremiumIncluida(form.codigo_servicio, productosDisp.find(p => p.id === a.id)?.categoria)
-  const totalAdicionales = adicionales.reduce((sum, a) => sum + (adicionalIncluido(a) ? 0 : a.precio * a.qty), 0)
+  // Cremación Premium (CP) incluye UNA ánfora premium sin costo; las adicionales
+  // se cobran. `repartoAdic` va alineado 1:1 con `adicionales`.
+  const repartoAdic = repartirAnforasPremium(
+    form.codigo_servicio, adicionales,
+    new Map(productosDisp.map(p => [String(p.id), String(p.categoria ?? '')])),
+  )
+  const totalAdicionales = repartoAdic.reduce((sum, r) => sum + Math.max(0, r.item.precio) * r.qtyCobrable, 0)
 
   // Resumen del servicio para la tarjeta de la lista: servicio + adicionales
   // (con "Incluido" para el ánfora premium de una Cremación Premium) + total.
@@ -579,10 +580,17 @@ export default function ClientesPage() {
     ]
     let items: AdicionalItem[] = []
     try { const arr = JSON.parse(c.adicionales || '[]'); if (Array.isArray(arr)) items = arr } catch { /* sin adicionales */ }
-    for (const a of items) {
-      const incluido = a.tipo === 'producto' && anforaPremiumIncluida(cs, productosDisp.find(p => p.id === a.id)?.categoria)
-      lineas.push({ nombre: `${a.nombre}${a.qty > 1 ? ` ×${a.qty}` : ''}`, valor: incluido ? 'Incluido' : fmtPrecio(a.precio * a.qty) })
-    }
+    const catMap = new Map(productosDisp.map(p => [String(p.id), String(p.categoria ?? '')]))
+    const repC = repartirAnforasPremium(cs, items, catMap)
+    items.forEach((a, k) => {
+      const r = repC[k]
+      const monto = Math.max(0, a.precio) * r.qtyCobrable
+      const incluidaTotal = r.qtyIncluida > 0 && r.qtyCobrable === 0
+      const valor = incluidaTotal ? 'Incluido'
+        : r.qtyIncluida > 0 ? `${r.qtyIncluida} incluida · ${fmtPrecio(monto)}`
+        : fmtPrecio(monto)
+      lineas.push({ nombre: `${a.nombre}${a.qty > 1 ? ` ×${a.qty}` : ''}`, valor, verde: incluidaTotal })
+    })
     const desc = intCLP(c.descuento_monto)
     if (desc > 0) lineas.push({ nombre: `Descuento${c.descuento_nombre ? ` (${c.descuento_nombre})` : ''}`, valor: `−${fmtPrecio(desc)}`, verde: true })
     // Eutanasia a domicilio asociada: se COBRA junto al retiro (el Total pasa a
@@ -937,11 +945,16 @@ export default function ClientesPage() {
               let items: AdicionalItem[] = []
               try { items = JSON.parse(selected.adicionales || '[]') } catch {}
               if (!Array.isArray(items) || items.length === 0) return null
-              // Ánforas premium incluidas (Cremación Premium) → su línea vale $0.
-              const incluido = (a: AdicionalItem) =>
-                a.tipo === 'producto' &&
-                anforaPremiumIncluida(selected.codigo_servicio, productosDisp.find(p => p.id === a.id)?.categoria)
-              const total = items.reduce((s, a) => s + (incluido(a) ? 0 : (a.precio || 0) * (a.qty || 1)), 0)
+              // CP incluye UNA ánfora premium; las adicionales se cobran.
+              const catMap = new Map(productosDisp.map(p => [String(p.id), String(p.categoria ?? '')]))
+              const repByItem = new Map(repartirAnforasPremium(selected.codigo_servicio, items, catMap).map(r => [r.item, r]))
+              const lineaAdic = (a: AdicionalItem) => {
+                const r = repByItem.get(a)
+                const qtyCobrable = r ? r.qtyCobrable : (a.qty || 1)
+                const qtyIncluida = r ? r.qtyIncluida : 0
+                return { incluidaTotal: qtyIncluida > 0 && qtyCobrable === 0, qtyIncluida, monto: Math.max(0, a.precio || 0) * qtyCobrable }
+              }
+              const total = items.reduce((s, a) => s + lineaAdic(a).monto, 0)
               const productos = items.filter(a => a.tipo === 'producto')
               const servicios = items.filter(a => a.tipo === 'servicio')
               return (
@@ -961,9 +974,11 @@ export default function ClientesPage() {
                             <span className="text-gray-800">
                               {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
                             </span>
-                            {incluido(a)
+                            {(() => { const L = lineaAdic(a); return L.incluidaTotal
                               ? <span className="font-medium text-emerald-600">Incluida</span>
-                              : <span className="text-gray-700">{fmtPrecio(a.precio * (a.qty || 1))}</span>}
+                              : L.qtyIncluida > 0
+                                ? <span className="text-gray-700"><span className="font-medium text-emerald-600">{L.qtyIncluida} incluida</span> · {fmtPrecio(L.monto)}</span>
+                                : <span className="text-gray-700">{fmtPrecio(L.monto)}</span> })()}
                           </div>
                         ))}
                       </div>
@@ -1384,16 +1399,22 @@ export default function ClientesPage() {
               {adicionales.length > 0 && (
                 <div className="border-t border-gray-300 pt-2 space-y-1">
                   <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Adicionales</p>
-                  {adicionales.map(a => (
+                  {adicionales.map((a, i) => {
+                    const r = repartoAdic[i]
+                    const monto = Math.max(0, a.precio) * r.qtyCobrable
+                    return (
                     <div key={`${a.tipo}-${a.id}`} className="flex items-center justify-between text-sm">
                       <span className="text-gray-700">
                         {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
                       </span>
-                      {adicionalIncluido(a)
+                      {r.qtyIncluida > 0 && r.qtyCobrable === 0
                         ? <span className="font-medium text-emerald-600">Incluida</span>
-                        : <span className="text-gray-700">{fmtPrecio(a.precio * a.qty)}</span>}
+                        : r.qtyIncluida > 0
+                          ? <span className="text-gray-700"><span className="font-medium text-emerald-600">{r.qtyIncluida} incluida</span> · {fmtPrecio(monto)}</span>
+                          : <span className="text-gray-700">{fmtPrecio(monto)}</span>}
                     </div>
-                  ))}
+                    )
+                  })}
                   <div className="flex items-center justify-between pt-1 border-t border-gray-300">
                     <span className="text-xs text-gray-500">Subtotal adicionales</span>
                     <span className="text-sm font-medium text-gray-700">{fmtPrecio(totalAdicionales)}</span>
@@ -1496,19 +1517,27 @@ export default function ClientesPage() {
                   </div>
                 </div>
 
-                {fichaCreada.adicionales.length > 0 && (
+                {fichaCreada.adicionales.length > 0 && (() => {
+                  const repFC = repartirAnforasPremium(
+                    fichaCreada.codigo_servicio, fichaCreada.adicionales,
+                    new Map(productosDisp.map(p => [String(p.id), String(p.categoria ?? '')])),
+                  )
+                  return (
                   <div className="border-t border-gray-300 pt-2 space-y-1">
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Adicionales</p>
-                    {fichaCreada.adicionales.map(a => {
-                      const incl = a.tipo === 'producto' && anforaPremiumIncluida(fichaCreada.codigo_servicio, productosDisp.find(p => p.id === a.id)?.categoria)
+                    {fichaCreada.adicionales.map((a, i) => {
+                      const r = repFC[i]
+                      const monto = Math.max(0, a.precio) * r.qtyCobrable
                       return (
                         <div key={`${a.tipo}-${a.id}`} className="flex items-center justify-between text-sm">
                           <span className="text-gray-700">
                             {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
                           </span>
-                          {incl
+                          {r.qtyIncluida > 0 && r.qtyCobrable === 0
                             ? <span className="font-medium text-emerald-600">Incluida</span>
-                            : <span className="text-gray-700">{fmtPrecio(a.precio * a.qty)}</span>}
+                            : r.qtyIncluida > 0
+                              ? <span className="text-gray-700"><span className="font-medium text-emerald-600">{r.qtyIncluida} incluida</span> · {fmtPrecio(monto)}</span>
+                              : <span className="text-gray-700">{fmtPrecio(monto)}</span>}
                         </div>
                       )
                     })}
@@ -1517,7 +1546,8 @@ export default function ClientesPage() {
                       <span className="text-sm font-medium text-gray-700">{fmtPrecio(fichaCreada.total_adicionales)}</span>
                     </div>
                   </div>
-                )}
+                  )
+                })()}
 
                 {fichaCreada.descuento_monto > 0 && (
                   <div className="flex items-center justify-between border-t border-gray-300 pt-2 text-sm">
