@@ -9,6 +9,7 @@ import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseDecimal, parsePeso } from '@/lib/numbers'
 import { findTramo } from '@/lib/tramos'
 import { anforaPremiumIncluida, servicioIncluyeAnforaPremium, repartirAnforasPremium } from '@/lib/anforas-premium'
+import { esComunaNoCubierta } from '@/lib/cobertura'
 import { aplicaReglaAuto, etiquetaRegla } from '@/lib/adicionales-auto'
 
 type Cliente = {
@@ -1061,6 +1062,9 @@ export default function ClientesPage() {
               <label className="text-xs font-semibold text-gray-700">Comuna <span className="text-red-500">*</span></label>
               <input required value={agendaForm.comuna} onChange={e => setAgendaForm(f => ({ ...f, comuna: e.target.value }))}
                 className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              {esComunaNoCubierta(agendaForm.comuna) && (
+                <p className="mt-1 text-xs text-amber-700">⚠️ Fuera de cobertura de retiro a domicilio.</p>
+              )}
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-700">Peso (kg)</label>
@@ -1126,6 +1130,11 @@ export default function ClientesPage() {
             <ModalField required type="date" label="Fecha de retiro" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
             <ModalField type="time" label="Hora de retiro" value={form.hora_retiro} onChange={v => setForm(f => ({ ...f, hora_retiro: v }))} />
           </div>
+          {esComunaNoCubierta(form.comuna) && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              ⚠️ <strong>{form.comuna}</strong> está fuera de nuestra cobertura de retiro a domicilio. Puedes registrar la ficha igual (por ejemplo si la mascota se acerca a Recoleta), pero ahí no coordinamos retiro.
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>

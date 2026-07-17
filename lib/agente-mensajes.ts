@@ -6,6 +6,7 @@ import { listarImagenesWhatsapp, type ImagenBanco } from './mailing-images'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS, ENTREGA_DIAS } from './diferenciadores'
 import { EXPRESS_DIAS } from './dias-habiles'
 import { comunasDeServicio } from './adicionales-auto'
+import { COMUNAS_NO_CUBIERTAS } from './cobertura'
 import { esFeriado, nombreFeriado } from './feriados'
 
 /**
@@ -173,10 +174,13 @@ async function bloqueRecargos(): Promise<string> {
         lineas.push(`- POR DISTANCIA: +${fmtPrecio(parseInt(dist.precio, 10) || 0)} cuando el retiro es en alguna de estas comunas: ${comunas.join(', ')}.`)
       }
     }
-    if (lineas.length === 0) return ''
+    const cobertura = `ZONAS FUERA DE COBERTURA (regla dura): NO damos retiro ni atención a domicilio en estas comunas: ${COMUNAS_NO_CUBIERTAS.join(', ')}. Si el cliente está en una de ellas, DÍSELO apenas te dé la comuna —con amabilidad, que lamentablemente no llegamos hasta ahí— y NO agendes retiro ni eutanasia. Ofrécele las alternativas: acercar a su mascota a nuestras instalaciones en Recoleta, o derivarlo al equipo por si hay alguna opción. Esto es distinto del recargo por distancia (esas comunas SÍ tienen cobertura, solo pagan el adicional).`
+    if (lineas.length === 0) return cobertura
     return `RECARGOS AUTOMÁTICOS (se SUMAN al valor de la cremación; los descuentos de convenio NO los rebajan; avísalos con naturalidad al cotizar y SIEMPRE antes de agendar):
 ${lineas.join('\n')}
-Si aplican ambos, se suman los dos. Estos montos son los vigentes: no uses otros.`
+Si aplican ambos, se suman los dos. Estos montos son los vigentes: no uses otros.
+
+${cobertura}`
   } catch (e) {
     console.warn('[agente] no se pudieron leer recargos:', e)
     return ''

@@ -12,6 +12,7 @@ import { capitalizarNombre } from './nombres'
 import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional } from './cobros'
 import { repartirAnforasPremium } from './anforas-premium'
+import { esComunaNoCubierta } from './cobertura'
 import { ajustarStockAdicionales } from './stock'
 import { generarCatalogoPdf } from './catalogo-generator'
 import { uploadToR2 } from './cloudflare-r2'
@@ -75,6 +76,9 @@ const COLS_RETIRO = [
 async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string> {
   a.nombre_tutor = capitalizarNombre(a.nombre_tutor)
   a.nombre_mascota = capitalizarNombre(a.nombre_mascota)
+  if (esComunaNoCubierta(a.comuna)) {
+    return `NO registres este retiro: ${a.comuna} está FUERA de nuestra cobertura de retiro a domicilio. Explícaselo al cliente con amabilidad —lamentablemente no llegamos con retiro hasta esa comuna— y ofrécele las alternativas: puede acercar a su mascota a nuestras instalaciones en Recoleta, o lo derivamos al equipo para ver si hay alguna opción. NO agendes.`
+  }
   if (!(await direccionValida(a.direccion, a.comuna))) {
     return `No pude validar la dirección "${a.direccion}, ${a.comuna}". Pídele al cliente que la confirme o la corrija (calle y número) y vuelve a registrarla. NO la registres aún.`
   }
@@ -346,6 +350,9 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
   const peso = Number(a.peso)
   if (!Number.isFinite(peso) || peso <= 0) {
     return 'Falta el peso de la mascota para agendar la eutanasia. Pídeselo al cliente.'
+  }
+  if (esComunaNoCubierta(a.comuna)) {
+    return `NO agendes esta eutanasia: ${a.comuna} está FUERA de nuestra cobertura de atención a domicilio. Explícaselo al cliente con amabilidad —lamentablemente no llegamos hasta esa comuna— y ofrécele derivarlo al equipo por si hay alguna alternativa. NO agendes.`
   }
   if (!(await direccionValida(a.direccion, a.comuna))) {
     return `No pude validar la dirección "${a.direccion}, ${a.comuna}". Pídele al cliente que la confirme o la corrija (calle y número) y vuelve a agendar. NO la agendes aún.`
