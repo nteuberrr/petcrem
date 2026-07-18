@@ -160,7 +160,7 @@ export function ColeccionEditor({
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-8" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="font-bold text-brand">{form.id ? 'Editar' : nuevoLabel}</h3>
-              <button onClick={() => setForm(null)} className="text-gray-400 hover:text-gray-700 text-xl">×</button>
+              <button onClick={() => setForm(null)} aria-label="Cerrar" className="text-gray-400 hover:text-gray-700 text-xl">×</button>
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
               {campos.map(c => {

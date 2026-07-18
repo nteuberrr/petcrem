@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { fmtPrecio, fmtNumero as fmtNum, fmtLitros, fmtFecha } from '@/lib/format'
+import { CHART_PALETTE, CHART } from '@/lib/chart-colors'
 import { formatHora } from '@/lib/dates'
 import { formatDateForSheet } from '@/lib/dates'
 import {
@@ -58,7 +59,7 @@ type JornadaCfg = { id: string; vigente_desde: string; hora_entrada: string; hor
 const TABS = ['Mensual', 'Ingresos', 'Configuraciones', 'Veterinarios', 'Asistencia', 'Retiros'] as const
 type Tab = typeof TABS[number]
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-const CHART_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6', '#f43f5e', '#0ea5e9']
+const CHART_COLORS = CHART_PALETTE
 
 type IngresoBucket = { mes_key: string; mes_label: string; ingresos: number; cantidad: number }
 type IngresoSlice = { ingresos: number; cantidad: number }
@@ -1154,7 +1155,7 @@ function IngresosTab({
                   <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => fmtPrecioCorto(v as number)} />
                   <Tooltip formatter={(v) => fmtPrecio(v as number)} />
                   <Legend />
-                  <Bar name="Ingresos" dataKey="ingresos" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  <Bar name="Ingresos" dataKey="ingresos" fill={CHART.navy} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}

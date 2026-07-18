@@ -896,7 +896,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     {/* Cabecera (solo móvil): deja claro que es un panel cerrable */}
                     <div className="flex items-center justify-between px-3 py-2 border-b border-gray-300 sm:hidden">
                       <span className="text-sm font-bold text-gray-800">Documentos</span>
-                      <button onClick={() => setDocsOpen(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none px-1">×</button>
+                      <button onClick={() => setDocsOpen(false)} aria-label="Cerrar" className="text-gray-400 hover:text-gray-600 text-2xl leading-none px-1">×</button>
                     </div>
                     {/* Certificados */}
                     <p className="px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Certificados</p>
@@ -1291,6 +1291,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                         type="button"
                         onClick={() => eliminarFotoEvidencia(url)}
                         title="Eliminar"
+                        aria-label="Quitar"
                         className="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full w-4 h-4 grid place-items-center text-[10px] leading-none"
                       >×</button>
                     </div>

@@ -1,6 +1,7 @@
 'use client'
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import { fmtLitros, fmtNumero, fmtKg, fmtFecha, fmtPrecio } from '@/lib/format'
+import { CHART } from '@/lib/chart-colors'
 import { todayISO, formatHora, horaToMinutos, formatDateForSheet } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
 import VehiculoTab from '@/components/VehiculoTab'
@@ -452,7 +453,7 @@ export default function OperacionesPage() {
                       <span className="ml-2 text-sm text-gray-900 font-medium">{c.nombre_mascota}</span>
                       <span className="ml-2 text-xs text-gray-500">· {c.especie} · {fmtKg(c.peso_ingreso || c.peso_declarado || "0")}</span>
                     </div>
-                    <button type="button" onClick={() => quitar(c.id)}
+                    <button type="button" onClick={() => quitar(c.id)} aria-label="Quitar"
                       className="text-red-400 hover:text-red-600 text-xl leading-none w-6 h-6 flex items-center justify-center">×</button>
                   </div>
                 ))}
@@ -809,7 +810,7 @@ export default function OperacionesPage() {
                     <YAxis fontSize={11} tick={{ fill: '#6b7280' }}
                       tickFormatter={v => `$${Math.round(v as number)}`} />
                     <Tooltip formatter={(v) => fmtPrecio(v as number)} />
-                    <Line type="monotone" dataKey="costo_litro" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="costo_litro" stroke={CHART.navy} strokeWidth={2} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
               )}

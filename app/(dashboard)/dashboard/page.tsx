@@ -11,6 +11,7 @@ import SolicitudesPendientes from '@/components/SolicitudesPendientes'
 import AgendaSemanal from '@/components/AgendaSemanal'
 import { Modal } from '@/components/ui/Modal'
 import { esAdmin } from '@/lib/roles'
+import { CHART_PALETTE, CHART } from '@/lib/chart-colors'
 
 type RatioKey = 'litros_por_mascota' | 'litros_por_ciclo' | 'costo_vehiculo_por_mascota' | 'duracion_promedio_ciclo_min'
 type RatioMensual = { mes: string; litros_por_mascota: number; litros_por_ciclo: number; costo_vehiculo_por_mascota: number; duracion_promedio_ciclo_min: number }
@@ -33,7 +34,7 @@ type Data = {
   por_especie: Array<{ especie: string; count: number }>
 }
 
-const COLORS = ['#143C64', '#F2B84B', '#2A6DB0', '#10b981', '#ec4899', '#f59e0b', '#8b5cf6', '#14b8a6']
+const COLORS = CHART_PALETTE
 
 export default function DashboardPage() {
   const { data: session } = useSession()
@@ -126,7 +127,7 @@ export default function DashboardPage() {
               {k.icon}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-lg sm:text-xl font-bold text-gray-900 truncate">{k.value}</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900 truncate tabular-nums">{k.value}</p>
               <p className="text-xs text-gray-600 mt-0.5 truncate">{k.label}</p>
               {k.alert && <p className="text-xs text-red-600 mt-0.5 font-medium">⚠ Stock bajo</p>}
             </div>
@@ -145,7 +146,7 @@ export default function DashboardPage() {
                   {k.icon}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-lg sm:text-xl font-bold text-gray-900 truncate">{k.value}</p>
+                  <p className="text-lg sm:text-xl font-bold text-gray-900 truncate tabular-nums">{k.value}</p>
                   <p className="text-xs text-gray-600 mt-0.5 truncate">{k.label}</p>
                 </div>
               </div>
@@ -165,7 +166,7 @@ export default function DashboardPage() {
                 <p className="text-xs font-semibold text-gray-600">{r.label}</p>
                 <span className="text-xs text-brand-soft">📈</span>
               </div>
-              <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{r.value}</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1 tabular-nums">{r.value}</p>
               <p className="text-xs text-gray-600 mt-1 leading-tight">{r.sub}</p>
             </button>
           ))}
@@ -176,6 +177,9 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         {/* Mascotas ingresadas por mes (driver: fecha de retiro) */}
         <ChartCard title="Mascotas ingresadas por mes">
+          {data.ventas_por_mes.length === 0 ? (
+            <EmptyChart label="Sin mascotas registradas aún" />
+          ) : (
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={data.ventas_por_mes} margin={{ bottom: 20, right: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -183,13 +187,17 @@ export default function DashboardPage() {
                 interval={0} angle={-35} textAnchor="end" height={52} />
               <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => fmtNumero(v as number)} />
               <Tooltip formatter={(v) => fmtNumero(v as number)} />
-              <Bar dataKey="mascotas" fill="#10b981" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="mascotas" fill={CHART.green} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          )}
         </ChartCard>
 
         {/* Ciclos por mes (driver: fecha del ciclo) */}
         <ChartCard title="Ciclos por mes">
+          {data.ventas_por_mes.length === 0 ? (
+            <EmptyChart label="Sin ciclos registrados aún" />
+          ) : (
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={data.ventas_por_mes} margin={{ bottom: 20, right: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -197,13 +205,17 @@ export default function DashboardPage() {
                 interval={0} angle={-35} textAnchor="end" height={52} />
               <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => fmtNumero(v as number)} />
               <Tooltip formatter={(v) => fmtNumero(v as number)} />
-              <Bar dataKey="ciclos" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="ciclos" fill={CHART.amber} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          )}
         </ChartCard>
 
         {/* Top servicios — leyenda al costado y gráfico centrado */}
         <ChartCard title="Tipos de servicio contratados">
+          {data.top_servicios.length === 0 ? (
+            <EmptyChart label="Sin servicios contratados aún" />
+          ) : (
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie data={data.top_servicios} dataKey="count" nameKey="codigo"
@@ -216,10 +228,14 @@ export default function DashboardPage() {
                 wrapperStyle={{ fontSize: '12px', paddingLeft: '8px' }} />
             </PieChart>
           </ResponsiveContainer>
+          )}
         </ChartCard>
 
         {/* Por especie — leyenda al costado y gráfico centrado */}
         <ChartCard title="Mascotas por especie">
+          {data.por_especie.length === 0 ? (
+            <EmptyChart label="Sin datos de especie aún" />
+          ) : (
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie data={data.por_especie} dataKey="count" nameKey="especie"
@@ -232,6 +248,7 @@ export default function DashboardPage() {
                 wrapperStyle={{ fontSize: '12px', paddingLeft: '8px' }} />
             </PieChart>
           </ResponsiveContainer>
+          )}
         </ChartCard>
 
         {/* Ventas por veterinaria (solo admin) */}

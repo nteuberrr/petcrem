@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PageHeader, Card, Button, Tabs } from '@/components/ui/kit'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import { fmtPrecio, fmtFecha, fmtKg } from '@/lib/format'
 import ManualModal from '@/components/facturacion/ManualModal'
 import FacturarVetsModal from '@/components/facturacion/FacturarVetsModal'
@@ -196,7 +197,7 @@ function BoletasTab() {
     <div className="space-y-5">
       <FiltrosFecha desde={desde} hasta={hasta} q={q} setDesde={setDesde} setHasta={setHasta} setQ={setQ} />
       <Card className="p-0 overflow-hidden">
-        {loading ? <p className="p-8 text-center text-sm text-gray-400">Cargando…</p>
+        {loading ? <TableSkeleton rows={8} />
         : err ? <p className="p-4 text-sm text-red-700 bg-red-50">{err}</p>
         : ventas.length === 0 ? <p className="p-8 text-center text-sm text-gray-400">Sin ventas de tutor en este período.</p>
         : (
@@ -351,7 +352,7 @@ function FacturasTab({ onAbrirLote }: { onAbrirLote: () => void }) {
       </Card>
 
       <Card className="p-0 overflow-hidden">
-        {loading ? <p className="p-8 text-center text-sm text-gray-400">Cargando…</p>
+        {loading ? <TableSkeleton rows={8} />
         : err ? <p className="p-4 text-sm text-red-700 bg-red-50">{err}</p>
         : visibles.length === 0 ? <p className="p-8 text-center text-sm text-gray-400">Sin ventas de convenio para este filtro.</p>
         : (
@@ -461,7 +462,7 @@ function NotasCreditoTab() {
     <div className="space-y-5">
       <FiltrosFecha desde={desde} hasta={hasta} q={q} setDesde={setDesde} setHasta={setHasta} setQ={setQ} />
       <Card className="p-0 overflow-hidden">
-        {loading ? <p className="p-8 text-center text-sm text-gray-400">Cargando…</p>
+        {loading ? <TableSkeleton rows={8} />
         : err ? <p className="p-4 text-sm text-red-700 bg-red-50">{err}</p>
         : docs.length === 0 ? <p className="p-8 text-center text-sm text-gray-400">Sin notas de crédito.</p>
         : (

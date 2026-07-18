@@ -131,7 +131,7 @@ export default function WaCoexistencePage() {
       </ol>
 
       <button type="button" onClick={conectar} disabled={!sdkListo || estado === 'lanzando' || estado === 'procesando'}
-        className="bg-[#143C64] hover:bg-[#0f2e4d] text-white rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
+        className="bg-brand hover:bg-brand-dark text-white rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
         {estado === 'procesando' ? 'Procesando…' : estado === 'lanzando' ? 'Abriendo Meta…' : 'Conectar con WhatsApp Business'}
       </button>
 

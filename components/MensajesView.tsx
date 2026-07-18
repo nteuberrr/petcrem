@@ -224,7 +224,7 @@ export default function MensajesView() {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-4 h-[calc(100vh-180px)]">
+    <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-4 h-[calc(100dvh-180px)]">
       {/* Lista — en móvil se oculta cuando hay una conversación abierta */}
       <div className={`bg-white rounded-xl border border-gray-300 shadow-md flex-col overflow-hidden ${sel !== null ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-3 border-b border-gray-300 space-y-2">

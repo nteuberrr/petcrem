@@ -197,7 +197,7 @@ export default function RegistroMascotaPage() {
 
       <main className="max-w-3xl mx-auto px-4 py-8 sm:py-10">
         {error && (
-          <div className="mb-6 p-4 rounded-lg border bg-red-50 border-red-200 text-red-800 text-sm">
+          <div role="alert" className="mb-6 p-4 rounded-lg border bg-red-50 border-red-200 text-red-800 text-sm">
             {error}
           </div>
         )}

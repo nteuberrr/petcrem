@@ -134,7 +134,7 @@ export default function ManualModal({ onClose, onEmitido }: Props) {
                     className="w-16 border-2 border-gray-300 rounded-lg px-2 py-2 text-sm text-center" />
                   <input value={l.montoBruto} onChange={e => actualizarLinea(i, 'montoBruto', e.target.value.replace(/[^\d]/g, ''))} placeholder="Monto (IVA incl.)"
                     className="w-32 border-2 border-gray-300 rounded-lg px-2 py-2 text-sm text-right" />
-                  <button onClick={() => quitarLinea(i)} disabled={lineas.length === 1} className="text-gray-400 hover:text-red-600 disabled:opacity-30 px-1">✕</button>
+                  <button onClick={() => quitarLinea(i)} disabled={lineas.length === 1} aria-label="Quitar línea" className="text-gray-400 hover:text-red-600 disabled:opacity-30 px-1">✕</button>
                 </div>
               ))}
             </div>

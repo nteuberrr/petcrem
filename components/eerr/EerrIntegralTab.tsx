@@ -222,7 +222,7 @@ function MovimientosPanel({ drill, onClose }: { drill: Drill; onClose: () => voi
               <h3 className="font-bold text-gray-900">{drill.nombre}</h3>
               <p className="text-xs text-gray-500 mt-0.5">{todos ? 'Todos los períodos' : drill.label} · {filt.length} movimiento(s) · <strong className="text-gray-700">{fmtPrecio(total)}</strong></p>
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
+            <button onClick={onClose} aria-label="Cerrar" className="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
           </div>
           <div className="flex flex-wrap items-center gap-2 mt-3">
             <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar detalle, proveedor, doc…" className="border border-gray-300 rounded px-2 py-1.5 text-sm w-52" />

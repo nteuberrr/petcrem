@@ -29,7 +29,9 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Geist (cargada en app/layout.tsx vía next/font) con Arial de fallback. Antes
+     esta línea fijaba Arial directo y pisaba la Geist que ya se descargaba. */
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
 /* Contraste global: bordes + sombras más definidos por defecto */
@@ -55,5 +57,19 @@ textarea:focus {
     overflow-x: auto;
     white-space: nowrap;
     -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Accesibilidad (WCAG 2.3.3): si el usuario pidió menos movimiento en su sistema,
+   neutralizamos animaciones/transiciones en toda la app (transiciones de hover,
+   spinners, etc.) sin tener que tocar cada componente. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

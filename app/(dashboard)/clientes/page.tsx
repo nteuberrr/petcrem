@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtKg, fmtPrecio, fmtFecha } from '@/lib/format'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
@@ -811,7 +812,7 @@ export default function ClientesPage() {
 
       {/* Cards de resultados */}
       {loading ? (
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-12 text-center text-gray-500 text-sm">Cargando...</div>
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300"><TableSkeleton rows={8} /></div>
       ) : resultados.length === 0 ? (
         <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-12 text-center text-gray-500 text-sm">
           Sin resultados para tu búsqueda o filtro.

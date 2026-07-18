@@ -495,7 +495,7 @@ export default function CorreosConfig() {
                 >
                   {reenviando === verMeta.id ? '⌛ Enviando…' : '↪ Reenviar'}
                 </button>
-                <button onClick={() => setVerMeta(null)} className="text-gray-400 hover:text-gray-700 text-xl leading-none">✕</button>
+                <button onClick={() => setVerMeta(null)} aria-label="Cerrar" className="text-gray-400 hover:text-gray-700 text-xl leading-none">✕</button>
               </div>
             </div>
             <div className="flex-1 p-3 overflow-auto bg-gray-50">

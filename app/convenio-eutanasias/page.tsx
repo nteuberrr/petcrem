@@ -201,7 +201,7 @@ export default function ConvenioEutanasiasPage() {
 
           {/* Banner inline solo para errores. El éxito se muestra en pop-up. */}
           {resultado && resultado.tipo === 'error' && (
-            <div className="mb-6 p-4 rounded-lg border bg-red-50 border-red-200 text-red-800">
+            <div role="alert" className="mb-6 p-4 rounded-lg border bg-red-50 border-red-200 text-red-800">
               {resultado.mensaje}
             </div>
           )}
@@ -424,14 +424,16 @@ function Card({ num, titulo, children }: { num: string; titulo: string; children
 }
 
 function FormField({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
+  // El input va DENTRO del <label> → asociación implícita (accesible + amplía el
+  // área de clic) sin tener que pasar id/htmlFor por cada campo.
   return (
-    <div>
-      <label className="block text-sm font-medium text-gray-900 mb-1">
+    <label className="block">
+      <span className="block text-sm font-medium text-gray-900 mb-1">
         {label} {required && <span className="text-red-500">*</span>}
-      </label>
+      </span>
       {children}
-      {hint && <p className="text-xs text-gray-500 mt-1">{hint}</p>}
-    </div>
+      {hint && <span className="block text-xs text-gray-500 mt-1">{hint}</span>}
+    </label>
   )
 }
 

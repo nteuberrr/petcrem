@@ -171,7 +171,7 @@ export default function CampanasPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-extrabold text-[#143C64] tracking-tight">Campañas</h1>
+        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Campañas</h1>
         <p className="text-sm text-gray-500">Planificá con el agente, gestioná el mailing y el banco de imágenes desde un solo lugar.</p>
         <div className="flex gap-1.5 bg-white border border-gray-300 rounded-2xl p-2 shadow-md overflow-x-auto mt-3">
           {NAV.map(n => {
@@ -181,7 +181,7 @@ export default function CampanasPage() {
                 <button
                   onClick={() => setVista(n.key)}
                   className={`px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 ${
-                    active ? 'bg-[#143C64] text-white shadow-md' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    active ? 'bg-brand text-white shadow-md' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
                   <NavIcon k={n.key} className="w-6 h-6" />
@@ -192,7 +192,7 @@ export default function CampanasPage() {
                     onClick={() => setBancoParalelo(v => !v)}
                     title="Abrir el Banco en paralelo (ver los códigos de las imágenes sin salir del chat)"
                     className={`shrink-0 w-9 px-0 rounded-xl text-base transition-all flex items-center justify-center border ${
-                      bancoParalelo ? 'bg-[#143C64] text-white border-[#143C64]' : 'text-gray-500 border-gray-300 hover:bg-gray-50 hover:text-[#143C64]'
+                      bancoParalelo ? 'bg-brand text-white border-brand' : 'text-gray-500 border-gray-300 hover:bg-gray-50 hover:text-brand'
                     }`}
                   >⧉</button>
                 )}
@@ -210,9 +210,9 @@ export default function CampanasPage() {
       {/* Panel lateral "abrir en paralelo": el Banco compacto, sin bloquear el chat. */}
       {bancoParalelo && (
         <div className="fixed top-0 right-0 h-full w-full sm:w-[380px] z-40 bg-white border-l border-gray-300 shadow-2xl flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-[#143C64] text-white shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-300 bg-brand text-white shrink-0">
             <span className="font-semibold text-sm">🖼️ Banco en paralelo</span>
-            <button onClick={() => setBancoParalelo(false)} title="Cerrar" className="w-7 h-7 grid place-items-center rounded-lg hover:bg-white/15">✕</button>
+            <button onClick={() => setBancoParalelo(false)} title="Cerrar" aria-label="Cerrar" className="w-7 h-7 grid place-items-center rounded-lg hover:bg-white/15">✕</button>
           </div>
           <div className="flex-1 overflow-hidden">
             <BancoMiniPanel />
@@ -244,15 +244,15 @@ type CampAds = { id: string; nombre: string; status: string; effective_status: s
 
 const ESTADO_ADS: Record<string, { label: string; cls: string }> = {
   ACTIVE: { label: 'Activa', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  PAUSED: { label: 'Pausada', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
-  CAMPAIGN_PAUSED: { label: 'Pausada', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
-  ADSET_PAUSED: { label: 'Pausada (ad set)', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  PAUSED: { label: 'Pausada', cls: 'bg-gray-100 text-gray-600 border-gray-300' },
+  CAMPAIGN_PAUSED: { label: 'Pausada', cls: 'bg-gray-100 text-gray-600 border-gray-300' },
+  ADSET_PAUSED: { label: 'Pausada (ad set)', cls: 'bg-gray-100 text-gray-600 border-gray-300' },
   IN_PROCESS: { label: 'Procesando', cls: 'bg-amber-100 text-amber-800 border-amber-200' },
   PENDING_REVIEW: { label: 'En revisión', cls: 'bg-amber-100 text-amber-800 border-amber-200' },
   PENDING_BILLING_INFO: { label: 'Falta pago', cls: 'bg-red-100 text-red-800 border-red-200' },
   WITH_ISSUES: { label: 'Con problemas', cls: 'bg-red-100 text-red-800 border-red-200' },
   DISAPPROVED: { label: 'Rechazada', cls: 'bg-red-100 text-red-800 border-red-200' },
-  ARCHIVED: { label: 'Archivada', cls: 'bg-gray-100 text-gray-500 border-gray-200' },
+  ARCHIVED: { label: 'Archivada', cls: 'bg-gray-100 text-gray-500 border-gray-300' },
 }
 
 function GestionCampanas() {
@@ -310,13 +310,13 @@ function GestionCampanas() {
     setBusyId('')
   }
 
-  const badge = (c: CampAds) => ESTADO_ADS[c.effective_status] || { label: c.effective_status || c.status || '—', cls: 'bg-gray-100 text-gray-600 border-gray-200' }
+  const badge = (c: CampAds) => ESTADO_ADS[c.effective_status] || { label: c.effective_status || c.status || '—', cls: 'bg-gray-100 text-gray-600 border-gray-300' }
 
   return (
     <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Gestión de campañas (Meta Ads)</h3>
+          <h3 className="text-sm font-bold text-brand uppercase tracking-wide">Gestión de campañas (Meta Ads)</h3>
           <p className="text-xs text-gray-500 mt-0.5">Pausá o reactivá campañas y ajustá su presupuesto. Los cambios se aplican en Meta al instante.</p>
         </div>
         <button onClick={cargar} className="text-sm border-2 border-gray-300 rounded-lg px-3 py-1.5 font-semibold hover:bg-gray-50">Actualizar</button>
@@ -329,7 +329,7 @@ function GestionCampanas() {
       ) : !camps || camps.length === 0 ? (
         <p className="text-sm text-gray-400">No hay campañas en la cuenta.</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
+        <div className="overflow-x-auto rounded-xl border border-gray-300">
           <table className="w-full min-w-[720px] text-sm">
             <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
               <tr>
@@ -358,7 +358,7 @@ function GestionCampanas() {
                           <span className="text-gray-400">$</span>
                           <input value={editVal} onChange={e => setEditVal(e.target.value.replace(/\D/g, ''))}
                             className="w-24 border-2 border-gray-300 rounded-lg px-2 py-1 text-sm" autoFocus />
-                          <button disabled={busy} onClick={() => guardarPresupuesto(c)} className="text-xs font-semibold text-white bg-[#143C64] rounded-lg px-2.5 py-1 disabled:opacity-50">Guardar</button>
+                          <button disabled={busy} onClick={() => guardarPresupuesto(c)} className="text-xs font-semibold text-white bg-brand rounded-lg px-2.5 py-1 disabled:opacity-50">Guardar</button>
                           <button onClick={() => { setEditId(''); setEditVal('') }} className="text-xs text-gray-500 hover:underline">Cancelar</button>
                         </div>
                       ) : editable ? (
@@ -372,7 +372,7 @@ function GestionCampanas() {
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-end gap-2">
                         {editable && !editando && (
-                          <button disabled={busy} onClick={() => { setEditId(c.id); setEditVal(String(c.presupuesto_clp || '')) }} className="text-xs font-semibold text-[#143C64] border border-gray-300 rounded-lg px-2.5 py-1 hover:bg-gray-50 disabled:opacity-50">Presupuesto</button>
+                          <button disabled={busy} onClick={() => { setEditId(c.id); setEditVal(String(c.presupuesto_clp || '')) }} className="text-xs font-semibold text-brand border border-gray-300 rounded-lg px-2.5 py-1 hover:bg-gray-50 disabled:opacity-50">Presupuesto</button>
                         )}
                         {activa ? (
                           <button disabled={busy} onClick={() => cambiarEstado(c, 'pausar')} className="text-xs font-semibold text-amber-800 border border-amber-300 bg-amber-50 rounded-lg px-2.5 py-1 hover:bg-amber-100 disabled:opacity-50">Pausar</button>
@@ -411,8 +411,8 @@ type GoogleAdsResp = {
 
 const ESTADO_GOOGLE: Record<string, { label: string; cls: string }> = {
   ENABLED: { label: 'Activa', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  PAUSED: { label: 'Pausada', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
-  REMOVED: { label: 'Eliminada', cls: 'bg-gray-100 text-gray-500 border-gray-200' },
+  PAUSED: { label: 'Pausada', cls: 'bg-gray-100 text-gray-600 border-gray-300' },
+  REMOVED: { label: 'Eliminada', cls: 'bg-gray-100 text-gray-500 border-gray-300' },
 }
 
 // ── Auditoría de cuenta (Fase B) ──────────────────────────────────────────────
@@ -446,7 +446,7 @@ function AuditoriaGoogleAds() {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Auditoría de cuenta</p>
           <p className="text-[11px] text-gray-400">Revisa bidding, valores de conversión, anuncios, recursos, keywords e Impression Share contra las buenas prácticas.</p>
         </div>
-        <button disabled={loading} onClick={auditar} className="text-xs font-semibold text-white bg-[#143C64] rounded-lg px-3 py-1.5 hover:bg-[#0f2e4d] disabled:opacity-50 shrink-0">
+        <button disabled={loading} onClick={auditar} className="text-xs font-semibold text-white bg-brand rounded-lg px-3 py-1.5 hover:bg-brand-dark disabled:opacity-50 shrink-0">
           {loading ? 'Auditando…' : 'Auditar ahora'}
         </button>
       </div>
@@ -615,7 +615,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
 
   return (
     <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
-      <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Anuncios pagados (Google Ads)</h3>
+      <h3 className="text-sm font-bold text-brand uppercase tracking-wide">Anuncios pagados (Google Ads)</h3>
       {tokenVencido && (
         <div className="rounded-xl border-2 border-red-300 bg-red-50 p-3 text-sm text-red-800">
           <p className="font-semibold">⚠️ El acceso a Google Ads venció</p>
@@ -632,7 +632,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
           {comp && <p className="text-[11px] text-gray-400 -mb-1">Comparado con {comp.etiqueta}</p>}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {KPIS.map(k => (
-              <div key={k.l} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+              <div key={k.l} className="rounded-xl border border-gray-300 bg-gray-50 px-3 py-2">
                 <div className="text-[11px] text-gray-500">{k.l}</div>
                 <div className="flex items-baseline gap-1.5">
                   <div className="text-lg font-bold text-gray-900">{k.v}</div>
@@ -643,7 +643,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
           </div>
 
           {ads.campanas.length > 0 ? (
-            <div className="overflow-x-auto rounded-xl border border-gray-200">
+            <div className="overflow-x-auto rounded-xl border border-gray-300">
               <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                   <tr>
@@ -661,7 +661,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {ads.campanas.map(c => {
-                    const b = ESTADO_GOOGLE[c.status] || { label: c.status || '—', cls: 'bg-gray-100 text-gray-600 border-gray-200' }
+                    const b = ESTADO_GOOGLE[c.status] || { label: c.status || '—', cls: 'bg-gray-100 text-gray-600 border-gray-300' }
                     const g = gestionPorId.get(c.id)
                     const editando = editId === c.id
                     const busy = busyId === c.id
@@ -685,7 +685,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                             <div className="flex items-center gap-1.5">
                               <span className="text-gray-400">$</span>
                               <input value={editVal} onChange={e => setEditVal(e.target.value.replace(/\D/g, ''))} className="w-24 border-2 border-gray-300 rounded-lg px-2 py-1 text-sm" autoFocus />
-                              <button disabled={busy} onClick={() => guardarPresupuesto(c.id, c.nombre)} className="text-xs font-semibold text-white bg-[#143C64] rounded-lg px-2.5 py-1 disabled:opacity-50">Guardar</button>
+                              <button disabled={busy} onClick={() => guardarPresupuesto(c.id, c.nombre)} className="text-xs font-semibold text-white bg-brand rounded-lg px-2.5 py-1 disabled:opacity-50">Guardar</button>
                               <button onClick={() => { setEditId(''); setEditVal('') }} className="text-xs text-gray-500 hover:underline">Cancelar</button>
                             </div>
                           ) : g.compartido ? (
@@ -716,7 +716,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
           {data?.keywords && data.keywords.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Palabras clave (top {data.keywords.length} por gasto)</p>
-              <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <div className="overflow-x-auto rounded-xl border border-gray-300">
                 <table className="w-full min-w-[780px] text-sm">
                   <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                     <tr>
@@ -775,7 +775,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                 Términos de búsqueda reales (top {data.terminos.length} por gasto)
                 <span className="normal-case font-normal text-gray-400"> — lo que la gente escribió en Google; bloqueá los que no sirvan como negativa</span>
               </p>
-              <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <div className="overflow-x-auto rounded-xl border border-gray-300">
                 <table className="w-full min-w-[720px] text-sm">
                   <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                     <tr>
@@ -812,14 +812,14 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                 Listas de negativas compartidas
                 <span className="normal-case font-normal text-gray-400"> — aplican a TODAS las campañas de una vez</span>
               </p>
-              <button disabled={busyId === 'crear-lista-negativas'} onClick={crearListaUniversal} className="text-xs font-semibold text-white bg-[#143C64] rounded-lg px-3 py-1.5 hover:bg-[#0f2e4d] disabled:opacity-50 shrink-0">
+              <button disabled={busyId === 'crear-lista-negativas'} onClick={crearListaUniversal} className="text-xs font-semibold text-white bg-brand rounded-lg px-3 py-1.5 hover:bg-brand-dark disabled:opacity-50 shrink-0">
                 + Crear lista universal ES-CL
               </button>
             </div>
             {data?.listasNegativas && data.listasNegativas.length > 0 ? (
               <div className="space-y-2">
                 {data.listasNegativas.map(l => (
-                  <div key={l.resourceName} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+                  <div key={l.resourceName} className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
                     <div>
                       <p className="text-sm font-semibold text-gray-800">{l.nombre} <span className="font-normal text-gray-400">— {l.cantidadTerminos} términos</span></p>
                       <p className="text-xs text-gray-500">Campañas: {l.campanas.join(', ') || '(sin adjuntar a ninguna)'}</p>
@@ -894,14 +894,14 @@ function MetricasPanel() {
       ) : (
         <>
           <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
-            <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Anuncios pagados (Meta Ads)</h3>
+            <h3 className="text-sm font-bold text-brand uppercase tracking-wide">Anuncios pagados (Meta Ads)</h3>
             {data?.ads_error ? (
               <p className="text-sm text-gray-500">No se pudieron leer los Ads: {data.ads_error}</p>
             ) : ads ? (
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                   {KPIS.map(k => (
-                    <div key={k.l} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                    <div key={k.l} className="rounded-xl border border-gray-300 bg-gray-50 px-3 py-2">
                       <div className="text-[11px] text-gray-500">{k.l}</div>
                       <div className="text-lg font-bold text-gray-900">{k.v}</div>
                     </div>
@@ -911,7 +911,7 @@ function MetricasPanel() {
                   <p className="text-xs text-gray-500">Resultados: {ads.cuenta.acciones.map(a => `${a.tipo} (${fmt(a.valor)})`).join(' · ')}</p>
                 )}
                 {ads.campanas.length > 0 ? (
-                  <div className="overflow-x-auto rounded-xl border border-gray-200">
+                  <div className="overflow-x-auto rounded-xl border border-gray-300">
                     <table className="w-full min-w-[640px] text-sm">
                       <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                         <tr><th className="text-left px-3 py-2">Campaña</th><th className="text-right px-3 py-2">Gasto</th><th className="text-right px-3 py-2">Alcance</th><th className="text-right px-3 py-2">Clics</th><th className="text-right px-3 py-2">CTR</th><th className="text-right px-3 py-2">CPC</th></tr>
@@ -940,14 +940,14 @@ function MetricasPanel() {
           <GoogleAdsPanel periodo={periodo} />
 
           <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-3">
-            <h3 className="text-sm font-bold text-[#143C64] uppercase tracking-wide">Orgánico (Facebook)</h3>
+            <h3 className="text-sm font-bold text-brand uppercase tracking-wide">Orgánico (Facebook)</h3>
             {data?.organico_error ? (
               <p className="text-sm text-gray-500">No se pudo leer lo orgánico: {data.organico_error}</p>
             ) : org ? (
               <>
                 <p className="text-sm text-gray-700"><b>{fmt(org.seguidores)}</b> seguidores</p>
                 {org.posts.length > 0 ? (
-                  <div className="overflow-x-auto rounded-xl border border-gray-200">
+                  <div className="overflow-x-auto rounded-xl border border-gray-300">
                     <table className="w-full min-w-[640px] text-sm">
                       <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                         <tr><th className="text-left px-3 py-2">Fecha</th><th className="text-left px-3 py-2">Post</th><th className="text-right px-3 py-2">Impresiones</th><th className="text-right px-3 py-2">Interacciones</th><th className="px-3 py-2"></th></tr>
@@ -1779,7 +1779,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                           {c.estado === 'enviando' && (
                             <>
                               <button onClick={() => reanudar(c)} className="bg-emerald-600 hover:bg-emerald-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Reanudar envío a los que faltan">↻</button>
-                              <button onClick={() => cancelar(c)} className="bg-amber-600 hover:bg-amber-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Cancelar envío">✕</button>
+                              <button onClick={() => cancelar(c)} className="bg-amber-600 hover:bg-amber-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Cancelar envío" aria-label="Cancelar envío">✕</button>
                             </>
                           )}
                           {(c.estado === 'enviado' || c.estado === 'fallido' || c.estado === 'cancelado') && (
@@ -1792,7 +1792,7 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                             <button onClick={() => abrirDebug(c)} className="bg-gray-700 hover:bg-gray-800 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Ver diagnóstico de tracking">🔍</button>
                           )}
                           {c.estado !== 'enviando' && (
-                            <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Eliminar campaña">🗑</button>
+                            <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Eliminar campaña" aria-label="Eliminar campaña">🗑</button>
                           )}
                         </div>
                       </td>

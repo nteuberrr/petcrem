@@ -310,7 +310,7 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
           <button disabled={enCurso} onClick={() => patch(it.id, { activa: 'TRUE' }, 'act')} className="text-xs px-2 py-1 rounded border border-emerald-300 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">Activar</button>
         )}
         <button onClick={() => setEditItem(it)} className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50">Editar</button>
-        <button disabled={enCurso} onClick={() => eliminar(it.id)} className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50">✕</button>
+        <button disabled={enCurso} onClick={() => eliminar(it.id)} aria-label="Eliminar" className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50">✕</button>
       </div>
     )
   }
@@ -570,7 +570,7 @@ export default function CalendarioContent({ onBack, canalInicial }: { onBack?: (
                     <div key={i} className="relative">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={src} alt="" className="w-12 h-12 object-cover rounded-lg border border-gray-300" />
-                      <button onClick={() => setAdjuntos(a => a.filter((_, j) => j !== i))}
+                      <button onClick={() => setAdjuntos(a => a.filter((_, j) => j !== i))} aria-label="Quitar adjunto"
                         className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-gray-700 text-white text-[10px] leading-none flex items-center justify-center">×</button>
                     </div>
                   ))}
@@ -800,7 +800,7 @@ function PreviewModal({ item, onClose, onUpdated }: { item: Item; onClose: () =>
         <div className="fixed inset-0 z-[80] bg-black/80 flex flex-col items-center justify-center p-4" onClick={() => setLightbox(null)}>
           <div className="absolute top-3 right-3 flex items-center gap-2" onClick={e => e.stopPropagation()}>
             <a href={dl(imgs[lightbox].url)} download className="text-sm font-medium bg-white/95 hover:bg-white text-gray-800 rounded-lg px-3 py-1.5">⬇ Descargar</a>
-            <button onClick={() => setLightbox(null)} title="Cerrar" className="text-white/90 hover:text-white text-3xl leading-none px-2">×</button>
+            <button onClick={() => setLightbox(null)} title="Cerrar" aria-label="Cerrar" className="text-white/90 hover:text-white text-3xl leading-none px-2">×</button>
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imgs[lightbox].url} alt={imgs[lightbox].alt || ''} onClick={e => e.stopPropagation()} className="max-h-[85vh] max-w-[92vw] object-contain rounded-lg shadow-2xl" />

@@ -597,7 +597,7 @@ export default function DespachosTab() {
                       <span className="ml-2 text-xs text-gray-500">· {c.nombre_tutor}</span>
                       {c.direccion_despacho && <div className="text-xs text-gray-500 mt-0.5">{c.direccion_despacho}{c.comuna ? ` · ${c.comuna}` : ''}</div>}
                     </div>
-                    <button type="button" onClick={() => quitar(c.id)}
+                    <button type="button" onClick={() => quitar(c.id)} aria-label="Quitar"
                       className="text-red-400 hover:text-red-600 text-xl leading-none w-6 h-6 flex items-center justify-center">×</button>
                   </div>
                 ))}
@@ -817,7 +817,7 @@ export default function DespachosTab() {
                     <span className="ml-2 text-sm text-gray-900">{c.nombre_mascota}</span>
                     <span className="ml-1 text-xs text-gray-500">({c.nombre_tutor})</span>
                   </div>
-                  <button type="button" onClick={() => quitarEdit(c.id)}
+                  <button type="button" onClick={() => quitarEdit(c.id)} aria-label="Quitar"
                     className="text-red-500 hover:text-red-700 text-lg leading-none w-6 h-6 flex items-center justify-center">×</button>
                 </div>
               ))}

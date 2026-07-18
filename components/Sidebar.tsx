@@ -3,24 +3,31 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import { useState, useEffect } from 'react'
+import {
+  LayoutDashboard, PawPrint, MessageCircle, Flame, Clock, Receipt, Stethoscope,
+  HeartHandshake, Megaphone, FileText, Globe, Wallet, Settings, LineChart,
+  Menu, X, LogOut, type LucideIcon,
+} from 'lucide-react'
 
 // Cada ítem se asocia a un módulo; el sidebar muestra solo los módulos permitidos
 // para el rol (dinámico, vía /api/mis-modulos). El admin (dueño) ve todos.
-const nav: { href: string; label: string; icon: string; modulo: string }[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: '📊', modulo: 'dashboard' },
-  { href: '/clientes', label: 'Clientes', icon: '🐾', modulo: 'clientes' },
-  { href: '/mensajes', label: 'Mensajes', icon: '💬', modulo: 'mensajes' },
-  { href: '/operaciones', label: 'Operaciones', icon: '🔥', modulo: 'operaciones' },
-  { href: '/asistencia', label: 'Asistencia', icon: '🕐', modulo: 'asistencia' },
-  { href: '/rendiciones', label: 'Rendiciones', icon: '🧾', modulo: 'rendiciones' },
-  { href: '/bases', label: 'Veterinarios', icon: '🏥', modulo: 'bases' },
-  { href: '/servicios', label: 'Eutanasias', icon: '🤝', modulo: 'servicios' },
-  { href: '/mailing', label: 'Campañas', icon: '📣', modulo: 'mailing' },
-  { href: '/facturacion', label: 'Facturación', icon: '🧾', modulo: 'facturacion' },
-  { href: '/web', label: 'Web', icon: '🌐', modulo: 'web' },
-  { href: '/estado-resultados', label: 'Estado de Resultados', icon: '💰', modulo: 'eerr' },
-  { href: '/configuracion', label: 'Configuración', icon: '⚙️', modulo: 'configuracion' },
-  { href: '/reportes', label: 'Reportes', icon: '📈', modulo: 'reportes' },
+// `color` es la clase de color SOLO del icono en reposo (sobre el navy del sidebar);
+// cuando el ítem está activo el icono pasa a navy para verse sobre el pill dorado.
+const nav: { href: string; label: string; icon: LucideIcon; modulo: string; color: string }[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, modulo: 'dashboard', color: 'text-sky-400' },
+  { href: '/clientes', label: 'Clientes', icon: PawPrint, modulo: 'clientes', color: 'text-amber-400' },
+  { href: '/mensajes', label: 'Mensajes', icon: MessageCircle, modulo: 'mensajes', color: 'text-emerald-400' },
+  { href: '/operaciones', label: 'Operaciones', icon: Flame, modulo: 'operaciones', color: 'text-orange-400' },
+  { href: '/asistencia', label: 'Asistencia', icon: Clock, modulo: 'asistencia', color: 'text-cyan-400' },
+  { href: '/rendiciones', label: 'Rendiciones', icon: Receipt, modulo: 'rendiciones', color: 'text-yellow-300' },
+  { href: '/bases', label: 'Veterinarios', icon: Stethoscope, modulo: 'bases', color: 'text-teal-300' },
+  { href: '/servicios', label: 'Eutanasias', icon: HeartHandshake, modulo: 'servicios', color: 'text-rose-400' },
+  { href: '/mailing', label: 'Campañas', icon: Megaphone, modulo: 'mailing', color: 'text-fuchsia-400' },
+  { href: '/facturacion', label: 'Facturación', icon: FileText, modulo: 'facturacion', color: 'text-blue-400' },
+  { href: '/web', label: 'Web', icon: Globe, modulo: 'web', color: 'text-violet-400' },
+  { href: '/estado-resultados', label: 'Estado de Resultados', icon: Wallet, modulo: 'eerr', color: 'text-green-400' },
+  { href: '/configuracion', label: 'Configuración', icon: Settings, modulo: 'configuracion', color: 'text-slate-300' },
+  { href: '/reportes', label: 'Reportes', icon: LineChart, modulo: 'reportes', color: 'text-purple-400' },
 ]
 
 export default function Sidebar() {
@@ -92,7 +99,7 @@ export default function Sidebar() {
         onClick={() => setOpen(true)}
         className="md:hidden fixed top-3 left-3 z-30 w-10 h-10 rounded-lg bg-brand text-white flex items-center justify-center shadow-lg"
       >
-        <span className="text-xl leading-none">☰</span>
+        <Menu className="w-5 h-5" aria-hidden="true" />
       </button>
 
       {/* Overlay oscuro cuando el menú está abierto en móvil */}
@@ -119,13 +126,13 @@ export default function Sidebar() {
           <button
             aria-label="Cerrar menú"
             onClick={() => setOpen(false)}
-            className="md:hidden w-8 h-8 rounded-md hover:bg-white/15 text-white/90 text-xl leading-none"
+            className="md:hidden w-8 h-8 rounded-md hover:bg-white/15 text-white/90 flex items-center justify-center"
           >
-            ×
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
         <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
-          {items.map(({ href, label, icon }) => {
+          {items.map(({ href, label, icon: Icon, color }) => {
             const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
             return (
               <Link
@@ -137,7 +144,7 @@ export default function Sidebar() {
                     : 'text-white/80 font-medium hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <span className="text-lg">{icon}</span>
+                <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-brand' : color}`} aria-hidden="true" />
                 <span className="flex-1">{label}{href === '/mensajes' && noLeidos > 0 ? ` (${noLeidos})` : ''}</span>
                 {href === '/mensajes' && pendientes > 0 && (
                   <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
@@ -169,7 +176,7 @@ export default function Sidebar() {
             onClick={() => signOut({ callbackUrl: '/login' })}
             className="w-full text-left text-sm text-white/90 hover:text-white px-3 py-2 rounded-lg hover:bg-white/15 transition-colors flex items-center gap-2"
           >
-            <span className="text-sm">↩</span>
+            <LogOut className="w-4 h-4 shrink-0" aria-hidden="true" />
             Cerrar sesión
           </button>
         </div>

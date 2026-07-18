@@ -22,6 +22,7 @@
     "date-fns": "^4.1.0",
     "googleapis": "^171.4.0",
     "jszip": "^3.10.1",
+    "lucide-react": "^1.25.0",
     "next": "16.2.4",
     "next-auth": "^4.24.14",
     "node-forge": "^1.4.0",

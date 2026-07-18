@@ -99,17 +99,17 @@ export interface LayoutArgs {
 function renderFooter(c: Contacto): string {
   const telLink = (c.telefono || '').replace(/[^\d+]/g, '')
   return `
-      <hr style="border:none;border-top:1px solid ${BRAND.hairline};margin:30px 0 22px" />
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
           <td valign="top" style="font-family:${FONT};font-size:13px;color:${BRAND.muted};line-height:1.7">
-            <p style="margin:0 0 10px">Cualquier duda puedes ponerte en contacto con nosotros:</p>
-            <p style="margin:0">Correo: <a href="mailto:${escapeHtml(c.correo)}" style="color:${BRAND.navy};text-decoration:none;font-weight:600">${escapeHtml(c.correo)}</a></p>
-            <p style="margin:3px 0 0">Teléfono: <a href="tel:${escapeHtml(telLink)}" style="color:${BRAND.navy};text-decoration:none;font-weight:600">${escapeHtml(c.telefono)}</a></p>
-            <p style="margin:18px 0 0;color:${BRAND.ink}">Con cariño,<br/><strong>Equipo ${escapeHtml(c.nombre)}</strong></p>
+            <p style="margin:0 0 12px;font-weight:700;color:${BRAND.navy}">¿Cualquier duda? Estamos para acompañarte.</p>
+            <p style="margin:0">Correo &nbsp;<a href="mailto:${escapeHtml(c.correo)}" style="color:${BRAND.navy};text-decoration:none;font-weight:600">${escapeHtml(c.correo)}</a></p>
+            <p style="margin:4px 0 0">Teléfono &nbsp;<a href="tel:${escapeHtml(telLink)}" style="color:${BRAND.navy};text-decoration:none;font-weight:600">${escapeHtml(c.telefono)}</a></p>
+            <p style="margin:16px 0 0;color:${BRAND.ink}">Con cariño,<br/><strong>Equipo ${escapeHtml(c.nombre)}</strong></p>
+            <p style="margin:12px 0 0;font-size:12px;font-style:italic;color:${BRAND.amber}">Huellas que no se borran.</p>
           </td>
-          <td valign="bottom" align="right" width="92" style="width:92px">
-            <img src="${SELLO_URL}" alt="Sello Crematorio Alma Animal — proceso con amor y respeto" width="76" height="76" style="width:76px;height:76px;display:block;border:0;outline:none" />
+          <td valign="bottom" align="right" width="88" style="width:88px">
+            <img src="${SELLO_URL}" alt="Sello Crematorio Alma Animal — proceso con amor y respeto" width="78" height="78" style="width:78px;height:78px;display:block;border:0;outline:none" />
           </td>
         </tr>
       </table>`
@@ -133,20 +133,20 @@ export function renderEmailLayout(a: LayoutArgs): string {
 <body style="margin:0;padding:0;background:${BRAND.cream};color:${BRAND.ink}">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.cream}">
     <tr>
-      <td align="center" style="padding:24px 12px">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px">
+      <td align="center" style="padding:32px 12px">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;box-shadow:0 10px 30px rgba(20,60,100,0.10);border-radius:16px">
 
           <!-- Header navy -->
           <tr>
-            <td style="background:${BRAND.navy};border-radius:14px 14px 0 0;padding:22px 26px">
+            <td style="background:${BRAND.navy};border-radius:16px 16px 0 0;padding:26px 30px">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="left" valign="middle" style="font-family:${FONT}">
-                    <p style="margin:0;font-size:14px;font-weight:700;letter-spacing:1.5px;color:${BRAND.amber}">${eyebrow}</p>
-                    <h1 style="margin:9px 0 0;font-size:23px;font-weight:700;color:#ffffff;line-height:1.25">${escapeHtml(a.titulo)}</h1>
+                    <p style="margin:0;font-size:12px;font-weight:700;letter-spacing:2px;color:${BRAND.amber}">${eyebrow}</p>
+                    <h1 style="margin:12px 0 0;font-size:25px;font-weight:800;color:#ffffff;line-height:1.22;letter-spacing:-0.2px">${escapeHtml(a.titulo)}</h1>
                   </td>
-                  <td align="right" valign="middle" width="84" style="width:84px">
-                    <img src="${LOGO_URL}" alt="Alma Animal" height="70" style="height:70px;width:auto;display:block;border:0;outline:none" />
+                  <td align="right" valign="middle" width="78" style="width:78px">
+                    <img src="${LOGO_URL}" alt="Alma Animal" height="66" style="height:66px;width:auto;display:block;border:0;outline:none" />
                   </td>
                 </tr>
               </table>
@@ -156,10 +156,16 @@ export function renderEmailLayout(a: LayoutArgs): string {
           <!-- Filete dorado -->
           <tr><td style="height:4px;line-height:4px;font-size:0;background:${BRAND.amber}">&nbsp;</td></tr>
 
-          <!-- Cuerpo + footer -->
+          <!-- Cuerpo -->
           <tr>
-            <td style="background:#ffffff;border-radius:0 0 14px 14px;border:1px solid ${BRAND.hairline};border-top:0;padding:30px 26px;font-family:${FONT};color:${BRAND.ink}">
+            <td style="background:#ffffff;padding:36px 34px 30px;font-family:${FONT};color:${BRAND.ink}">
 ${a.bodyHtml}
+            </td>
+          </tr>
+
+          <!-- Footer en panel crema -->
+          <tr>
+            <td style="background:${BRAND.cream};border-radius:0 0 16px 16px;border-top:1px solid ${BRAND.hairline};padding:24px 34px">
 ${renderFooter(a.contacto)}
             </td>
           </tr>
