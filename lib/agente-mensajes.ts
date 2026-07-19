@@ -539,6 +539,22 @@ function bloqueFechaChile(): string {
     return `${dia} ${isoDe(offsetDias)}`
   }
   const horaActual = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+  // PRÓXIMO RETIRO POSIBLE calculado (determinístico): la ventana de retiros es
+  // 09:00–21:00. Regla: mínimo = ahora + 1 h, PERO acotado a la ventana:
+  //  - Si ahora+1h cae ANTES de las 09:00 (madrugada/temprano) → HOY a las 09:00.
+  //    (Que sea de madrugada NO significa que "hoy" ya pasó: la ventana de hoy
+  //     está entera por delante. Este era el bug: a las 00:50 el bot saltaba a
+  //     "mañana" cuando el retiro de HOY 09:00 estaba disponible — caso Jean.)
+  //  - Si ahora+1h cae DENTRO de 09:00–21:00 → HOY a esa hora.
+  //  - Si ahora+1h pasa de las 21:00 (ya cerró hoy) → MAÑANA a las 09:00.
+  const [hN, mN] = horaActual.split(':').map(Number)
+  const OPEN = 9 * 60, CLOSE = 21 * 60
+  let proxOffset = 0
+  let proxMin = (hN * 60 + mN) + 60
+  if (proxMin < OPEN) proxMin = OPEN
+  else if (proxMin > CLOSE) { proxOffset = 1; proxMin = OPEN }
+  const proxHora = `${pad(Math.floor(proxMin / 60))}:${pad(proxMin % 60)}`
+  const proxTxt = `${ref(proxOffset)} a las ${proxHora}`
   // Tabla de los próximos 8 días: día de la semana → fecha exacta, marcando feriados.
   const tabla = Array.from({ length: 8 }, (_, i) => {
     const etq = i === 0 ? '   ← HOY' : i === 1 ? '   ← mañana' : i === 2 ? '   ← pasado mañana' : ''
@@ -549,6 +565,7 @@ function bloqueFechaChile(): string {
 - Hoy es ${ref(0)}.
 - Ahora son las ${horaActual} hrs.
 - Retiros: solo de 09:00 a 21:00 (última hora para agendar = 21:00) y nunca dentro de la próxima hora (mínimo = ahora + 1 h).
+- PRÓXIMO RETIRO POSIBLE (ya calculado — ÚSALO tal cual): ${proxTxt}. Cuando el cliente pida "hoy", "lo antes posible", "ahora" o no dé una hora precisa, ofrécele EXACTAMENTE este horario. Si te pide "hoy" y este próximo retiro cae HOY, es que SÍ se puede hoy — confírmalo, no lo mandes a mañana.
 
 CALENDARIO DE LOS PRÓXIMOS DÍAS (día de la semana → fecha exacta). Usa SIEMPRE esta tabla para resolver "este jueves", "el viernes", "mañana", etc. NUNCA calcules tú los días de la semana ni sumes días de memoria — LÉELOS de acá:
 ${tabla}
@@ -556,7 +573,8 @@ ${tabla}
 REGLAS DE FECHA (duras):
 - Cuando el cliente mencione un día de la semana o una fecha relativa, toma la fecha EXACTA de la tabla de arriba. Pasa las fechas a las herramientas como YYYY-MM-DD y las horas como HH:MM (24h).
 - Si el cliente AFIRMA una fecha (ej.: "es jueves 16") y esa fecha COINCIDE con la tabla, acéptala sin discutir. Solo corrígelo si NO coincide con la tabla, y hazlo mostrándole la fecha correcta de la tabla. (Nos pasó con una clienta: le insistimos que "el jueves era 17" cuando en la tabla era jueves 16 — el error fue nuestro. No repitas eso.)
-- Para "lo antes posible"/"ahora"/"en un rato", calcula la hora desde la HORA ACTUAL de arriba (mínimo +1 h), dentro de 09:00–21:00.
+- Para "lo antes posible"/"ahora"/"en un rato"/"hoy", NO calcules tú la hora: usa el "PRÓXIMO RETIRO POSIBLE" ya calculado de arriba, tal cual (fecha + hora).
+- MADRUGADA / TEMPRANO ≠ "hoy ya no se puede" (regla dura — este es el error del caso Jean): que sea de noche o de madrugada NO significa que el día de HOY ya pasó. La ventana de retiros de HOY es 09:00–21:00; si esa ventana todavía está por delante (p. ej. son las 02:00 y aún no son las 21:00 de hoy), ENTONCES SÍ se puede retirar HOY — ofrécelo. Solo se salta al día siguiente cuando la ventana de HOY ya cerró (después de las 21:00). Nunca ofrezcas "mañana" si el retiro de HOY todavía es posible, y nunca digas "no alcanzamos hoy" solo porque en este instante sea de madrugada. "No alcanzamos AHORA (es de noche)" es distinto de "no se puede HOY".
 - FERIADOS: si un día de la tabla está marcado como FERIADO (aunque sea día de semana), cuenta como fin de semana → el recargo de fuera de horario aplica TODO el día, no solo desde las 19:00. Cuando el retiro caiga en un feriado, avísale el recargo al cotizar y súmalo al total (igual que un fin de semana). Si el cliente pregunta "¿trabajan el feriado?", sí trabajamos, solo aclara que ese día lleva el recargo de fuera de horario.
 - NUNCA inventes ni adivines la fecha, el año, el día de la semana ni la hora; ante ambigüedad, confírmala contra la tabla antes de agendar.
 ESTA TABLA ES LA VERDAD VIGENTE aunque en el historial (tuyo o del cliente) se haya mencionado otra fecha/día — algo dicho pasada la medianoche puede haber quedado desactualizado. Antes de reutilizar una fecha del historial, verifícala contra la tabla.`
