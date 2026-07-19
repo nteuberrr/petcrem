@@ -80,17 +80,19 @@ export interface OpcionesPlantilla {
 
 export interface ResultadoPlantilla { html: string; fotos: FotoGrafico[] }
 
-export const PLANTILLAS = ['portada', 'contenido', 'dato', 'foto', 'cierre'] as const
+export const PLANTILLAS = ['portada', 'contenido', 'dato', 'foto', 'cierre', 'cita', 'split'] as const
 export type NombrePlantilla = (typeof PLANTILLAS)[number]
 
 /** Guía de slots por plantilla, para el prompt/tool del modelo. */
 export const PLANTILLAS_INFO = `PLANTILLAS DISPONIBLES (elegí UNA y llená sus slots; el layout ya es on-brand y no se rompe):
-- "portada": gancho/apertura. slots: eyebrow (corto, ej. "PARA VETERINARIOS"), titulo (2-4 palabras), titulo_destacado (2ª línea, sale en dorado), bajada (1 frase corta, máx ~120 car), foto {prompt} (opcional; va en banda arriba), cta + cta_secundario (opcional). NO lleva bullets.
+- "portada": gancho/apertura. slots: eyebrow (corto, ej. "PARA VETERINARIOS"), titulo (2-4 palabras), titulo_destacado (2ª línea, sale en dorado), bajada (1 frase corta, máx ~120 car), foto {prompt} (opcional; va en banda arriba), fondo (navy/crema/blanco), cta + cta_secundario (opcional). NO lleva bullets.
 - "contenido": una idea con apoyos. slots: eyebrow (opcional), titulo, bullets (2-4, MUY cortos), bajada (opcional), foto {prompt} (opcional), fondo. Para láminas de carrusel educativas.
 - "dato": una cifra/palabra fuerte. slots: dato (el número/palabra grande, ej. "4 días"), dato_label (qué es), bajada (1 línea de apoyo), fondo.
 - "foto": foto protagonista, casi sin texto. slots: foto {prompt} (obligatoria), titulo (UNA frase corta encima), fondo. Para piezas emocionales/estéticas.
 - "cierre": llamado a la acción final. slots: titulo, cta (ej. teléfono), cta_secundario (web), bajada (opcional), fondo, foto {prompt} (opcional, banda arriba).
-Reglas: textos CORTOS (si no caben, se recortan). El fondo alterna navy/crema/blanco entre piezas. La foto: mascota viva y feliz o tutor con su mascota, cálida; NUNCA instalaciones. El logo se coloca solo.`
+- "cita": testimonio o frase destacada (gran comilla dorada). slots: titulo (la frase/testimonio, ~1-2 líneas), bajada (autor: "María, tutora de Rocky" o "Clínica X"), eyebrow (opcional), fondo (default crema/claro). SIN foto. Ideal para PRUEBA SOCIAL y frases de marca.
+- "split": editorial lado-a-lado — foto a la izquierda, texto a la derecha (layout DISTINTO a los apilados). slots: foto {prompt} (obligatoria), titulo, titulo_destacado (opcional, dorado), bajada (opcional), bullets (2-3, opcional), cta (opcional), fondo (del panel de texto; default crema). Para una idea con una foto potente, con aire de revista.
+Reglas: textos CORTOS (si no caben, se recortan). El fondo alterna navy/crema/blanco entre piezas — la PORTADA también (ya NO es siempre navy): NO dejes todas las portadas en navy, variá a crema o blanco (o con la foto mandando) para que el feed no se vea "todo azul". Regla práctica: máximo ~1 de cada 3 piezas de una misma tanda con fondo navy dominante. La foto: mascota viva y feliz o tutor con su mascota, cálida; NUNCA instalaciones. El logo se coloca solo.`
 
 // ─── helpers de bloque ────────────────────────────────────────────────────────
 function eyebrowChip(text: string, abs?: { top: number; left: number }): string {
@@ -125,7 +127,10 @@ function portada(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlan
   const fotos: FotoGrafico[] = []
   const conFoto = !!(s.foto && (s.foto.url || s.foto.prompt))
   const bandaH = conFoto ? Math.round(C.h * 0.44) : 0
-  const oscuro = true // el bloque de texto de la portada va navy
+  // El fondo del bloque de texto ya NO es siempre navy: honra el slot `fondo`
+  // (navy/crema/blanco) para que las portadas —lo que se ve en el grid— varíen.
+  const bg = bgColor(s.fondo)
+  const oscuro = bg === NAVY // texto claro sobre navy; navy sobre crema/blanco
   let banda = ''
   if (conFoto) {
     const src = s.foto!.url ? esc(s.foto!.url) : 'FOTO:principal'
@@ -135,12 +140,12 @@ function portada(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlan
     banda = `<div style="display:flex;position:relative;width:${C.w}px;height:${bandaH}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${C.w}" height="${bandaH}" style="object-fit:cover;object-position:center 35%;display:block" />${eb}${lg}</div>`
   }
   const eyebrowText = !conFoto && s.eyebrow ? eyebrowChip(s.eyebrow) : ''
-  const tit = tituloBloque(s, WHITE, C.w - PAD * 2, 86)
-  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:32px;color:${SOFT};line-height:1.4;margin-top:26px">${esc(clampText(s.bajada, 130))}</span>` : ''
+  const tit = tituloBloque(s, oscuro ? WHITE : NAVY, C.w - PAD * 2, 86)
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:32px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:26px">${esc(clampText(s.bajada, 130))}</span>` : ''
   const cta = ctaRow(s, oscuro)
-  const lgBottom = !conFoto ? logoImg(o.logoBlanco, `bottom:52px;right:${PAD - 16}px`, 168) : logoImg(o.logoBlanco, `bottom:52px;right:${PAD - 16}px`, 168)
+  const lgBottom = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 168)
   const textBlock = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:64px ${PAD}px 120px ${PAD}px">${eyebrowText}${tit}${bajada}${ruleGold()}${cta}</div>`
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${banda}${textBlock}${lgBottom}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${banda}${textBlock}${lgBottom}</div>`
   return { html, fotos }
 }
 
@@ -205,23 +210,64 @@ function cierre(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlant
   const fotos: FotoGrafico[] = []
   const conFoto = !!(s.foto && (s.foto.url || s.foto.prompt))
   const bandaH = conFoto ? Math.round(C.h * 0.42) : 0
+  const bg = bgColor(s.fondo) // honra navy/crema/blanco (antes era navy fijo)
+  const oscuro = bg === NAVY
   let banda = ''
   if (conFoto) {
     const src = s.foto!.url ? esc(s.foto!.url) : 'FOTO:principal'
     if (!s.foto!.url) fotos.push({ slot: 'principal', prompt: s.foto!.prompt || 'una mascota viva y feliz con su tutor, luz cálida', aspect: '3:2' })
     banda = `<div style="display:flex;width:${C.w}px;height:${bandaH}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${C.w}" height="${bandaH}" style="object-fit:cover;object-position:center 35%;display:block" /></div>`
   }
-  const tit = tituloBloque(s, WHITE, C.w - PAD * 2, 76)
-  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${SOFT};line-height:1.4;margin-top:22px">${esc(clampText(s.bajada, 120))}</span>` : ''
-  const cta = ctaRow(s, true)
-  const lg = logoImg(o.logoBlanco, `bottom:52px;right:${PAD - 16}px`, 168)
+  const tit = tituloBloque(s, oscuro ? WHITE : NAVY, C.w - PAD * 2, 76)
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:22px">${esc(clampText(s.bajada, 120))}</span>` : ''
+  const cta = ctaRow(s, oscuro)
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 168)
   const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px 120px ${PAD}px">${tit}${bajada}${cta}</div>`
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${banda}${body}${lg}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${banda}${body}${lg}</div>`
+  return { html, fotos }
+}
+
+function cita(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  // Testimonio / frase destacada. Por defecto en CLARO (crema) para romper el navy.
+  const bg = bgColor(s.fondo || 'crema')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const eb = s.eyebrow ? eyebrowChip(s.eyebrow) : ''
+  const comilla = `<div style="display:flex;font-family:Inter;font-weight:700;font-size:170px;color:${GOLD};line-height:0.8;margin-bottom:8px">“</div>`
+  const frase = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2, 68, 40)}px;color:${col};line-height:1.24">${esc(clampText(s.titulo, 200))}</span>` : ''
+  const autor = s.bajada ? `<span style="font-family:Inter;font-weight:600;font-size:30px;color:${oscuro ? SOFT : INK};margin-top:30px">— ${esc(clampText(s.bajada, 60))}</span>` : ''
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:64px ${PAD}px 120px ${PAD}px">${eb}${comilla}${frase}${autor}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos: [] }
+}
+
+function split(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  // Editorial lado-a-lado: foto a la izquierda, panel de texto a la derecha.
+  // Estructura DISTINTA a las apiladas → variedad real de layout.
+  const fotos: FotoGrafico[] = []
+  const src = s.foto?.url ? esc(s.foto.url) : 'FOTO:principal'
+  if (!s.foto?.url) fotos.push({ slot: 'principal', prompt: s.foto?.prompt || 'una mascota viva y serena junto a su tutor, luz cálida natural', aspect: '3:4' })
+  const bg = bgColor(s.fondo || 'crema')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const fotoW = Math.round(C.w * 0.46)
+  const eb = s.eyebrow ? eyebrowChip(s.eyebrow) : ''
+  const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, C.w - fotoW - 112, 54) : ''
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:28px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:18px">${esc(clampText(s.bajada, 140))}</span>` : ''
+  const items = (s.bullets || []).slice(0, 3).map(b =>
+    `<div style="display:flex;flex-direction:row;align-items:flex-start;gap:14px"><div style="display:flex;width:10px;height:10px;border-radius:6px;background:${GOLD};margin-top:11px;flex-shrink:0"></div><span style="font-family:Inter;font-weight:600;font-size:27px;color:${col};line-height:1.3">${esc(clampText(b, 80))}</span></div>`).join('')
+  const bullets = items ? `<div style="display:flex;flex-direction:column;gap:14px;margin-top:26px">${items}</div>` : ''
+  const cta = ctaRow(s, oscuro)
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:44px;right:44px`, 120)
+  const fotoCol = `<div style="display:flex;width:${fotoW}px;height:${C.h}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${fotoW}" height="${C.h}" style="object-fit:cover;display:block" /></div>`
+  const textCol = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:64px 56px 100px 56px">${eb}${tit}${bajada}${bullets}${cta}</div>`
+  const html = `<div style="display:flex;flex-direction:row;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${fotoCol}${textCol}${lg}</div>`
   return { html, fotos }
 }
 
 const BUILDERS: Record<NombrePlantilla, (s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla) => ResultadoPlantilla> = {
-  portada, contenido, dato, foto, cierre,
+  portada, contenido, dato, foto, cierre, cita, split,
 }
 
 /** Construye el HTML on-brand de una plantilla + las fotos a generar. */

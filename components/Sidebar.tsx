@@ -22,7 +22,7 @@ const nav: { href: string; label: string; icon: LucideIcon; modulo: string; colo
   { href: '/rendiciones', label: 'Rendiciones', icon: Receipt, modulo: 'rendiciones', color: 'text-yellow-300' },
   { href: '/bases', label: 'Veterinarios', icon: Stethoscope, modulo: 'bases', color: 'text-teal-300' },
   { href: '/servicios', label: 'Eutanasias', icon: HeartHandshake, modulo: 'servicios', color: 'text-rose-400' },
-  { href: '/mailing', label: 'Campañas', icon: Megaphone, modulo: 'mailing', color: 'text-fuchsia-400' },
+  { href: '/mailing', label: 'Marketing', icon: Megaphone, modulo: 'mailing', color: 'text-fuchsia-400' },
   { href: '/facturacion', label: 'Facturación', icon: FileText, modulo: 'facturacion', color: 'text-blue-400' },
   { href: '/web', label: 'Web', icon: Globe, modulo: 'web', color: 'text-violet-400' },
   { href: '/estado-resultados', label: 'Estado de Resultados', icon: Wallet, modulo: 'eerr', color: 'text-green-400' },

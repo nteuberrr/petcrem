@@ -91,9 +91,19 @@ const MODEL = process.env.ANTHROPIC_MAILING_MODEL || 'claude-sonnet-4-6'
 const BANCO_VISIBLE = 40
 
 const VOZ_AUDIENCIA: Record<string, string> = {
-  tutores: `AUDIENCIA: TUTORES (B2C), adultos en duelo por su mascota. Voz: tuteo cálido pero sobrio, cercana y humana, profesional. Inspira confianza, NO lástima. Sin clichés del rubro ("puente del arcoíris", "angelito", "ya no sufre"), sin humor, sin religión. A la mascota por su nombre cuando aplique; genérico "tu mascota".`,
-  veterinarios: `AUDIENCIA: VETERINARIOS / CLÍNICAS (B2B). Voz: profesional, técnica, eficiente, de socio confiable (datos, plazos, procesos). Cercana pero sobria. Los argumentos que MANDAN, en este orden (dueño): retiro en menos de 3 horas, operamos de lunes a domingo, entrega en 4 días hábiles, precios convenientes y trazabilidad total; complementos: instalaciones propias y red de eutanasia a domicilio.`,
-  ambos: `AUDIENCIA: MIXTA (tutores y veterinarios). Voz cercana y profesional, español neutro de Chile. Sin clichés del rubro, sin humor, sin religión.`,
+  tutores: `AUDIENCIA: TUTORES (B2C), adultos que perdieron a su mascota o van a perderla. Voz: tuteo cálido, cercano y humano, natural y POCO FORMAL — como alguien que sabe del tema y de verdad quiere ayudar, no como una empresa ni un folleto. Profesional en lo importante, sin rigidez corporativa. Inspira confianza y acompañamiento, NO lástima. Sin clichés del rubro ("puente del arcoíris", "angelito", "ya no sufre"), sin humor, sin religión. A la mascota por su nombre cuando aplique; genérico "tu mascota".`,
+  veterinarios: `AUDIENCIA: VETERINARIOS / CLÍNICAS (B2B). Voz: profesional y cercana, de socio confiable — directa, cálida y eficiente (datos, plazos, procesos), sin acartonarse. Los argumentos que MANDAN, en este orden (dueño): retiro en menos de 3 horas, operamos de lunes a domingo, entrega en 4 días hábiles, precios convenientes y trazabilidad total; complementos: instalaciones propias y red de eutanasia a domicilio.`,
+  ambos: `AUDIENCIA: MIXTA (tutores y veterinarios). Voz cercana, humana y profesional, poco formal, español neutro de Chile. Sin clichés del rubro, sin humor, sin religión.`,
+}
+
+// Perilla de TONO según el objetivo de la pieza (análoga a la del generador de
+// email): modula el registro para que el feed no suene siempre igual de plano.
+const TONO_OBJETIVO: Record<string, string> = {
+  educacion_tutores: 'TONO: didáctico y cercano. Explica claro y útil, como quien acompaña; que se sienta ayuda genuina, no un folleto.',
+  recordacion: 'TONO: cálido y humano, emotivo pero contenido. Prioriza el vínculo y la calma por sobre el argumento de venta.',
+  postventa: 'TONO: agradecido y cercano, de acompañamiento; cuida el detalle, sin vender.',
+  captacion_vets: 'TONO: directo y profesional, con un gancho claro de beneficio. Puedes subir un poco el voltaje comercial (una invitación a sumarse), sin perder respeto ni caer en hype.',
+  promocion: 'TONO: más resuelto y con energía comercial: un gancho potente y un llamado a la acción claro ("Conócelo", "Escríbenos"), siempre respetuoso y sin exagerar.',
 }
 
 const CANAL_HINT: Record<string, string> = {
@@ -230,7 +240,7 @@ const TOOL_POST: Anthropic.Tool = {
           type: 'object',
           properties: {
             modo: { type: 'string', enum: ['plantilla', 'grafico', 'reuse', 'nueva'], description: 'plantilla = PLACA de una PLANTILLA MAESTRA on-brand (RECOMENDADO para casi todo: elegís plantilla + slots y el layout no se rompe); reuse = usar una foto del banco; nueva = generar una foto fotorrealista NUEVA; grafico = HTML libre (SOLO si ninguna plantilla calza — es más frágil).' },
-            plantilla: { type: 'string', enum: [...PLANTILLAS], description: 'Si modo=plantilla: qué plantilla usar (portada = apertura/gancho; contenido = idea + bullets; dato = una cifra fuerte; foto = foto protagonista casi sin texto; cierre = CTA final).' },
+            plantilla: { type: 'string', enum: [...PLANTILLAS], description: 'Si modo=plantilla: qué plantilla usar (portada = apertura/gancho; contenido = idea + bullets; dato = una cifra fuerte; foto = foto protagonista casi sin texto; cierre = CTA final; cita = testimonio/frase destacada; split = editorial foto-al-lado-de-texto). Varía la plantilla entre piezas.' },
             slots: {
               type: 'object',
               description: 'Si modo=plantilla: el CONTENIDO de la plantilla (textos CORTOS; lo que no cabe se recorta). No todos aplican a cada plantilla — mirá PLANTILLAS DISPONIBLES.',
@@ -294,6 +304,7 @@ async function generarPiezaSocial(item: ItemCalendario, creadoPor?: string, opts
   ])
   const web = contacto.web?.startsWith('http') ? contacto.web : `https://${contacto.web || 'crematorioalmaanimal.cl'}`
   const voz = VOZ_AUDIENCIA[item.audiencia] || VOZ_AUDIENCIA.ambos
+  const tono = TONO_OBJETIVO[item.objetivo] || ''
   const canalHint = CANAL_HINT[item.canal] || ''
 
   // Modo "solo imagen": conserva el copy actual y diseña imágenes NUEVAS y distintas
@@ -314,7 +325,7 @@ async function generarPiezaSocial(item: ItemCalendario, creadoPor?: string, opts
   const system = `Eres community manager senior del **Crematorio Alma Animal** (cremación de mascotas, Recoleta, Santiago de Chile; cobertura RM; lema "Huellas que no se borran"). Redactas un post orgánico para ${item.canal === 'facebook' ? 'Facebook' : 'Instagram'}.
 
 ${voz}
-
+${tono ? `\n${tono}\n` : ''}
 CANAL — ${canalHint}
 
 REGLAS:
@@ -333,7 +344,7 @@ IMÁGENES (campo "imagenes", EN ORDEN) — OBLIGATORIO:
 - VARIEDAD ante todo (es la queja del dueño, textual: "todas son muy iguales, muy azules, muy recicladas"). Las marcas buenas del rubro usan MUCHA foto real (mascota viva, feliz o serena) y MUCHOS layouts distintos. Somos un crematorio, pero el feed debe verse VIVO, cálido y bonito — de vez en cuando un post puramente estético (foto protagonista) que embellezca el perfil. NO repitas el molde ni el fondo de las últimas piezas.
 - En cada imagen DECLARÁ "layout" y "fondo" (se guardan como memoria para que la próxima pieza no repita).
 - Modos por imagen (PREFERÍ SIEMPRE "plantilla"):
-  · "plantilla" = una PLANTILLA MAESTRA on-brand (ver "PLANTILLAS DISPONIBLES"): elegís la plantilla (portada/contenido/dato/foto/cierre) y llenás sus SLOTS con textos CORTOS. El layout, el encuadre, la marca y el logo salen de código PROBADO — NO se encima ni se rompe. Es lo que debés usar para CASI TODO (portadas, láminas de carrusel, datos, cierres). Las fotos van dentro de la plantilla (slot foto: "prompt" para una nueva, o "url" del banco para reutilizar). Variá la plantilla y el fondo entre piezas.
+  · "plantilla" = una PLANTILLA MAESTRA on-brand (ver "PLANTILLAS DISPONIBLES"): elegís la plantilla (portada/contenido/dato/foto/cierre/cita/split) y llenás sus SLOTS con textos CORTOS. El layout, el encuadre, la marca y el logo salen de código PROBADO — NO se encima ni se rompe. Es lo que debés usar para CASI TODO (portadas, láminas de carrusel, datos, cierres). Las fotos van dentro de la plantilla (slot foto: "prompt" para una nueva, o "url" del banco para reutilizar). Variá la plantilla y el fondo entre piezas.
   · "grafico" = HTML de diseño LIBRE (ver "DISEÑO DE GRÁFICOS CON TEXTO"). Es MÁS FRÁGIL porque lo armás vos: usalo SOLO si ninguna plantilla calza con lo que necesitás.
   · "reuse" = usar una FOTO del banco (URL exacta) como imagen completa de la slide — NUNCA una marcada "USADA en las últimas piezas".
   · "nueva" = generar una FOTO nueva (cálida: mascota viva tranquila/feliz, o un tutor con su mascota; variá especie/raza/escena) SIN texto. NUNCA fotos de oficina/financieras; NUNCA instalaciones. (Para una foto CON texto encima, usá la plantilla "foto".)
@@ -634,15 +645,26 @@ export interface PiezaGenerada {
 }
 
 /** Genera la pieza de un ítem del calendario y actualiza la fila a estado=generada. */
+// Formato de email según el objetivo, para que las campañas NO salgan todas iguales
+// (antes siempre caía a 'auto', que tiende a converger al mismo molde).
+const FORMATO_EMAIL_OBJETIVO: Record<string, string> = {
+  captacion_vets: 'folleto',      // pitch breve y concreto para captar clínicas
+  promocion: 'anuncio',           // una novedad/oferta contundente
+  recordacion: 'correo',          // recordatorio simple y personal
+  postventa: 'correo',
+  educacion_tutores: 'newsletter',
+}
+
 export async function generarPieza(id: string, creadoPor?: string): Promise<PiezaGenerada> {
   const item = await obtenerItem(id)
   if (!item) throw new Error(`ítem ${id} no encontrado`)
 
   if (item.canal === 'email') {
     const categoria = mapCategoriaEmail(item.objetivo)
+    const formato = FORMATO_EMAIL_OBJETIVO[item.objetivo] || 'auto'
     const instruccion = [item.idea, item.titulo && `Título/gancho sugerido: ${item.titulo}`, item.notas && `Notas: ${item.notas}`]
       .filter(Boolean).join('\n')
-    const camp = await generarCampana({ instruccion, categoria, creadoPor })
+    const camp = await generarCampana({ instruccion, categoria, creadoPor, formato })
     const avisos = [...camp.avisos]
     if (item.audiencia === 'tutores') {
       avisos.push('El email solo llega a la base de veterinarios (B2B). Este ítem está marcado para tutores: se generó el contenido, pero no hay base de email de tutores para enviarlo. Para llegar a tutores usá Instagram/Facebook.')

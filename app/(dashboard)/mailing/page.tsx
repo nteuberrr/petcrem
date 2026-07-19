@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment, type ReactNode } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { formatDate, formatDateTime, formatHoraDia } from '@/lib/dates'
 import CalendarioContent from '@/components/marketing/CalendarioContent'
@@ -144,13 +144,14 @@ const CATEGORIAS = ['prospecto', 'cliente', 'inactivo'] as const
 type Red = 'mail' | 'instagram' | 'facebook' | 'tiktok'
 type Vista = Red | 'calendario' | 'imagenes' | 'metricas'
 
-// Barra de accesos fija arriba: el Agente (calendario + IA, con sus propios botones
-// de canal FB/IG dentro), el Mailing, el Banco de imágenes y las Métricas.
+// Barra de accesos fija arriba, ordenada por el flujo de trabajo: se crea el
+// contenido con el Agente, se distribuye por Mailing, se paga con Publicidad y
+// el Banco de imágenes es la biblioteca de apoyo.
 const NAV: { key: Vista; label: string }[] = [
   { key: 'calendario', label: 'Agente' },
   { key: 'mail', label: 'Mailing' },
+  { key: 'metricas', label: 'Publicidad' },
   { key: 'imagenes', label: 'Banco' },
-  { key: 'metricas', label: 'Métricas' },
 ]
 
 function NavIcon({ k, className = 'w-6 h-6' }: { k: Vista; className?: string }) {
@@ -159,8 +160,34 @@ function NavIcon({ k, className = 'w-6 h-6' }: { k: Vista; className?: string })
   if (k === 'instagram') return <InstagramIcon className={className} />
   if (k === 'facebook') return <FacebookIcon className={className} />
   if (k === 'tiktok') return <span className="text-xl leading-none">🎵</span>
-  if (k === 'metricas') return <span className="text-xl leading-none">📊</span>
+  if (k === 'metricas') return <span className="text-xl leading-none">📣</span>
   return <span className="text-xl leading-none">🖼️</span>
+}
+
+// ── Estilo compartido de las tablas de métricas: grilla suave (líneas verticales +
+// horizontales tenues), filas zebra, cabecera con tinte de marca y (i) por columna. ──
+const MET_THEAD = 'bg-brand/[0.06] text-brand text-[11px] uppercase tracking-wide'
+const MET_THEAD_TR = 'divide-x divide-brand/10 border-b-2 border-brand/15'
+const MET_ROW = 'divide-x divide-gray-200/70 odd:bg-white even:bg-gray-50/70 hover:bg-brand/5 transition-colors'
+
+/** Circulito «i» con tooltip nativo — explica qué significa una métrica. */
+function InfoDot({ text }: { text: string }) {
+  return (
+    <span title={text} aria-label={text}
+      className="inline-grid place-items-center w-3.5 h-3.5 rounded-full bg-brand/15 text-brand text-[9px] font-bold leading-none cursor-help shrink-0 align-middle">i</span>
+  )
+}
+
+/** Celda de cabecera de tabla de métricas, con alineación y (i) opcional. */
+function MetTh({ children, info, right, center }: { children: ReactNode; info?: string; right?: boolean; center?: boolean }) {
+  return (
+    <th className={`px-3 py-2.5 font-semibold ${right ? 'text-right' : center ? 'text-center' : 'text-left'}`}>
+      <span className="inline-flex items-center gap-1 align-middle">
+        <span>{children}</span>
+        {info && <InfoDot text={info} />}
+      </span>
+    </th>
+  )
 }
 
 export default function CampanasPage() {
@@ -171,8 +198,8 @@ export default function CampanasPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Campañas</h1>
-        <p className="text-sm text-gray-500">Planificá con el agente, gestioná el mailing y el banco de imágenes desde un solo lugar.</p>
+        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Marketing</h1>
+        <p className="text-sm text-gray-500">Planificá con el agente, enviá mailing, gestioná la publicidad y el banco de imágenes desde un solo lugar.</p>
         <div className="flex gap-1.5 bg-white border border-gray-300 rounded-2xl p-2 shadow-md overflow-x-auto mt-3">
           {NAV.map(n => {
             const active = vista === n.key
@@ -331,12 +358,12 @@ function GestionCampanas() {
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-300">
           <table className="w-full min-w-[720px] text-sm">
-            <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-              <tr>
-                <th className="text-left px-3 py-2">Campaña</th>
-                <th className="text-left px-3 py-2">Estado</th>
-                <th className="text-left px-3 py-2">Presupuesto</th>
-                <th className="text-right px-3 py-2">Acciones</th>
+            <thead className={MET_THEAD}>
+              <tr className={MET_THEAD_TR}>
+                <MetTh>Campaña</MetTh>
+                <MetTh info="Si la campaña está activa (gastando) o pausada.">Estado</MetTh>
+                <MetTh info="Presupuesto diario o total configurado en Meta.">Presupuesto</MetTh>
+                <MetTh right>Acciones</MetTh>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -347,7 +374,7 @@ function GestionCampanas() {
                 const editable = c.tipo_presupuesto === 'diario' || c.tipo_presupuesto === 'total'
                 const busy = busyId === c.id
                 return (
-                  <tr key={c.id} className="hover:bg-gray-50 align-middle">
+                  <tr key={c.id} className={`${MET_ROW} align-middle`}>
                     <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate" title={c.nombre}>{c.nombre}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded border ${b.cls}`}>{b.label}</span>
@@ -513,14 +540,14 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
   }
 
   const KPIS = ads ? [
-    { l: 'Gasto', v: money(ads.cuenta.gasto), d: comp ? delta(ads.cuenta.gasto, comp.gasto, false) : null },
-    { l: 'Conversiones', v: ads.cuenta.conversiones.toLocaleString('es-CL'), d: comp ? delta(ads.cuenta.conversiones, comp.conversiones, true) : null },
-    { l: 'Costo/conversión', v: ads.cuenta.costoPorConversion > 0 ? money(ads.cuenta.costoPorConversion) : '—', d: comp ? delta(ads.cuenta.costoPorConversion, comp.costoPorConversion, false) : null },
-    { l: 'Valor conversión', v: ads.cuenta.conversionesValor > 0 ? money(ads.cuenta.conversionesValor) : '—', d: comp ? delta(ads.cuenta.conversionesValor, comp.conversionesValor, true) : null },
-    { l: 'Clics', v: fmt(ads.cuenta.clicks), d: null },
-    { l: 'CTR', v: `${ads.cuenta.ctr.toFixed(2)}%`, d: null },
-    { l: 'CPC', v: money(ads.cuenta.cpc), d: null },
-    { l: 'Impresiones', v: fmt(ads.cuenta.impresiones), d: null },
+    { l: 'Gasto', v: money(ads.cuenta.gasto), d: comp ? delta(ads.cuenta.gasto, comp.gasto, false) : null, i: 'Dinero invertido en anuncios durante el período.' },
+    { l: 'Conversiones', v: ads.cuenta.conversiones.toLocaleString('es-CL'), d: comp ? delta(ads.cuenta.conversiones, comp.conversiones, true) : null, i: 'Acciones valiosas atribuidas a los anuncios (formularios, llamadas, etc.).' },
+    { l: 'Costo/conversión', v: ads.cuenta.costoPorConversion > 0 ? money(ads.cuenta.costoPorConversion) : '—', d: comp ? delta(ads.cuenta.costoPorConversion, comp.costoPorConversion, false) : null, i: 'Cuánto costó, en promedio, cada conversión (Gasto ÷ Conversiones). Más bajo es mejor.' },
+    { l: 'Valor conversión', v: ads.cuenta.conversionesValor > 0 ? money(ads.cuenta.conversionesValor) : '—', d: comp ? delta(ads.cuenta.conversionesValor, comp.conversionesValor, true) : null, i: 'Valor total asignado a las conversiones del período.' },
+    { l: 'Clics', v: fmt(ads.cuenta.clicks), d: null, i: 'Cantidad de clics en tus anuncios.' },
+    { l: 'CTR', v: `${ads.cuenta.ctr.toFixed(2)}%`, d: null, i: 'Click-Through Rate: % de personas que hicieron clic sobre las que vieron el anuncio (Clics ÷ Impresiones).' },
+    { l: 'CPC', v: money(ads.cuenta.cpc), d: null, i: 'Costo por clic promedio.' },
+    { l: 'Impresiones', v: fmt(ads.cuenta.impresiones), d: null, i: 'Cuántas veces se mostró tu anuncio.' },
   ] : []
 
   async function accionCampana(id: string, nombre: string, accion: 'pausar_campana' | 'activar_campana') {
@@ -632,9 +659,12 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
           {comp && <p className="text-[11px] text-gray-400 -mb-1">Comparado con {comp.etiqueta}</p>}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {KPIS.map(k => (
-              <div key={k.l} className="rounded-xl border border-gray-300 bg-gray-50 px-3 py-2">
-                <div className="text-[11px] text-gray-500">{k.l}</div>
-                <div className="flex items-baseline gap-1.5">
+              <div key={k.l} className="rounded-xl border border-gray-300 bg-white px-3 py-2.5 shadow-sm">
+                <div className="flex items-center gap-1 text-[11px] font-medium text-gray-500 uppercase tracking-wide">
+                  <span className="truncate">{k.l}</span>
+                  <InfoDot text={k.i} />
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
                   <div className="text-lg font-bold text-gray-900">{k.v}</div>
                   {k.d && <span className={`text-[11px] font-semibold ${k.d.cls}`}>{k.d.txt}</span>}
                 </div>
@@ -645,18 +675,18 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
           {ads.campanas.length > 0 ? (
             <div className="overflow-x-auto rounded-xl border border-gray-300">
               <table className="w-full min-w-[980px] text-sm">
-                <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                  <tr>
-                    <th className="text-left px-3 py-2">Campaña</th>
-                    <th className="text-left px-3 py-2">Estado</th>
-                    <th className="text-right px-3 py-2">Gasto</th>
-                    <th className="text-right px-3 py-2">Conv.</th>
-                    <th className="text-right px-3 py-2" title="Costo por conversión">Costo/conv.</th>
-                    <th className="text-right px-3 py-2" title="% de las búsquedas elegibles donde apareciste">Imp. Share</th>
-                    <th className="text-right px-3 py-2">CTR</th>
-                    <th className="text-right px-3 py-2">CPC</th>
-                    <th className="text-left px-3 py-2">Presupuesto/día</th>
-                    <th className="text-right px-3 py-2">Acciones</th>
+                <thead className={MET_THEAD}>
+                  <tr className={MET_THEAD_TR}>
+                    <MetTh>Campaña</MetTh>
+                    <MetTh>Estado</MetTh>
+                    <MetTh right info="Dinero invertido en esta campaña durante el período.">Gasto</MetTh>
+                    <MetTh right info="Conversiones atribuidas a la campaña.">Conv.</MetTh>
+                    <MetTh right info="Costo promedio por conversión (Gasto ÷ Conversiones). Más bajo es mejor.">Costo/conv.</MetTh>
+                    <MetTh right info="Impression Share: % de las búsquedas elegibles donde apareciste. ⚠ = perdés apariciones por presupuesto o ranking.">Imp. Share</MetTh>
+                    <MetTh right info="Click-Through Rate: % de clics sobre impresiones (clics ÷ impresiones).">CTR</MetTh>
+                    <MetTh right info="Costo por clic promedio.">CPC</MetTh>
+                    <MetTh info="Tope de gasto diario configurado para la campaña.">Presupuesto/día</MetTh>
+                    <MetTh right>Acciones</MetTh>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -671,7 +701,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                       ? [c.perdidoPorPresupuesto != null && c.perdidoPorPresupuesto >= 10 ? `pierde ${c.perdidoPorPresupuesto}% por presupuesto` : '', c.perdidoPorRanking != null && c.perdidoPorRanking >= 20 ? `pierde ${c.perdidoPorRanking}% por ranking` : ''].filter(Boolean).join(' · ')
                       : ''
                     return (
-                      <tr key={c.id} className="hover:bg-gray-50 align-middle">
+                      <tr key={c.id} className={`${MET_ROW} align-middle`}>
                         <td className="px-3 py-2 text-gray-800 max-w-[200px] truncate">{c.nombre}</td>
                         <td className="px-3 py-2"><span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded border ${b.cls}`}>{b.label}</span></td>
                         <td className="px-3 py-2 text-right">{money(c.gasto)}</td>
@@ -718,16 +748,16 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Palabras clave (top {data.keywords.length} por gasto)</p>
               <div className="overflow-x-auto rounded-xl border border-gray-300">
                 <table className="w-full min-w-[780px] text-sm">
-                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                    <tr>
-                      <th className="text-left px-3 py-2">Palabra clave</th>
-                      <th className="text-left px-3 py-2">Campaña</th>
-                      <th className="text-center px-3 py-2" title="Quality Score 1-10 (calidad según Google)">QS</th>
-                      <th className="text-right px-3 py-2">Gasto</th>
-                      <th className="text-right px-3 py-2">Clics</th>
-                      <th className="text-right px-3 py-2">CTR</th>
-                      <th className="text-right px-3 py-2">CPC</th>
-                      <th className="text-right px-3 py-2">Acciones</th>
+                  <thead className={MET_THEAD}>
+                    <tr className={MET_THEAD_TR}>
+                      <MetTh>Palabra clave</MetTh>
+                      <MetTh>Campaña</MetTh>
+                      <MetTh center info="Quality Score (1-10): la nota de Google a la calidad de la palabra clave. Verde ≥7 · ámbar 4-6 · rojo ≤3.">QS</MetTh>
+                      <MetTh right info="Dinero invertido en esta palabra clave.">Gasto</MetTh>
+                      <MetTh right info="Clics recibidos por esta palabra clave.">Clics</MetTh>
+                      <MetTh right info="Click-Through Rate: clics ÷ impresiones.">CTR</MetTh>
+                      <MetTh right info="Costo por clic promedio.">CPC</MetTh>
+                      <MetTh right>Acciones</MetTh>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -741,7 +771,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                       // Color del QS: verde ≥7, ámbar 4-6, rojo ≤3.
                       const qsCls = k.qualityScore == null ? 'text-gray-300' : k.qualityScore >= 7 ? 'text-emerald-600' : k.qualityScore >= 4 ? 'text-amber-600' : 'text-red-600'
                       return (
-                        <tr key={i} className="hover:bg-gray-50">
+                        <tr key={i} className={MET_ROW}>
                           <td className="px-3 py-2 text-gray-800">
                             {k.texto} <span className="text-gray-400 text-xs">({k.matchType?.toLowerCase()})</span>
                             {!activa && <span className="ml-1.5 text-[10px] font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">pausada</span>}
@@ -777,19 +807,19 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
               </p>
               <div className="overflow-x-auto rounded-xl border border-gray-300">
                 <table className="w-full min-w-[720px] text-sm">
-                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                    <tr>
-                      <th className="text-left px-3 py-2">Término buscado</th>
-                      <th className="text-left px-3 py-2">Campaña</th>
-                      <th className="text-right px-3 py-2">Gasto</th>
-                      <th className="text-right px-3 py-2">Clics</th>
-                      <th className="text-right px-3 py-2">Conversiones</th>
-                      <th className="text-right px-3 py-2">Acciones</th>
+                  <thead className={MET_THEAD}>
+                    <tr className={MET_THEAD_TR}>
+                      <MetTh info="Lo que la persona escribió realmente en Google antes de ver tu anuncio.">Término buscado</MetTh>
+                      <MetTh>Campaña</MetTh>
+                      <MetTh right info="Dinero gastado en este término de búsqueda.">Gasto</MetTh>
+                      <MetTh right info="Clics generados por este término.">Clics</MetTh>
+                      <MetTh right info="Conversiones generadas por este término.">Conversiones</MetTh>
+                      <MetTh right info="Bloqueá como negativa los términos que no sirven para dejar de gastar en ellos.">Acciones</MetTh>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {data.terminos.map((t, i) => (
-                      <tr key={i} className="hover:bg-gray-50">
+                      <tr key={i} className={MET_ROW}>
                         <td className="px-3 py-2 text-gray-800">{t.termino}</td>
                         <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{t.campana}</td>
                         <td className="px-3 py-2 text-right">{money(t.gasto)}</td>
@@ -836,8 +866,14 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
   )
 }
 
+const SUBS_PUBLICIDAD: { key: 'meta' | 'google'; label: string }[] = [
+  { key: 'meta', label: 'Meta (Facebook · Instagram)' },
+  { key: 'google', label: 'Google Ads' },
+]
+
 function MetricasPanel() {
   const [periodo, setPeriodo] = useState('last_30d')
+  const [sub, setSub] = useState<'meta' | 'google'>('meta')
   const [data, setData] = useState<MetResp | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
@@ -862,21 +898,21 @@ function MetricasPanel() {
   const money = (n: number) => `$${fmt(n)}${ads && ads.moneda !== 'CLP' ? ' ' + ads.moneda : ''}`
 
   const KPIS = ads ? [
-    { l: 'Gasto', v: money(ads.cuenta.spend) },
-    { l: 'Alcance', v: fmt(ads.cuenta.alcance) },
-    { l: 'Impresiones', v: fmt(ads.cuenta.impresiones) },
-    { l: 'Clics', v: fmt(ads.cuenta.clicks) },
-    { l: 'CTR', v: `${ads.cuenta.ctr.toFixed(2)}%` },
-    { l: 'CPC', v: money(ads.cuenta.cpc) },
+    { l: 'Gasto', v: money(ads.cuenta.spend), i: 'Dinero invertido en anuncios de Meta durante el período.' },
+    { l: 'Alcance', v: fmt(ads.cuenta.alcance), i: 'Personas únicas que vieron tus anuncios.' },
+    { l: 'Impresiones', v: fmt(ads.cuenta.impresiones), i: 'Cuántas veces se mostraron tus anuncios (una misma persona puede contar varias veces).' },
+    { l: 'Clics', v: fmt(ads.cuenta.clicks), i: 'Clics totales en tus anuncios.' },
+    { l: 'CTR', v: `${ads.cuenta.ctr.toFixed(2)}%`, i: 'Click-Through Rate: % de clics sobre impresiones (clics ÷ impresiones).' },
+    { l: 'CPC', v: money(ads.cuenta.cpc), i: 'Costo por clic promedio.' },
   ] : []
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5">
+      <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h2 className="text-base font-bold text-gray-900">📊 Métricas</h2>
-            <p className="text-sm text-gray-500">Datos en vivo de Meta: anuncios pagados y posts orgánicos. El período aplica a los Ads.</p>
+            <h2 className="text-base font-bold text-gray-900">📣 Publicidad</h2>
+            <p className="text-sm text-gray-500">Rendimiento y gestión de tus anuncios en vivo. El período aplica a las métricas.</p>
           </div>
           <div className="flex items-center gap-2">
             <select value={periodo} onChange={e => setPeriodo(e.target.value)} className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm">
@@ -885,9 +921,19 @@ function MetricasPanel() {
             <button onClick={cargar} className="text-sm border-2 border-gray-300 rounded-lg px-3 py-1.5 font-semibold hover:bg-gray-50">Actualizar</button>
           </div>
         </div>
+        <div className="inline-flex gap-1 bg-gray-100 border border-gray-300 rounded-2xl p-1.5 overflow-x-auto max-w-full">
+          {SUBS_PUBLICIDAD.map(s => (
+            <button key={s.key} onClick={() => setSub(s.key)}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${sub === s.key ? 'bg-brand text-white shadow-md' : 'text-gray-600 hover:bg-white hover:text-gray-900'}`}>
+              {s.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {loading ? (
+      {sub === 'google' ? (
+        <GoogleAdsPanel periodo={periodo} />
+      ) : loading ? (
         <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-8 text-center text-sm text-gray-400">Cargando…</div>
       ) : err ? (
         <div className="bg-red-50 border-2 border-red-200 text-red-800 rounded-2xl px-4 py-3 text-sm">{err}</div>
@@ -901,9 +947,12 @@ function MetricasPanel() {
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                   {KPIS.map(k => (
-                    <div key={k.l} className="rounded-xl border border-gray-300 bg-gray-50 px-3 py-2">
-                      <div className="text-[11px] text-gray-500">{k.l}</div>
-                      <div className="text-lg font-bold text-gray-900">{k.v}</div>
+                    <div key={k.l} className="rounded-xl border border-gray-300 bg-white px-3 py-2.5 shadow-sm">
+                      <div className="flex items-center gap-1 text-[11px] font-medium text-gray-500 uppercase tracking-wide">
+                        <span className="truncate">{k.l}</span>
+                        <InfoDot text={k.i} />
+                      </div>
+                      <div className="text-lg font-bold text-gray-900 mt-0.5">{k.v}</div>
                     </div>
                   ))}
                 </div>
@@ -913,12 +962,19 @@ function MetricasPanel() {
                 {ads.campanas.length > 0 ? (
                   <div className="overflow-x-auto rounded-xl border border-gray-300">
                     <table className="w-full min-w-[640px] text-sm">
-                      <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                        <tr><th className="text-left px-3 py-2">Campaña</th><th className="text-right px-3 py-2">Gasto</th><th className="text-right px-3 py-2">Alcance</th><th className="text-right px-3 py-2">Clics</th><th className="text-right px-3 py-2">CTR</th><th className="text-right px-3 py-2">CPC</th></tr>
+                      <thead className={MET_THEAD}>
+                        <tr className={MET_THEAD_TR}>
+                          <MetTh>Campaña</MetTh>
+                          <MetTh right info="Dinero invertido en esta campaña durante el período.">Gasto</MetTh>
+                          <MetTh right info="Personas únicas alcanzadas por la campaña.">Alcance</MetTh>
+                          <MetTh right info="Clics recibidos por la campaña.">Clics</MetTh>
+                          <MetTh right info="Click-Through Rate: clics ÷ impresiones.">CTR</MetTh>
+                          <MetTh right info="Costo por clic promedio.">CPC</MetTh>
+                        </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {ads.campanas.map((c, i) => (
-                          <tr key={i} className="hover:bg-gray-50">
+                          <tr key={i} className={MET_ROW}>
                             <td className="px-3 py-2 text-gray-800 max-w-[260px] truncate">{c.nombre}</td>
                             <td className="px-3 py-2 text-right">{money(c.spend)}</td>
                             <td className="px-3 py-2 text-right">{fmt(c.alcance)}</td>
@@ -937,8 +993,6 @@ function MetricasPanel() {
 
           <GestionCampanas />
 
-          <GoogleAdsPanel periodo={periodo} />
-
           <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-3">
             <h3 className="text-sm font-bold text-brand uppercase tracking-wide">Orgánico (Facebook)</h3>
             {data?.organico_error ? (
@@ -949,12 +1003,18 @@ function MetricasPanel() {
                 {org.posts.length > 0 ? (
                   <div className="overflow-x-auto rounded-xl border border-gray-300">
                     <table className="w-full min-w-[640px] text-sm">
-                      <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                        <tr><th className="text-left px-3 py-2">Fecha</th><th className="text-left px-3 py-2">Post</th><th className="text-right px-3 py-2">Impresiones</th><th className="text-right px-3 py-2">Interacciones</th><th className="px-3 py-2"></th></tr>
+                      <thead className={MET_THEAD}>
+                        <tr className={MET_THEAD_TR}>
+                          <MetTh>Fecha</MetTh>
+                          <MetTh>Post</MetTh>
+                          <MetTh right info="Cuántas veces se mostró la publicación de forma orgánica (sin pauta pagada).">Impresiones</MetTh>
+                          <MetTh right info="Suma de reacciones, comentarios y veces compartido.">Interacciones</MetTh>
+                          <MetTh right>{''}</MetTh>
+                        </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {org.posts.map((p, i) => (
-                          <tr key={i} className="hover:bg-gray-50">
+                          <tr key={i} className={MET_ROW}>
                             <td className="px-3 py-2 whitespace-nowrap text-gray-600">{(p.fecha || '').slice(0, 10)}</td>
                             <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate">{p.mensaje || '(sin texto)'}</td>
                             <td className="px-3 py-2 text-right">{fmt(p.impresiones)}</td>
@@ -978,7 +1038,7 @@ function MetricasPanel() {
 
 // ===================== MAIL (módulo histórico completo) =====================
 
-function MailContent({ onBack }: { onBack?: () => void }) {
+function MailContent() {
   const [tab, setTab] = useState<Tab>('Campañas')
   const [prefilled, setPrefilled] = useState<Prefilled>(null)
   const [campanasRefreshKey, setCampanasRefreshKey] = useState(0)
@@ -1003,13 +1063,14 @@ function MailContent({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        {onBack && <button onClick={onBack} className="text-sm text-brand hover:text-brand font-semibold mb-1">← Campañas</button>}
-        <div className="flex items-center gap-2">
-          <span className="w-9 h-9 rounded-lg bg-brand/10 grid place-items-center text-xl">✉️</span>
-          <h2 className="text-xl font-bold text-gray-900">Mailing</h2>
+      <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5">
+        <div className="flex items-center gap-3">
+          <span className="w-9 h-9 rounded-lg bg-brand/10 grid place-items-center text-xl shrink-0">✉️</span>
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Mailing</h2>
+            <p className="text-sm text-gray-500">Campañas de email a la base de veterinarios.</p>
+          </div>
         </div>
-        <p className="text-sm text-gray-500 mt-0.5">Campañas de email a la base de veterinarios.</p>
       </div>
 
       {diag && <DiagBanner d={diag} />}
