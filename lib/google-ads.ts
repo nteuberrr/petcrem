@@ -328,6 +328,28 @@ export async function resumenCampanas(periodo: string): Promise<ResumenGoogleAds
   return { moneda, cuenta, campanas, comparacion }
 }
 
+export interface PuntoSerieGoogle { fecha: string; gasto: number; conversiones: number }
+/** Serie DIARIA de gasto + conversiones del período (para gráficos evolutivos). */
+export async function serieDiariaGoogle(periodo = 'last_30d'): Promise<PuntoSerieGoogle[]> {
+  const rows = await gaqlSearch(`
+    SELECT segments.date, metrics.cost_micros, metrics.conversions
+    FROM campaign
+    WHERE ${whereFecha(periodo)} AND campaign.status != 'REMOVED'
+  `)
+  const porDia = new Map<string, { gasto: number; conversiones: number }>()
+  for (const r of rows) {
+    const fecha = String(r.segments?.date || '')
+    if (!fecha) continue
+    const m = (r.metrics || {}) as Record<string, unknown>
+    const cur = porDia.get(fecha) || { gasto: 0, conversiones: 0 }
+    cur.gasto += clp(m.costMicros)
+    cur.conversiones += num(m.conversions)
+    porDia.set(fecha, cur)
+  }
+  return [...porDia.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([fecha, v]) => ({ fecha, gasto: v.gasto, conversiones: Math.round(v.conversiones * 10) / 10 }))
+}
+
 // ─── Keywords ─────────────────────────────────────────────────────────────────
 export interface KeywordGoogle {
   resourceName: string

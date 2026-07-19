@@ -109,6 +109,18 @@ export async function resumenAds(opts: { datePreset?: string } = {}): Promise<Re
   }
 }
 
+export interface PuntoSerieMeta { fecha: string; spend: number }
+/** Serie DIARIA de gasto (para gráficos evolutivos). */
+export async function serieDiariaMeta(datePreset = 'last_30d'): Promise<PuntoSerieMeta[]> {
+  const act = await getAdAccountId()
+  const d = await graphGet(`${act}/insights`, { fields: 'spend', level: 'account', time_increment: '1', date_preset: datePreset, access_token: token() })
+  const rows = (d.data as Array<Record<string, unknown>>) || []
+  return rows
+    .map(r => ({ fecha: String(r.date_start || ''), spend: num(r.spend) }))
+    .filter(p => p.fecha)
+    .sort((a, b) => (a.fecha < b.fecha ? -1 : 1))
+}
+
 // ─── Orgánico (posts de la Página) ────────────────────────────────────────────
 export interface PostOrganico {
   fecha: string
