@@ -113,6 +113,12 @@ type Vet = {
   notas: string
   total_servicios: string
   fecha_inscripcion: string
+  // Datos de transferencia (los carga el vet por el link datos-pago, consumo único).
+  banco?: string
+  tipo_cuenta?: string
+  numero_cuenta?: string
+  datos_pago_completos?: string
+  fecha_datos_pago?: string
   comunas_array?: string[]
   horarios_obj?: Record<string, { am?: boolean; pm?: boolean }>
 }
@@ -919,6 +925,9 @@ export default function ServiciosEutanasiasPage() {
                           <td className="px-3 py-2 text-gray-600">
                             <div className="text-xs">{v.email}</div>
                             <div className="text-xs text-gray-500">{v.telefono}</div>
+                            <div className={`text-[10px] font-medium mt-0.5 ${(v.datos_pago_completos || '').toUpperCase() === 'TRUE' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                              {(v.datos_pago_completos || '').toUpperCase() === 'TRUE' ? '💳 Datos de pago ✓' : '⏳ Sin datos de pago'}
+                            </div>
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex flex-wrap gap-1 max-w-xs">
@@ -1539,6 +1548,33 @@ export default function ServiciosEutanasiasPage() {
               <input type="text" required value={vetForm.rut} onChange={e => setVetForm({ ...vetForm, rut: e.target.value })} className={inputCls} placeholder="12345678-9" />
             </Field>
           </div>
+
+          {/* Datos de transferencia (los carga el vet por su link; solo lectura acá) */}
+          {editingVet && (
+            <div className="rounded-lg border border-gray-300 bg-gray-50 p-3">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Datos de transferencia</p>
+                {(editingVet.datos_pago_completos || '').toUpperCase() === 'TRUE' ? (
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                    ✓ Recibidos{editingVet.fecha_datos_pago ? ` · ${formatDate(editingVet.fecha_datos_pago)}` : ''}
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">⏳ Pendientes</span>
+                )}
+              </div>
+              {(editingVet.datos_pago_completos || '').toUpperCase() === 'TRUE' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <p><span className="text-gray-500">Titular:</span> <span className="font-medium text-gray-900">{`${editingVet.nombre || ''} ${editingVet.apellido || ''}`.trim() || '—'}</span></p>
+                  <p><span className="text-gray-500">RUT:</span> <span className="font-medium text-gray-900">{editingVet.rut || '—'}</span></p>
+                  <p><span className="text-gray-500">Banco:</span> <span className="font-medium text-gray-900">{editingVet.banco || '—'}</span></p>
+                  <p><span className="text-gray-500">Tipo de cuenta:</span> <span className="font-medium text-gray-900">{editingVet.tipo_cuenta || '—'}</span></p>
+                  <p className="sm:col-span-2"><span className="text-gray-500">N° de cuenta:</span> <span className="font-mono font-semibold text-gray-900">{editingVet.numero_cuenta || '—'}</span></p>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500">El veterinario todavía no cargó sus datos bancarios (los completa con el link que recibe por correo). Aparecerán acá apenas los envíe.</p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">
