@@ -185,6 +185,9 @@ export default function ServiciosEutanasiasPage() {
   const [loadingCotis, setLoadingCotis] = useState(false)
   const [showCotiModal, setShowCotiModal] = useState(false)
   const [cotiForm, setCotiForm] = useState(cotizacionFormDefault())
+  // ¿La cotización manual incluye cremación? Por defecto SÍ (servicio integral
+  // recomendado: coordinamos eutanasia + cremación con el vet de punta a punta).
+  const [nuevaConCremacion, setNuevaConCremacion] = useState(true)
   const [savingCoti, setSavingCoti] = useState(false)
   const [cotiError, setCotiError] = useState('')
   // Estado paralelo al form: si el admin elige asignar vet manualmente al crear.
@@ -349,6 +352,7 @@ export default function ServiciosEutanasiasPage() {
   // ─── Cotizaciones handlers ────────────────────────────────────────────────
   function abrirNuevaCotizacion() {
     setCotiForm(cotizacionFormDefault())
+    setNuevaConCremacion(true)
     setVetManualId('')
     setComunaAuto(false)
     setComunaWarn('')
@@ -392,6 +396,7 @@ export default function ServiciosEutanasiasPage() {
         body: JSON.stringify({
           ...cotiForm,
           peso: parseFloat(cotiForm.peso),
+          incluye_cremacion: nuevaConCremacion,
           vet_id_asignado: vetManualId || undefined,
         }),
       })
@@ -1172,6 +1177,26 @@ export default function ServiciosEutanasiasPage() {
           <Field label="Notas internas">
             <textarea value={cotiForm.notas} onChange={e => setCotiForm({ ...cotiForm, notas: e.target.value })} rows={2} className={inputCls} placeholder="Información adicional que ayude al vet" />
           </Field>
+
+          {/* ¿Incluye cremación? — por defecto SÍ (servicio integral recomendado) */}
+          <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">¿Incluye cremación?</label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setNuevaConCremacion(true)}
+                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${nuevaConCremacion ? 'bg-brand text-white border-brand' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
+                Con cremación <span className={nuevaConCremacion ? 'text-white/80' : 'text-gray-400'}>(recomendado)</span>
+              </button>
+              <button type="button" onClick={() => setNuevaConCremacion(false)}
+                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${!nuevaConCremacion ? 'bg-gray-600 text-white border-gray-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
+                Solo eutanasia
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {nuevaConCremacion
+                ? 'El chofer pasa a retirar tras la eutanasia: aparece en el dashboard, ocupa la agenda y se crea la ficha de cremación.'
+                : 'Solo la eutanasia. Queda como recordatorio gris en el calendario, sin retiro ni bloqueo de agenda.'}
+            </p>
+          </div>
 
           {/* Asignar vet manualmente (opcional) */}
           <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
