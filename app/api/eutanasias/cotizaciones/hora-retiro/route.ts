@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
         const dSem = new Date(`${c.fecha_servicio}T12:00:00`).getDay()
         const motivo = esFeriado(c.fecha_servicio) ? `por ser feriado (${nombreFeriado(c.fecha_servicio)})`
           : (dSem === 0 || dSem === 6) ? 'por ser fin de semana'
-          : 'por ser después de las 19:00'
+          : 'por ser después de las 18:00'
         const msg =
           `Hola ${tutor}, la veterinaria nos informó que la hora del servicio de ${mascota} quedó coordinada para las ${hora} hrs. ` +
           `El retiro para la cremación tiene un recargo adicional de ${fmtPrecio(monto)} por fuera de horario (${motivo}) ` +

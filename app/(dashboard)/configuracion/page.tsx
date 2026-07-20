@@ -1445,7 +1445,7 @@ export default function ConfiguracionPage() {
             <select value={otroForm.auto_regla} onChange={e => setOtroForm(f => ({ ...f, auto_regla: e.target.value }))}
               className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="">Ninguno (se marca a mano)</option>
-              <option value="fuera_horario">Fuera de horario — retiros desde las 19:00 (L–V) y todo sábado/domingo</option>
+              <option value="fuera_horario">Fuera de horario — retiros desde las 18:00 (L–V) y todo sábado/domingo</option>
               <option value="distancia">Por comuna (distancia) — según la lista de comunas</option>
             </select>
             <p className="mt-1 text-[11px] text-gray-500">Se pre-carga solo en los adicionales de la ficha cuando aplica; siempre se puede desmarcar.</p>

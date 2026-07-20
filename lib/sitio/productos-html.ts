@@ -51,7 +51,7 @@ function tarjetaServicio(s: Prod): string {
   const precio = num(s.precio)
   let detalle = ''
   if (s.auto_regla === 'fuera_horario') {
-    detalle = 'Retiros después de las 19:00 hrs (lun a vie), y todo el día los fines de semana y feriados.'
+    detalle = 'Retiros después de las 18:00 hrs (lun a vie), y todo el día los fines de semana y feriados.'
   } else if (s.auto_regla === 'distancia') {
     let comunas: string[] = []
     try { const x = JSON.parse(s.comunas || '[]'); if (Array.isArray(x)) comunas = x.map(String) } catch { /* sin lista */ }

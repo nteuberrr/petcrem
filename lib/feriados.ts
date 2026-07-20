@@ -1,7 +1,7 @@
 /**
  * Feriados nacionales de Chile. Un feriado que cae en día de semana se trata
  * como fin de semana para el recargo "fuera de horario": el retiro tiene recargo
- * durante TODO el día (no solo desde las 19:00). Lo usan lib/adicionales-auto
+ * durante TODO el día (no solo desde las 18:00). Lo usan lib/adicionales-auto
  * (auto-carga en la ficha) y el agente de WhatsApp (para avisarlo al cotizar).
  *
  * Client-safe: solo datos + funciones puras (sin imports de servidor).

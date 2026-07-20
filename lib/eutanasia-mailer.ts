@@ -715,7 +715,7 @@ export function renderClienteCotizacionEutanasia(args: ClienteCotizacionArgs, co
         </p>
         ${args.recargoFueraHorario && args.recargoFueraHorario > 0 ? `
         <p style="margin:10px 0 0;font-size:13px;line-height:1.5;color:${BRAND.muted}">
-          Estos valores incluyen un <strong>recargo por atención fuera de horario</strong> de ${escapeHtml(fmtPrecio(args.recargoFueraHorario))} (fin de semana, feriado o desde las 19:00).${args.conCremacion === false ? '' : ' Si sumas la cremación, este recargo se cobra una sola vez.'}
+          Estos valores incluyen un <strong>recargo por atención fuera de horario</strong> de ${escapeHtml(fmtPrecio(args.recargoFueraHorario))} (fin de semana, feriado o desde las 18:00).${args.conCremacion === false ? '' : ' Si sumas la cremación, este recargo se cobra una sola vez.'}
         </p>` : ''}
       </div>
 

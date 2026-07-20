@@ -34,7 +34,7 @@ export async function PUT(req: NextRequest) {
   try {
     const body = await req.json()
 
-    // Guardado del recargo fuera de horario (finde/feriado/≥19:00 L-V).
+    // Guardado del recargo fuera de horario (finde/feriado/≥18:00 L-V).
     if ('recargo_fuera_horario' in body) {
       const monto = Number(body.recargo_fuera_horario)
       if (!Number.isFinite(monto) || monto < 0) {

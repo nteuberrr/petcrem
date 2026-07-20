@@ -6,8 +6,9 @@ import { esFeriado } from './feriados'
  * Un servicio de `otros_servicios` con `auto_regla` se PRE-CARGA solo en los
  * adicionales al crear/registrar una ficha (siempre deseleccionable a mano):
  *
- *  - 'fuera_horario': retiros después de las 19:00 de lunes a viernes, y a
- *    CUALQUIER hora los sábados y domingos (regla del dueño, 2026-07-13).
+ *  - 'fuera_horario': retiros desde las 18:00 de lunes a viernes, y a
+ *    CUALQUIER hora los sábados y domingos (regla del dueño, 2026-07-13;
+ *    corte movido de 19:00 → 18:00 el 2026-07-20).
  *  - 'distancia': la comuna de retiro está en la lista `comunas` del servicio
  *    (JSON array de nombres; match sin tildes/mayúsculas vía lib/comunas).
  *
@@ -19,7 +20,7 @@ import { esFeriado } from './feriados'
 export type ReglaAuto = '' | 'fuera_horario' | 'distancia'
 
 /** Hora (inclusive) desde la que un retiro de día de semana es "fuera de horario". */
-export const HORA_FUERA_HORARIO = '19:00'
+export const HORA_FUERA_HORARIO = '18:00'
 
 export interface ServicioAuto {
   auto_regla?: string
@@ -40,7 +41,7 @@ export function comunasDeServicio(comunasJson: string | undefined): string[] {
 
 /**
  * ¿El retiro es fuera de horario? Sábado/domingo y FERIADOS siempre (todo el
- * día); L-V hábil desde las 19:00 (inclusive). Sin fecha no se puede saber →
+ * día); L-V hábil desde las 18:00 (inclusive). Sin fecha no se puede saber →
  * false. Sin hora en día de semana hábil → false (se asume dentro de horario
  * hasta que se coordine la hora).
  */
@@ -77,7 +78,7 @@ export function aplicaReglaAuto(
 
 /** Etiqueta corta de la regla (UI de Configuración y hints de la ficha). */
 export function etiquetaRegla(regla: string | undefined): string {
-  if (regla === 'fuera_horario') return 'Auto: fuera de horario (19:00+, fin de semana y feriados)'
+  if (regla === 'fuera_horario') return 'Auto: fuera de horario (18:00+, fin de semana y feriados)'
   if (regla === 'distancia') return 'Auto: por comuna (distancia)'
   return ''
 }

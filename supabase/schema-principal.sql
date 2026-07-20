@@ -89,7 +89,7 @@ alter table "clientes" add column if not exists "factura_vet_id" text not null d
 -- pagada. vacío = no se emitió aún (guard de idempotencia del auto-emisor de boleta).
 alter table "clientes" add column if not exists "boleta_id" text default '';
 -- hora_retiro (HH:MM): hora coordinada del retiro. Junto con fecha_retiro determina
--- si aplica el recargo automático "fuera de horario" (>=19:00 L-V, o sáb/dom).
+-- si aplica el recargo automático "fuera de horario" (>=18:00 L-V, o sáb/dom).
 alter table "clientes" add column if not exists "hora_retiro" text not null default '';
 -- greda_descontada: ánfora de greda descontada del stock por esta ficha (solo
 -- Cremación Individual, por tramo de peso 0-10 S / 10-30 M / 30+ L, ver
@@ -656,7 +656,7 @@ create table if not exists "config_eutanasia" (
   "consulta_vet" text not null default '30000',
   "consulta_alma" text not null default '10000',
   -- Recargo al cliente si el servicio de eutanasia es fuera de horario (finde,
-  -- feriado o >=19:00 L-V). Se cobra una sola vez junto con la eutanasia, aparte
+  -- feriado o >=18:00 L-V). Se cobra una sola vez junto con la eutanasia, aparte
   -- de la boleta; si además hay cremación, el retiro no vuelve a sumar su recargo.
   "recargo_fuera_horario" text not null default '10000'
 );

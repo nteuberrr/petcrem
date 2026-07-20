@@ -280,7 +280,7 @@ export default function ServiciosEutanasiasPage() {
   const [savingConsulta, setSavingConsulta] = useState(false)
   const [consultaMsg, setConsultaMsg] = useState('')
 
-  // Recargo fuera de horario (finde/feriado/≥19:00 L-V): se suma al valor de la
+  // Recargo fuera de horario (finde/feriado/≥18:00 L-V): se suma al valor de la
   // eutanasia (aparte de la boleta) y se cobra una sola vez aunque haya cremación.
   const [recargoInput, setRecargoInput] = useState('')
   const [savingRecargo, setSavingRecargo] = useState(false)
@@ -1032,7 +1032,7 @@ export default function ServiciosEutanasiasPage() {
 
           {/* Recargo fuera de horario del servicio de eutanasia a domicilio */}
           <div className="bg-white rounded-xl shadow-md border border-gray-300 p-4 sm:p-5 mb-5 max-w-2xl">
-            <h3 className="text-sm font-semibold text-gray-900">Recargo fuera de horario <span className="text-gray-400 font-normal">(fin de semana, feriado o desde las 19:00)</span></h3>
+            <h3 className="text-sm font-semibold text-gray-900">Recargo fuera de horario <span className="text-gray-400 font-normal">(fin de semana, feriado o desde las 18:00)</span></h3>
             <p className="text-xs text-gray-500 mt-1">
               Se le suma al valor de la eutanasia cuando el servicio es fuera de horario. Se cobra <strong>junto con la eutanasia</strong> (aparte de la boleta) y <strong>una sola vez</strong>: si además hay cremación, el retiro no vuelve a sumar su propio recargo. Aplica se realice o no la eutanasia.
             </p>

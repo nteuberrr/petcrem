@@ -96,7 +96,7 @@ function renderRecargos(recargos: Tramo[]): string {
   const dist = recargos.find(r => activo(r) && r.auto_regla === 'distancia')
   const items: string[] = []
   if (fh) {
-    items.push(`<li class="aa-rec-item"><span class="aa-rec-top"><span class="aa-rec-n">Retiro fuera de horario</span><span class="aa-rec-v">+${fmtCLP(num(fh.precio))}</span></span><span class="aa-rec-d">Retiros después de las 19:00 hrs (lunes a viernes), y durante todo el día los fines de semana y feriados.</span></li>`)
+    items.push(`<li class="aa-rec-item"><span class="aa-rec-top"><span class="aa-rec-n">Retiro fuera de horario</span><span class="aa-rec-v">+${fmtCLP(num(fh.precio))}</span></span><span class="aa-rec-d">Retiros después de las 18:00 hrs (lunes a viernes), y durante todo el día los fines de semana y feriados.</span></li>`)
   }
   if (dist) {
     let comunas: string[] = []

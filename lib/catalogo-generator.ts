@@ -451,7 +451,7 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
       const precio = parseInt(s.precio, 10) || 0
       let det = ''
       if (s.auto_regla === 'fuera_horario') {
-        det = 'Retiros después de las 19:00 hrs (lunes a viernes), y todo el día los fines de semana y feriados.'
+        det = 'Retiros después de las 18:00 hrs (lunes a viernes), y todo el día los fines de semana y feriados.'
       } else if (s.auto_regla === 'distancia') {
         let comunas: string[] = []
         try { const x = JSON.parse(s.comunas || '[]'); if (Array.isArray(x)) comunas = x.map(String) } catch { /* sin lista */ }

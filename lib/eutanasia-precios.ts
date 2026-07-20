@@ -28,7 +28,7 @@ const CONFIG_COLS = ['id', 'fijo', 'consulta_vet', 'consulta_alma', 'recargo_fue
 const CONSULTA_VET_DEFAULT = 30000
 const CONSULTA_ALMA_DEFAULT = 10000
 
-// Recargo por servicio FUERA DE HORARIO (fin de semana, feriado o desde las 19:00
+// Recargo por servicio FUERA DE HORARIO (fin de semana, feriado o desde las 18:00
 // L-V), que se le cobra al cliente por la eutanasia a domicilio. Se cobra UNA sola
 // vez, junto con la eutanasia y SIEMPRE fuera de la boleta (que cubre solo la
 // cremación); si además hay cremación, la ficha NO vuelve a sumar su propio
@@ -182,7 +182,7 @@ type CotValor = { peso?: string; precio_snapshot?: string; fecha_servicio?: stri
  * `precio_snapshot` congelado (lo pactado con el vet) + el fijo vigente; si la
  * cotización no tiene snapshot (legacy), cae a la tabla por peso. El recargo se
  * agrega cuando la fecha/hora del servicio cae fuera de horario (finde, feriado o
- * ≥19:00 L-V) y se cobra junto con la eutanasia, SIEMPRE fuera de la boleta.
+ * ≥18:00 L-V) y se cobra junto con la eutanasia, SIEMPRE fuera de la boleta.
  */
 export async function desgloseValorCotizacion(cot: CotValor): Promise<ValorCotizacionDesglose> {
   const [fijo, recargoMonto] = await Promise.all([getFijoEutanasia(), getRecargoFueraHorario()])

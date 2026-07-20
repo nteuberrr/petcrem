@@ -334,7 +334,7 @@ async function cotizarEutanasia(a: AccionCotizarEutanasia): Promise<string> {
     return 'No tengo el precio de la eutanasia a domicilio configurado para ese peso ahora mismo. Ofrécele que un miembro del equipo lo contacte para darle el valor, o escala a un humano.'
   }
   const notaRecargo = recargo > 0
-    ? ` IMPORTANTE: si el servicio queda fuera de horario (fin de semana, feriado o desde las 19:00), se suma un recargo de ${fmtPrecio(recargo)} a ese valor (aplica se realice o no la eutanasia). Avísaselo si la fecha/hora que pide cae fuera de horario, para que no sea una sorpresa.`
+    ? ` IMPORTANTE: si el servicio queda fuera de horario (fin de semana, feriado o desde las 18:00), se suma un recargo de ${fmtPrecio(recargo)} a ese valor (aplica se realice o no la eutanasia). Avísaselo si la fecha/hora que pide cae fuera de horario, para que no sea una sorpresa.`
     : ''
   return `Es un servicio de EVALUACIÓN a domicilio: un veterinario de la red visita a la mascota y evalúa si corresponde la eutanasia. Explícale al cliente con claridad los dos valores: si SE REALIZA la eutanasia, el valor es ${fmtPrecio(cliente)} (mascota de ${peso} kg); si al evaluar NO corresponde realizarla, se cobra solo la consulta de ${fmtPrecio(consulta.total)}. NO expliques cómo se reparte ese monto internamente.${notaRecargo} Si decide avanzar, junta los datos y agéndala.`
 }
