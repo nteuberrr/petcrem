@@ -1105,12 +1105,19 @@ export default function ClientesPage() {
             </div>
           )}
 
+          {/* Información del tutor */}
+          <h3 className="text-sm font-bold text-brand">Información del tutor</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <ModalField required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
             <ModalField required label="Nombre tutor" value={form.nombre_tutor} onChange={v => setForm(f => ({ ...f, nombre_tutor: v }))} />
             <ModalField required type="email" label="Email" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} placeholder="ejemplo@correo.cl" />
             <ModalField required type="tel" label="Teléfono" value={form.telefono} onChange={v => setForm(f => ({ ...f, telefono: v.replace(/\D/g, '').slice(0, 9) }))} placeholder="9 dígitos · ej: 912345678" />
+            <ModalField required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
           </div>
+          {esComunaNoCubierta(form.comuna) && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              ⚠️ <strong>{form.comuna}</strong> está fuera de nuestra cobertura de retiro a domicilio. Puedes registrar la ficha igual (por ejemplo si la mascota se acerca a Recoleta), pero ahí no coordinamos retiro.
+            </div>
+          )}
 
           <ModalAddressField required label="Dirección de retiro" value={form.direccion_retiro}
             onChange={v => setForm(f => ({ ...f, direccion_retiro: v, direccion_despacho: f.misma_direccion ? v : f.direccion_despacho }))} />
@@ -1126,20 +1133,10 @@ export default function ClientesPage() {
             <ModalAddressField required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
           )}
 
+          {/* Información de la mascota */}
+          <h3 className="text-sm font-bold text-brand pt-3 border-t border-gray-200">Información de la mascota</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <ModalField required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
-            <ModalField type="date" label="Fecha de nacimiento" value={form.fecha_nacimiento} onChange={v => setForm(f => ({ ...f, fecha_nacimiento: v }))} />
-            <ModalField required type="date" label="Fecha de defunción" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
-            <ModalField required type="date" label="Fecha de retiro" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
-            <ModalField type="time" label="Hora de retiro" value={form.hora_retiro} onChange={v => setForm(f => ({ ...f, hora_retiro: v }))} />
-          </div>
-          {esComunaNoCubierta(form.comuna) && (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              ⚠️ <strong>{form.comuna}</strong> está fuera de nuestra cobertura de retiro a domicilio. Puedes registrar la ficha igual (por ejemplo si la mascota se acerca a Recoleta), pero ahí no coordinamos retiro.
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <ModalField required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
             <div>
               <label className="text-xs font-semibold text-gray-700">
                 Especie <span className="text-red-500">*</span>
@@ -1152,9 +1149,17 @@ export default function ClientesPage() {
                 {especies.map(e => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
               </select>
             </div>
+            <ModalField type="date" label="Fecha de nacimiento" value={form.fecha_nacimiento} onChange={v => setForm(f => ({ ...f, fecha_nacimiento: v }))} />
+            <ModalField required type="date" label="Fecha de defunción" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
             <ModalField required type="number" step="0.1" min="0" label="Peso declarado (kg)" value={form.peso_declarado} onChange={v => setForm(f => ({ ...f, peso_declarado: v }))} />
           </div>
 
+          {/* Información del servicio */}
+          <h3 className="text-sm font-bold text-brand pt-3 border-t border-gray-200">Información del servicio</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <ModalField required type="date" label="Fecha de retiro" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
+            <ModalField type="time" label="Hora de retiro" value={form.hora_retiro} onChange={v => setForm(f => ({ ...f, hora_retiro: v }))} />
+          </div>
           <div>
             <label className="text-xs font-semibold text-gray-700">
               Tipo de servicio <span className="text-red-500">*</span>
