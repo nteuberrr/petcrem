@@ -692,7 +692,8 @@ create table if not exists "cotizaciones_eutanasia" (
   "creado_por" text not null default '',
   "tipo_servicio_cremacion" text not null default '',
   "cliente_confirmo" text not null default '',
-  "fecha_cliente_confirmacion" text not null default ''
+  "fecha_cliente_confirmacion" text not null default '',
+  "incluye_cremacion" text not null default ''
 );
 alter table "cotizaciones_eutanasia" enable row level security;
 -- Columnas del flujo de eutanasia del agente de WhatsApp (idempotente; ya están
@@ -710,7 +711,12 @@ alter table "cotizaciones_eutanasia"
   add column if not exists "consulta_vet_snapshot" text not null default '',
   -- hora_retiro_crematorio: hora que el vet informa (coordinada con el cliente)
   -- para que el crematorio pase a retirar tras la eutanasia. En blanco hasta que la informe.
-  add column if not exists "hora_retiro_crematorio" text not null default '';
+  add column if not exists "hora_retiro_crematorio" text not null default '',
+  -- incluye_cremacion: 'TRUE'/'FALSE'. Sin cremación → recordatorio gris en el
+  -- calendario, sin notificación en el dashboard ni bloqueo de agenda (el chofer
+  -- no retira). Vacío = derivar de tipo_servicio_cremacion (solo NINGUNA es sin
+  -- cremación). Ver lib/eutanasia-cremacion.
+  add column if not exists "incluye_cremacion" text not null default '';
 create index if not exists "cotizaciones_eutanasia_estado_idx" on "cotizaciones_eutanasia" ("estado");
 create index if not exists "cotizaciones_eutanasia_vet_id_asignado_idx" on "cotizaciones_eutanasia" ("vet_id_asignado");
 

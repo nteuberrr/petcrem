@@ -326,6 +326,9 @@ export const SHEETS: Record<string, string[]> = {
     // Servicio de cremación que el cliente eligió para DESPUÉS de la eutanasia
     // (CI | CP | SD). Se agendan ambos servicios.
     'tipo_servicio_cremacion',
+    // ¿Incluye cremación posterior? 'TRUE'/'FALSE'. Sin cremación: recordatorio
+    // gris en el calendario, sin notificación ni bloqueo de agenda (ver lib/eutanasia-cremacion).
+    'incluye_cremacion',
     'notas',
     'estado',
     'vet_id_asignado', 'vet_nombre_asignado', 'vet_email_asignado',

@@ -8,6 +8,7 @@ import { getConsultaEutanasia } from '@/lib/eutanasia-precios'
 import { parsePeso } from '@/lib/numbers'
 import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarClienteAgradecimientoEutanasia, enviarMailNoRealizada } from '@/lib/eutanasia-mailer'
 import { formatDate } from '@/lib/dates'
+import { crearClienteBorrador } from '@/lib/cliente-borrador'
 
 const SHEET = 'cotizaciones_eutanasia'
 
@@ -145,6 +146,53 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
+    // ── Toggle "¿incluye cremación?" ────────────────────────────────────────
+    // Además del flag, gestiona la ficha de cremación (borrador) para que el
+    // chofer tenga o no algo que retirar. Aviso al frontend si conservó una ficha.
+    let avisoToggle: string | undefined
+    if ('incluye_cremacion' in body) {
+      const quiere = body.incluye_cremacion === true || String(body.incluye_cremacion).toUpperCase() === 'TRUE'
+      partial.incluye_cremacion = quiere ? 'TRUE' : 'FALSE'
+      const c = rows[idx]
+      const clienteIdActual = c.cliente_id || ''
+      if (quiere) {
+        // Pasa a CON cremación → asegurar ficha borrador (si no tiene una).
+        if (!clienteIdActual) {
+          try {
+            const tipo = (c.tipo_servicio_cremacion || '').toUpperCase()
+            const borradorId = await crearClienteBorrador({
+              nombre_tutor: c.cliente_nombre,
+              nombre_mascota: c.mascota_nombre,
+              telefono: c.cliente_wa_id || c.cliente_telefono,
+              email: c.cliente_email,
+              direccion_retiro: c.direccion,
+              comuna: c.comuna,
+              peso_declarado: c.peso,
+              codigo_servicio: ['CI', 'CP', 'SD'].includes(tipo) ? tipo : '',
+              origen: 'bot_eutanasia',
+              notas: `Cremación tras eutanasia a domicilio (cotización N° ${id}).`,
+            })
+            if (borradorId) partial.cliente_id = borradorId
+          } catch (e) { console.warn('[cotizaciones PATCH] no se pudo crear borrador al activar cremación:', e) }
+        }
+      } else if (clienteIdActual) {
+        // Pasa a SIN cremación → si la ficha aún es borrador, se elimina; si ya
+        // está registrada (con código / en proceso), se conserva y se avisa.
+        try {
+          const clientes = await getSheetData('clientes')
+          const ci = clientes.findIndex(r => String(r.id) === String(clienteIdActual))
+          if (ci === -1) {
+            partial.cliente_id = ''
+          } else if ((clientes[ci].estado || '') === 'borrador') {
+            await deleteRow('clientes', ci)
+            partial.cliente_id = ''
+          } else {
+            avisoToggle = `La eutanasia quedó SIN cremación, pero su ficha de cremación${clientes[ci].codigo ? ` ${clientes[ci].codigo}` : ''} ya estaba registrada: se conservó. Elimínala a mano si corresponde.`
+          }
+        } catch (e) { console.warn('[cotizaciones PATCH] no se pudo procesar la ficha al desactivar cremación:', e) }
+      }
+    }
+
     const updated = { ...rows[idx], ...partial }
     await updateById(SHEET, id, updated)
 
@@ -204,7 +252,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
-    return NextResponse.json(updated)
+    return NextResponse.json({ ...updated, aviso: avisoToggle })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })
   }

@@ -10,6 +10,7 @@ import { getConsultaEutanasia, getFijoEutanasia, getRecargoFueraHorario, recargo
 import { crearClienteBorrador } from './cliente-borrador'
 import { capitalizarNombre } from './nombres'
 import { enviarTextoWhatsapp, isWhatsappConfigured, avisarAdminsWhatsapp } from './whatsapp'
+import { incluyeCremacion } from './eutanasia-cremacion'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lógica compartida de cotizaciones de eutanasia: envío a vets + alta automática
@@ -32,6 +33,10 @@ const COLS_COTI = [
   // pase a retirar tras la eutanasia. En blanco hasta que la informe.
   'hora_retiro_crematorio',
   'tipo_servicio_cremacion',
+  // ¿La eutanasia incluye cremación posterior? 'TRUE'/'FALSE'. Sin cremación: el
+  // chofer no retira → recordatorio gris en el calendario, sin notificación ni
+  // bloqueo de agenda. Ver lib/eutanasia-cremacion.
+  'incluye_cremacion',
   'notas',
   'estado',
   'vet_id_asignado', 'vet_nombre_asignado', 'vet_email_asignado',
@@ -202,6 +207,9 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
   const id = await getNextId(SHEET_COTI)
   const ahora = new Date().toISOString()
   const cliTel = (input.cliente_telefono || '').replace(/\D/g, '').slice(-9)
+  // Si el tutor NO quiere cremación ('NINGUNA') la eutanasia queda SIN cremación
+  // (no se crea borrador, no bloquea la agenda, recordatorio gris en el calendario).
+  const sinCremacion = (input.tipo_servicio_cremacion || '').toUpperCase() === 'NINGUNA'
 
   const row = {
     id,
@@ -217,6 +225,8 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
     fecha_servicio: input.fecha,
     hora_servicio: input.hora,
     tipo_servicio_cremacion: input.tipo_servicio_cremacion ?? '',
+    // Si el tutor NO quiere cremación ('NINGUNA') la eutanasia queda SIN cremación.
+    incluye_cremacion: sinCremacion ? 'FALSE' : 'TRUE',
     notas: input.notas ?? '',
     estado: 'creada',
     vet_id_asignado: '',
@@ -244,7 +254,6 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
   // para el cronograma del dashboard y el borrado si la eutanasia no se realiza.
   // Best-effort: no bloquea la cotización. Si el tutor NO quiere cremación
   // (tipo 'NINGUNA'), no hay servicio posterior → no se crea borrador.
-  const sinCremacion = (input.tipo_servicio_cremacion || '').toUpperCase() === 'NINGUNA'
   if (!sinCremacion) try {
     const borradorId = await crearClienteBorrador({
       nombre_tutor: input.cliente_nombre,
@@ -368,6 +377,10 @@ export async function listarEutanasiasCronograma(): Promise<EutanasiaCronograma[
   }
   const out: EutanasiaCronograma[] = []
   for (const c of cotis) {
+    // Las eutanasias SIN cremación no aparecen en el panel de notificaciones del
+    // dashboard (el chofer no pasa a retirar); quedan solo como recordatorio gris
+    // en el calendario y se gestionan en Servicios → Cotizaciones.
+    if (!incluyeCremacion(c)) continue
     const estado = c.estado || ''
     let cronograma: 'esperando' | 'tomada' | null = null
     if (estado === 'creada' || estado === 'enviada') cronograma = 'esperando'

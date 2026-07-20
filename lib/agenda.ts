@@ -24,6 +24,7 @@
  */
 import { getSheetData } from './datastore'
 import { formatDateForSheet, formatHora } from './dates'
+import { incluyeCremacion } from './eutanasia-cremacion'
 
 export const HORA_APERTURA = 9         // primera hora de la agenda (09:00)
 export const HORA_ULTIMO_RETIRO = 21   // última hora para agendar un retiro (21:00)
@@ -78,6 +79,8 @@ export interface AgendaItem {
   horaEutanasia?: string
   /** Eutanasia: true si aún no llega la hora de retiro del veterinario. */
   esperandoHoraVet?: boolean
+  /** Eutanasia SIN cremación: solo recordatorio (etiqueta gris), NO bloquea la agenda. */
+  sinCremacion?: boolean
 }
 
 /**
@@ -128,6 +131,32 @@ export async function listarAgenda(fromISO?: string, toISO?: string): Promise<Ag
     if (!['creada', 'enviada', 'aceptada', 'realizada'].includes(estado)) continue
     const fecha = formatDateForSheet(c.fecha_servicio)
     if (!fecha || !inRange(fecha)) continue
+
+    // SIN cremación: no hay retiro del crematorio → solo un recordatorio (gris) a
+    // la hora de la EUTANASIA. No entra en el cálculo de slots ocupados (ver
+    // ocupadosDe), así que no bloquea la agenda del chofer.
+    if (!incluyeCremacion(c)) {
+      const min = horaMin(c.hora_servicio)
+      out.push({
+        id: `e${c.id}`,
+        tipo: 'eutanasia',
+        fecha,
+        hora: min != null ? fmtMin(min) : '',
+        bloque: bloqueDe(min),
+        estado: 'pendiente',
+        mascota: c.mascota_nombre || '',
+        quien: c.cliente_nombre || '',
+        esVet: false,
+        comuna: c.comuna || '',
+        direccion: c.direccion || '',
+        clienteId: c.cliente_id || '',
+        horaEutanasia: formatHora(c.hora_servicio) || '',
+        esperandoHoraVet: false,
+        sinCremacion: true,
+      })
+      continue
+    }
+
     const horaRetiro = (c.hora_retiro_crematorio || '').trim()
     const tieneRetiro = !!horaRetiro
     const realizada = estado === 'realizada'
@@ -166,6 +195,9 @@ async function ocupadosDe(fechaISO: string): Promise<number[]> {
   const items = await listarAgenda(fechaISO, fechaISO)
   const out: number[] = []
   for (const it of items) {
+    // Las eutanasias SIN cremación no ocupan slot: el chofer no pasa a retirar,
+    // así que su horario queda libre para agendar otros retiros.
+    if (it.tipo === 'eutanasia' && it.sinCremacion) continue
     const min = horaMin(it.hora)
     if (min != null) out.push(min)
   }

@@ -5,6 +5,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import ComunaPicker from '@/components/ui/ComunaPicker'
 import { fmtPrecio } from '@/lib/format'
+import { incluyeCremacion } from '@/lib/eutanasia-cremacion'
 import { formatDate, formatHoraDia, todayISO } from '@/lib/dates'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { COMUNAS } from '@/lib/comunas'
@@ -24,6 +25,9 @@ type Cotizacion = {
   comuna: string
   fecha_servicio: string
   hora_servicio: string
+  tipo_servicio_cremacion?: string
+  incluye_cremacion?: string
+  cliente_id?: string
   notas: string
   estado: string
   vet_id_asignado: string
@@ -569,6 +573,31 @@ export default function ServiciosEutanasiasPage() {
       body: JSON.stringify({ estado_pago: nuevoEstadoPago }),
     })
     await cargarCotis()
+  }
+
+  // Prende/apaga "incluye cremación" en la cotización. Con cremación: el chofer
+  // retira → aparece en el dashboard, ocupa la agenda y tiene ficha de cremación.
+  // Sin cremación: solo recordatorio gris en el calendario.
+  const [guardandoCrem, setGuardandoCrem] = useState(false)
+  async function cambiarIncluyeCremacion(id: string, incluir: boolean) {
+    setGuardandoCrem(true)
+    try {
+      const r = await fetch(`/api/eutanasias/cotizaciones/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ incluye_cremacion: incluir }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { alert(d?.error || 'No se pudo actualizar.'); return }
+      if (d?.aviso) alert(d.aviso)
+      // Reflejar en el modal abierto + refrescar la lista.
+      setDetalleCoti(prev => prev && prev.id === id
+        ? { ...prev, incluye_cremacion: incluir ? 'TRUE' : 'FALSE', cliente_id: typeof d.cliente_id === 'string' ? d.cliente_id : prev.cliente_id }
+        : prev)
+      await cargarCotis()
+    } finally {
+      setGuardandoCrem(false)
+    }
   }
 
   // Vets activos disponibles para asignación manual.
@@ -1282,6 +1311,29 @@ export default function ServiciosEutanasiasPage() {
               {detalleCoti.notas && <FichaRow label="Notas" value={detalleCoti.notas} />}
             </FichaBloque>
 
+            {/* Bloque: ¿Incluye cremación? — controla dashboard, agenda y etiqueta del calendario */}
+            <FichaBloque titulo="Servicio">
+              {(() => {
+                const conCrem = incluyeCremacion(detalleCoti)
+                return (
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900">¿Incluye cremación?</p>
+                      <p className="text-xs text-gray-500 mt-0.5 leading-snug">
+                        {conCrem
+                          ? 'Con cremación: nuestro chofer pasa a retirar. Aparece en las notificaciones del dashboard, ocupa la agenda (verde) y tiene ficha de cremación.'
+                          : 'Sin cremación: solo la eutanasia. Queda como recordatorio gris en el calendario, sin retiro: no notifica en el dashboard ni bloquea la agenda del chofer.'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                      <span className={`text-xs font-semibold ${conCrem ? 'text-brand' : 'text-gray-400'}`}>{conCrem ? 'Sí' : 'No'}</span>
+                      <Toggle checked={conCrem} disabled={guardandoCrem} onChange={v => cambiarIncluyeCremacion(detalleCoti.id, v)} />
+                    </div>
+                  </div>
+                )
+              })()}
+            </FichaBloque>
+
             {/* Bloque: Cliente */}
             <FichaBloque titulo="Cliente">
               <FichaRow label="Nombre" value={detalleCoti.cliente_nombre} />
@@ -1619,6 +1671,13 @@ function CotizacionCard({
         </div>
         <span className="text-[10px] text-gray-400 font-medium shrink-0">N° {c.id}</span>
       </div>
+
+      {/* Sin cremación: solo eutanasia (recordatorio gris, sin retiro del chofer) */}
+      {!incluyeCremacion(c) && (
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-600 bg-gray-100 border border-gray-300 px-1.5 py-0.5 rounded mb-0.5">
+          🚫 Sin cremación
+        </span>
+      )}
 
       {/* Vet asignado */}
       {c.vet_nombre_asignado && (

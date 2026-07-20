@@ -17,6 +17,7 @@ const COLS = [
   'cliente_nombre', 'cliente_telefono', 'cliente_email', 'cliente_wa_id',
   'direccion', 'comuna',
   'fecha_servicio', 'hora_servicio',
+  'incluye_cremacion',
   'notas',
   'estado',
   'vet_id_asignado', 'vet_nombre_asignado', 'vet_email_asignado',
@@ -146,6 +147,9 @@ export async function POST(req: NextRequest) {
       comuna: comunaCanon,
       fecha_servicio: fecha,
       hora_servicio: hora,
+      // Por defecto CON cremación (comportamiento histórico); el admin puede
+      // pasarla a "sin cremación" con el toggle de la ficha. Ver eutanasia-cremacion.
+      incluye_cremacion: (body.incluye_cremacion === false || String(body.incluye_cremacion).toUpperCase() === 'FALSE') ? 'FALSE' : 'TRUE',
       notas,
       estado: vetAsignado ? 'aceptada' : 'creada',
       vet_id_asignado: vetAsignado?.id ?? '',

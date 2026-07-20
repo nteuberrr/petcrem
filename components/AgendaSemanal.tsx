@@ -8,7 +8,7 @@ type Item = {
   id: string; tipo: 'retiro' | 'eutanasia'; fecha: string; hora: string; bloque: number
   estado: 'pendiente' | 'confirmada'; mascota: string; quien: string; esVet: boolean
   comuna: string; direccion: string; tipo_servicio?: string; clienteId?: string
-  horaEutanasia?: string; esperandoHoraVet?: boolean
+  horaEutanasia?: string; esperandoHoraVet?: boolean; sinCremacion?: boolean
 }
 
 const HORAS = Array.from({ length: 13 }, (_, i) => 9 + i) // 9..21 (la agenda va de 09:00 a 22:00)
@@ -45,13 +45,18 @@ function icono(it: Item): string {
   return it.esVet ? '🏥' : '🐾'
 }
 function detalle(it: Item): string {
+  const eutSinCrem = it.tipo === 'eutanasia' && it.sinCremacion
   const partes = [
-    it.tipo === 'eutanasia' ? `Eutanasia · retiro del crematorio` : `Retiro de cremación`,
+    it.tipo === 'eutanasia'
+      ? (eutSinCrem ? `Eutanasia · SIN cremación (solo recordatorio)` : `Eutanasia · retiro del crematorio`)
+      : `Retiro de cremación`,
     it.mascota && `Mascota: ${it.mascota}`,
     it.quien && `${it.esVet ? 'Veterinario' : 'Tutor'}: ${it.quien}`,
     it.tipo_servicio && `Servicio: ${SERVICIO[it.tipo_servicio] || it.tipo_servicio}`,
     (it.direccion || it.comuna) && `📍 ${[it.direccion, it.comuna].filter(Boolean).join(', ')}`,
-    it.tipo === 'eutanasia' && it.esperandoHoraVet
+    eutSinCrem
+      ? 'Sin retiro del crematorio: el chofer no pasa a buscarla. No bloquea la agenda.'
+      : it.tipo === 'eutanasia' && it.esperandoHoraVet
       ? `⏳ Esperando que el veterinario informe la hora de retiro (se muestra en la hora de la eutanasia${it.horaEutanasia ? ` ${it.horaEutanasia}` : ''})`
       : it.estado === 'pendiente' ? 'Pendiente de confirmación' : 'Confirmado',
   ].filter(Boolean)
@@ -175,6 +180,7 @@ export default function AgendaSemanal() {
         <span className="sm:hidden font-medium text-gray-500">{rango}</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-200 border border-amber-400" /> Por confirmar</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-200 border border-emerald-400" /> Confirmado</span>
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-200 border border-gray-400" /> Eutanasia sin cremación (recordatorio)</span>
         <span className="inline-flex items-center gap-1">🐾 Retiro · 🏥 Vet · 🩺 Eutanasia</span>
       </div>
 
@@ -214,8 +220,11 @@ export default function AgendaSemanal() {
                       </div>
                     )}
                     {celda.map(it => {
+                      const gris = it.tipo === 'eutanasia' && it.sinCremacion
                       const amarillo = it.estado === 'pendiente'
-                      const cls = amarillo
+                      const cls = gris
+                        ? 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
+                        : amarillo
                         ? 'bg-amber-100 border-amber-300 text-amber-900 hover:bg-amber-200'
                         : 'bg-emerald-100 border-emerald-300 text-emerald-900 hover:bg-emerald-200'
                       return (
