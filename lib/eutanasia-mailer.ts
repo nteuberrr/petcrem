@@ -643,10 +643,12 @@ export interface ClienteCotizacionArgs {
   fechaServicio: string
   horaServicio: string
   comuna: string
-  /** Precio al cliente si la eutanasia SÍ se realiza (según peso). */
+  /** Precio al cliente si la eutanasia SÍ se realiza (según peso). Incluye el recargo fuera de horario si aplica. */
   precioClienteRealizada: number
-  /** Total al cliente si NO se realiza (la consulta). */
+  /** Total al cliente si NO se realiza (la consulta). Incluye el recargo fuera de horario si aplica. */
   consultaTotal: number
+  /** Recargo fuera de horario ya incluido en los valores de arriba (0 si no aplica). Se muestra como aclaración. */
+  recargoFueraHorario?: number
   /** false cuando el tutor NO quiere cremación posterior (omite el párrafo del retiro). Default true. */
   conCremacion?: boolean
 }
@@ -711,6 +713,10 @@ export function renderClienteCotizacionEutanasia(args: ClienteCotizacionArgs, co
         <p style="margin:0;font-size:14px;line-height:1.5">
           <strong>Si al evaluar no corresponde realizarla:</strong> se cobra solo el valor de la <strong>consulta</strong>, ${escapeHtml(fmtPrecio(args.consultaTotal))}.
         </p>
+        ${args.recargoFueraHorario && args.recargoFueraHorario > 0 ? `
+        <p style="margin:10px 0 0;font-size:13px;line-height:1.5;color:${BRAND.muted}">
+          Estos valores incluyen un <strong>recargo por atención fuera de horario</strong> de ${escapeHtml(fmtPrecio(args.recargoFueraHorario))} (fin de semana, feriado o desde las 19:00).${args.conCremacion === false ? '' : ' Si sumas la cremación, este recargo se cobra una sola vez.'}
+        </p>` : ''}
       </div>
 
       ${args.conCremacion === false ? '' : `

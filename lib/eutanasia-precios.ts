@@ -1,5 +1,6 @@
 import { getSheetData, ensureSheet, ensureColumns, appendRow, updateRow } from './datastore'
 import { findTramo } from './tramos'
+import { esFueraDeHorario } from './adicionales-auto'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Precios del servicio de eutanasia a domicilio.
@@ -20,12 +21,19 @@ import { findTramo } from './tramos'
 
 const SHEET_PRECIOS = 'precios_eutanasia'
 const SHEET_CONFIG = 'config_eutanasia'
-const CONFIG_COLS = ['id', 'fijo', 'consulta_vet', 'consulta_alma']
+const CONFIG_COLS = ['id', 'fijo', 'consulta_vet', 'consulta_alma', 'recargo_fuera_horario']
 
 // Defaults de la consulta (cuando la eutanasia NO se realiza): $30.000 al vet +
 // $10.000 spread Alma = $40.000 al cliente. Se usan si la config aún no existe.
 const CONSULTA_VET_DEFAULT = 30000
 const CONSULTA_ALMA_DEFAULT = 10000
+
+// Recargo por servicio FUERA DE HORARIO (fin de semana, feriado o desde las 19:00
+// L-V), que se le cobra al cliente por la eutanasia a domicilio. Se cobra UNA sola
+// vez, junto con la eutanasia y SIEMPRE fuera de la boleta (que cubre solo la
+// cremación); si además hay cremación, la ficha NO vuelve a sumar su propio
+// recargo de retiro fuera de horario. Aplica se realice o no la eutanasia.
+export const RECARGO_FUERA_HORARIO_DEFAULT = 10000
 
 function num(v: unknown): number {
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0
@@ -87,6 +95,38 @@ export async function setConsultaEutanasia(c: { vet: number; alma: number }): Pr
   })
 }
 
+/**
+ * Recargo fuera de horario configurado (default $10.000 si no hay config o la
+ * columna aún no existe — los reads toleran su ausencia).
+ */
+export async function getRecargoFueraHorario(): Promise<number> {
+  try {
+    const rows = await getSheetData(SHEET_CONFIG)
+    const row = rows.find(r => r.id === '1') ?? rows[0]
+    if (row && row.recargo_fuera_horario !== '' && row.recargo_fuera_horario != null) {
+      return num(row.recargo_fuera_horario)
+    }
+    return RECARGO_FUERA_HORARIO_DEFAULT
+  } catch {
+    return RECARGO_FUERA_HORARIO_DEFAULT
+  }
+}
+
+/** Persiste el recargo fuera de horario (fila única id=1). */
+export async function setRecargoFueraHorario(monto: number): Promise<void> {
+  await guardarConfig({ recargo_fuera_horario: String(Math.max(0, Math.round(monto))) })
+}
+
+/**
+ * Monto de recargo fuera de horario que corresponde a un servicio de eutanasia
+ * agendado para `fecha`/`hora` (0 si cae dentro de horario). El `monto` es el
+ * recargo configurado — pásalo desde `getRecargoFueraHorario()` para no leer la
+ * config dos veces cuando ya la tienes.
+ */
+export function recargoEutanasiaPara(fecha: string | undefined, hora: string | undefined, monto: number): number {
+  return esFueraDeHorario(fecha, hora) ? Math.max(0, Math.round(monto)) : 0
+}
+
 /** Upsert de la fila única de config (merge de campos). Crea hoja/columnas si faltan. */
 async function guardarConfig(campos: Record<string, string>): Promise<void> {
   await ensureSheet(SHEET_CONFIG)
@@ -125,18 +165,46 @@ export async function precioClienteEutanasia(peso: number): Promise<PrecioEutana
   return { vet, fijo, cliente: vet + fijo }
 }
 
+export interface ValorCotizacionDesglose {
+  /** Precio al cliente SIN el recargo fuera de horario (snapshot|tramo + fijo). */
+  base: number
+  /** Recargo fuera de horario según la fecha/hora del servicio (0 si dentro de horario). */
+  recargo: number
+  /** Total a cobrar al cliente = base + recargo. Se cobra SIEMPRE fuera de la boleta. */
+  total: number
+}
+
+type CotValor = { peso?: string; precio_snapshot?: string; fecha_servicio?: string; hora_servicio?: string }
+
 /**
- * Valor a COBRAR al cliente por una cotización de eutanasia concreta. Usa el
- * `precio_snapshot` congelado en la cotización (lo pactado con el vet) + el fijo
- * vigente; si la cotización no tiene snapshot (legacy), cae a la tabla por peso.
- * Es el valor que la ficha de cremación asociada muestra como "fuera de boleta"
- * y el que se suma al total a cobrar del retiro.
+ * Desglose del valor a COBRAR al cliente por una cotización de eutanasia: la base
+ * (precio del servicio) y el recargo fuera de horario aparte. La base usa el
+ * `precio_snapshot` congelado (lo pactado con el vet) + el fijo vigente; si la
+ * cotización no tiene snapshot (legacy), cae a la tabla por peso. El recargo se
+ * agrega cuando la fecha/hora del servicio cae fuera de horario (finde, feriado o
+ * ≥19:00 L-V) y se cobra junto con la eutanasia, SIEMPRE fuera de la boleta.
  */
-export async function valorClienteCotizacion(cot: { peso?: string; precio_snapshot?: string }): Promise<number> {
+export async function desgloseValorCotizacion(cot: CotValor): Promise<ValorCotizacionDesglose> {
+  const [fijo, recargoMonto] = await Promise.all([getFijoEutanasia(), getRecargoFueraHorario()])
   const snap = num(cot.precio_snapshot)
-  if (snap > 0) return snap + (await getFijoEutanasia())
-  const peso = num(cot.peso)
-  return peso > 0 ? (await precioClienteEutanasia(peso)).cliente : 0
+  let base = 0
+  if (snap > 0) base = snap + fijo
+  else {
+    const peso = num(cot.peso)
+    base = peso > 0 ? (await precioVetEutanasia(peso)) + fijo : 0
+  }
+  if (base <= 0) return { base: 0, recargo: 0, total: 0 }
+  const recargo = recargoEutanasiaPara(cot.fecha_servicio, cot.hora_servicio, recargoMonto)
+  return { base, recargo, total: base + recargo }
+}
+
+/**
+ * Valor total a COBRAR al cliente por una cotización de eutanasia (base + recargo
+ * fuera de horario). Es el que la ficha de cremación asociada muestra como "fuera
+ * de boleta" y el que se suma al total a cobrar del retiro.
+ */
+export async function valorClienteCotizacion(cot: CotValor): Promise<number> {
+  return (await desgloseValorCotizacion(cot)).total
 }
 
 /**

@@ -7,7 +7,7 @@ import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
 import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarClienteCotizacionEutanasia } from '@/lib/eutanasia-mailer'
-import { getConsultaEutanasia, getFijoEutanasia } from '@/lib/eutanasia-precios'
+import { getConsultaEutanasia, getFijoEutanasia, getRecargoFueraHorario, recargoEutanasiaPara } from '@/lib/eutanasia-precios'
 import { formatDate } from '@/lib/dates'
 
 const SHEET = 'cotizaciones_eutanasia'
@@ -189,7 +189,8 @@ export async function POST(req: NextRequest) {
       // Sin vet pre-asignado (flujo normal) → correo al tutor: recibimos tu
       // solicitud, explica la evaluación + precios. Best-effort.
       try {
-        const fijo = await getFijoEutanasia()
+        const [fijo, recargoMonto] = await Promise.all([getFijoEutanasia(), getRecargoFueraHorario()])
+        const recargoFuera = recargoEutanasiaPara(fecha, hora, recargoMonto)
         await enviarClienteCotizacionEutanasia({
           clienteEmail: cliEmail,
           clienteNombre: row.cliente_nombre,
@@ -199,8 +200,9 @@ export async function POST(req: NextRequest) {
           fechaServicio: row.fecha_servicio,
           horaServicio: row.hora_servicio,
           comuna: row.comuna,
-          precioClienteRealizada: precio + fijo,
-          consultaTotal: consulta.total,
+          precioClienteRealizada: precio + fijo + recargoFuera,
+          consultaTotal: consulta.total + recargoFuera,
+          recargoFueraHorario: recargoFuera,
         })
       } catch (e) { console.warn('[cotizaciones POST] correo cotización al tutor falló:', e) }
     }

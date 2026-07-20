@@ -14,7 +14,7 @@ import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
 import { dispararCobroAdicional, cobrosPendientesPorCliente, sincronizarSaldoParcial, cerrarSaldoParcial } from '@/lib/cobros'
 import { excluirIncluidos } from '@/lib/anforas-premium'
 import { emitirBoletaSiCorresponde } from '@/lib/facturacion'
-import { valorClienteCotizacion, valorEutanasiaPorCliente } from '@/lib/eutanasia-precios'
+import { desgloseValorCotizacion, valorEutanasiaPorCliente } from '@/lib/eutanasia-precios'
 
 export async function GET(
   _req: NextRequest,
@@ -50,14 +50,21 @@ export async function GET(
       const cotis = await getSheetData('cotizaciones_eutanasia')
       const cot = cotis.find((c) => String(c.cliente_id) === String(id) && (c.estado || '') !== 'cancelada')
       if (cot) {
-        let valorCliente = 0
-        try { valorCliente = await valorClienteCotizacion(cot) } catch { /* config no disponible */ }
+        let base = 0, recargo = 0, valorCliente = 0
+        try {
+          const d = await desgloseValorCotizacion(cot)
+          base = d.base; recargo = d.recargo; valorCliente = d.total
+        } catch { /* config no disponible */ }
         eutanasia = {
           id: cot.id || '',
           hora_servicio: cot.hora_servicio || '',
           hora_retiro_crematorio: cot.hora_retiro_crematorio || '',
           estado: cot.estado || '',
           valor_cliente: valorCliente,
+          // Desglose: base del servicio + recargo fuera de horario (0 si no aplica),
+          // para mostrarlos separados en la ficha.
+          valor_base: base,
+          recargo_fuera_horario: recargo,
         }
       }
     } catch { /* best-effort: la ficha se muestra igual sin datos de eutanasia */ }

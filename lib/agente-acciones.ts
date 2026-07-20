@@ -5,7 +5,7 @@ import { geocodeAddress, coordEnChile } from './google-maps'
 import { formatDate, formatDateForSheet, todayISO } from './dates'
 import { agregarDiasHabiles, isoFecha, tieneExpress, EXPRESS_DIAS } from './dias-habiles'
 import { fmtPrecio } from './format'
-import { precioClienteEutanasia, getConsultaEutanasia } from './eutanasia-precios'
+import { precioClienteEutanasia, getConsultaEutanasia, getRecargoFueraHorario, recargoEutanasiaPara } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
 import { evaluarSlotRetiro, horaLibreEnFranja } from './agenda'
 import { capitalizarNombre } from './nombres'
@@ -329,11 +329,14 @@ async function cotizarEutanasia(a: AccionCotizarEutanasia): Promise<string> {
   if (!Number.isFinite(peso) || peso <= 0) {
     return 'Necesito el peso aproximado de la mascota para darte el valor de la eutanasia a domicilio.'
   }
-  const [{ cliente }, consulta] = await Promise.all([precioClienteEutanasia(peso), getConsultaEutanasia()])
+  const [{ cliente }, consulta, recargo] = await Promise.all([precioClienteEutanasia(peso), getConsultaEutanasia(), getRecargoFueraHorario()])
   if (cliente <= 0) {
     return 'No tengo el precio de la eutanasia a domicilio configurado para ese peso ahora mismo. Ofrécele que un miembro del equipo lo contacte para darle el valor, o escala a un humano.'
   }
-  return `Es un servicio de EVALUACIÓN a domicilio: un veterinario de la red visita a la mascota y evalúa si corresponde la eutanasia. Explícale al cliente con claridad los dos valores: si SE REALIZA la eutanasia, el valor es ${fmtPrecio(cliente)} (mascota de ${peso} kg); si al evaluar NO corresponde realizarla, se cobra solo la consulta de ${fmtPrecio(consulta.total)}. NO expliques cómo se reparte ese monto internamente. Si decide avanzar, junta los datos y agéndala.`
+  const notaRecargo = recargo > 0
+    ? ` IMPORTANTE: si el servicio queda fuera de horario (fin de semana, feriado o desde las 19:00), se suma un recargo de ${fmtPrecio(recargo)} a ese valor (aplica se realice o no la eutanasia). Avísaselo si la fecha/hora que pide cae fuera de horario, para que no sea una sorpresa.`
+    : ''
+  return `Es un servicio de EVALUACIÓN a domicilio: un veterinario de la red visita a la mascota y evalúa si corresponde la eutanasia. Explícale al cliente con claridad los dos valores: si SE REALIZA la eutanasia, el valor es ${fmtPrecio(cliente)} (mascota de ${peso} kg); si al evaluar NO corresponde realizarla, se cobra solo la consulta de ${fmtPrecio(consulta.total)}. NO expliques cómo se reparte ese monto internamente.${notaRecargo} Si decide avanzar, junta los datos y agéndala.`
 }
 
 /** Crea la cotización de eutanasia, matchea la red de vets y les envía el correo. */
@@ -391,7 +394,9 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
   const notas = `Solicitud vía WhatsApp (bot). Franja preferida: ${franja === 'PM' ? 'tarde' : 'mañana'}.` +
     (sinCremacion ? ' SIN cremación (el tutor no la quiere).' : (a.tipo_servicio_cremacion ? ` Cremación elegida: ${a.tipo_servicio_cremacion}.` : ''))
 
-  const { cliente } = await precioClienteEutanasia(peso)
+  const [{ cliente: precioBase }, recargoMonto] = await Promise.all([precioClienteEutanasia(peso), getRecargoFueraHorario()])
+  const recargoFuera = recargoEutanasiaPara(a.fecha, hora, recargoMonto)
+  const cliente = precioBase + recargoFuera
 
   let res
   try {
@@ -432,7 +437,9 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
       : `⚠ Sin veterinarios disponibles para ${res.comunaCanon} en esa fecha/franja — requiere gestión manual.`)
   try { await avisarAdminsWhatsapp(avisoAdmin) } catch (e) { console.warn('[agente-acciones] FYI admin eutanasia falló:', e) }
 
-  const precioTxt = cliente > 0 ? ` El valor del servicio para el cliente es ${fmtPrecio(cliente)}.` : ''
+  const precioTxt = cliente > 0
+    ? ` El valor del servicio para el cliente es ${fmtPrecio(cliente)}${recargoFuera > 0 ? ` (incluye ${fmtPrecio(recargoFuera)} de recargo por ser fuera de horario, sobre ${fmtPrecio(precioBase)}). Avísale ese recargo con claridad al cliente` : ''}.`
+    : ''
 
   if (res.matched === 0) {
     return `Registré la solicitud de eutanasia (N° ${res.id}) pero ahora mismo no hay veterinarios disponibles para ${res.comunaCanon} en esa fecha/franja. ` +

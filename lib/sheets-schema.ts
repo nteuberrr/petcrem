@@ -301,7 +301,8 @@ export const SHEETS: Record<string, string[]> = {
   // SUMA al precio del tramo (lo que se paga al vet) para dar el precio AL CLIENTE.
   // fijo = cargo al cliente sobre el pago al vet cuando la eutanasia SÍ se realiza.
   // consulta_vet + consulta_alma = consulta cobrada cuando NO se realiza (total al cliente).
-  config_eutanasia: ['id', 'fijo', 'consulta_vet', 'consulta_alma'],
+  // recargo_fuera_horario = recargo al cliente si el servicio es fuera de horario (finde/feriado/≥19:00).
+  config_eutanasia: ['id', 'fijo', 'consulta_vet', 'consulta_alma', 'recargo_fuera_horario'],
   // Cotizaciones de eutanasia que ingresa el admin desde /servicios.
   // - estado: creada | enviada | aceptada | realizada | no_realizada | cancelada
   // - vet_id_asignado: vacío hasta que un vet acepta; luego queda fijo.

@@ -6,7 +6,7 @@ import { createToken, createVetToken } from './eutanasia-tokens'
 import { formatDate, formatHoraDia } from './dates'
 import { nombreCompletoVet, renderCotizacionEmail, enviarClienteCotizacionEutanasia } from './eutanasia-mailer'
 import { getContacto } from './email-layout'
-import { getConsultaEutanasia, getFijoEutanasia } from './eutanasia-precios'
+import { getConsultaEutanasia, getFijoEutanasia, getRecargoFueraHorario, recargoEutanasiaPara } from './eutanasia-precios'
 import { crearClienteBorrador } from './cliente-borrador'
 import { capitalizarNombre } from './nombres'
 import { enviarTextoWhatsapp, isWhatsappConfigured, avisarAdminsWhatsapp } from './whatsapp'
@@ -276,7 +276,10 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
   // Best-effort. Precio al cliente si se realiza = tramo + cargo fijo.
   if ((input.cliente_email || '').trim()) {
     try {
-      const fijo = await getFijoEutanasia()
+      const [fijo, recargoMonto] = await Promise.all([getFijoEutanasia(), getRecargoFueraHorario()])
+      // Recargo fuera de horario según la fecha/hora del SERVICIO (se cobra igual
+      // se realice o no la eutanasia) — se suma a ambos valores del correo.
+      const recargoFuera = recargoEutanasiaPara(input.fecha, input.hora, recargoMonto)
       await enviarClienteCotizacionEutanasia({
         clienteEmail: input.cliente_email!.trim().toLowerCase(),
         clienteNombre: input.cliente_nombre,
@@ -286,8 +289,9 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
         fechaServicio: input.fecha,
         horaServicio: input.hora,
         comuna: comunaCanon,
-        precioClienteRealizada: precioVet + fijo,
-        consultaTotal: consulta.total,
+        precioClienteRealizada: precioVet + fijo + recargoFuera,
+        consultaTotal: consulta.total + recargoFuera,
+        recargoFueraHorario: recargoFuera,
         conCremacion: !sinCremacion,
       })
     } catch (e) {

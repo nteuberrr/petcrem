@@ -113,6 +113,9 @@ type ClienteDetalle = {
     hora_retiro_crematorio: string
     estado: string
     valor_cliente: number
+    /** Base del servicio (sin recargo) y recargo fuera de horario, para mostrarlos separados. */
+    valor_base?: number
+    recargo_fuera_horario?: number
   } | null
 }
 
@@ -587,6 +590,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   // registrada no cambia sola sus adicionales al editarla).
   const autoAgregadosRef = useRef<Set<string>>(new Set())
   const autoQuitadosRef = useRef<Set<string>>(new Set())
+  // Si la ficha viene de una eutanasia a domicilio, el recargo fuera de horario ya
+  // se cobra con la eutanasia (aparte de la boleta) → la cremación NO vuelve a
+  // sumar su propio recargo de retiro fuera de horario (evita el cobro doble).
+  const deEutanasia = !!cliente?.eutanasia
   useEffect(() => {
     if (cliente?.estado !== 'borrador') return
     const ctx = { fecha: form.fecha_retiro, hora: form.hora_retiro, comuna: form.comuna }
@@ -594,7 +601,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       let next = prev
       for (const s of otrosServicios) {
         if (!(s.auto_regla || '').trim()) continue
-        const aplica = aplicaReglaAuto(s, ctx)
+        const aplica = deEutanasia && (s.auto_regla || '').trim() === 'fuera_horario'
+          ? false
+          : aplicaReglaAuto(s, ctx)
         const presente = next.some(a => a.tipo === 'servicio' && a.id === s.id)
         if (aplica && !presente && !autoQuitadosRef.current.has(s.id)) {
           autoAgregadosRef.current.add(s.id)
@@ -606,7 +615,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       }
       return next
     })
-  }, [cliente?.estado, form.fecha_retiro, form.hora_retiro, form.comuna, otrosServicios])
+  }, [cliente?.estado, form.fecha_retiro, form.hora_retiro, form.comuna, otrosServicios, deEutanasia])
 
   function toggleAdicional(tipo: 'producto' | 'servicio', item: { id: string; nombre: string; precio: string }) {
     const existing = adicionales.find(a => a.tipo === tipo && a.id === item.id)
@@ -1204,6 +1213,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             <InfoField label="Hora Retiro (crematorio)" value={cliente.eutanasia.hora_retiro_crematorio || 'Por confirmar'} />
             <InfoField label="Valor eutanasia (a cobrar, fuera de boleta)" value={cliente.eutanasia.valor_cliente > 0 ? fmtPrecio(cliente.eutanasia.valor_cliente) : '—'} />
           </div>
+          {(cliente.eutanasia.recargo_fuera_horario ?? 0) > 0 && (
+            <p className="text-xs text-gray-600 mt-3">
+              Incluye <strong>recargo fuera de horario</strong> (finde/feriado/noche):{' '}
+              <span className="font-semibold text-gray-900">{fmtPrecio(cliente.eutanasia.recargo_fuera_horario!)}</span>
+              {' '}sobre el servicio de {fmtPrecio(cliente.eutanasia.valor_base ?? (cliente.eutanasia.valor_cliente - (cliente.eutanasia.recargo_fuera_horario ?? 0)))}.
+              {' '}Este recargo va con la eutanasia, no en la boleta; la cremación no vuelve a sumarlo.
+            </p>
+          )}
         </div>
       )}
 

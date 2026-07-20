@@ -267,6 +267,12 @@ export default function ServiciosEutanasiasPage() {
   const [savingConsulta, setSavingConsulta] = useState(false)
   const [consultaMsg, setConsultaMsg] = useState('')
 
+  // Recargo fuera de horario (finde/feriado/≥19:00 L-V): se suma al valor de la
+  // eutanasia (aparte de la boleta) y se cobra una sola vez aunque haya cremación.
+  const [recargoInput, setRecargoInput] = useState('')
+  const [savingRecargo, setSavingRecargo] = useState(false)
+  const [recargoMsg, setRecargoMsg] = useState('')
+
   const cargarFijo = useCallback(async () => {
     const r = await fetch('/api/eutanasias/config', { cache: 'no-store' })
     if (!r.ok) return
@@ -274,6 +280,7 @@ export default function ServiciosEutanasiasPage() {
     if (d && typeof d.fijo === 'number') setFijo(d.fijo)
     if (d && typeof d.consulta_vet === 'number') setConsultaVetInput(String(d.consulta_vet))
     if (d && typeof d.consulta_alma === 'number') setConsultaAlmaInput(String(d.consulta_alma))
+    if (d && typeof d.recargo_fuera_horario === 'number') setRecargoInput(String(d.recargo_fuera_horario))
   }, [])
 
   const consultaTotal = (parseInt(consultaVetInput, 10) || 0) + (parseInt(consultaAlmaInput, 10) || 0)
@@ -301,6 +308,30 @@ export default function ServiciosEutanasiasPage() {
       }
     } finally {
       setSavingConsulta(false)
+    }
+  }
+
+  async function guardarRecargo() {
+    setSavingRecargo(true)
+    setRecargoMsg('')
+    try {
+      const monto = parseInt(recargoInput, 10)
+      if (isNaN(monto) || monto < 0) { setRecargoMsg('Valor inválido'); return }
+      const r = await fetch('/api/eutanasias/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recargo_fuera_horario: monto }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok) {
+        setRecargoInput(String(d.recargo_fuera_horario ?? monto))
+        setRecargoMsg('Guardado ✓')
+        setTimeout(() => setRecargoMsg(''), 2500)
+      } else {
+        setRecargoMsg(d.error || 'Error al guardar')
+      }
+    } finally {
+      setSavingRecargo(false)
     }
   }
 
@@ -953,6 +984,33 @@ export default function ServiciosEutanasiasPage() {
                 {savingConsulta ? 'Guardando…' : 'Guardar'}
               </button>
               {consultaMsg && <span className={`text-xs font-medium ${consultaMsg.includes('✓') ? 'text-emerald-600' : 'text-red-600'}`}>{consultaMsg}</span>}
+            </div>
+          </div>
+
+          {/* Recargo fuera de horario del servicio de eutanasia a domicilio */}
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-4 sm:p-5 mb-5 max-w-2xl">
+            <h3 className="text-sm font-semibold text-gray-900">Recargo fuera de horario <span className="text-gray-400 font-normal">(fin de semana, feriado o desde las 19:00)</span></h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Se le suma al valor de la eutanasia cuando el servicio es fuera de horario. Se cobra <strong>junto con la eutanasia</strong> (aparte de la boleta) y <strong>una sola vez</strong>: si además hay cremación, el retiro no vuelve a sumar su propio recargo. Aplica se realice o no la eutanasia.
+            </p>
+            <div className="flex items-end gap-3 mt-3">
+              <div className="w-40">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Monto</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input type="number" min="0" step="1000" value={recargoInput}
+                    onChange={e => setRecargoInput(e.target.value)}
+                    className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-base sm:text-sm" placeholder="10000" />
+                </div>
+              </div>
+              <button
+                onClick={guardarRecargo}
+                disabled={savingRecargo}
+                className="ml-auto px-4 py-2 bg-brand hover:bg-brand-dark disabled:bg-brand/40 text-white text-sm font-medium rounded-lg"
+              >
+                {savingRecargo ? 'Guardando…' : 'Guardar'}
+              </button>
+              {recargoMsg && <span className={`text-xs font-medium ${recargoMsg.includes('✓') ? 'text-emerald-600' : 'text-red-600'}`}>{recargoMsg}</span>}
             </div>
           </div>
 
