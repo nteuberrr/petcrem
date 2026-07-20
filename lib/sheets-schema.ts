@@ -9,7 +9,7 @@ export const SHEETS: Record<string, string[]> = {
     'direccion_retiro', 'direccion_despacho', 'misma_direccion', 'comuna',
     // hora_retiro (HH:MM): junto con fecha_retiro determina si aplica el recargo
     // automático "fuera de horario" (>=19:00 L-V, o sáb/dom) — lib/adicionales-auto.ts.
-    'fecha_retiro', 'hora_retiro', 'fecha_defuncion',
+    'fecha_retiro', 'hora_retiro', 'fecha_defuncion', 'fecha_nacimiento',
     'especie', 'letra_especie',
     'peso_declarado', 'peso_ingreso',
     'tipo_servicio', 'codigo_servicio',

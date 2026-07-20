@@ -77,6 +77,7 @@ type ClienteDetalle = {
   descuento_monto?: string
   fecha_creacion: string
   fecha_defuncion: string
+  fecha_nacimiento: string
   notas: string
   tipo_pago: string
   estado_pago: string
@@ -227,6 +228,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       ...d,
       fecha_retiro: formatDateForSheet(d.fecha_retiro) || d.fecha_retiro || '',
       fecha_defuncion: formatDateForSheet(d.fecha_defuncion) || d.fecha_defuncion || '',
+      fecha_nacimiento: formatDateForSheet(d.fecha_nacimiento) || d.fecha_nacimiento || '',
       fecha_creacion: formatDateForSheet(d.fecha_creacion) || d.fecha_creacion || '',
     })
   }, [id])
@@ -241,6 +243,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           ...d,
           fecha_retiro: formatDateForSheet(d.fecha_retiro) || d.fecha_retiro || '',
           fecha_defuncion: formatDateForSheet(d.fecha_defuncion) || d.fecha_defuncion || '',
+          fecha_nacimiento: formatDateForSheet(d.fecha_nacimiento) || d.fecha_nacimiento || '',
           fecha_creacion: formatDateForSheet(d.fecha_creacion) || d.fecha_creacion || '',
         }
         setCliente(normalized)
@@ -568,6 +571,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         ...updated,
         fecha_retiro: formatDateForSheet(updated.fecha_retiro) || updated.fecha_retiro || '',
         fecha_defuncion: formatDateForSheet(updated.fecha_defuncion) || updated.fecha_defuncion || '',
+        fecha_nacimiento: formatDateForSheet(updated.fecha_nacimiento) || updated.fecha_nacimiento || '',
         fecha_creacion: formatDateForSheet(updated.fecha_creacion) || updated.fecha_creacion || '',
       }
       setCliente(norm)
@@ -1224,11 +1228,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      {/* Datos de ingreso */}
+      {/* Información del tutor */}
       <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 mb-6">
-        <h2 className="text-base font-bold text-gray-900 mb-4">Datos de ingreso</h2>
+        <h2 className="text-base font-bold text-gray-900 mb-4">Información del tutor</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
           <Field required label="Nombre tutor" value={form.nombre_tutor} onChange={v => setForm(f => ({ ...f, nombre_tutor: v }))} />
           <div>
             <Field required type="email" label="Email" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} />
@@ -1242,9 +1245,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <AddressField required label="Dirección de retiro" value={form.direccion_retiro} onChange={v => setForm(f => ({ ...f, direccion_retiro: v }))} />
           <AddressField required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
           <Field required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
-          <Field required label="Fecha de retiro" type="date" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
-          <Field label="Hora de retiro" type="time" value={form.hora_retiro} onChange={v => setForm(f => ({ ...f, hora_retiro: v }))} />
-          <Field label="Fecha de defunción" type="date" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
+        </div>
+      </div>
+
+      {/* Información de la mascota */}
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 mb-6">
+        <h2 className="text-base font-bold text-gray-900 mb-4">Información de la mascota</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
           <div>
             <label className="text-xs font-semibold text-gray-700">Especie <span className="text-red-500">*</span></label>
             {/* Dropdown desde la tabla de especies: al elegir setea también letra_especie
@@ -1265,6 +1273,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               {especies.map(e => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
             </select>
           </div>
+          <Field label="Fecha de nacimiento" type="date" value={form.fecha_nacimiento} onChange={v => setForm(f => ({ ...f, fecha_nacimiento: v }))} />
+          <Field label="Fecha de defunción" type="date" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
           <Field required label="Peso declarado (kg)" type="number" step="0.1" value={form.peso_declarado} onChange={v => setForm(f => ({ ...f, peso_declarado: v }))} />
           <PesoIngresoField
             value={form.peso_ingreso ?? ''}
@@ -1345,6 +1355,13 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Información del servicio */}
+      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 mb-6">
+        <h2 className="text-base font-bold text-gray-900 mb-4">Información del servicio</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <label className="text-xs font-semibold text-gray-700">
               Tipo de servicio <span className="text-red-500">*</span>
@@ -1363,6 +1380,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               <option value="SD">Cremación Sin Devolución (SD)</option>
             </select>
           </div>
+          <Field required label="Fecha de retiro" type="date" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
+          <Field label="Hora de retiro" type="time" value={form.hora_retiro} onChange={v => setForm(f => ({ ...f, hora_retiro: v }))} />
         </div>
 
         {/* Veterinaria */}

@@ -72,6 +72,7 @@ const FORM_DEFAULT = {
   fecha_retiro: '',
   hora_retiro: '',
   fecha_defuncion: '',
+  fecha_nacimiento: '',
   especie: '',
   letra_especie: '',
   peso_declarado: '',
@@ -1127,6 +1128,7 @@ export default function ClientesPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <ModalField required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
+            <ModalField type="date" label="Fecha de nacimiento" value={form.fecha_nacimiento} onChange={v => setForm(f => ({ ...f, fecha_nacimiento: v }))} />
             <ModalField required type="date" label="Fecha de defunción" value={form.fecha_defuncion} onChange={v => setForm(f => ({ ...f, fecha_defuncion: v }))} />
             <ModalField required type="date" label="Fecha de retiro" value={form.fecha_retiro} onChange={v => setForm(f => ({ ...f, fecha_retiro: v }))} />
             <ModalField type="time" label="Hora de retiro" value={form.hora_retiro} onChange={v => setForm(f => ({ ...f, hora_retiro: v }))} />

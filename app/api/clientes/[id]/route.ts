@@ -86,7 +86,7 @@ export async function PATCH(
     await ensureColumns('clientes', [
       'veterinaria_id', 'adicionales', 'tipo_precios',
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
-      'fecha_defuncion', 'notas', 'tipo_pago', 'estado_pago',
+      'fecha_defuncion', 'fecha_nacimiento', 'notas', 'tipo_pago', 'estado_pago',
       'peso_declarado', 'peso_ingreso', 'despacho_id',
       'precio_servicio', 'precio_adicionales', 'precio_total', 'boleta_id', 'hora_retiro',
       'greda_descontada',
