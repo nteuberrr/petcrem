@@ -478,7 +478,7 @@ const TOOL_CATALOGO: Anthropic.Tool = {
 
 const TOOL_ADICIONAL: Anthropic.Tool = {
   name: 'agregar_adicional',
-  description: 'Agrega uno o más PRODUCTOS/SERVICIOS ADICIONALES al servicio de la mascota (queda en su ficha) y le envía al cliente el detalle + los datos de transferencia para pagarlo. Llámala SOLO DESPUÉS de que el cliente CONFIRME explícitamente que quiere agregarlo (tú le preguntaste "¿confirmas agregar X por $Y al servicio?" y respondió que sí). Usa EXACTAMENTE los IDs de la lista PRODUCTOS ADICIONALES DISPONIBLES. Si el cliente aún no tiene una ficha registrada, la herramienta te avisará y deberás escalar al equipo.',
+  description: 'Agrega uno o más PRODUCTOS/SERVICIOS ADICIONALES al servicio de la mascota (queda anotado en su ficha). El COBRO depende de si la mascota ya fue retirada: si YA fue retirada (ficha con código), la herramienta le envía al cliente el detalle + los datos de transferencia para pagar; si AÚN NO fue retirada, solo lo anota en la ficha y el chofer lo cobra al momento del retiro (NO se envía correo de pago). La herramienta te dirá en su respuesta cuál de los dos casos aplica —díselo al cliente tal cual (no prometas un correo de pago si no se envió). Llámala SOLO DESPUÉS de que el cliente CONFIRME explícitamente que quiere agregarlo (tú le preguntaste "¿confirmas agregar X por $Y al servicio?" y respondió que sí). Usa EXACTAMENTE los IDs de la lista PRODUCTOS ADICIONALES DISPONIBLES. Si el cliente NO tiene ninguna ficha (ni borrador), la herramienta te avisará y deberás escalar al equipo.',
   input_schema: {
     type: 'object',
     properties: {

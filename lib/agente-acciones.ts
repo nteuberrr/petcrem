@@ -668,7 +668,17 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
     .filter(r => r.qtyCobrable > 0)
     .map(r => ({ ...r.item, qty: r.qtyCobrable }))
   const monto = cobrables.reduce((s, r) => s + r.precio * r.qty, 0)
-  if (cobrables.length > 0) {
+
+  // ¿La ficha ya está REGISTRADA (tiene código = la mascota ya fue retirada/
+  // ingresada) o sigue en BORRADOR (aún no la retiran)? Solo se emite el cobro
+  // (correo + WhatsApp con datos de transferencia) si YA fue retirada. Si el
+  // cliente pide el adicional ANTES del retiro, el producto queda anotado en la
+  // ficha (ya lo hicimos arriba) y el CHOFER lo cobra al momento del retiro — NO
+  // se envía ningún correo de pago (nos pasó con Mona: se le cobró un relicario
+  // antes de retirar a la mascota).
+  const fichaRegistrada = (ficha.codigo || '').trim() !== '' && (ficha.estado || '').toLowerCase() !== 'borrador'
+
+  if (cobrables.length > 0 && fichaRegistrada) {
     try {
       await dispararCobroAdicional(
         { id: String(ficha.id), email: ficha.email || '', nombre_tutor: ficha.nombre_tutor || '', nombre_mascota: ficha.nombre_mascota || '', telefono: ficha.telefono || '' },
@@ -683,6 +693,12 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
     // Premium): no se cobró nada, así que NO se envió correo de pago.
     return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'}, sin costo adicional (viene incluido en el servicio). ` +
       `Confírmale de forma cálida y breve que quedó agregado, sin necesidad de pago adicional.`
+  }
+  if (!fichaRegistrada) {
+    // Mascota todavía NO retirada: se anotó en la ficha, se cobra al retirar.
+    return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'} (${fmtPrecio(monto)}). ` +
+      `Como la mascota TODAVÍA NO ha sido retirada, quedó anotado en su ficha y NO enviamos ningún cobro por ahora: el pago se coordina al momento del retiro. ` +
+      `Confírmale de forma cálida y breve que quedó agregado y que se cobra al momento del retiro (NO le digas que le llegará un correo con datos de pago).`
   }
   return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'} (total a pagar ${fmtPrecio(monto)}). ` +
     `Le enviamos al cliente un correo con el detalle y los datos de transferencia (y un aviso por WhatsApp). ` +

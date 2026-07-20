@@ -11,7 +11,7 @@ type Item = {
   horaEutanasia?: string; esperandoHoraVet?: boolean; sinCremacion?: boolean
 }
 
-const HORAS = Array.from({ length: 13 }, (_, i) => 9 + i) // 9..21 (la agenda va de 09:00 a 22:00)
+const HORAS = Array.from({ length: 16 }, (_, i) => 8 + i) // 8..23 (la agenda muestra de 08:00 a 24:00)
 const DIAS_LBL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const SERVICIO: Record<string, string> = { CI: 'Individual', CP: 'Premium', SD: 'Sin Devolución' }
@@ -65,7 +65,7 @@ function detalle(it: Item): string {
 
 /**
  * Agenda semanal en el Dashboard (entre las notificaciones y el Timeline).
- * Grilla días × horas (09:00–22:00) con los retiros de cremación y los retiros
+ * Grilla días × horas (08:00–24:00) con los retiros de cremación y los retiros
  * de eutanasia coordinados. AMARILLO = por confirmar (retiro pendiente, o
  * eutanasia esperando la hora del veterinario); VERDE = confirmado. Se refresca
  * sola cada 30s. Solo lectura (confirmar/rechazar vive en las notificaciones).
@@ -111,7 +111,9 @@ export default function AgendaSemanal() {
   const porCelda = useMemo(() => {
     const map: Record<string, Record<number, Item[]>> = {}
     for (const it of items) {
-      const h = Math.min(21, Math.max(9, it.bloque < 0 ? 9 : it.bloque))
+      // Muestra cada item en SU hora real (08:00–23:00). Los que caigan fuera de
+      // ese rango se acotan al borde; los que no tienen hora válida van a las 08:00.
+      const h = Math.min(23, Math.max(8, it.bloque < 0 ? 8 : it.bloque))
       ;(map[it.fecha] ??= {})[h] ??= []
       map[it.fecha][h].push(it)
     }
@@ -245,8 +247,8 @@ export default function AgendaSemanal() {
             </Fragment>
           ))}
 
-          {/* Cierre 22:00 */}
-          <div className="sticky left-0 z-10 bg-white pr-1.5 pt-1 text-right text-[11px] font-medium text-gray-400 border-t border-gray-200">22:00</div>
+          {/* Cierre 24:00 */}
+          <div className="sticky left-0 z-10 bg-white pr-1.5 pt-1 text-right text-[11px] font-medium text-gray-400 border-t border-gray-200">24:00</div>
           {dias.map(d => <div key={'end' + d.iso} className="border-t border-l border-gray-200" />)}
         </div>
       </div>
