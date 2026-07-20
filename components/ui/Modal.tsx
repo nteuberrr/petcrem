@@ -22,6 +22,12 @@ export function Modal({ open, onClose, title, children, size = 'lg' }: ModalProp
   const panelRef = useRef<HTMLDivElement>(null)
   // Elemento que tenía el foco al abrir, para devolvérselo al cerrar.
   const prevFocus = useRef<HTMLElement | null>(null)
+  // `onClose` suele venir como arrow inline del padre → cambia de identidad en
+  // cada render. Lo leemos por ref para que el efecto de foco dependa SOLO de
+  // `open`: si dependiera de `onClose`, se re-ejecutaría en cada tecla y el
+  // `panelRef.focus()` le robaría el foco al input que estás escribiendo.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     if (!open) return
@@ -42,7 +48,7 @@ export function Modal({ open, onClose, title, children, size = 'lg' }: ModalProp
         : []
 
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return }
+      if (e.key === 'Escape') { onCloseRef.current(); return }
       // Focus trap: mantiene el Tab dentro del diálogo.
       if (e.key === 'Tab') {
         const items = focusables()
@@ -60,7 +66,7 @@ export function Modal({ open, onClose, title, children, size = 'lg' }: ModalProp
       document.body.style.overflow = prevOverflow
       prevFocus.current?.focus?.()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
