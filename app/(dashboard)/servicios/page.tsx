@@ -812,7 +812,7 @@ export default function ServiciosEutanasiasPage() {
         <section>
           <div className="flex flex-col md:flex-row gap-3 md:items-end justify-between mb-5">
             <div>
-              <p className="text-sm text-gray-600">Cada cotización avanza por las 4 columnas a medida que el veterinario va respondiendo los correos.</p>
+              <p className="text-sm text-gray-600">Cada cotización avanza por las columnas a medida que el veterinario va respondiendo los correos.</p>
             </div>
             <button
               onClick={abrirNuevaCotizacion}
@@ -825,11 +825,11 @@ export default function ServiciosEutanasiasPage() {
           {loadingCotis && cotis.length === 0 ? (
             <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center text-gray-500">Cargando…</div>
           ) : (
-            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-start">
               {COLUMNAS_COTI.map(col => {
                 const items = cotisPorColumna[col.key]
                 return (
-                  <div key={col.key} className="bg-gray-50/80 rounded-xl border border-gray-300/70 flex flex-col min-h-[200px]">
+                  <div key={col.key} className="bg-gray-50/80 rounded-xl border border-gray-300/70 flex flex-col min-h-[120px]">
                     <div className={`px-4 py-3 rounded-t-xl border-b ${col.header}`}>
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold leading-tight">{col.titulo}</h3>
@@ -1178,25 +1178,19 @@ export default function ServiciosEutanasiasPage() {
             <textarea value={cotiForm.notas} onChange={e => setCotiForm({ ...cotiForm, notas: e.target.value })} rows={2} className={inputCls} placeholder="Información adicional que ayude al vet" />
           </Field>
 
-          {/* ¿Incluye cremación? — por defecto SÍ (servicio integral recomendado) */}
-          <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">¿Incluye cremación?</label>
-            <div className="flex gap-2">
+          {/* ¿Incluye cremación? — segmentado compacto, por defecto CON cremación */}
+          <Field label="¿Incluye cremación?">
+            <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden text-xs font-medium">
               <button type="button" onClick={() => setNuevaConCremacion(true)}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${nuevaConCremacion ? 'bg-brand text-white border-brand' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
-                Con cremación <span className={nuevaConCremacion ? 'text-white/80' : 'text-gray-400'}>(recomendado)</span>
+                className={`px-3 py-1.5 transition-colors ${nuevaConCremacion ? 'bg-brand text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                Con cremación
               </button>
               <button type="button" onClick={() => setNuevaConCremacion(false)}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${!nuevaConCremacion ? 'bg-gray-600 text-white border-gray-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
+                className={`px-3 py-1.5 border-l border-gray-300 transition-colors ${!nuevaConCremacion ? 'bg-brand text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                 Solo eutanasia
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {nuevaConCremacion
-                ? 'El chofer pasa a retirar tras la eutanasia: aparece en el dashboard, ocupa la agenda y se crea la ficha de cremación.'
-                : 'Solo la eutanasia. Queda como recordatorio gris en el calendario, sin retiro ni bloqueo de agenda.'}
-            </p>
-          </div>
+          </Field>
 
           {/* Asignar vet manualmente (opcional) */}
           <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
