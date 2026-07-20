@@ -9,10 +9,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           viewport → en móvil se veía "zoomeada"/corrida al cambiar de sección.
           Con min-w-0 el item se encoge y las tablas scrollean en su propio wrapper. */}
       <main className="flex-1 min-w-0 max-w-full md:ml-60 p-4 pt-16 md:p-8 bg-slate-200 min-h-screen">
-        {/* Contenido alineado a la IZQUIERDA y a todo el ancho disponible (sin
-            centrarlo ni dejar gris a los costados). Las páginas con su propio
-            max-w menor siguen mandando adentro. */}
-        <div className="w-full">
+        {/* Contenedor centrado con tope de ancho: en monitores muy anchos el
+            contenido no se estira a lo bruto (el fondo slate sí es full-width).
+            Las páginas con su propio max-w menor siguen mandando adentro. */}
+        <div className="mx-auto w-full max-w-[1600px]">
           {children}
         </div>
       </main>
