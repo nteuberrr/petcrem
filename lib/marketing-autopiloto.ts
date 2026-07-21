@@ -20,7 +20,12 @@ import { avisarAdminsWhatsapp, isWhatsappConfigured } from './whatsapp'
  */
 
 const TZ = 'America/Santiago'
-const MODEL = process.env.ANTHROPIC_MARKETING_MODEL || 'claude-sonnet-4-6'
+// LOTE = trabajo masivo/desatendido (planificación semanal del autopiloto) → Sonnet,
+// barato. Env PROPIA (ANTHROPIC_MARKETING_MODEL_LOTE) para NO acoplarse al modelo del
+// chat interactivo (ANTHROPIC_MARKETING_MODEL, que es Opus): así subir la calidad del
+// chat no encarece la generación en lote. Cada PIEZA que genera el autopiloto usa
+// marketing-pieza.ts, que ya corre en Sonnet (ANTHROPIC_MAILING_MODEL).
+const MODEL = process.env.ANTHROPIC_MARKETING_MODEL_LOTE || 'claude-sonnet-4-6'
 
 let client: Anthropic | null = null
 function getClient(): Anthropic {

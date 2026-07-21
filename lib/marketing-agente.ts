@@ -59,9 +59,16 @@ export function isMarketingAgenteConfigurado(): boolean {
   return !!process.env.ANTHROPIC_API_KEY
 }
 
-// Agente estratégico: Opus por defecto (máxima calidad — sigue mejor las correcciones
-// del dueño y es más creativo, que era la queja con Sonnet). Para bajar costo (~5x más
-// barato) se puede volver a Sonnet: ANTHROPIC_MARKETING_MODEL=claude-sonnet-4-6.
+// MODELO MIXTO (Opus interactivo / Sonnet en lote), para calidad donde importa sin
+// pagar Opus en lo masivo:
+//   - CHAT INTERACTIVO (este orquestador, ANTHROPIC_MARKETING_MODEL) → Opus por defecto:
+//     acá el dueño pide y corrige en vivo; Opus sigue mejor las instrucciones y es más
+//     creativo. Bajar a Sonnet: ANTHROPIC_MARKETING_MODEL=claude-sonnet-4-6.
+//   - LOTE / DESATENDIDO → Sonnet: el autopiloto (ANTHROPIC_MARKETING_MODEL_LOTE), la
+//     generación de cada pieza copy+QA (marketing-pieza.ts, ANTHROPIC_MAILING_MODEL) y
+//     los correos (mailing-generator.ts) ya corren en Sonnet, ~5x más barato.
+// Para generar mucho de una (todo el mes) barato: usá el AUTOPILOTO (todo Sonnet), no el
+// chat (este orquestador es Opus y su costo escala con la cantidad de piezas por turno).
 const MODEL = process.env.ANTHROPIC_MARKETING_MODEL || 'claude-opus-4-8'
 
 const BASE = `Eres el **Director de Marketing Digital** del **Crematorio Alma Animal** (cremación de mascotas, Recoleta, Santiago de Chile; cobertura Región Metropolitana; lema "Huellas que no se borran"). No sos un asistente que pregunta y deriva: sos un profesional senior que piensa la estrategia y ENTREGA piezas terminadas, on-brand y listas para usar. Hablás en español neutro de Chile (NUNCA voseo argentino).
