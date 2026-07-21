@@ -80,7 +80,7 @@ export interface OpcionesPlantilla {
 
 export interface ResultadoPlantilla { html: string; fotos: FotoGrafico[] }
 
-export const PLANTILLAS = ['portada', 'contenido', 'dato', 'foto', 'cierre', 'cita', 'split'] as const
+export const PLANTILLAS = ['portada', 'contenido', 'dato', 'foto', 'cierre', 'cita', 'split', 'numeros', 'marco'] as const
 export type NombrePlantilla = (typeof PLANTILLAS)[number]
 
 /** Guía de slots por plantilla, para el prompt/tool del modelo. */
@@ -92,6 +92,8 @@ export const PLANTILLAS_INFO = `PLANTILLAS DISPONIBLES (elegí UNA y llená sus 
 - "cierre": llamado a la acción final. slots: titulo, cta (ej. teléfono), cta_secundario (web), bajada (opcional), fondo, foto {prompt} (opcional, banda arriba).
 - "cita": testimonio o frase destacada (gran comilla dorada). slots: titulo (la frase/testimonio, ~1-2 líneas), bajada (autor: "María, tutora de Rocky" o "Clínica X"), eyebrow (opcional), fondo (default crema/claro). SIN foto. Ideal para PRUEBA SOCIAL y frases de marca.
 - "split": editorial lado-a-lado — foto a la izquierda, texto a la derecha (layout DISTINTO a los apilados). slots: foto {prompt} (obligatoria), titulo, titulo_destacado (opcional, dorado), bajada (opcional), bullets (2-3, opcional), cta (opcional), fondo (del panel de texto; default crema). Para una idea con una foto potente, con aire de revista.
+- "numeros": lista NUMERADA (pasos o razones) con números dorados grandes — otro ritmo visual que los bullets. slots: eyebrow (opcional), titulo, bajada (opcional), bullets (2-4, cada uno es un paso/razón, MUY cortos), fondo (default crema). Ideal para "los pasos del proceso", "3 razones para…". SIN foto.
+- "marco": foto ENMARCADA (estilo galería) centrada, con aire alrededor + pie de foto. slots: foto {prompt} (obligatoria), titulo (frase/pie centrado), bajada (opcional, autor/contexto), fondo (default crema). Distinta de "foto" (full-bleed): acá la foto respira sobre el color de marca. Cálida para homenajes, humanización y prueba social.
 Reglas: textos CORTOS (si no caben, se recortan). El fondo alterna navy/crema/blanco entre piezas — la PORTADA también (ya NO es siempre navy): NO dejes todas las portadas en navy, variá a crema o blanco (o con la foto mandando) para que el feed no se vea "todo azul". Regla práctica: máximo ~1 de cada 3 piezas de una misma tanda con fondo navy dominante. La foto: mascota viva y feliz o tutor con su mascota, cálida; NUNCA instalaciones. El logo se coloca solo.`
 
 // ─── helpers de bloque ────────────────────────────────────────────────────────
@@ -266,8 +268,47 @@ function split(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlanti
   return { html, fotos }
 }
 
+function numeros(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  // Lista NUMERADA (pasos / razones): números dorados grandes → ritmo visual
+  // distinto a los bullets de "contenido". Sin foto. Default en claro.
+  const bg = bgColor(s.fondo || 'crema')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const eb = s.eyebrow ? eyebrowChip(s.eyebrow) : ''
+  const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, C.w - PAD * 2, 60) : ''
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:18px">${esc(clampText(s.bajada, 120))}</span>` : ''
+  const rows = (s.bullets || []).slice(0, 4).map((b, i) =>
+    `<div style="display:flex;flex-direction:row;align-items:center;gap:24px"><div style="display:flex;align-items:center;justify-content:center;width:66px;height:66px;border-radius:34px;background:${GOLD};flex-shrink:0"><span style="font-family:Inter;font-weight:700;font-size:36px;color:${NAVY}">${i + 1}</span></div><span style="font-family:Inter;font-weight:600;font-size:32px;color:${col};line-height:1.25">${esc(clampText(b, 76))}</span></div>`).join('')
+  const lista = rows ? `<div style="display:flex;flex-direction:column;gap:26px;margin-top:40px">${rows}</div>` : ''
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px 120px ${PAD}px">${eb}${tit}${bajada}${lista}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos: [] }
+}
+
+function marco(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  // Foto ENMARCADA (estilo galería/editorial) centrada + pie de foto. Distinta de
+  // "foto" (full-bleed) y "split" (lado a lado): la foto respira sobre el fondo de
+  // marca, con aire. Cálida para homenajes/humanización.
+  const fotos: FotoGrafico[] = []
+  const src = s.foto?.url ? esc(s.foto.url) : 'FOTO:principal'
+  if (!s.foto?.url) fotos.push({ slot: 'principal', prompt: s.foto?.prompt || 'una mascota viva y feliz, retrato cálido con luz natural', aspect: '1:1' })
+  const bg = bgColor(s.fondo || 'crema')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const marcoW = C.w - PAD * 2
+  const fotoH = Math.round(C.h * 0.50)
+  const cuadro = `<div style="display:flex;background:${WHITE};padding:20px;border-radius:8px"><img src="${src}" width="${marcoW - 40}" height="${fotoH}" style="object-fit:cover;display:block;border-radius:2px" /></div>`
+  const tit = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, marcoW, 50, 34)}px;color:${col};line-height:1.22;margin-top:40px">${esc(clampText(s.titulo, 90))}</span>` : ''
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:28px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:14px">${esc(clampText(s.bajada, 120))}</span>` : ''
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:46px;right:${PAD - 16}px`, 130)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:72px ${PAD}px 110px ${PAD}px">${cuadro}${tit}${bajada}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos }
+}
+
 const BUILDERS: Record<NombrePlantilla, (s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla) => ResultadoPlantilla> = {
-  portada, contenido, dato, foto, cierre, cita, split,
+  portada, contenido, dato, foto, cierre, cita, split, numeros, marco,
 }
 
 /** Construye el HTML on-brand de una plantilla + las fotos a generar. */

@@ -59,9 +59,10 @@ export function isMarketingAgenteConfigurado(): boolean {
   return !!process.env.ANTHROPIC_API_KEY
 }
 
-// Agente estratégico: Sonnet por defecto (costo: ~5x más barato que Opus). Para volver
-// a la máxima calidad: ANTHROPIC_MARKETING_MODEL=claude-opus-4-8.
-const MODEL = process.env.ANTHROPIC_MARKETING_MODEL || 'claude-sonnet-4-6'
+// Agente estratégico: Opus por defecto (máxima calidad — sigue mejor las correcciones
+// del dueño y es más creativo, que era la queja con Sonnet). Para bajar costo (~5x más
+// barato) se puede volver a Sonnet: ANTHROPIC_MARKETING_MODEL=claude-sonnet-4-6.
+const MODEL = process.env.ANTHROPIC_MARKETING_MODEL || 'claude-opus-4-8'
 
 const BASE = `Eres el **Director de Marketing Digital** del **Crematorio Alma Animal** (cremación de mascotas, Recoleta, Santiago de Chile; cobertura Región Metropolitana; lema "Huellas que no se borran"). No sos un asistente que pregunta y deriva: sos un profesional senior que piensa la estrategia y ENTREGA piezas terminadas, on-brand y listas para usar. Hablás en español neutro de Chile (NUNCA voseo argentino).
 
@@ -78,7 +79,11 @@ CÓMO TRABAJÁS (lo más importante — leelo bien)
 LÍNEA VISUAL DE MARCA
 - Seguí SIEMPRE la DIRECCIÓN VISUAL (fotos) y la DIRECCIÓN PARA GRÁFICOS (piezas con texto) que tenés más abajo. Paleta: crema/blanco domina, navy ESTRUCTURA (no fondo por defecto), dorado acento; sobrio, cálido y premium. VARIÁ el layout y el fondo entre piezas (crema, blanco, foto cálida, navy): el feed muestra todo junto y no puede verse como un bloque azul.
 - El logo de marca se agrega solo (nítido) a las imágenes que generás; no necesitás "dibujarlo".
-- VARIÁ entre placas y FOTOS REALES. Tenemos varias fotos de mascotas/personas en el banco: cuando aporte calidez y cercanía (sobre todo en piezas para tutores), reutilizá una de esas fotos en vez de hacer TODO con placas de texto. Con criterio y creatividad — NO en cada post ni a la fuerza, pero tampoco caigas siempre en lo plano "puras letras". Un buen mix (foto cálida + placas con la info) se siente más humano.
+- VARIÁ DE VERDAD, NO REPITAS EL MISMO MOLDE (queja directa del dueño: "salen todas iguales, mismo formato"). Reglas concretas:
+  · ROTÁ las plantillas: tenés 9 (portada, contenido, dato, foto, cierre, cita, split, numeros, marco). NO caigas siempre en portada/contenido apiladas. Usá a propósito las que rompen el molde — "foto" y "marco" (foto protagonista), "split" (lado a lado), "numeros" (lista numerada), "cita" (testimonio), "dato" (cifra grande). Mirá qué formato usaste recién y elegí OTRO.
+  · APOYATE EN FOTOS REALES, no todo placas de texto. Tenemos fotos de mascotas/personas en el banco: cuando aporte calidez (sobre todo para tutores) reutilizá una o generá una nueva, en vez de hacer TODO "puras letras". Un feed de solo placas de texto se ve plano y repetido.
+  · ALTERNÁ el FONDO entre piezas (crema, blanco, foto; navy como máximo 1 de cada 3) y el ÁNGULO/tema. No repitas un mismo tema ni una misma composición en piezas seguidas.
+  · Criterio, no fórmula: no metas foto a la fuerza en cada post, pero tampoco entregues la 5ª placa navy de texto seguida. Si lo que venís haciendo se parece a lo anterior, cambiá el enfoque.
 
 CANALES
 - email: campañas de correo a la BASE DE VETERINARIOS (B2B). Para informar novedades, fidelizar o captar clínicas.
@@ -430,7 +435,7 @@ const TOOL_DISENAR_PLANTILLA: Anthropic.Tool = {
   input_schema: {
     type: 'object',
     properties: {
-      plantilla: { type: 'string', enum: [...PLANTILLAS], description: 'portada = apertura/gancho (eyebrow + titular + bajada + foto arriba + CTA); contenido = idea + hasta 4 bullets; dato = una cifra/palabra grande; foto = foto protagonista con una frase; cierre = CTA final (titular + teléfono/web); cita = testimonio/frase destacada (comilla dorada, sin foto); split = editorial foto a la izquierda + texto a la derecha.' },
+      plantilla: { type: 'string', enum: [...PLANTILLAS], description: 'portada = apertura/gancho (eyebrow + titular + bajada + foto arriba + CTA); contenido = idea + hasta 4 bullets; dato = una cifra/palabra grande; foto = foto protagonista con una frase; cierre = CTA final (titular + teléfono/web); cita = testimonio/frase destacada (comilla dorada, sin foto); split = editorial foto a la izquierda + texto a la derecha; numeros = lista numerada (pasos/razones) con números dorados grandes (bullets = los pasos); marco = foto enmarcada estilo galería + pie centrado (homenajes, prueba social). ROTÁ entre plantillas: no caigas siempre en portada/contenido.' },
       formato: { type: 'string', enum: ['post_vertical', 'post', 'story'], description: 'post_vertical (1080x1350, feed IG/FB — DEFAULT), post (1080x1080), story (1080x1920).' },
       carrusel: { type: 'string', description: 'Mismo identificador en todas las placas de un carrusel/serie (las agrupa en una campaña C-X.1, C-X.2…). Vacío si es suelta.' },
       slots: {
@@ -441,7 +446,7 @@ const TOOL_DISENAR_PLANTILLA: Anthropic.Tool = {
           titulo: { type: 'string', description: 'Titular (2-4 palabras); en "foto" una frase corta.' },
           titulo_destacado: { type: 'string', description: '2ª línea del titular, en DORADO.' },
           bajada: { type: 'string', description: 'Frase de apoyo corta.' },
-          bullets: { type: 'array', items: { type: 'string' }, description: 'Solo "contenido": 2-4 bullets MUY cortos.' },
+          bullets: { type: 'array', items: { type: 'string' }, description: '"contenido" y "numeros": 2-4 ítems MUY cortos (en "numeros" cada uno es un paso/razón).' },
           dato: { type: 'string', description: 'Solo "dato": el número/palabra grande (ej. "4 días").' },
           dato_label: { type: 'string', description: 'Solo "dato": qué es esa cifra.' },
           cta: { type: 'string', description: 'CTA corto o teléfono (portada/cierre).' },
