@@ -142,7 +142,7 @@ function proxyImgs(html: string): string {
 const CATEGORIAS = ['prospecto', 'cliente', 'inactivo'] as const
 
 type Red = 'mail' | 'instagram' | 'facebook' | 'tiktok'
-type Vista = Red | 'calendario' | 'imagenes' | 'metricas'
+type Vista = Red | 'calendario' | 'imagenes' | 'metricas' | 'embudo'
 
 // Barra de accesos fija arriba, ordenada por el flujo de trabajo: se crea el
 // contenido con el Agente, se distribuye por Mailing, se paga con Publicidad y
@@ -151,6 +151,7 @@ const NAV: { key: Vista; label: string }[] = [
   { key: 'calendario', label: 'Agente' },
   { key: 'mail', label: 'Mailing' },
   { key: 'metricas', label: 'Publicidad' },
+  { key: 'embudo', label: 'Embudo' },
   { key: 'imagenes', label: 'Banco' },
 ]
 
@@ -161,6 +162,7 @@ function NavIcon({ k, className = 'w-6 h-6' }: { k: Vista; className?: string })
   if (k === 'facebook') return <FacebookIcon className={className} />
   if (k === 'tiktok') return <span className="text-xl leading-none">🎵</span>
   if (k === 'metricas') return <span className="text-xl leading-none">📣</span>
+  if (k === 'embudo') return <span className="text-xl leading-none">📈</span>
   return <span className="text-xl leading-none">🖼️</span>
 }
 
@@ -233,6 +235,7 @@ export default function CampanasPage() {
       {vista === 'mail' && <MailContent />}
       {vista === 'imagenes' && <BancoView />}
       {vista === 'metricas' && <MetricasPanel />}
+      {vista === 'embudo' && <EmbudoSemanalPanel />}
 
       {/* Panel lateral "abrir en paralelo": el Banco compacto, sin bloquear el chat. */}
       {bancoParalelo && (
@@ -246,6 +249,175 @@ export default function CampanasPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Apartado «Embudo»: conversión por semana ISO (Google Ads + inbox + fichas) ──
+type EmbudoFila = {
+  label: string; desde: string; hasta: string
+  impresiones: number; clicks: number; ctr: number | null
+  leads: number | null; clkLead: number | null
+  ventas: number | null; leadVenta: number | null; clkVenta: number | null
+  nota?: string; historico?: boolean
+}
+type EmbudoResp = { filas: EmbudoFila[]; avisos: string[]; googleOk: boolean; leadsOk: boolean; leadsDesde: string }
+
+const MESES_ABBR = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+function rangoCorto(desde: string, hasta: string): string {
+  const f = (iso: string) => { const p = iso.split('-'); return `${parseInt(p[2], 10)} ${MESES_ABBR[parseInt(p[1], 10) - 1]}` }
+  return `${f(desde)} – ${f(hasta)}`
+}
+const fmtNumCL = (v: number) => v.toLocaleString('es-CL')
+const fmtTasa = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}%`)
+
+/** Semáforo de color por métrica (verde bien · ámbar medio · rojo bajo). Umbrales
+ *  tentativos, calibrables; Lead→Venta > 100% se marca ámbar (anomalía de atribución). */
+function colorTasa(kind: 'ctr' | 'clkLead' | 'leadVenta' | 'clkVenta', v: number | null): string {
+  if (v == null) return 'text-gray-400'
+  // Clk→Lead y Lead→Venta pueden superar el 100% (los leads incluyen tráfico
+  // orgánico/directo, no solo clics de ads) → se marcan ámbar como anomalía.
+  if ((kind === 'leadVenta' || kind === 'clkLead') && v > 100) return 'text-amber-600 font-semibold'
+  const [rojo, verde] = { ctr: [8, 10], clkLead: [12, 20], leadVenta: [12, 20], clkVenta: [2.5, 4] }[kind]
+  if (v >= verde) return 'text-emerald-600 font-semibold'
+  if (v >= rojo) return 'text-amber-600'
+  return 'text-rose-600'
+}
+
+function EmbudoSemanalPanel() {
+  const [semanas, setSemanas] = useState(16)
+  const [data, setData] = useState<EmbudoResp | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let vivo = true
+    setLoading(true); setError('')
+    fetch(`/api/mailing/embudo?semanas=${semanas}`)
+      .then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Error'); return j as EmbudoResp })
+      .then(j => { if (vivo) setData(j) })
+      .catch(e => { if (vivo) setError(e instanceof Error ? e.message : 'Error') })
+      .finally(() => { if (vivo) setLoading(false) })
+    return () => { vivo = false }
+  }, [semanas])
+
+  const exportar = async () => {
+    if (!data) return
+    const XLSX = await import('xlsx-js-style')
+    const wb = XLSX.utils.book_new()
+    const head = ['Semana', 'Desde', 'Hasta', 'Impresiones', 'Clics', 'CTR %', 'Leads WA', 'Clk→Lead %', 'Ventas', 'Lead→Venta %', 'Clk→Venta %', 'Nota']
+    const aoa: (string | number)[][] = [head, ...data.filas.map(f => [
+      f.label, f.desde, f.hasta, f.impresiones, f.clicks, f.ctr ?? '',
+      f.leads ?? '', f.clkLead ?? '', f.ventas ?? '', f.leadVenta ?? '', f.clkVenta ?? '', f.nota ?? '',
+    ] as (string | number)[])]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    for (let c = 0; c < head.length; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c })
+      if (ws[ref]) ws[ref].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '143C64' } } }
+    }
+    XLSX.utils.book_append_sheet(wb, ws, 'Embudo semanal')
+    XLSX.writeFile(wb, `petcrem-embudo-semanal.xlsx`)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-300 rounded-2xl shadow-md p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-brand">Embudo semanal</h2>
+            <p className="text-sm text-gray-600 mt-0.5">Conversión por semana ISO: impresiones → clics → leads de WhatsApp → ventas. En vivo desde Google Ads, el inbox y las fichas.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={semanas}
+              onChange={e => setSemanas(parseInt(e.target.value, 10))}
+              className="rounded-xl border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 bg-white"
+            >
+              <option value={12}>Últimas 12 semanas</option>
+              <option value={16}>Últimas 16 semanas</option>
+              <option value={24}>Últimas 24 semanas</option>
+              <option value={52}>Último año</option>
+            </select>
+            <button
+              onClick={exportar}
+              disabled={!data || loading}
+              className="rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >⬇ Excel</button>
+          </div>
+        </div>
+        {data && (data.avisos.length > 0 || !data.leadsOk || !data.googleOk) && (
+          <div className="mt-3 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 space-y-0.5">
+            {!data.googleOk && <div>• Sin datos de Google Ads en el período (impresiones y clics en 0).</div>}
+            {!data.leadsOk && <div>• El inbox no respondió: la columna «Leads WA» queda en blanco.</div>}
+            {data.avisos.map((a, i) => <div key={i}>• {a}</div>)}
+          </div>
+        )}
+      </div>
+
+      {error && <div className="bg-rose-50 border border-rose-200 rounded-2xl px-4 py-3 text-sm text-rose-700">{error}</div>}
+      {loading && <div className="bg-white border border-gray-300 rounded-2xl shadow-md p-8 text-center text-gray-500">Cargando embudo…</div>}
+
+      {data && !loading && (
+        <div className="bg-white border border-gray-300 rounded-2xl shadow-md overflow-x-auto">
+          <table className="w-full min-w-[860px] text-sm border-collapse">
+            <thead className={MET_THEAD}>
+              <tr className="divide-x divide-brand/10 border-b border-brand/10 text-center">
+                <th className="px-3 py-2" colSpan={2}>Identificación</th>
+                <th className="px-3 py-2">Impresiones</th>
+                <th className="px-3 py-2" colSpan={2}>Clics (CTR)</th>
+                <th className="px-3 py-2" colSpan={2}>Leads WhatsApp</th>
+                <th className="px-3 py-2" colSpan={3}>Ventas (conversión)</th>
+              </tr>
+              <tr className={MET_THEAD_TR}>
+                <MetTh>Semana</MetTh>
+                <MetTh>Fechas</MetTh>
+                <MetTh right info="Veces que se mostró un anuncio (Google Ads).">Impresiones</MetTh>
+                <MetTh right info="Clics en los anuncios.">Clics</MetTh>
+                <MetTh right info="CTR = clics / impresiones.">CTR</MetTh>
+                <MetTh right info="Conversaciones nuevas de tutores por WhatsApp en la semana. Solo existe desde que el inbox en vivo empezó a capturar.">Leads</MetTh>
+                <MetTh right info="Clic → Lead = leads / clics.">Clk→Lead</MetTh>
+                <MetTh right info="Fichas directas de tutores creadas en la semana (excluye borradores y convenio B2B).">Ventas</MetTh>
+                <MetTh right info="Lead → Venta = ventas / leads. Puede superar el 100%: una venta puede cerrar a partir de un lead de semanas previas o de tráfico directo (⚠️).">Lead→Venta</MetTh>
+                <MetTh right info="Clic → Venta = ventas / clics (conversión punta a punta).">Clk→Venta</MetTh>
+              </tr>
+            </thead>
+            <tbody>
+              {data.filas.map((f, idx) => {
+                const enCurso = idx === data.filas.length - 1
+                return (
+                  <tr key={f.label} className={MET_ROW}>
+                    <td className="px-3 py-2 font-semibold text-brand whitespace-nowrap">
+                      {f.label}
+                      {enCurso && <span className="ml-1.5 text-[10px] font-medium text-gray-400">en curso</span>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap text-xs">
+                      {rangoCorto(f.desde, f.hasta)}
+                      {f.nota && <span className="ml-1.5 text-amber-600 font-medium">· {f.nota}</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{fmtNumCL(f.impresiones)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{fmtNumCL(f.clicks)}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${colorTasa('ctr', f.ctr)}`}>{fmtTasa(f.ctr)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-medium text-gray-800">{f.leads == null ? '—' : fmtNumCL(f.leads)}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${colorTasa('clkLead', f.clkLead)}`}>{fmtTasa(f.clkLead)}{f.clkLead != null && f.clkLead > 100 ? ' ⚠️' : ''}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-brand">{f.ventas == null ? '—' : fmtNumCL(f.ventas)}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${colorTasa('leadVenta', f.leadVenta)}`}>{fmtTasa(f.leadVenta)}{f.leadVenta != null && f.leadVenta > 100 ? ' ⚠️' : ''}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${colorTasa('clkVenta', f.clkVenta)}`}>{fmtTasa(f.clkVenta)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="bg-white border border-gray-300 rounded-2xl shadow-md p-4 text-xs text-gray-500 leading-relaxed">
+        <p className="font-semibold text-gray-600 mb-1">Cómo leer esta tabla</p>
+        <p>• <b>Leads WA</b> = conversaciones nuevas de tutores por WhatsApp. Solo disponibles desde el <b>{data ? formatDate(data.leadsDesde) : '—'}</b> (cuando el inbox empezó a capturar); antes salen «—» porque no existe historia de leads fechada. Impresiones, clics y ventas sí tienen historia completa.</p>
+        <p>• <b>Ventas</b> = fichas directas de tutores creadas esa semana (sin convenio B2B, sin borradores).</p>
+        <p>• <b>Semanas hasta abr-2026</b>: leads y ventas vienen del <b>registro manual</b> que se llevaba antes de conectar las APIs (impresiones/clics igual salen de Google Ads). La semana de <b>carga inicial</b> del sistema (20-abr) deja sus ventas en «—» porque ese día se cargaron todas las fichas viejas juntas (pico irreal).</p>
+        <p>• <b>⚠️ Tasas &gt; 100% (Clk→Lead o Lead→Venta)</b>: es esperado. La tabla mide «lo que pasó cada semana», no una cohorte — un lead o una venta puede venir de una semana anterior o de tráfico directo/orgánico (no todos los leads salen de un clic de ads).</p>
+        <p>• La última fila es la <b>semana en curso</b> (parcial): sus números todavía se están completando.</p>
+      </div>
     </div>
   )
 }

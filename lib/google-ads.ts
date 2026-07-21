@@ -186,6 +186,34 @@ async function monedaCuenta(): Promise<string> {
   } catch { return 'CLP' }
 }
 
+export interface SemanaImprClicks { impresiones: number; clicks: number }
+
+/**
+ * Impresiones + clics agregados POR SEMANA (lunes–domingo) en un rango de fechas.
+ * La clave del Map es la fecha del LUNES de cada semana (`segments.week` de Google,
+ * que también arranca en lunes) → se alinea 1:1 con las semanas ISO del embudo.
+ * Suma TODAS las campañas, incluidas pausadas/eliminadas: interesa el histórico de
+ * la cuenta, no el estado actual. La usa lib/embudo-semanal.ts.
+ */
+export async function impresionesClicksPorSemana(desdeIso: string, hastaIso: string): Promise<Map<string, SemanaImprClicks>> {
+  const rows = await gaqlSearch(`
+    SELECT segments.week, metrics.impressions, metrics.clicks
+    FROM campaign
+    WHERE segments.date BETWEEN '${desdeIso}' AND '${hastaIso}' AND campaign.status != 'REMOVED'
+  `)
+  const map = new Map<string, SemanaImprClicks>()
+  for (const r of rows) {
+    const wk = String((r.segments as Record<string, unknown> | undefined)?.week || '')
+    if (!wk) continue
+    const cur = map.get(wk) || { impresiones: 0, clicks: 0 }
+    const m = (r.metrics || {}) as Record<string, unknown>
+    cur.impresiones += num(m.impressions)
+    cur.clicks += num(m.clicks)
+    map.set(wk, cur)
+  }
+  return map
+}
+
 // ─── Campañas ─────────────────────────────────────────────────────────────────
 export interface CampanaGoogle {
   id: string
