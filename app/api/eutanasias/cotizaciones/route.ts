@@ -7,7 +7,7 @@ import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
 import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarClienteCotizacionEutanasia } from '@/lib/eutanasia-mailer'
-import { getConsultaEutanasia, getFijoEutanasia, getRecargoFueraHorario, recargoEutanasiaPara } from '@/lib/eutanasia-precios'
+import { getConsultaEutanasia, getFijoEutanasia, getRecargoFueraHorario, recargoEutanasiaPara, cremacionOpcionesParaCorreo } from '@/lib/eutanasia-precios'
 import { formatDate } from '@/lib/dates'
 
 const SHEET = 'cotizaciones_eutanasia'
@@ -207,6 +207,10 @@ export async function POST(req: NextRequest) {
           precioClienteRealizada: precio + fijo + recargoFuera,
           consultaTotal: consulta.total + recargoFuera,
           recargoFueraHorario: recargoFuera,
+          conCremacion: row.incluye_cremacion !== 'FALSE',
+          // El alta manual no captura la modalidad → se listan las opciones con su
+          // valor (bloque aparte) + catálogo adjunto para que el tutor elija.
+          cremacionOpciones: row.incluye_cremacion === 'FALSE' ? undefined : await cremacionOpcionesParaCorreo(row.peso),
         })
       } catch (e) { console.warn('[cotizaciones POST] correo cotización al tutor falló:', e) }
     }

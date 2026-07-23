@@ -20,7 +20,7 @@ type Cliente = {
   tipo_servicio: string; codigo_servicio: string
   estado: string; estado_pago?: string; tipo_pago?: string
   fecha_retiro: string; hora_retiro?: string; fecha_creacion: string; ciclo_id: string
-  direccion_retiro?: string; direccion_despacho?: string; comuna?: string
+  direccion_retiro?: string; direccion_despacho?: string; comuna?: string; es_depto?: string
   adicionales?: string
   veterinaria_id?: string; notas?: string
   fotos_cuadro?: string; videos_servicio?: string
@@ -68,6 +68,7 @@ const FORM_DEFAULT = {
   direccion_retiro: '',
   direccion_despacho: '',
   misma_direccion: false,
+  es_depto: false,
   comuna: '',
   fecha_retiro: '',
   hora_retiro: '',
@@ -504,6 +505,7 @@ export default function ClientesPage() {
       ...form,
       peso_declarado: pesoDeclarado,
       misma_direccion: form.misma_direccion,
+      es_depto: form.es_depto,
       direccion_despacho: form.misma_direccion ? form.direccion_retiro : form.direccion_despacho,
       veterinaria_id: noEsVeterinaria ? '' : form.veterinaria_id,
       adicionales: JSON.stringify(adicionales),
@@ -601,6 +603,21 @@ export default function ClientesPage() {
     const eutanasia = intCLP(c.eutanasia_valor)
     if (eutanasia > 0) lineas.push({ nombre: 'Eutanasia a domicilio (fuera de boleta)', valor: fmtPrecio(eutanasia) })
     return { lineas, total: total + eutanasia }
+  }
+
+  /**
+   * Monto que FALTA cobrar de una ficha. Suma dos cosas:
+   *  - el total del servicio, si todavía no se pagó. En 'parcial' NO se cuenta:
+   *    el resto ya vive como un cobro 'saldo' (si no, se contaría doble).
+   *  - los cobros pendientes de la ficha (adicional / diferencia de peso / saldo).
+   */
+  function montoPendiente(c: Cliente): number {
+    const estado = (c.estado_pago || '').toLowerCase()
+    const base = estado === 'pagado' || estado === 'parcial' ? 0 : intCLP(c.precio_total) + intCLP(c.eutanasia_valor)
+    const cobros = cobrosPend
+      .filter(x => String(x.cliente_id) === String(c.id))
+      .reduce((s, x) => s + (parseFloat(String(x.monto).replace(/[^\d.-]/g, '')) || 0), 0)
+    return Math.max(0, Math.round(base + cobros))
   }
 
   const vetSeleccionada = !noEsVeterinaria ? veterinarias.find(v => v.id === form.veterinaria_id) : undefined
@@ -878,11 +895,15 @@ export default function ClientesPage() {
                   🗂 Completa la ficha para registrarla
                 </p>
               )}
-              {c.estado !== 'borrador' && c.estado_pago !== 'pagado' && (
-                <p className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                  ⚠ Pago pendiente
-                </p>
-              )}
+              {c.estado !== 'borrador' && c.estado_pago !== 'pagado' && (() => {
+                const pend = montoPendiente(c)
+                return (
+                  <p className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 flex items-center justify-between gap-2">
+                    <span>⚠ {c.estado_pago === 'parcial' ? 'Saldo pendiente' : 'Pago pendiente'}</span>
+                    {pend > 0 && <span className="font-bold whitespace-nowrap">{fmtPrecio(pend)}</span>}
+                  </p>
+                )
+              })()}
                 </div>
                 {resumen && (
                   <div className="w-40 shrink-0 border-l border-gray-200 pl-3">
@@ -919,7 +940,10 @@ export default function ClientesPage() {
               {selected.estado_pago === 'pagado' ? (
                 <Badge variant="green">Pagado</Badge>
               ) : (
-                <Badge variant="yellow">Pago pendiente</Badge>
+                <Badge variant="yellow">
+                  {selected.estado_pago === 'parcial' ? 'Saldo pendiente' : 'Pago pendiente'}
+                  {montoPendiente(selected) > 0 ? ` · ${fmtPrecio(montoPendiente(selected))}` : ''}
+                </Badge>
               )}
             </div>
 
@@ -932,10 +956,20 @@ export default function ClientesPage() {
               <PreviewField label="Servicio" value={`${selected.tipo_servicio} (${selected.codigo_servicio})`} />
               <PreviewField label="Fecha de retiro" value={fmtFecha(selected.fecha_retiro)} />
               <PreviewField label="Comuna" value={selected.comuna || '—'} />
-              <PreviewField label="Tipo de pago" value={selected.tipo_pago || '—'} />
+              <PreviewField label="Forma de pago" value={selected.tipo_pago || '—'} />
               <PreviewField label="Estado de pago" value={selected.estado_pago || 'pendiente'} />
+              <PreviewField
+                label="Monto total"
+                value={fmtPrecio(intCLP(selected.precio_total) + intCLP(selected.eutanasia_valor))}
+              />
+              {selected.estado_pago !== 'pagado' && (
+                <PreviewField label="Monto pendiente" value={fmtPrecio(montoPendiente(selected))} />
+              )}
               <div className="sm:col-span-2">
-                <PreviewField label="Dirección de retiro" value={selected.direccion_retiro || '—'} />
+                <PreviewField
+                  label="Dirección de retiro"
+                  value={`${selected.direccion_retiro || '—'}${selected.es_depto === 'TRUE' ? ' · 🏢 Depto' : ''}`}
+                />
               </div>
               {selected.direccion_despacho && selected.direccion_despacho !== selected.direccion_retiro && (
                 <div className="sm:col-span-2">
@@ -1121,6 +1155,17 @@ export default function ClientesPage() {
 
           <ModalAddressField required label="Dirección de retiro" value={form.direccion_retiro}
             onChange={v => setForm(f => ({ ...f, direccion_retiro: v, direccion_despacho: f.misma_direccion ? v : f.direccion_despacho }))} />
+
+          {/* Opcional: marca que la dirección es un departamento (edificio), para
+              que el chofer sepa que hay conserjería/acceso antes de llegar. */}
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="es_depto" checked={form.es_depto}
+              onChange={e => setForm(f => ({ ...f, es_depto: e.target.checked }))}
+              className="w-4 h-4 rounded border-gray-400 text-brand focus:ring-brand" />
+            <label htmlFor="es_depto" className="text-xs font-medium text-gray-700">
+              Depto <span className="text-gray-400 font-normal">(la dirección es un departamento / edificio)</span>
+            </label>
+          </div>
 
           <div className="flex items-center gap-2">
             <input type="checkbox" id="misma" checked={form.misma_direccion}

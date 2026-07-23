@@ -112,15 +112,15 @@ function FiltrosFecha({ desde, hasta, q, setDesde, setHasta, setQ }: {
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-end gap-3">
-        <div>
+        <div className="flex-1 min-w-[140px]">
           <label className="block text-xs font-semibold text-gray-600 mb-1">Desde</label>
-          <input type="date" value={desde} onChange={e => setDesde(e.target.value)} className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+          <input type="date" value={desde} onChange={e => setDesde(e.target.value)} className="w-full border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
         </div>
-        <div>
+        <div className="flex-1 min-w-[140px]">
           <label className="block text-xs font-semibold text-gray-600 mb-1">Hasta</label>
-          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} className="border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} className="w-full border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
         </div>
-        <div className="flex-1 min-w-[180px]">
+        <div className="flex-1 min-w-full sm:min-w-[180px]">
           <label className="block text-xs font-semibold text-gray-600 mb-1">Buscar</label>
           <input type="text" value={q} onChange={e => setQ(e.target.value)} placeholder="Código, mascota, tutor, folio…"
             className="w-full border-2 border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
@@ -203,37 +203,47 @@ function BoletasTab() {
         : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[880px] text-sm">
+              <table className="w-full md:min-w-[880px] text-sm">
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                   <tr>
-                    <th className="text-left px-4 py-2.5">Código</th>
-                    <th className="text-left px-4 py-2.5">Mascota / Tutor</th>
-                    <th className="text-left px-4 py-2.5">Fecha</th>
-                    <th className="text-right px-4 py-2.5">Monto</th>
-                    <th className="text-left px-4 py-2.5">Pago</th>
-                    <th className="text-left px-4 py-2.5">Boleta</th>
-                    <th className="text-right px-4 py-2.5">Acciones</th>
+                    <th className="text-left px-2 md:px-4 py-2.5">Código</th>
+                    <th className="text-left px-2 md:px-4 py-2.5">Mascota / Tutor</th>
+                    <th className="text-left px-4 py-2.5 hidden md:table-cell">Fecha</th>
+                    <th className="text-right px-2 md:px-4 py-2.5">Monto</th>
+                    <th className="text-left px-4 py-2.5 hidden md:table-cell">Pago</th>
+                    <th className="text-left px-4 py-2.5 hidden md:table-cell">Boleta</th>
+                    <th className="text-right px-2 md:px-4 py-2.5">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {ventas.map(v => (
                     <tr key={v.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2.5 font-mono text-xs font-bold text-brand">{v.codigo || `#${v.id}`}</td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-2 md:px-4 py-2.5 font-mono text-xs font-bold text-brand">{v.codigo || `#${v.id}`}</td>
+                      <td className="px-2 md:px-4 py-2.5">
                         <div className="text-gray-900 font-medium">{v.nombre_mascota || '—'}</div>
                         <div className="text-xs text-gray-400">{v.nombre_tutor}</div>
+                        {/* Móvil: la info de las columnas ocultas, plegada acá. */}
+                        <div className="md:hidden mt-1 flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-gray-500">{v.fecha ? fmtFecha(v.fecha) : '—'}</span>
+                          <BadgePago estado={v.estado_pago} />
+                          {v.boleta
+                            ? (v.boleta.estado === 'anulado'
+                                ? <Badge variant="red">Anulada</Badge>
+                                : <span className="text-xs font-mono font-bold text-brand">{v.boleta.folio || '—'}</span>)
+                            : <span className="text-xs text-gray-400">Sin emitir</span>}
+                        </div>
                       </td>
-                      <td className="px-4 py-2.5 text-gray-700">{v.fecha ? fmtFecha(v.fecha) : '—'}</td>
-                      <td className="px-4 py-2.5 text-right font-semibold text-gray-900">{fmtPrecio(v.monto)}</td>
-                      <td className="px-4 py-2.5"><BadgePago estado={v.estado_pago} /></td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-2.5 text-gray-700 hidden md:table-cell">{v.fecha ? fmtFecha(v.fecha) : '—'}</td>
+                      <td className="px-2 md:px-4 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(v.monto)}</td>
+                      <td className="px-4 py-2.5 hidden md:table-cell"><BadgePago estado={v.estado_pago} /></td>
+                      <td className="px-4 py-2.5 hidden md:table-cell">
                         {v.boleta
                           ? (v.boleta.estado === 'anulado'
                               ? <Badge variant="red">Anulada</Badge>
                               : <span className="text-xs"><span className="font-mono font-bold text-brand">{v.boleta.folio || '—'}</span></span>)
                           : <span className="text-xs text-gray-400">Sin emitir</span>}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-2 md:px-4 py-2.5">
                         <div className="flex flex-col items-end gap-1">
                           <div className="flex items-center justify-end gap-2">
                             {v.boleta && <LinkDoc doc={v.boleta} />}
@@ -358,42 +368,53 @@ function FacturasTab({ onAbrirLote }: { onAbrirLote: () => void }) {
         : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-sm">
+              <table className="w-full md:min-w-[960px] text-sm">
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                   <tr>
-                    <th className="text-left px-4 py-2.5">Código</th>
-                    <th className="text-left px-4 py-2.5">Mascota</th>
-                    <th className="text-left px-4 py-2.5">Veterinaria</th>
-                    <th className="text-left px-4 py-2.5">Retiro</th>
-                    <th className="text-left px-4 py-2.5">Serv.</th>
-                    <th className="text-right px-4 py-2.5">Monto</th>
-                    <th className="text-left px-4 py-2.5">Factura</th>
-                    <th className="text-right px-4 py-2.5">Acciones</th>
+                    <th className="text-left px-2 md:px-4 py-2.5">Código</th>
+                    <th className="text-left px-2 md:px-4 py-2.5">Mascota</th>
+                    <th className="text-left px-4 py-2.5 hidden md:table-cell">Veterinaria</th>
+                    <th className="text-left px-4 py-2.5 hidden md:table-cell">Retiro</th>
+                    <th className="text-left px-4 py-2.5 hidden md:table-cell">Serv.</th>
+                    <th className="text-right px-2 md:px-4 py-2.5">Monto</th>
+                    <th className="text-left px-4 py-2.5 hidden md:table-cell">Factura</th>
+                    <th className="text-right px-2 md:px-4 py-2.5">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {visibles.map(v => (
                     <tr key={v.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2.5 font-mono text-xs font-bold text-brand">{v.codigo || `#${v.id}`}</td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-2 md:px-4 py-2.5 font-mono text-xs font-bold text-brand">{v.codigo || `#${v.id}`}</td>
+                      <td className="px-2 md:px-4 py-2.5">
                         <div className="text-gray-900 font-medium">{v.nombre_mascota || '—'}</div>
                         <div className="text-xs text-gray-400">{v.especie} · {fmtKg(v.peso)}</div>
+                        {/* Móvil: la info de las columnas ocultas, plegada acá. */}
+                        <div className="md:hidden mt-1 flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-gray-600">{v.vet_nombre}</span>
+                          {!v.vet_rut && <span className="text-[10px] font-semibold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">sin RUT</span>}
+                          <span className="text-xs text-gray-500">{v.fecha_retiro ? fmtFecha(v.fecha_retiro) : '—'} · {v.codigo_servicio}</span>
+                          {v.factura
+                            ? (v.factura.estado === 'anulado'
+                                ? <Badge variant="red">Anulada</Badge>
+                                : <span className="text-xs font-mono font-bold text-brand">{v.factura.folio || 'emitida'}</span>)
+                            : <span className="text-xs text-gray-400">Sin facturar</span>}
+                        </div>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-2.5 hidden md:table-cell">
                         <div className="text-gray-800">{v.vet_nombre}</div>
                         {!v.vet_rut && <span className="text-[10px] font-semibold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">sin RUT</span>}
                       </td>
-                      <td className="px-4 py-2.5 text-gray-700">{v.fecha_retiro ? fmtFecha(v.fecha_retiro) : '—'}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{v.codigo_servicio}</td>
-                      <td className="px-4 py-2.5 text-right font-semibold text-gray-900">{fmtPrecio(v.monto)}</td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-2.5 text-gray-700 hidden md:table-cell">{v.fecha_retiro ? fmtFecha(v.fecha_retiro) : '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-600 hidden md:table-cell">{v.codigo_servicio}</td>
+                      <td className="px-2 md:px-4 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(v.monto)}</td>
+                      <td className="px-4 py-2.5 hidden md:table-cell">
                         {v.factura
                           ? (v.factura.estado === 'anulado'
                               ? <Badge variant="red">Anulada</Badge>
                               : <span className="text-xs"><span className="font-mono font-bold text-brand">{v.factura.folio || 'emitida'}</span></span>)
                           : <span className="text-xs text-gray-400">Sin facturar</span>}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-2 md:px-4 py-2.5">
                         <div className="flex flex-col items-end gap-1">
                           <div className="flex items-center justify-end gap-2">
                             {v.factura && <LinkDoc doc={v.factura} />}
@@ -467,31 +488,37 @@ function NotasCreditoTab() {
         : docs.length === 0 ? <p className="p-8 text-center text-sm text-gray-400">Sin notas de crédito.</p>
         : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full md:min-w-[760px] text-sm">
               <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                 <tr>
-                  <th className="text-left px-4 py-2.5">Folio</th>
-                  <th className="text-left px-4 py-2.5">Fecha</th>
-                  <th className="text-left px-4 py-2.5">Receptor</th>
-                  <th className="text-left px-4 py-2.5">Detalle</th>
-                  <th className="text-right px-4 py-2.5">Monto</th>
-                  <th className="text-right px-4 py-2.5">Doc.</th>
+                  <th className="text-left px-2 md:px-4 py-2.5">Folio</th>
+                  <th className="text-left px-4 py-2.5 hidden md:table-cell">Fecha</th>
+                  <th className="text-left px-2 md:px-4 py-2.5">Receptor</th>
+                  <th className="text-left px-4 py-2.5 hidden md:table-cell">Detalle</th>
+                  <th className="text-right px-2 md:px-4 py-2.5">Monto</th>
+                  <th className="text-right px-2 md:px-4 py-2.5">Doc.</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {docs.map(d => (
                   <tr key={d.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2.5 font-mono text-xs font-bold text-brand">{d.folio || '—'}</td>
-                    <td className="px-4 py-2.5 text-gray-700">{fmtFecha(d.fecha_emision)}</td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-2 md:px-4 py-2.5 font-mono text-xs font-bold text-brand">{d.folio || '—'}</td>
+                    <td className="px-4 py-2.5 text-gray-700 hidden md:table-cell">{fmtFecha(d.fecha_emision)}</td>
+                    <td className="px-2 md:px-4 py-2.5">
                       <div className="text-gray-900 font-medium">{d.receptor_razon_social || '—'}</div>
                       {d.receptor_rut && <div className="text-xs text-gray-400">{d.receptor_rut}</div>}
+                      {/* Móvil: fecha y detalle (columnas ocultas) plegados acá. */}
+                      <div className="md:hidden mt-1 text-xs text-gray-500">
+                        {fmtFecha(d.fecha_emision)}
+                        {d.resumen && <span className="text-gray-400"> · {d.resumen}</span>}
+                        {d.documento_anulado_id && <span className="text-gray-400"> · anula #{d.documento_anulado_id}</span>}
+                      </div>
                     </td>
-                    <td className="px-4 py-2.5 text-gray-600 max-w-[260px] truncate" title={d.resumen}>
+                    <td className="px-4 py-2.5 text-gray-600 max-w-[260px] truncate hidden md:table-cell" title={d.resumen}>
                       {d.resumen}{d.documento_anulado_id && <span className="text-gray-400"> · anula #{d.documento_anulado_id}</span>}
                     </td>
-                    <td className="px-4 py-2.5 text-right font-semibold text-gray-900">{fmtPrecio(parseFloat(d.monto_total) || 0)}</td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="px-2 md:px-4 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(parseFloat(d.monto_total) || 0)}</td>
+                    <td className="px-2 md:px-4 py-2.5 text-right">
                       {(d.pdf_url || d.openfactura_url)
                         ? <a href={d.pdf_url || d.openfactura_url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-brand-soft hover:underline">{d.pdf_url ? 'Descargar' : 'Ver'}</a>
                         : <span className="text-xs text-gray-400">—</span>}

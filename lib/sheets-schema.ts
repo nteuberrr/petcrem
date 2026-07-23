@@ -6,7 +6,9 @@ export const SHEETS: Record<string, string[]> = {
   clientes: [
     'id', 'codigo', 'nombre_mascota', 'nombre_tutor',
     'email', 'telefono',
-    'direccion_retiro', 'direccion_despacho', 'misma_direccion', 'comuna',
+    // es_depto ('TRUE'/'FALSE'): la dirección de retiro es un departamento/edificio
+    // (aviso para el chofer: conserjería/acceso). Opcional, default FALSE.
+    'direccion_retiro', 'direccion_despacho', 'misma_direccion', 'es_depto', 'comuna',
     // hora_retiro (HH:MM): junto con fecha_retiro determina si aplica el recargo
     // automático "fuera de horario" (>=18:00 L-V, o sáb/dom) — lib/adicionales-auto.ts.
     'fecha_retiro', 'hora_retiro', 'fecha_defuncion', 'fecha_nacimiento',

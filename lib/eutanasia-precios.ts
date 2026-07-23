@@ -127,6 +127,66 @@ export function recargoEutanasiaPara(fecha: string | undefined, hora: string | u
   return esFueraDeHorario(fecha, hora) ? Math.max(0, Math.round(monto)) : 0
 }
 
+/**
+ * Datos de la CREMACIÓN posterior para el correo al tutor (modalidad legible +
+ * valor según el peso, con tarifas GENERALES: el tutor es cliente directo).
+ * Devuelve undefined si no hay cremación contratada, no hay peso, o no se puede
+ * cotizar — en ese caso el correo simplemente omite el bloque.
+ * Se muestra SIEMPRE en un bloque aparte del de la eutanasia (son dos cobros).
+ */
+export async function cremacionParaCorreo(
+  peso: number | string | undefined,
+  codigoServicio: string | undefined,
+): Promise<{ servicio: string; precio: number; esPremium: boolean } | undefined> {
+  const cod = String(codigoServicio ?? '').trim().toUpperCase()
+  if (!cod || cod === 'NINGUNA') return undefined
+  const p = num(peso)
+  if (!(p > 0)) return undefined
+  try {
+    const { calcularPrecio } = await import('./price-calculator')
+    const precio = await calcularPrecio(p, cod, 'general')
+    if (!(precio > 0)) return undefined
+    let servicio = ''
+    try {
+      const tipos = await getSheetData('tipos_servicio')
+      servicio = tipos.find(t => String(t.codigo ?? '').trim().toUpperCase() === cod)?.nombre ?? ''
+    } catch { /* cae al nombre por defecto */ }
+    if (!servicio) servicio = cod === 'CP' ? 'Cremación Premium' : cod === 'SD' ? 'Cremación Sin Devolución' : 'Cremación Individual'
+    const { servicioIncluyeAnforaPremium } = await import('./anforas-premium')
+    return { servicio, precio, esPremium: servicioIncluyeAnforaPremium(cod) }
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Las modalidades de cremación con su valor para ese peso (tarifas GENERALES).
+ * Se usa cuando el tutor TODAVÍA no eligió modalidad (alta manual del admin): el
+ * correo le muestra las opciones para que elija. [] si no se puede cotizar.
+ */
+export async function cremacionOpcionesParaCorreo(
+  peso: number | string | undefined,
+): Promise<{ servicio: string; precio: number }[]> {
+  const p = num(peso)
+  if (!(p > 0)) return []
+  try {
+    const { calcularPrecio } = await import('./price-calculator')
+    let tipos: Record<string, string>[] = []
+    try { tipos = await getSheetData('tipos_servicio') } catch { /* nombres por defecto */ }
+    const DEFAULTS: Record<string, string> = { CI: 'Cremación Individual', CP: 'Cremación Premium', SD: 'Cremación Sin Devolución' }
+    const out: { servicio: string; precio: number }[] = []
+    for (const cod of ['CI', 'CP', 'SD']) {
+      const precio = await calcularPrecio(p, cod, 'general')
+      if (!(precio > 0)) continue
+      const nombre = tipos.find(t => String(t.codigo ?? '').trim().toUpperCase() === cod)?.nombre || DEFAULTS[cod]
+      out.push({ servicio: nombre, precio })
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
 /** Upsert de la fila única de config (merge de campos). Crea hoja/columnas si faltan. */
 async function guardarConfig(campos: Record<string, string>): Promise<void> {
   await ensureSheet(SHEET_CONFIG)

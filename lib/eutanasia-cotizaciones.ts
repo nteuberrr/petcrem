@@ -6,7 +6,7 @@ import { createToken, createVetToken } from './eutanasia-tokens'
 import { formatDate, formatHoraDia } from './dates'
 import { nombreCompletoVet, renderCotizacionEmail, enviarClienteCotizacionEutanasia } from './eutanasia-mailer'
 import { getContacto } from './email-layout'
-import { getConsultaEutanasia, getFijoEutanasia, getRecargoFueraHorario, recargoEutanasiaPara } from './eutanasia-precios'
+import { getConsultaEutanasia, getFijoEutanasia, getRecargoFueraHorario, recargoEutanasiaPara, cremacionParaCorreo } from './eutanasia-precios'
 import { crearClienteBorrador } from './cliente-borrador'
 import { capitalizarNombre } from './nombres'
 import { enviarTextoWhatsapp, isWhatsappConfigured, avisarAdminsWhatsapp } from './whatsapp'
@@ -302,6 +302,8 @@ export async function agendarEutanasiaAutomatico(input: AgendarEutInput): Promis
         consultaTotal: consulta.total + recargoFuera,
         recargoFueraHorario: recargoFuera,
         conCremacion: !sinCremacion,
+        // Valor de la cremación APARTE (bloque propio en el correo) + catálogo adjunto.
+        cremacion: sinCremacion ? undefined : await cremacionParaCorreo(input.peso, input.tipo_servicio_cremacion),
       })
     } catch (e) {
       console.warn('[eutanasia-cotizaciones] no se pudo enviar el correo al tutor:', e)

@@ -651,6 +651,22 @@ export interface ClienteCotizacionArgs {
   recargoFueraHorario?: number
   /** false cuando el tutor NO quiere cremación posterior (omite el párrafo del retiro). Default true. */
   conCremacion?: boolean
+  /**
+   * Cremación posterior contratada: modalidad legible + valor al tutor. Se muestra
+   * en un bloque APARTE (nunca dentro de la tabla de la eutanasia: son dos servicios
+   * y dos cobros distintos). Si viene, el correo además adjunta el catálogo.
+   */
+  cremacion?: {
+    servicio: string      // "Cremación Individual" | "Cremación Premium" | ...
+    precio: number        // valor al tutor por la cremación
+    esPremium?: boolean   // true en Premium → puede elegir su ánfora del catálogo
+  }
+  /**
+   * Alternativa a `cremacion` cuando TODAVÍA no se eligió modalidad (alta manual
+   * del admin): las modalidades disponibles con su valor para ese peso, para que
+   * el tutor elija. Se muestra en el mismo bloque aparte.
+   */
+  cremacionOpciones?: { servicio: string; precio: number }[]
 }
 
 /**
@@ -667,6 +683,18 @@ export async function enviarClienteCotizacionEutanasia(args: ClienteCotizacionAr
   }
   try {
     const contacto = await getContacto()
+    // Con cremación contratada adjuntamos el catálogo para que el tutor elija su
+    // ánfora premium (si va Premium) y/o productos adicionales. Best-effort: si el
+    // PDF falla, el correo sale igual (solo pierde el adjunto).
+    let adjuntos: { filename: string; content: Buffer; content_type: string }[] | undefined
+    if (args.conCremacion !== false && (args.cremacion || args.cremacionOpciones?.length)) {
+      try {
+        const { generarCatalogoPdf } = await import('./catalogo-generator')
+        adjuntos = [{ filename: 'catalogo-alma-animal.pdf', content: await generarCatalogoPdf(), content_type: 'application/pdf' }]
+      } catch (e) {
+        console.warn('[eutanasia-mailer] no se pudo adjuntar el catálogo:', e instanceof Error ? e.message : e)
+      }
+    }
     const res = await sendEmail({
       to,
       subject: `Recibimos tu solicitud para ${args.mascotaNombre}`,
@@ -674,6 +702,7 @@ export async function enviarClienteCotizacionEutanasia(args: ClienteCotizacionAr
       preview_text: `Estamos buscando un veterinario de nuestra red para ${args.mascotaNombre}.`,
       tags: [{ name: 'tipo', value: 'eutanasia_cliente_cotizacion' }],
       seguimiento: { tipo: 'eutanasia_cliente_cotizacion', audiencia: 'Tutor', nombre: args.mascotaNombre },
+      attachments: adjuntos,
     })
     return res.ok
       ? { ok: true, estado: 'enviado', message_id: res.message_id, to }
@@ -723,6 +752,31 @@ export function renderClienteCotizacionEutanasia(args: ClienteCotizacionArgs, co
       <p style="margin:16px 0 0;font-size:14px;line-height:1.6">
         Una vez realizada la eutanasia, llegaremos en nuestro vehículo a hacer el <strong>retiro</strong> de ${mascota}
         para proceder con el <strong>servicio de cremación</strong>.
+      </p>`}
+
+      ${args.conCremacion === false || (!args.cremacion && !args.cremacionOpciones?.length) ? '' : `
+      <h2 style="margin:24px 0 10px;font-size:16px;color:${BRAND.navy}">Servicio de cremación</h2>
+      <div style="background:#ffffff;border:1px solid ${BRAND.hairline};border-radius:10px;padding:16px;margin:0 0 8px">
+        ${args.cremacion ? `
+        <p style="margin:0 0 6px;font-size:14px;line-height:1.5">
+          <strong>${escapeHtml(args.cremacion.servicio)}:</strong> ${escapeHtml(fmtPrecio(args.cremacion.precio))}
+          <span style="color:${BRAND.muted}">(según el peso de ${mascota})</span>
+        </p>` : `
+        <p style="margin:0 0 8px;font-size:14px;line-height:1.5">Valores según el peso de ${mascota}:</p>
+        ${(args.cremacionOpciones ?? []).map(o => `
+        <p style="margin:0 0 4px;font-size:14px;line-height:1.5">
+          <strong>${escapeHtml(o.servicio)}:</strong> ${escapeHtml(fmtPrecio(o.precio))}
+        </p>`).join('')}`}
+        <p style="margin:8px 0 0;font-size:13px;line-height:1.5;color:${BRAND.muted}">
+          Es un <strong>servicio aparte</strong> de la eutanasia y se cobra por separado.
+        </p>
+      </div>
+      <p style="margin:12px 0 0;font-size:14px;line-height:1.6">
+        Te adjuntamos nuestro <strong>catálogo de productos</strong> para que puedas elegir
+        ${args.cremacion?.esPremium
+          ? `el <strong>ánfora premium</strong> incluida en tu servicio, y cualquier producto adicional que quieras sumar`
+          : `algún <strong>producto adicional</strong> si lo deseas`}.
+        Avísanos tu elección respondiendo este correo.
       </p>`}
       <p style="margin:14px 0 0;font-size:13px;color:${BRAND.muted};line-height:1.55">
         Cualquier duda, respóndenos este correo o escríbenos por los medios de abajo. Estamos para acompañarte. 🐾
