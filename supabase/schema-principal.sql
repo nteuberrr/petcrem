@@ -35,8 +35,8 @@ create table if not exists "clientes" (
   "direccion_retiro" text not null default '',
   "direccion_despacho" text not null default '',
   "misma_direccion" text not null default '',
-  -- La dirección de retiro es un departamento/edificio (aviso al chofer). 'TRUE'/'FALSE'.
-  "es_depto" text not null default 'FALSE',
+  -- N° de departamento/oficina si la dirección de retiro es un edificio (opcional).
+  "depto" text not null default '',
   "comuna" text not null default '',
   "fecha_retiro" text not null default '',
   "fecha_defuncion" text not null default '',
@@ -90,8 +90,8 @@ alter table "clientes" add column if not exists "factura_vet_id" text not null d
 -- boleta_id: id del documento (boleta 39) emitido AL TUTOR cuando la ficha pasó a
 -- pagada. vacío = no se emitió aún (guard de idempotencia del auto-emisor de boleta).
 alter table "clientes" add column if not exists "boleta_id" text default '';
--- es_depto: la dirección de retiro es un departamento/edificio (aviso al chofer).
-alter table "clientes" add column if not exists "es_depto" text not null default 'FALSE';
+-- depto: n° de departamento/oficina si la dirección de retiro es un edificio.
+alter table "clientes" add column if not exists "depto" text not null default '';
 -- hora_retiro (HH:MM): hora coordinada del retiro. Junto con fecha_retiro determina
 -- si aplica el recargo automático "fuera de horario" (>=18:00 L-V, o sáb/dom).
 alter table "clientes" add column if not exists "hora_retiro" text not null default '';

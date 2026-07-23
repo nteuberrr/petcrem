@@ -19,8 +19,8 @@ const ClienteSchema = z.object({
   direccion_retiro: z.string().min(1, 'Dirección de retiro requerida'),
   direccion_despacho: z.string().min(1, 'Dirección de despacho requerida'),
   misma_direccion: z.boolean(),
-  /** La dirección de retiro es un departamento/edificio (aviso al chofer). Opcional. */
-  es_depto: z.boolean().optional(),
+  /** N° de departamento/oficina si la dirección de retiro es un edificio. Opcional. */
+  depto: z.string().optional(),
   comuna: z.string().min(1, 'Comuna requerida'),
   fecha_retiro: z.string().min(1, 'Fecha de retiro requerida'),
   hora_retiro: z.string().optional(),
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
       'veterinaria_id', 'adicionales', 'tipo_precios',
       'peso_declarado', 'peso_ingreso', 'despacho_id',
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
-      'fecha_defuncion', 'fecha_nacimiento', 'es_depto', 'notas', 'tipo_pago', 'estado_pago',
+      'fecha_defuncion', 'fecha_nacimiento', 'depto', 'notas', 'tipo_pago', 'estado_pago',
       'precio_servicio', 'precio_adicionales', 'precio_total', 'hora_retiro',
       'greda_descontada',
     ])
@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
       direccion_retiro: data.direccion_retiro,
       direccion_despacho: data.misma_direccion ? data.direccion_retiro : data.direccion_despacho,
       misma_direccion: data.misma_direccion ? 'TRUE' : 'FALSE',
-      es_depto: data.es_depto ? 'TRUE' : 'FALSE',
+      depto: data.depto ?? '',
       comuna: data.comuna,
       fecha_retiro: data.fecha_retiro,
       hora_retiro: data.hora_retiro ?? '',

@@ -20,7 +20,7 @@ type Cliente = {
   tipo_servicio: string; codigo_servicio: string
   estado: string; estado_pago?: string; tipo_pago?: string
   fecha_retiro: string; hora_retiro?: string; fecha_creacion: string; ciclo_id: string
-  direccion_retiro?: string; direccion_despacho?: string; comuna?: string; es_depto?: string
+  direccion_retiro?: string; direccion_despacho?: string; comuna?: string; depto?: string
   adicionales?: string
   veterinaria_id?: string; notas?: string
   fotos_cuadro?: string; videos_servicio?: string
@@ -68,7 +68,7 @@ const FORM_DEFAULT = {
   direccion_retiro: '',
   direccion_despacho: '',
   misma_direccion: false,
-  es_depto: false,
+  depto: '',
   comuna: '',
   fecha_retiro: '',
   hora_retiro: '',
@@ -505,7 +505,7 @@ export default function ClientesPage() {
       ...form,
       peso_declarado: pesoDeclarado,
       misma_direccion: form.misma_direccion,
-      es_depto: form.es_depto,
+      depto: form.depto,
       direccion_despacho: form.misma_direccion ? form.direccion_retiro : form.direccion_despacho,
       veterinaria_id: noEsVeterinaria ? '' : form.veterinaria_id,
       adicionales: JSON.stringify(adicionales),
@@ -968,7 +968,7 @@ export default function ClientesPage() {
               <div className="sm:col-span-2">
                 <PreviewField
                   label="Dirección de retiro"
-                  value={`${selected.direccion_retiro || '—'}${selected.es_depto === 'TRUE' ? ' · 🏢 Depto' : ''}`}
+                  value={`${selected.direccion_retiro || '—'}${selected.depto ? ` · Depto ${selected.depto}` : ''}`}
                 />
               </div>
               {selected.direccion_despacho && selected.direccion_despacho !== selected.direccion_retiro && (
@@ -1156,16 +1156,10 @@ export default function ClientesPage() {
           <ModalAddressField required label="Dirección de retiro" value={form.direccion_retiro}
             onChange={v => setForm(f => ({ ...f, direccion_retiro: v, direccion_despacho: f.misma_direccion ? v : f.direccion_despacho }))} />
 
-          {/* Opcional: marca que la dirección es un departamento (edificio), para
-              que el chofer sepa que hay conserjería/acceso antes de llegar. */}
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="es_depto" checked={form.es_depto}
-              onChange={e => setForm(f => ({ ...f, es_depto: e.target.checked }))}
-              className="w-4 h-4 rounded border-gray-400 text-brand focus:ring-brand" />
-            <label htmlFor="es_depto" className="text-xs font-medium text-gray-700">
-              Depto <span className="text-gray-400 font-normal">(la dirección es un departamento / edificio)</span>
-            </label>
-          </div>
+          {/* Opcional: n° de departamento/oficina cuando la dirección es un edificio,
+              para que el chofer sepa exactamente dónde tocar. */}
+          <ModalField label="Depto (opcional)" value={form.depto}
+            onChange={v => setForm(f => ({ ...f, depto: v }))} placeholder="Ej: 402, Torre B" />
 
           <div className="flex items-center gap-2">
             <input type="checkbox" id="misma" checked={form.misma_direccion}

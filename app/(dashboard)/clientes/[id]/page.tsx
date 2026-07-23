@@ -55,8 +55,8 @@ type ClienteDetalle = {
   direccion_retiro: string
   direccion_despacho: string
   misma_direccion: string
-  /** 'TRUE' si la dirección de retiro es un departamento/edificio (aviso al chofer). */
-  es_depto: string
+  /** N° de departamento/oficina si la dirección de retiro es un edificio (opcional). */
+  depto: string
   comuna: string
   fecha_retiro: string
   hora_retiro?: string
@@ -1245,18 +1245,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           </div>
           <Field required type="tel" label="Teléfono" value={form.telefono} onChange={v => setForm(f => ({ ...f, telefono: v.replace(/\D/g, '').slice(0, 9) }))} placeholder="9 dígitos" />
           <AddressField required label="Dirección de retiro" value={form.direccion_retiro} onChange={v => setForm(f => ({ ...f, direccion_retiro: v }))} />
-          {/* Opcional: la dirección de retiro es un departamento/edificio (aviso al chofer). */}
-          <label className="flex items-center gap-2 cursor-pointer select-none sm:col-span-2">
-            <input
-              type="checkbox"
-              checked={String(form.es_depto || '').toUpperCase() === 'TRUE'}
-              onChange={e => setForm(f => ({ ...f, es_depto: e.target.checked ? 'TRUE' : 'FALSE' }))}
-              className="w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand"
-            />
-            <span className="text-sm text-gray-700">
-              <strong>Depto</strong> <span className="text-gray-500">— la dirección de retiro es un departamento / edificio</span>
-            </span>
-          </label>
+          {/* Opcional: n° de departamento/oficina si la dirección de retiro es un edificio. */}
+          <Field label="Depto (opcional)" value={form.depto} onChange={v => setForm(f => ({ ...f, depto: v }))} placeholder="Ej: 402, Torre B" />
           <AddressField required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
           <Field required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
         </div>
