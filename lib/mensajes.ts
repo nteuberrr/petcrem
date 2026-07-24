@@ -307,6 +307,9 @@ export async function upsertContacto(c: {
   else if (c.instagram) { const e = await findBy('instagram', c.instagram); if (e) return e }
   else if (c.telefono) { const e = await findBy('telefono', c.telefono); if (e) return e }
 
+  const key: 'wa_id' | 'instagram' | null = c.wa_id ? 'wa_id' : c.instagram ? 'instagram' : null
+  const keyVal = c.wa_id || c.instagram
+
   const { data, error } = await sb.from(T_CONTACTOS).insert({
     nombre: c.nombre ?? null,
     telefono: c.telefono ?? null,
@@ -314,15 +317,19 @@ export async function upsertContacto(c: {
     instagram: c.instagram ?? null,
     audiencia: c.audiencia ?? 'A',
   }).select('*').single()
-  if (error) throw new Error(error.message)
+  if (error) {
+    // Si hay un índice único en wa_id/instagram y otro mensaje simultáneo ganó la
+    // carrera, el INSERT choca (unique_violation): en vez de fallar, reutilizamos el
+    // contacto que ya existe.
+    if (key && keyVal) { const e = await findBy(key, keyVal); if (e) return e }
+    throw new Error(error.message)
+  }
   const creado = data as Contacto
 
-  // Reconciliación anti-carrera: si dos mensajes casi simultáneos del mismo contacto
-  // (wa_id/instagram) cayeron cada uno en su propio INSERT (caso Fabiola: 3 mensajes
-  // en 34 s → 3 contactos), nos quedamos con el de MENOR id y borramos el nuestro, y
-  // devolvemos el que sobrevive. Así el resto del webhook usa un único contacto.
-  const key: 'wa_id' | 'instagram' | null = c.wa_id ? 'wa_id' : c.instagram ? 'instagram' : null
-  const keyVal = c.wa_id || c.instagram
+  // Reconciliación anti-carrera (backstop mientras no exista el índice único): si dos
+  // mensajes casi simultáneos del mismo contacto (wa_id/instagram) cayeron cada uno en
+  // su propio INSERT (caso Fabiola: 3 mensajes en 34 s → 3 contactos), nos quedamos con
+  // el de MENOR id y borramos el nuestro, devolviendo el sobreviviente.
   if (key && keyVal) {
     const { data: mismos } = await sb.from(T_CONTACTOS).select('id').eq(key, keyVal).order('id', { ascending: true }).limit(1)
     const min = mismos && mismos[0]
