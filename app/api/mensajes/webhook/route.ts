@@ -59,9 +59,20 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
     return
   }
 
+  // Un mensaje ENTRANTE sin texto (imagen/audio/documento) igual debe llegarle al
+  // agente como un turno, o el agente quedaría mudo cuando el cliente manda solo una
+  // foto (pasaba: mandaban la foto de la mascota al chat y no respondía nada).
+  const NOMBRE_TIPO: Record<string, string> = { imagen: 'una imagen', audio: 'un audio de voz', video: 'un video', documento: 'un documento' }
   const historial = msgsFrescos
-    .filter(m => m.cuerpo)
-    .map(m => ({ rol: (m.direccion === 'entrante' ? 'cliente' : 'nosotros') as 'cliente' | 'nosotros', texto: m.cuerpo as string }))
+    .map(m => {
+      let texto = (m.cuerpo ?? '').toString().trim()
+      if (!texto && m.direccion === 'entrante' && m.tipo && m.tipo !== 'texto') {
+        texto = `[el cliente envió ${NOMBRE_TIPO[m.tipo] || 'un archivo'} por el chat]`
+      }
+      if (!texto) return null
+      return { rol: (m.direccion === 'entrante' ? 'cliente' : 'nosotros') as 'cliente' | 'nosotros', texto }
+    })
+    .filter((x): x is { rol: 'cliente' | 'nosotros'; texto: string } => x !== null)
   if (historial.length === 0) return
 
   let r

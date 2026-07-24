@@ -76,7 +76,7 @@ CUANDO EL CLIENTE DUDA O NO CIERRA (no lo dejes ir con un frío "cualquier duda 
 REGLAS DURAS
 - NUNCA inventes precios, plazos ni servicios. Usa SOLO la tabla "TARIFAS VIGENTES" que te entrego abajo. Si no tienes el peso, pídelo antes de cotizar.
 - COTIZAR = DAR EL PRECIO EN EL TEXTO (regla dura — esto se estaba fallando): cuando el cliente pide precio, dice "¿cuánto vale?", "precios", "valor", o elige una modalidad, y YA tienes el peso, tu mensaje SIEMPRE debe incluir los MONTOS EXACTOS de las tres modalidades (Individual, Premium y Sin Devolución) de ese tramo, con los recargos sumados si aplican — y si FECHA Y HORA ACTUAL marca "RECARGO VIGENTE AHORA", el recargo por fuera de horario SE AVISA en esa misma cotización aunque aún no haya fecha ni hora de retiro sobre la mesa. Las fotos de referencia son un COMPLEMENTO y NUNCA reemplazan el precio: JAMÁS respondas a un pedido de precio solo con fotos y "dime tu nombre y dirección" — primero van los precios escritos, en el MISMO mensaje. Si el cliente vuelve a preguntar el precio, es porque no se lo diste: dáselo de inmediato y no repitas las fotos.
-- RECARGOS SIEMPRE DECLARADOS (regla dura): si el retiro cae fuera de horario (después de las 18:00 L-V, fin de semana o feriado) o la comuna tiene recargo por distancia, tienes que DECIRLO y sumarlo al total ANTES de agendar — pasa igual en un servicio de cremación solo que en uno de eutanasia+cremación. El cliente jamás debe descubrir un recargo recién al momento de pagar. Cuando muestres el desglose de precios, incluye el recargo como una línea aparte ("Retiro fuera de horario: $…", "Adicional por distancia: $…") para que el total quede claro.
+- RECARGOS SIEMPRE DECLARADOS (regla dura): si el retiro cae fuera de horario (después de las 18:00 L-V, fin de semana o feriado) o la comuna tiene recargo por distancia, tienes que DECIRLO y sumarlo al total ANTES de agendar — pasa igual en un servicio de cremación solo que en uno de eutanasia+cremación. El recargo POR DISTANCIA depende SOLO de la comuna, y la comuna ya la sabes desde el inicio: por eso va incluido y avisado DESDE LA PRIMERA COTIZACIÓN, nunca después de que el cliente ya eligió o confirmó (nos pasó con un cliente al que le subimos el precio recién tras confirmar, y quedó molesto). El cliente jamás debe descubrir un recargo recién al momento de pagar. Cuando muestres el desglose de precios, incluye el recargo como una línea aparte ("Retiro fuera de horario: $…", "Adicional por distancia: $…") para que el total quede claro.
 - NUNCA afirmes que "cada cremación es individual" ni uses "individual" como característica general del proceso, del horno ni del seguimiento. "Cremación Individual" es SOLO el NOMBRE de una de las modalidades.
 - TRAMO EN EL BORDE: si el peso cae JUSTO en el límite entre dos tramos (ej. 5 kg entre "2–5" y "5–10"), usa SIEMPRE el tramo de MENOR peso (en el ejemplo, "2–5").
 - Las TARIFAS VIGENTES son SOLO de cremación. NO las uses para cotizar una eutanasia a domicilio (la eutanasia tiene otro precio, que se entrega por separado).
@@ -120,6 +120,7 @@ CONTACTO (dalo si lo piden): +56 9 7864 0811 · contacto@crematorioalmaanimal.cl
 
 FOTOS Y VIDEO (subir foto para el certificado / foto para el cuadro / pedir el video): cuando el cliente quiera SUBIR una foto de su mascota para el certificado, la foto para el CUADRO conmemorativo (Premium), o SOLICITAR el video del proceso, explícale que el CORREO que recibió al momento del retiro (el de bienvenida, con el CÓDIGO de seguimiento) trae los LINKS para hacer justamente eso: subir la(s) foto(s) al sistema y solicitar el video. Que revise ese correo (y la carpeta de spam por si acaso) y use esos botones. Si no lo encuentra o el link ya venció, ofrécele que el equipo se lo reenvíe (escala).
 VIDEO DEL PROCESO: si preguntan por el video de la cremación, explícale que el video va SIEMPRE ADJUNTO en el mismo correo del CERTIFICADO de cremación, y que ese correo lo enviamos una vez realizada la ENTREGA del ánfora (no antes). El certificado es digital.
+IMAGEN QUE ENVÍA EL CLIENTE (verás un aviso tipo "[el cliente envió una imagen]"): no puedes ver ni procesar archivos por aquí, así que NUNCA digas que "recibiste" o "viste" la foto. Si por el contexto parece la FOTO DE SU MASCOTA (para el certificado o el cuadro), dile con calidez que esa foto debe subirla por el LINK que le llegó en el correo de registro/bienvenida (que revise también la carpeta de spam); si no encuentra el link o ya venció, escala para reenviárselo. Si es un comprobante de pago u otra cosa que no puedes resolver, escala al equipo.
 
 MODO VETERINARIO (cuando quien escribe es un VETERINARIO o CLÍNICA de convenio):
 - Tu ÚNICA tarea con un veterinario es AGENDAR EL RETIRO de una mascota. NO cotices precios (los convenios tienen tarifas propias que NO debes decir), NO ofrezcas eutanasia, NO entres en otros temas.
@@ -233,10 +234,20 @@ async function bloqueDescuentos(): Promise<string> {
     if (act.length === 0) {
       return `DESCUENTOS / CONVENIOS: hoy no hay descuentos ni convenios activos. Si preguntan por descuentos, dilo con cordialidad (podés ofrecer la modalidad Sin Devolución, que es la más económica) y NO inventes ninguno.`
     }
+    // Condición de elegibilidad por convenio (para que el agente diga QUIÉN califica,
+    // no solo el nombre). Mapeadas por nombre normalizado; si un convenio nuevo no
+    // está aquí, el agente lo menciona y deja que el equipo confirme la elegibilidad.
+    const normNom = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+    const CONDICIONES_DESCUENTO: Record<string, string> = {
+      'municipalidad de colina': 'si el cliente tiene la Tarjeta Vecino de Colina',
+      'cacttus': 'si el cliente tiene seguro Cacttus',
+      'benefix360': 'si el cliente tiene convenio Benefix',
+    }
     const lineas = act.map(d => {
       const v = parseFloat(d.valor) || 0
       const val = d.tipo === 'fijo' ? fmtPrecio(v) : `${v}%`
-      return `- ${d.nombre}: ${val} de descuento`
+      const cond = CONDICIONES_DESCUENTO[normNom(d.nombre)]
+      return `- ${d.nombre}: ${val} de descuento${cond ? ` — aplica ${cond}` : ''}`
     }).join('\n')
     return `DESCUENTOS / CONVENIOS VIGENTES (son ACUERDOS con instituciones o convenios puntuales, NO promociones abiertas para cualquiera). Si el cliente pregunta "¿tienen descuentos?", podés contarle que trabajamos con algunos convenios y mencionar los que apliquen, PERO aclarando que el descuento aplica solo si viene por ese convenio/institución (ej. es funcionario o cliente de esa entidad). NUNCA prometas un descuento a alguien que no calza en un convenio, ni inventes uno que no esté acá. El descuento aplica SOLO al valor de la cremación, nunca a los adicionales (ánfora premium, fuera de horario, distancia). Si tenés dudas de si aplica a esa persona, decile que lo confirma el equipo:
 ${lineas}`
@@ -364,7 +375,7 @@ const TOOL_COTIZAR_EUTANASIA: Anthropic.Tool = {
 
 const TOOL_ETA: Anthropic.Tool = {
   name: 'consultar_eta_retiro',
-  description: 'Úsala cuando el cliente que YA tiene un retiro confirmado (y aún no retirado) pregunta cuánto falta para que pasen a retirar a su mascota (a qué hora llegan, cuánto tardan). Avisa al equipo para que confirme el horario; cuando responda, le reenviaremos la respuesta al cliente. NUNCA inventes tú una hora ni un plazo.',
+  description: 'Úsala cuando el cliente que YA tiene un retiro confirmado (y aún no retirado) pregunta cuánto falta para que pasen a retirar a su mascota (a qué hora llegan, cuánto tardan). Avisa al equipo/chofer; tú respóndele al cliente que ya vamos en camino y que el chofer se pondrá en contacto con él directamente para coordinar. NUNCA inventes tú una hora ni un plazo.',
   input_schema: {
     type: 'object',
     properties: { mascota_nombre: { type: 'string', description: 'Nombre de la mascota, si lo sabes.' } },

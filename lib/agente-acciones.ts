@@ -222,20 +222,39 @@ function normalizaNombre(s: string): string {
     .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-/** Busca un veterinario de convenio ACTIVO por nombre (match flexible). */
-async function buscarVetConvenio(nombre: string): Promise<{ unico?: Record<string, string>; varios?: Record<string, string>[] }> {
+/**
+ * Busca un veterinario de convenio ACTIVO (match flexible). Coincide contra el
+ * NOMBRE de fantasía, la RAZÓN SOCIAL y el NOMBRE DE CONTACTO (el vet puede darnos
+ * cualquiera), también por RUT si lo escribe, y cuando quedan varios candidatos
+ * los DESEMPATA por comuna. Así evitamos el "no te encuentro" cuando el nombre de
+ * fantasía no calza letra por letra con el titular registrado.
+ */
+async function buscarVetConvenio(nombre: string, comuna?: string): Promise<{ unico?: Record<string, string>; varios?: Record<string, string>[] }> {
   const q = normalizaNombre(nombre)
-  if (q.length < 3) return {}
+  const qDig = (nombre || '').replace(/\D/g, '')
+  if (q.length < 3 && qDig.length < 7) return {}
   const vets = (await getSheetData('veterinarios')).filter(v => /^(true|verdadero|1)$/i.test((v.activo || '').trim()))
-  const exactos = vets.filter(v => normalizaNombre(v.nombre) === q)
-  if (exactos.length === 1) return { unico: exactos[0] }
-  if (exactos.length > 1) return { varios: exactos }
-  const parciales = vets.filter(v => {
-    const n = normalizaNombre(v.nombre)
-    return n.length >= 3 && (n.includes(q) || q.includes(n))
-  })
-  if (parciales.length === 1) return { unico: parciales[0] }
-  if (parciales.length > 1) return { varios: parciales }
+  const nombresDe = (v: Record<string, string>) =>
+    [v.nombre, v.razon_social, v.nombre_contacto].filter(Boolean).map(normalizaNombre)
+  const desempatar = (cands: Record<string, string>[]) => {
+    if (cands.length === 1) return { unico: cands[0] }
+    const c = normalizaNombre(comuna || '')
+    const porComuna = c ? cands.filter(v => normalizaNombre(v.comuna) === c) : []
+    if (porComuna.length === 1) return { unico: porComuna[0] }
+    return { varios: cands }
+  }
+  // 1) por RUT exacto (si el vet lo escribió)
+  if (qDig.length >= 7) {
+    const porRut = vets.filter(v => (v.rut || '').replace(/\D/g, '') === qDig)
+    if (porRut.length) return desempatar(porRut)
+  }
+  if (q.length < 3) return {}
+  // 2) coincidencia exacta contra cualquiera de los nombres
+  const exactos = vets.filter(v => nombresDe(v).some(n => n === q))
+  if (exactos.length) return desempatar(exactos)
+  // 3) coincidencia parcial (uno contiene al otro)
+  const parciales = vets.filter(v => nombresDe(v).some(n => n.length >= 3 && (n.includes(q) || q.includes(n))))
+  if (parciales.length) return desempatar(parciales)
   return {}
 }
 
@@ -248,13 +267,13 @@ async function buscarVetConvenio(nombre: string): Promise<{ unico?: Record<strin
  */
 async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<string> {
   a.nombre_mascota = capitalizarNombre(a.nombre_mascota)
-  const { unico, varios } = await buscarVetConvenio(a.veterinaria_nombre)
+  const { unico, varios } = await buscarVetConvenio(a.veterinaria_nombre, a.comuna)
   if (varios && varios.length > 1) {
     const nombres = varios.slice(0, 4).map(v => v.nombre).filter(Boolean).join(', ')
-    return `Hay varios veterinarios en la base que coinciden con "${a.veterinaria_nombre}" (${nombres}). Pídele al veterinario que indique el nombre exacto de su clínica para identificarlo bien. NO agendes todavía.`
+    return `Hay varios veterinarios en la base que coinciden con "${a.veterinaria_nombre}" (${nombres}). Pídele al veterinario que indique el nombre exacto de su clínica (o el RUT) para identificarlo bien. NO agendes todavía.`
   }
   if (!unico) {
-    return `No encontré al veterinario "${a.veterinaria_nombre}" en nuestra base de convenio. NO agendes el retiro. Usa la herramienta escalar_a_humano explicando que un veterinario quiere agendar un retiro y no pudimos identificarlo en la base, y dile al veterinario —cálido y breve— que un miembro del equipo lo contactará en seguida para coordinar.`
+    return `No encontré al veterinario "${a.veterinaria_nombre}" en nuestra base de convenio. Antes de escalar, pídele el nombre EXACTO de la clínica tal como está en el convenio o su RUT, y vuelve a intentar registrarlo con ese dato. Si aun así no aparece, NO agendes: usa la herramienta escalar_a_humano explicando que un veterinario quiere agendar un retiro y no pudimos identificarlo en la base, y dile al veterinario —cálido y breve— que un miembro del equipo lo contactará en seguida para coordinar.`
   }
 
   if (!(await direccionValida(a.direccion, a.comuna))) {
@@ -457,7 +476,7 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
 async function consultarEtaRetiro(a: AccionConsultaEta, ctx: CtxAgente): Promise<string> {
   const waCliente = (ctx.waId || '').replace(/\D/g, '')
   if (!waCliente) {
-    return 'Dile al cliente que estás confirmando con el equipo cuánto falta para el retiro y que en un momento le confirmas por aquí.'
+    return 'Dile al cliente, cálido y breve, que ya vamos en camino y que le avisamos al chofer para que se ponga en contacto con él directamente para coordinar. NO inventes una hora.'
   }
   let mascota = capitalizarNombre(a.mascota_nombre || '')
   let fechaTxt = ''
@@ -487,13 +506,13 @@ async function consultarEtaRetiro(a: AccionConsultaEta, ctx: CtxAgente): Promise
   const msgIds = envs.filter(e => e.ok && e.message_id).map(e => String(e.message_id))
   if (msgIds.length === 0) {
     console.warn('[agente-acciones] no se pudo avisar al admin (ETA):', envs.map(e => e.error).filter(Boolean).join('; '))
-    return 'Dile al cliente, cálido y breve, que estás confirmando con el equipo el horario de retiro y que en un momento le confirmas por aquí. NO inventes una hora.'
+    return 'Dile al cliente, cálido y breve, que ya vamos en camino y que le avisamos al chofer para que se ponga en contacto con él directamente para coordinar. NO inventes una hora.'
   }
   try {
     await crearRelayPendiente({ adminMsgId: msgIds.join(','), clienteWaId: waCliente, clienteNombre: nombre, mascota, pregunta: 'ETA de retiro' })
   } catch (e) { console.warn('[agente-acciones] no se pudo guardar relay pendiente:', e) }
 
-  return 'Avisé al equipo para que confirme el horario. Dile al cliente, cálido y breve, que estás confirmando cuánto falta para el retiro y que apenas el equipo responda se lo avisas por aquí. NO inventes una hora.'
+  return 'Avisé al equipo/chofer. Dile al cliente, cálido y breve, que ya vamos en camino y que le avisamos al chofer para que se ponga en contacto con él directamente para coordinar. NO inventes una hora.'
 }
 
 /**
