@@ -143,15 +143,16 @@ export default function ConfiguracionPage() {
   const [segMsg, setSegMsg] = useState<{ ok: boolean; texto: string } | null>(null)
 
   async function guardarSeguimiento() {
-    if (segActivo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(segEmail.trim())) {
-      setSegMsg({ ok: false, texto: 'Ingresa un correo válido para activar el seguimiento.' })
+    const correos = segEmail.split(',').map((c) => c.trim()).filter(Boolean)
+    if (segActivo && (correos.length === 0 || !correos.every((c) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c)))) {
+      setSegMsg({ ok: false, texto: 'Ingresa uno o más correos válidos separados por coma para activar el seguimiento.' })
       return
     }
     setSegSaving(true); setSegMsg(null)
     try {
       const res = await fetch('/api/empresa-config', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email_seguimiento_activo: segActivo ? 'TRUE' : 'FALSE', email_seguimiento: segEmail.trim() }),
+        body: JSON.stringify({ email_seguimiento_activo: segActivo ? 'TRUE' : 'FALSE', email_seguimiento: correos.join(', ') }),
       })
       const d = await res.json()
       if (res.ok) setSegMsg({ ok: true, texto: 'Guardado.' })
