@@ -22,12 +22,13 @@ const HOUR_PX = 56                 // alto en px de una hora de la grilla
 const START_MIN = 8 * 60           // 08:00 (primera línea de la agenda)
 const END_MIN = 24 * 60            // 24:00 (última línea)
 const TOTAL_PX = HORAS.length * HOUR_PX
-const DURACION_MIN = 45            // duración visual del bloque = separación mínima entre reservas
+const DURACION_MIN = 45            // alto del bloque hacia abajo = bloqueo DESPUÉS de la reserva (45 min)
+const SOMBRA_ANTES_MIN = 30        // bloqueo ANTES de la reserva (dueño 2026-07-24): 30 min
 // Si no es null, fuerza la hora que muestra la línea roja de "ahora" (para
 // previsualizar). En producción va en null → usa la hora real de Chile.
 const DEMO_LINEA_AHORA: { h: number; m: number } | null = null
-// Trama diagonal para la "sombra" de bloqueo (los 45 min previos a una reserva en
-// los que el bot no puede agendar otra: choca() en lib/agenda usa |dif| < 45 min).
+// Trama diagonal para la "sombra" de bloqueo (los 30 min previos a una reserva en
+// los que el bot no puede agendar otra; ver SEP_ANTES en lib/agenda).
 const SOMBRA_BG = 'repeating-linear-gradient(45deg, rgba(100,116,139,0.10) 0, rgba(100,116,139,0.10) 5px, rgba(100,116,139,0.22) 5px, rgba(100,116,139,0.22) 10px)'
 
 /** Minutos desde medianoche del inicio de un item (fallback: bloque, luego 08:00). */
@@ -229,7 +230,7 @@ export default function AgendaSemanal() {
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-200 border border-amber-400" /> Por confirmar</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-200 border border-emerald-400" /> Confirmado</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-200 border border-gray-400" /> Eutanasia sin cremación (recordatorio)</span>
-        <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{ background: SOMBRA_BG }} /> Bloqueo 45 min</span>
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{ background: SOMBRA_BG }} /> Bloqueo 30 min</span>
         <span className="inline-flex items-center gap-1">🐾 Retiro · 🏥 Vet · 🩺 Eutanasia</span>
       </div>
 
@@ -281,7 +282,7 @@ export default function AgendaSemanal() {
                   {HORAS.map((h, i) => (
                     <div key={h} className="absolute left-0 right-0 border-t border-gray-200" style={{ top: i * HOUR_PX }} />
                   ))}
-                  {/* Sombra de bloqueo (45 min previos a cada reserva) + evento */}
+                  {/* Sombra de bloqueo (30 min previos a cada reserva) + evento */}
                   {colocados.map(({ it, startMin, endMin, col, cols }) => {
                     const top = (startMin - START_MIN) / 60 * HOUR_PX
                     const alto = Math.max(20, (endMin - startMin) / 60 * HOUR_PX)
@@ -291,7 +292,7 @@ export default function AgendaSemanal() {
                     const gris = it.tipo === 'eutanasia' && it.sinCremacion
                     const amarillo = it.estado === 'pendiente'
                     // Las eutanasias SIN cremación no ocupan la agenda del chofer → sin sombra.
-                    const sombraTop = (Math.max(START_MIN, startMin - DURACION_MIN) - START_MIN) / 60 * HOUR_PX
+                    const sombraTop = (Math.max(START_MIN, startMin - SOMBRA_ANTES_MIN) - START_MIN) / 60 * HOUR_PX
                     const sombraAlto = top - sombraTop
                     const cls = gris
                       ? 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
@@ -303,7 +304,7 @@ export default function AgendaSemanal() {
                         {!gris && sombraAlto > 2 && (
                           <div className="absolute rounded-t-md pointer-events-none z-0"
                             style={{ top: sombraTop, height: sombraAlto, left: izq, width: ancho, background: SOMBRA_BG }}
-                            title="Separación mínima: no se agenda dentro de los 45 min previos a esta reserva" />
+                            title="Separación mínima: no se agenda dentro de los 30 min previos a esta reserva" />
                         )}
                         <button onClick={() => abrir(it)} title={detalle(it)}
                           className={`absolute overflow-hidden text-left rounded-md border px-1.5 py-0.5 leading-tight transition-colors z-10 ${cls} ${it.clienteId ? 'cursor-pointer' : 'cursor-default'}`}

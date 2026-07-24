@@ -12,9 +12,10 @@
  * Regla de agendamiento del bot (decisión del dueño 2026-07-11, actualizada 2026-07-23):
  *  - Ventana 09:00–21:10 (la ÚLTIMA hora para agendar un retiro es 21:10).
  *  - No se agenda dentro de la próxima hora (mínimo = hora actual de Chile + 1 h).
- *  - MÍNIMO 45 MINUTOS entre reservas: una reserva a las 16:00 bloquea todo
- *    nuevo agendamiento antes de las 16:45 (y simétrico: tampoco 15:20, porque
- *    quedaría a menos de 45 min). Se compara al MINUTO, no por bloque.
+ *  - SEPARACIÓN ASIMÉTRICA (dueño 2026-07-24): una reserva bloquea los 30 min
+ *    ANTES y los 45 min DESPUÉS de su hora. Ej.: una reserva a las 16:00 permite
+ *    un nuevo retiro a las 15:30 (30 min antes) pero nada entre 15:31 y 16:44.
+ *    Se compara al MINUTO, no por bloque.
  * Ocupan slot TODAS las reservas visibles de la agenda:
  *  - retiros (pendiente/confirmada) a su hora;
  *  - eutanasias SIEMPRE: a la hora del SERVICIO mientras el vet no informa la
@@ -30,7 +31,9 @@ export const HORA_APERTURA = 9         // primera hora de la agenda (09:00)
 export const HORA_ULTIMO_RETIRO = 21   // hora de referencia de la agenda; el corte real es 21:10
 const MIN_APERTURA = HORA_APERTURA * 60
 const MIN_ULTIMO = 21 * 60 + 10        // 21:10 — última hora agendable (decisión dueño 2026-07-23)
-const SEPARACION_MIN = 45              // mínimo entre reservas + paso de la grilla de horas ofrecidas
+const SEP_ANTES = 30                   // bloqueo ANTES de una reserva (dueño 2026-07-24)
+const SEP_DESPUES = 45                 // bloqueo DESPUÉS de una reserva
+const SEPARACION_MIN = SEP_DESPUES     // paso de la grilla de horas ofrecidas
 const BUFFER_MIN = 60                   // no se agenda dentro de la próxima hora (lead time del chofer)
 // Eutanasia: el vet informa la hora de la VISITA (acordada con el cliente) y
 // nuestro chofer pasa a retirar ~30 min después → la agenda muestra ese desfase.
@@ -206,13 +209,13 @@ async function ocupadosDe(fechaISO: string): Promise<number[]> {
 }
 
 /**
- * true si `min` queda a menos de 45 minutos de alguna reserva existente. El `<`
- * es estricto A PROPÓSITO: exactamente 45 min de separación SÍ se permite, para
- * poder agendar pegadas una detrás de la otra (reserva 16:00 → siguiente 16:45).
- * NO cambiar a `<=` (bloquearía el back-to-back que pidió el dueño 2026-07-23).
+ * true si `min` cae dentro del bloqueo de alguna reserva existente `o`. Asimétrico
+ * (dueño 2026-07-24): cada reserva bloquea 30 min ANTES y 45 min DESPUÉS de su hora
+ * → chocan los `min` con `o - 30 < min < o + 45`. Los `<` son estrictos A PROPÓSITO:
+ * se permite exactamente 30 min antes y 45 min después (agendar pegadas).
  */
 function choca(min: number, ocupados: number[]): boolean {
-  return ocupados.some(o => Math.abs(o - min) < SEPARACION_MIN)
+  return ocupados.some(o => min > o - SEP_ANTES && min < o + SEP_DESPUES)
 }
 
 /**
@@ -222,9 +225,9 @@ function choca(min: number, ocupados: number[]): boolean {
  * libres — bug real: a un cliente solo se le ofreció hasta las 14:00 habiendo
  * horas libres hasta las 21:10). Candidatos: el arranque, una grilla cada 45 min
  * anclada a la apertura (09:00, 09:45, 10:30, …), el corte 21:10 (siempre como
- * última hora) y cada `reserva + 45 min` (así, con una reserva a las 16:30, se
- * ofrece 17:15 en vez de perder la franja). Se filtran los que chocan (<45 min
- * de otra reserva).
+ * última hora), cada `reserva + 45 min` (así, con una reserva a las 16:30, se
+ * ofrece 17:15 en vez de perder la franja) y cada `reserva - 30 min` (el hueco que
+ * queda justo antes). Se filtran los que chocan con el bloqueo (30 antes / 45 después).
  */
 function horasLibres(fechaISO: string, hoy: string, ahora: number, ocupados: number[]): string[] {
   if (fechaISO < hoy) return []
@@ -236,7 +239,7 @@ function horasLibres(fechaISO: string, hoy: string, ahora: number, ocupados: num
   for (let m = MIN_APERTURA; m <= MIN_ULTIMO; m += SEPARACION_MIN) {
     if (m === MIN_ULTIMO || MIN_ULTIMO - m >= SEPARACION_MIN) candidatos.add(m)
   }
-  for (const o of ocupados) candidatos.add(o + SEPARACION_MIN)
+  for (const o of ocupados) { candidatos.add(o + SEP_DESPUES); candidatos.add(o - SEP_ANTES) }
   return [...candidatos]
     .filter(min => min >= startMin && min <= MIN_ULTIMO && !choca(min, ocupados))
     .sort((a, b) => a - b)
@@ -299,7 +302,7 @@ export async function evaluarSlotRetiro(fechaRaw: string, horaRaw: string): Prom
   }
 
   if (choca(min, ocupados))
-    return { ok: false, motivo: `El horario de las ${fmtMin(min)} del ${fecha} no está disponible: queda a menos de 45 minutos de otra reserva (dejamos al menos 45 minutos entre cada servicio agendado).`, libres }
+    return { ok: false, motivo: `El horario de las ${fmtMin(min)} del ${fecha} no está disponible: queda muy pegado a otra reserva (dejamos al menos 30 minutos antes y 45 minutos después de cada servicio agendado).`, libres }
 
   return { ok: true, libres }
 }
