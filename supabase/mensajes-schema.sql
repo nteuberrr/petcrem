@@ -21,6 +21,14 @@ create table if not exists mensajes_contactos (
 );
 create index if not exists idx_mcontactos_wa  on mensajes_contactos(wa_id);
 create index if not exists idx_mcontactos_tel on mensajes_contactos(telefono);
+-- Un contacto por wa_id / instagram (parcial: ignora nulos y vacíos). Backstop duro
+-- contra los contactos duplicados por mensajes en ráfaga (caso Fabiola/yop): impide
+-- que dos INSERT casi simultáneos creen dos contactos para el mismo wa_id. El código
+-- (lib/mensajes upsertContacto) reutiliza el existente ante el choque. Idempotente:
+create unique index if not exists uq_mcontactos_wa_id
+  on mensajes_contactos (wa_id) where wa_id is not null and wa_id <> '';
+create unique index if not exists uq_mcontactos_instagram
+  on mensajes_contactos (instagram) where instagram is not null and instagram <> '';
 
 create table if not exists mensajes_conversaciones (
   id                       bigint generated always as identity primary key,
