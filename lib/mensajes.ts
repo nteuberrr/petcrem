@@ -297,16 +297,16 @@ export async function upsertContacto(c: {
   audiencia?: Audiencia
 }): Promise<Contacto> {
   const sb = getMensajesSupabase()
-  if (c.wa_id) {
-    const { data } = await sb.from(T_CONTACTOS).select('*').eq('wa_id', c.wa_id).maybeSingle()
-    if (data) return data as Contacto
-  } else if (c.instagram) {
-    const { data } = await sb.from(T_CONTACTOS).select('*').eq('instagram', c.instagram).maybeSingle()
-    if (data) return data as Contacto
-  } else if (c.telefono) {
-    const { data } = await sb.from(T_CONTACTOS).select('*').eq('telefono', c.telefono).maybeSingle()
-    if (data) return data as Contacto
+  // Busca por columna tomando SIEMPRE el de menor id (order+limit, no maybeSingle:
+  // si ya hay duplicados, maybeSingle reventaba con "multiple rows").
+  const findBy = async (col: 'wa_id' | 'instagram' | 'telefono', val: string): Promise<Contacto | null> => {
+    const { data } = await sb.from(T_CONTACTOS).select('*').eq(col, val).order('id', { ascending: true }).limit(1)
+    return data && data[0] ? (data[0] as Contacto) : null
   }
+  if (c.wa_id) { const e = await findBy('wa_id', c.wa_id); if (e) return e }
+  else if (c.instagram) { const e = await findBy('instagram', c.instagram); if (e) return e }
+  else if (c.telefono) { const e = await findBy('telefono', c.telefono); if (e) return e }
+
   const { data, error } = await sb.from(T_CONTACTOS).insert({
     nombre: c.nombre ?? null,
     telefono: c.telefono ?? null,
@@ -315,7 +315,23 @@ export async function upsertContacto(c: {
     audiencia: c.audiencia ?? 'A',
   }).select('*').single()
   if (error) throw new Error(error.message)
-  return data as Contacto
+  const creado = data as Contacto
+
+  // Reconciliación anti-carrera: si dos mensajes casi simultáneos del mismo contacto
+  // (wa_id/instagram) cayeron cada uno en su propio INSERT (caso Fabiola: 3 mensajes
+  // en 34 s → 3 contactos), nos quedamos con el de MENOR id y borramos el nuestro, y
+  // devolvemos el que sobrevive. Así el resto del webhook usa un único contacto.
+  const key: 'wa_id' | 'instagram' | null = c.wa_id ? 'wa_id' : c.instagram ? 'instagram' : null
+  const keyVal = c.wa_id || c.instagram
+  if (key && keyVal) {
+    const { data: mismos } = await sb.from(T_CONTACTOS).select('id').eq(key, keyVal).order('id', { ascending: true }).limit(1)
+    const min = mismos && mismos[0]
+    if (min && min.id !== creado.id) {
+      await sb.from(T_CONTACTOS).delete().eq('id', creado.id)
+      const e = await findBy(key, keyVal); if (e) return e
+    }
+  }
+  return creado
 }
 
 /** ¿Ya existe un mensaje con ese provider_message_id? (dedupe de webhooks). */
