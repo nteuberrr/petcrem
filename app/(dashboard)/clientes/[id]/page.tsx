@@ -607,14 +607,18 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       let next = prev
       for (const s of otrosServicios) {
         if (!(s.auto_regla || '').trim()) continue
-        const aplica = deEutanasia && (s.auto_regla || '').trim() === 'fuera_horario'
-          ? false
-          : aplicaReglaAuto(s, ctx)
+        const esFueraHorario = (s.auto_regla || '').trim() === 'fuera_horario'
+        // Con eutanasia asociada, el recargo fuera de horario ya lo cobra la
+        // eutanasia (fuera de boleta) → la cremación NUNCA lo lleva.
+        const aplica = deEutanasia && esFueraHorario ? false : aplicaReglaAuto(s, ctx)
         const presente = next.some(a => a.tipo === 'servicio' && a.id === s.id)
         if (aplica && !presente && !autoQuitadosRef.current.has(s.id)) {
           autoAgregadosRef.current.add(s.id)
           next = [...next, { tipo: 'servicio' as const, id: s.id, nombre: s.nombre, precio: parseFloat(s.precio) || 0, qty: 1 }]
-        } else if (!aplica && presente && autoAgregadosRef.current.has(s.id)) {
+        } else if (!aplica && presente && (autoAgregadosRef.current.has(s.id) || (deEutanasia && esFueraHorario))) {
+          // Se saca si lo agregamos nosotros, o SIEMPRE si es el recargo fuera de
+          // horario y la ficha va con eutanasia — aunque viniera persistido en los
+          // adicionales guardados (así se corrige el cobro doble al abrir/registrar).
           autoAgregadosRef.current.delete(s.id)
           next = next.filter(a => !(a.tipo === 'servicio' && a.id === s.id))
         }
