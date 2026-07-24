@@ -249,11 +249,12 @@ export function esAdminWhatsapp(num: string): boolean {
  * Dos niveles de destinatarios de los mensajes del sistema (Configuración →
  * Usuarios; usuarios ACTIVOS con celular y avisos_whatsapp=TRUE, más el env
  * ADMIN_WHATSAPP siempre):
- *  - `admins`  → SOLO roles admin/admin2. Reciben todo lo del bot/inbox
- *    (escalamientos, relays de ETA, avisos operativos).
- *  - `retiros` → TODO el equipo con avisos ON, incluidos operadores. Reciben
- *    únicamente las SOLICITUDES DE RETIRO con botones ✅/❌ y cualquiera puede
- *    resolverlas (decisión del dueño 2026-07-11).
+ *  - `admins`  → roles admin/admin2 y Operario Nivel 2 (operador2). Reciben todo
+ *    lo del bot/inbox (escalamientos, relays de ETA, avisos operativos). El
+ *    Operario Nivel 1 (operador) NO — solo recibe las solicitudes de retiro.
+ *  - `retiros` → TODO el equipo con avisos ON, incluidos ambos niveles de
+ *    operario. Reciben las SOLICITUDES DE RETIRO con botones ✅/❌ y cualquiera
+ *    puede resolverlas (decisión del dueño 2026-07-11).
  * Cache 60s: un cambio en la tabla aplica al minuto.
  */
 let equipoCache: { ts: number; admins: string[]; retiros: string[] } | null = null
@@ -268,14 +269,16 @@ async function cargarEquipo(): Promise<{ admins: string[]; retiros: string[] }> 
       const t = (u.telefono || '').replace(/\D/g, '').slice(-9)
       if (t.length !== 9) continue
       retiros.add(`56${t}`)
-      if (esAdmin(u.rol)) admins.add(`56${t}`)
+      // admin/admin2 y el Operario Nivel 2 reciben TODOS los avisos del sistema;
+      // el Operario Nivel 1 (operador) queda solo en `retiros`.
+      if (esAdmin(u.rol) || u.rol === 'operador2') admins.add(`56${t}`)
     }
   } catch (e) { console.warn('[whatsapp] no se pudo leer usuarios para los avisos (sigue solo el env):', e) }
   equipoCache = { ts: Date.now(), admins: [...admins], retiros: [...retiros] }
   return equipoCache
 }
 
-/** Destinatarios del grueso de los avisos del bot/inbox: env + admin/admin2. */
+/** Destinatarios del grueso de los avisos del bot/inbox: env + admin/admin2 + Operario Nivel 2. */
 export async function destinatariosAvisos(): Promise<string[]> {
   return (await cargarEquipo()).admins
 }
@@ -285,7 +288,7 @@ export async function destinatariosRetiros(): Promise<string[]> {
   return (await cargarEquipo()).retiros
 }
 
-/** ¿Puede recibir/resolver los avisos generales del sistema? (solo admin/admin2 + env). */
+/** ¿Puede recibir/resolver los avisos generales del sistema? (admin/admin2 + Operario Nivel 2 + env). */
 export async function esDestinatarioAvisos(num: string): Promise<boolean> {
   return (await destinatariosAvisos()).includes((num || '').replace(/\D/g, ''))
 }

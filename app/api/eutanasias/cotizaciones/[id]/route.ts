@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
 import { getSheetData, updateById, deleteRow } from '@/lib/datastore'
-import { esAdmin } from '@/lib/roles'
+import { sesionConAcceso } from '@/lib/permisos-server'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { getConsultaEutanasia } from '@/lib/eutanasia-precios'
 import { parsePeso } from '@/lib/numbers'
@@ -13,10 +11,8 @@ import { crearClienteBorrador } from '@/lib/cliente-borrador'
 const SHEET = 'cotizaciones_eutanasia'
 
 async function requireAdmin() {
-  const session = await getServerSession(authOptions)
-  if (!esAdmin((session?.user as { role?: string })?.role)) {
-    return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
-  }
+  const { ok } = await sesionConAcceso('/api/eutanasias')
+  if (!ok) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   return null
 }
 

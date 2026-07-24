@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
-import { esAdmin } from '@/lib/roles'
+import { sesionConAcceso } from '@/lib/permisos-server'
 import { getFijoEutanasia, setFijoEutanasia, getConsultaEutanasia, setConsultaEutanasia, getRecargoFueraHorario, setRecargoFueraHorario } from '@/lib/eutanasia-precios'
 
 // Config del módulo de eutanasias. Admin (incl. admin2):
@@ -10,10 +8,8 @@ import { getFijoEutanasia, setFijoEutanasia, getConsultaEutanasia, setConsultaEu
 //  - recargo_fuera_horario: recargo al cliente si el servicio es fuera de horario.
 
 async function requireAdmin() {
-  const session = await getServerSession(authOptions)
-  if (!esAdmin((session?.user as { role?: string })?.role)) {
-    return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
-  }
+  const { ok } = await sesionConAcceso('/api/eutanasias')
+  if (!ok) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   return null
 }
 

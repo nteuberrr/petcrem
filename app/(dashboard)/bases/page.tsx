@@ -14,8 +14,23 @@ const emptyVet = { nombre: '', direccion: '', telefono: '', correo: '', nombre_c
 
 export default function BasesPage() {
   const { data: session, status } = useSession()
-  // admin y admin2 acceden a esta sección (admin2 = "General", todo menos Config Avanzada).
-  const isAdmin = status === 'authenticated' && (esAdmin(session?.user?.role) || session?.user?.role === undefined)
+
+  // Acceso según los PERMISOS DINÁMICOS (Configuración → Permisos por rol), no un
+  // esAdmin hardcodeado: admin/admin2 siempre, y cualquier rol (ej. Operario Nivel 2)
+  // al que el dueño le habilite el módulo "bases". El proxy ya gatea el acceso real;
+  // esto solo evita mostrar "Acceso restringido" a quien SÍ tiene el permiso.
+  const [allowed, setAllowed] = useState<Set<string> | null>(null)
+  useEffect(() => {
+    let cancel = false
+    fetch('/api/mis-modulos')
+      .then(r => (r.ok ? r.json() : { modulos: [] }))
+      .then(d => { if (!cancel) setAllowed(new Set<string>(Array.isArray(d.modulos) ? d.modulos : [])) })
+      .catch(() => { if (!cancel) setAllowed(new Set()) })
+    return () => { cancel = true }
+  }, [])
+  const rol = session?.user?.role
+  const isAdmin = status === 'authenticated' &&
+    (esAdmin(rol) || rol === undefined || (allowed?.has('bases') ?? false))
 
   const [vets, setVets] = useState<Vet[]>([])
 
@@ -44,7 +59,7 @@ export default function BasesPage() {
     await fetchAll()
   }
 
-  if (status === 'loading') return <div className="p-8 text-gray-400 text-sm">Cargando...</div>
+  if (status === 'loading' || allowed === null) return <div className="p-8 text-gray-400 text-sm">Cargando...</div>
   if (!isAdmin) return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
       <p className="text-4xl mb-4">🔒</p>

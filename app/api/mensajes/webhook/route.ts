@@ -192,10 +192,18 @@ async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
   if (!(await esDestinatarioRetiros(msg.from))) return true
 
   // La lógica de confirmar/rechazar (cierre atómico + efectos + avisos) vive en
-  // lib/solicitudes-retiro y la comparte el PANEL de la app. El acuse va a TODO
-  // el equipo de retiros (los mismos que recibieron los botones ven quién resolvió).
-  const { acuseAdmin } = await resolverSolicitudRetiro(m[2], m[1] === 'ok')
-  await avisarEquipoRetiros(acuseAdmin)
+  // lib/solicitudes-retiro y la comparte el PANEL de la app.
+  const { resultado, acuseAdmin } = await resolverSolicitudRetiro(m[2], m[1] === 'ok')
+  if (resultado === 'confirmada' || resultado === 'rechazada') {
+    // Resolución EFECTIVA (esta persona ganó el cierre atómico) → avisar a TODO el
+    // equipo de retiros, así todos ven que quedó resuelta y quién la resolvió.
+    await avisarEquipoRetiros(acuseAdmin)
+  } else {
+    // Ya estaba resuelta (o no existe): el 2º que toca el botón. El acuse va SOLO a
+    // quien clickeó, para no spamear "ya había sido confirmada" al resto del equipo
+    // (sobre todo a quien ya la confirmó). Best-effort.
+    try { await enviarTextoWhatsapp(msg.from, acuseAdmin) } catch { /* no bloquea */ }
+  }
   return true
 }
 

@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, updateRow, deleteRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
-import { esAdmin } from '@/lib/roles'
+import { sesionConAcceso } from '@/lib/permisos-server'
 import { getConsultaEutanasia } from '@/lib/eutanasia-precios'
 
 const SHEET = 'precios_eutanasia'
 const COLS = ['id', 'peso_min', 'peso_max', 'precio']
 
 async function requireAdmin() {
-  const session = await getServerSession(authOptions)
-  if (!esAdmin((session?.user as { role?: string })?.role)) {
-    return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
-  }
+  const { ok } = await sesionConAcceso('/api/eutanasias')
+  if (!ok) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   return null
 }
 

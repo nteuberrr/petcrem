@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, updateRow, deleteRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 import { buscarComuna } from '@/lib/comunas'
 import { enviarBienvenidaVet } from '@/lib/eutanasia-mailer'
-import { esAdmin } from '@/lib/roles'
+import { sesionConAcceso } from '@/lib/permisos-server'
 
 const SHEET = 'vet_convenio_eutanasia'
 const COLS = [
@@ -17,10 +15,8 @@ const COLS = [
 ]
 
 async function requireAdmin() {
-  const session = await getServerSession(authOptions)
-  if (!esAdmin((session?.user as { role?: string })?.role)) {
-    return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
-  }
+  const { ok } = await sesionConAcceso('/api/eutanasias')
+  if (!ok) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   return null
 }
 

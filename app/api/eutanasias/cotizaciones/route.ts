@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { buscarComuna } from '@/lib/comunas'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { capitalizarNombre } from '@/lib/nombres'
-import { esAdmin } from '@/lib/roles'
+import { sesionConAcceso } from '@/lib/permisos-server'
 import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarClienteCotizacionEutanasia } from '@/lib/eutanasia-mailer'
 import { getConsultaEutanasia, getFijoEutanasia, getRecargoFueraHorario, recargoEutanasiaPara, cremacionOpcionesParaCorreo } from '@/lib/eutanasia-precios'
 import { formatDate } from '@/lib/dates'
@@ -30,10 +28,8 @@ const COLS = [
 ]
 
 async function requireAdmin() {
-  const session = await getServerSession(authOptions)
-  if (!esAdmin((session?.user as { role?: string })?.role)) {
-    return { denied: NextResponse.json({ error: 'Solo admin' }, { status: 403 }), session: null }
-  }
+  const { ok, session } = await sesionConAcceso('/api/eutanasias')
+  if (!ok) return { denied: NextResponse.json({ error: 'No autorizado' }, { status: 403 }), session: null }
   return { denied: null, session }
 }
 

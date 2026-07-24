@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
 import { enviarCotizacionAVets } from '@/lib/eutanasia-cotizaciones'
-import { esAdmin } from '@/lib/roles'
+import { sesionConAcceso } from '@/lib/permisos-server'
 
 /**
  * POST /api/eutanasias/cotizaciones/[id]/enviar
@@ -12,10 +10,8 @@ import { esAdmin } from '@/lib/roles'
  * caso). La lógica vive en lib/eutanasia-cotizaciones (compartida con el bot).
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getServerSession(authOptions)
-  if (!esAdmin((session?.user as { role?: string })?.role)) {
-    return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
-  }
+  const { ok } = await sesionConAcceso('/api/eutanasias')
+  if (!ok) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   try {
     const { id } = await params
     const body = await req.json()
