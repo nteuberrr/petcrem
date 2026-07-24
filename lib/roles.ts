@@ -1,28 +1,31 @@
 /**
- * Modelo de roles del sistema (3 niveles).
+ * Modelo de roles del sistema (4 niveles).
  *
- *  - admin     → poder total: todo, incluida "Configuración Avanzada" y el informe de accesos.
- *  - admin2    → igual que admin EXCEPTO "Configuración Avanzada"; en Usuarios solo gestiona operadores.
- *  - operador  → acceso restringido (dashboard, clientes, operaciones, asistencia).
+ *  - admin      → poder total: todo, incluida "Configuración Avanzada" y el informe de accesos.
+ *  - admin2     → igual que admin EXCEPTO "Configuración Avanzada"; en Usuarios solo gestiona operarios.
+ *  - operador   → Operario Nivel 1: acceso restringido (dashboard, clientes, operaciones, asistencia).
+ *  - operador2  → Operario Nivel 2: mismos permisos base que el Nivel 1, pero gobernado por su
+ *                 propia columna en el editor de permisos para poder diferenciarlos después.
  *
  * Fuente única usada por proxy.ts, lib/auth, la API de usuarios y la UI.
  */
 
-export type Rol = 'admin' | 'admin2' | 'operador'
+export type Rol = 'admin' | 'admin2' | 'operador' | 'operador2'
 
 export const ROLES: { value: Rol; label: string }[] = [
   { value: 'admin', label: 'Admin' },
   { value: 'admin2', label: 'General' },
-  { value: 'operador', label: 'Operador' },
+  { value: 'operador', label: 'Operario Nivel 1' },
+  { value: 'operador2', label: 'Operario Nivel 2' },
 ]
 
 export const ROL_LABEL: Record<string, string> = {
-  admin: 'Admin', admin2: 'General', operador: 'Operador',
+  admin: 'Admin', admin2: 'General', operador: 'Operario Nivel 1', operador2: 'Operario Nivel 2',
 }
 
-/** Normaliza un valor arbitrario a un Rol válido (default operador). */
+/** Normaliza un valor arbitrario a un Rol válido (default operador = Nivel 1). */
 export function normalizarRol(r: unknown): Rol {
-  return r === 'admin' || r === 'admin2' ? r : 'operador'
+  return r === 'admin' || r === 'admin2' || r === 'operador2' ? r : 'operador'
 }
 
 /** Nivel 1: poder total (Configuración Avanzada + informe de accesos). */
@@ -53,10 +56,10 @@ export function esApiAvanzada(pathname: string): boolean {
  */
 export interface ModuloAcceso { modulo: string; roles: Rol[]; nota?: string }
 export const MATRIZ_ACCESOS: ModuloAcceso[] = [
-  { modulo: 'Dashboard', roles: ['admin', 'admin2', 'operador'] },
-  { modulo: 'Clientes', roles: ['admin', 'admin2', 'operador'] },
-  { modulo: 'Operaciones (ciclos, petróleo, vehículo, despachos)', roles: ['admin', 'admin2', 'operador'] },
-  { modulo: 'Asistencia', roles: ['admin', 'admin2', 'operador'] },
+  { modulo: 'Dashboard', roles: ['admin', 'admin2', 'operador', 'operador2'] },
+  { modulo: 'Clientes', roles: ['admin', 'admin2', 'operador', 'operador2'] },
+  { modulo: 'Operaciones (ciclos, petróleo, vehículo, despachos)', roles: ['admin', 'admin2', 'operador', 'operador2'] },
+  { modulo: 'Asistencia', roles: ['admin', 'admin2', 'operador', 'operador2'] },
   { modulo: 'Mensajes (inbox WhatsApp)', roles: ['admin', 'admin2'] },
   { modulo: 'Rendiciones', roles: ['admin', 'admin2'], nota: 'admin2 ve, crea y paga; editar/eliminar solo admin principal.' },
   { modulo: 'Veterinarios (Bases)', roles: ['admin', 'admin2'] },

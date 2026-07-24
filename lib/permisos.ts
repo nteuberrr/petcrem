@@ -13,7 +13,7 @@
 
 import { APIS_AVANZADAS } from './roles'
 
-export type RolEditable = 'admin2' | 'operador'
+export type RolEditable = 'admin2' | 'operador' | 'operador2'
 
 export interface Modulo {
   key: string
@@ -22,8 +22,8 @@ export interface Modulo {
   pages: string[]
   /** Prefijos de API que cubre el módulo. */
   apis: string[]
-  /** Acceso por defecto (= comportamiento actual antes de editar). */
-  def: { admin2: boolean; operador: boolean }
+  /** Acceso por defecto (= comportamiento actual antes de editar). operador2 arranca = operador (Nivel 1). */
+  def: { admin2: boolean; operador: boolean; operador2: boolean }
 }
 
 /**
@@ -36,32 +36,32 @@ export const MODULOS: Modulo[] = [
   // solicitudes-retiro también está en 'mensajes'; acá se lista para que TODOS
   // los roles con Dashboard vean las notificaciones de eutanasias (el GET del
   // route devuelve SOLO eutanasias a los no-admin; el POST sigue siendo admin).
-  { key: 'dashboard', label: 'Dashboard', pages: ['/dashboard'], apis: ['/api/dashboard', '/api/solicitudes-retiro', '/api/agenda'], def: { admin2: true, operador: true } },
-  { key: 'clientes', label: 'Clientes', pages: ['/clientes'], apis: ['/api/clientes', '/api/cobros', '/api/upload', '/api/places', '/api/veterinarios', '/api/precios', '/api/descuentos', '/api/especies', '/api/productos', '/api/categorias-productos', '/api/servicios'], def: { admin2: true, operador: true } },
-  { key: 'operaciones', label: 'Operaciones', pages: ['/operaciones'], apis: ['/api/ciclos', '/api/petroleo', '/api/vehiculo', '/api/despachos'], def: { admin2: true, operador: true } },
+  { key: 'dashboard', label: 'Dashboard', pages: ['/dashboard'], apis: ['/api/dashboard', '/api/solicitudes-retiro', '/api/agenda'], def: { admin2: true, operador: true, operador2: true } },
+  { key: 'clientes', label: 'Clientes', pages: ['/clientes'], apis: ['/api/clientes', '/api/cobros', '/api/upload', '/api/places', '/api/veterinarios', '/api/precios', '/api/descuentos', '/api/especies', '/api/productos', '/api/categorias-productos', '/api/servicios'], def: { admin2: true, operador: true, operador2: true } },
+  { key: 'operaciones', label: 'Operaciones', pages: ['/operaciones'], apis: ['/api/ciclos', '/api/petroleo', '/api/vehiculo', '/api/despachos'], def: { admin2: true, operador: true, operador2: true } },
   // pagos-retiros se usa desde la página de Asistencia pero trae su propio gate
   // interno esAdmin: el operador pasa el proxy y recibe 403 de la ruta (mismo
   // resultado que el fallback histórico, ahora gobernado por el editor).
-  { key: 'asistencia', label: 'Asistencia', pages: ['/asistencia'], apis: ['/api/asistencia', '/api/jornada-config', '/api/retiros-adicionales', '/api/pagos-retiros'], def: { admin2: true, operador: true } },
-  { key: 'mensajes', label: 'Mensajes', pages: ['/mensajes'], apis: ['/api/mensajes', '/api/solicitudes-retiro'], def: { admin2: true, operador: false } },
-  { key: 'rendiciones', label: 'Rendiciones', pages: ['/rendiciones'], apis: ['/api/rendiciones'], def: { admin2: true, operador: false } },
-  { key: 'bases', label: 'Veterinarios (Bases)', pages: ['/bases'], apis: ['/api/veterinarios'], def: { admin2: true, operador: false } },
-  { key: 'servicios', label: 'Servicios (Eutanasias)', pages: ['/servicios'], apis: ['/api/eutanasias', '/api/servicios'], def: { admin2: true, operador: false } },
-  { key: 'reportes', label: 'Reportes', pages: ['/reportes'], apis: ['/api/reportes'], def: { admin2: true, operador: false } },
-  { key: 'configuracion', label: 'Configuración (Precios, Artículos, Descuentos, Jornada)', pages: ['/configuracion'], apis: ['/api/precios', '/api/productos', '/api/categorias-productos', '/api/especies', '/api/servicios', '/api/descuentos', '/api/tipos-servicio', '/api/jornada-config', '/api/empresa/informe'], def: { admin2: true, operador: false } },
-  { key: 'mailing', label: 'Campañas (Mail / Instagram / Facebook)', pages: ['/mailing'], apis: ['/api/mailing'], def: { admin2: false, operador: false } },
-  { key: 'facturacion', label: 'Facturación (Boletas, Facturas, NC)', pages: ['/facturacion'], apis: ['/api/facturacion'], def: { admin2: false, operador: false } },
+  { key: 'asistencia', label: 'Asistencia', pages: ['/asistencia'], apis: ['/api/asistencia', '/api/jornada-config', '/api/retiros-adicionales', '/api/pagos-retiros'], def: { admin2: true, operador: true, operador2: true } },
+  { key: 'mensajes', label: 'Mensajes', pages: ['/mensajes'], apis: ['/api/mensajes', '/api/solicitudes-retiro'], def: { admin2: true, operador: false, operador2: false } },
+  { key: 'rendiciones', label: 'Rendiciones', pages: ['/rendiciones'], apis: ['/api/rendiciones'], def: { admin2: true, operador: false, operador2: false } },
+  { key: 'bases', label: 'Veterinarios (Bases)', pages: ['/bases'], apis: ['/api/veterinarios'], def: { admin2: true, operador: false, operador2: false } },
+  { key: 'servicios', label: 'Servicios (Eutanasias)', pages: ['/servicios'], apis: ['/api/eutanasias', '/api/servicios'], def: { admin2: true, operador: false, operador2: false } },
+  { key: 'reportes', label: 'Reportes', pages: ['/reportes'], apis: ['/api/reportes'], def: { admin2: true, operador: false, operador2: false } },
+  { key: 'configuracion', label: 'Configuración (Precios, Artículos, Descuentos, Jornada)', pages: ['/configuracion'], apis: ['/api/precios', '/api/productos', '/api/categorias-productos', '/api/especies', '/api/servicios', '/api/descuentos', '/api/tipos-servicio', '/api/jornada-config', '/api/empresa/informe'], def: { admin2: true, operador: false, operador2: false } },
+  { key: 'mailing', label: 'Campañas (Mail / Instagram / Facebook)', pages: ['/mailing'], apis: ['/api/mailing'], def: { admin2: false, operador: false, operador2: false } },
+  { key: 'facturacion', label: 'Facturación (Boletas, Facturas, NC)', pages: ['/facturacion'], apis: ['/api/facturacion'], def: { admin2: false, operador: false, operador2: false } },
   // Panel administrador del sitio público (Web). Owner-only por defecto, activable.
-  { key: 'web', label: 'Web (sitio público)', pages: ['/web'], apis: ['/api/web'], def: { admin2: false, operador: false } },
-  { key: 'eerr', label: 'Estado de Resultados', pages: ['/estado-resultados'], apis: ['/api/eerr'], def: { admin2: false, operador: false } },
+  { key: 'web', label: 'Web (sitio público)', pages: ['/web'], apis: ['/api/web'], def: { admin2: false, operador: false, operador2: false } },
+  { key: 'eerr', label: 'Estado de Resultados', pages: ['/estado-resultados'], apis: ['/api/eerr'], def: { admin2: false, operador: false, operador2: false } },
 ]
 
-export type PermisosConfig = Record<string, { admin2: boolean; operador: boolean }>
+export type PermisosConfig = Record<string, { admin2: boolean; operador: boolean; operador2: boolean }>
 
 /** Config por defecto (lo que está en MODULOS.def). */
 export function defaultPermisos(): PermisosConfig {
   const out: PermisosConfig = {}
-  for (const m of MODULOS) out[m.key] = { admin2: m.def.admin2, operador: m.def.operador }
+  for (const m of MODULOS) out[m.key] = { admin2: m.def.admin2, operador: m.def.operador, operador2: m.def.operador2 }
   return out
 }
 
@@ -125,7 +125,7 @@ export async function getPermisosConfig(): Promise<PermisosConfig> {
       const rows = (await res.json()) as Array<{ modulo: string; rol: string; permitido: string }>
       for (const r of rows) {
         if (!base[r.modulo]) continue
-        if (r.rol === 'admin2' || r.rol === 'operador') {
+        if (r.rol === 'admin2' || r.rol === 'operador' || r.rol === 'operador2') {
           base[r.modulo][r.rol] = /^(true|verdadero|1)$/i.test((r.permitido || '').trim())
         }
       }
@@ -145,7 +145,7 @@ export function invalidarPermisosCache(): void {
 /** Claves de módulos que el rol puede ver (para el sidebar). admin ve todos. */
 export function modulosPermitidos(rol: string, config: PermisosConfig): Set<string> {
   if (rol === 'admin') return new Set(MODULOS.map(m => m.key))
-  const r: RolEditable | null = rol === 'admin2' ? 'admin2' : rol === 'operador' ? 'operador' : null
+  const r: RolEditable | null = rol === 'admin2' ? 'admin2' : rol === 'operador' ? 'operador' : rol === 'operador2' ? 'operador2' : null
   if (!r) return new Set()
   return new Set(MODULOS.filter(m => (config[m.key]?.[r] ?? m.def[r])).map(m => m.key))
 }

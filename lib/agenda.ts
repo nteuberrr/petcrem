@@ -9,12 +9,12 @@
  *    en la hora del servicio mientras el vet NO informa la hora de retiro; verde
  *    en la hora de retiro (`hora_retiro_crematorio`) cuando la informa.
  *
- * Regla de agendamiento del bot (decisión del dueño 2026-07-11):
- *  - Ventana 09:00–21:00 (la ÚLTIMA hora para agendar un retiro es 21:00).
+ * Regla de agendamiento del bot (decisión del dueño 2026-07-11, actualizada 2026-07-23):
+ *  - Ventana 09:00–21:10 (la ÚLTIMA hora para agendar un retiro es 21:10).
  *  - No se agenda dentro de la próxima hora (mínimo = hora actual de Chile + 1 h).
- *  - MÍNIMO 60 MINUTOS entre reservas: una reserva a las 16:00 bloquea todo
- *    nuevo agendamiento antes de las 17:00 (y simétrico: tampoco 15:30, porque
- *    quedaría a menos de una hora). Se compara al MINUTO, no por bloque.
+ *  - MÍNIMO 45 MINUTOS entre reservas: una reserva a las 16:00 bloquea todo
+ *    nuevo agendamiento antes de las 16:45 (y simétrico: tampoco 15:20, porque
+ *    quedaría a menos de 45 min). Se compara al MINUTO, no por bloque.
  * Ocupan slot TODAS las reservas visibles de la agenda:
  *  - retiros (pendiente/confirmada) a su hora;
  *  - eutanasias SIEMPRE: a la hora del SERVICIO mientras el vet no informa la
@@ -27,10 +27,11 @@ import { formatDateForSheet, formatHora } from './dates'
 import { incluyeCremacion } from './eutanasia-cremacion'
 
 export const HORA_APERTURA = 9         // primera hora de la agenda (09:00)
-export const HORA_ULTIMO_RETIRO = 21   // última hora para agendar un retiro (21:00)
+export const HORA_ULTIMO_RETIRO = 21   // hora de referencia de la agenda; el corte real es 21:10
 const MIN_APERTURA = HORA_APERTURA * 60
-const MIN_ULTIMO = HORA_ULTIMO_RETIRO * 60
-const BUFFER_MIN = 60                   // no se agenda dentro de la próxima hora
+const MIN_ULTIMO = 21 * 60 + 10        // 21:10 — última hora agendable (decisión dueño 2026-07-23)
+const SEPARACION_MIN = 45              // mínimo entre reservas + paso de la grilla de horas ofrecidas
+const BUFFER_MIN = 60                   // no se agenda dentro de la próxima hora (lead time del chofer)
 // Eutanasia: el vet informa la hora de la VISITA (acordada con el cliente) y
 // nuestro chofer pasa a retirar ~30 min después → la agenda muestra ese desfase.
 const DESFASE_RETIRO_MIN = 30
@@ -204,28 +205,38 @@ async function ocupadosDe(fechaISO: string): Promise<number[]> {
   return out
 }
 
-/** true si `min` queda a menos de 60 minutos de alguna reserva existente. */
+/**
+ * true si `min` queda a menos de 45 minutos de alguna reserva existente. El `<`
+ * es estricto A PROPÓSITO: exactamente 45 min de separación SÍ se permite, para
+ * poder agendar pegadas una detrás de la otra (reserva 16:00 → siguiente 16:45).
+ * NO cambiar a `<=` (bloquearía el back-to-back que pidió el dueño 2026-07-23).
+ */
 function choca(min: number, ocupados: number[]): boolean {
-  return ocupados.some(o => Math.abs(o - min) < BUFFER_MIN)
+  return ocupados.some(o => Math.abs(o - min) < SEPARACION_MIN)
 }
 
 /**
  * Horas libres (HH:MM) sugeribles en una fecha, respetando ventana + buffer.
- * Recorre TODA la ventana 09:00–21:00 (antes se cortaba a las primeras 5 horas
+ * Recorre TODA la ventana 09:00–21:10 (antes se cortaba a las primeras 5 horas
  * libres, lo que escondía la tarde completa cuando la mañana ya tenía 5+ bloques
  * libres — bug real: a un cliente solo se le ofreció hasta las 14:00 habiendo
- * horas libres hasta las 21:00). Candidatos: el arranque, cada hora en punto y
- * cada `reserva + 60 min` (así, con una reserva a las 16:30, se ofrece 17:30 en
- * vez de perder la franja hasta las 18:00). Se filtran los que chocan (<60 min
+ * horas libres hasta las 21:10). Candidatos: el arranque, una grilla cada 45 min
+ * anclada a la apertura (09:00, 09:45, 10:30, …), el corte 21:10 (siempre como
+ * última hora) y cada `reserva + 45 min` (así, con una reserva a las 16:30, se
+ * ofrece 17:15 en vez de perder la franja). Se filtran los que chocan (<45 min
  * de otra reserva).
  */
 function horasLibres(fechaISO: string, hoy: string, ahora: number, ocupados: number[]): string[] {
   if (fechaISO < hoy) return []
   const esHoy = fechaISO === hoy
   const startMin = esHoy ? Math.max(MIN_APERTURA, ahora + BUFFER_MIN) : MIN_APERTURA
-  const candidatos = new Set<number>([startMin])
-  for (let h = Math.ceil(startMin / 60); h * 60 <= MIN_ULTIMO; h++) candidatos.add(h * 60)
-  for (const o of ocupados) candidatos.add(o + BUFFER_MIN)
+  const candidatos = new Set<number>([startMin, MIN_ULTIMO])
+  // Grilla cada 45 min desde la apertura; se omiten los puntos a menos de 45 min
+  // del cierre para no encimar 21:00 con el corte 21:10 (que siempre se ofrece).
+  for (let m = MIN_APERTURA; m <= MIN_ULTIMO; m += SEPARACION_MIN) {
+    if (m === MIN_ULTIMO || MIN_ULTIMO - m >= SEPARACION_MIN) candidatos.add(m)
+  }
+  for (const o of ocupados) candidatos.add(o + SEPARACION_MIN)
   return [...candidatos]
     .filter(min => min >= startMin && min <= MIN_ULTIMO && !choca(min, ocupados))
     .sort((a, b) => a - b)
@@ -242,7 +253,7 @@ export interface EvalSlot {
 /**
  * Primera hora libre de una FRANJA (AM/PM) en una fecha, para el agendamiento de
  * eutanasias del bot (el cliente elige franja, no hora exacta; la hora resultante
- * también debe respetar los 60 min con las demás reservas). Corte AM/PM a las
+ * también debe respetar los 45 min con las demás reservas). Corte AM/PM a las
  * 13:00, igual que el matcher de vets. Preferencia: lo más cerca de la hora
  * representativa histórica (10:00 AM / 16:00 PM).
  */
@@ -261,8 +272,8 @@ export async function horaLibreEnFranja(fechaRaw: string, franja: 'AM' | 'PM'): 
 }
 
 /**
- * Valida si se puede agendar un retiro en (fecha, hora): ventana 09:00–21:00,
- * fuera de la próxima hora si es hoy, y a 60+ minutos de cualquier otra reserva
+ * Valida si se puede agendar un retiro en (fecha, hora): ventana 09:00–21:10,
+ * fuera de la próxima hora si es hoy, y a 45+ minutos de cualquier otra reserva
  * (retiro o eutanasia). Devuelve además las horas libres de ese día.
  */
 export async function evaluarSlotRetiro(fechaRaw: string, horaRaw: string): Promise<EvalSlot> {
@@ -277,18 +288,18 @@ export async function evaluarSlotRetiro(fechaRaw: string, horaRaw: string): Prom
   const min = horaMin(horaRaw)
   if (min == null) return { ok: false, motivo: 'La hora no es válida (usa formato HH:MM).', libres }
   if (min < MIN_APERTURA || min > MIN_ULTIMO)
-    return { ok: false, motivo: 'Los retiros se agendan entre las 09:00 y las 21:00 (la última hora para agendar es 21:00).', libres }
+    return { ok: false, motivo: 'Los retiros se agendan entre las 09:00 y las 21:10 (la última hora para agendar es 21:10).', libres }
 
   if (fecha === hoy && min < ahora + BUFFER_MIN) {
     const desde = Math.min(MIN_ULTIMO, ahora + BUFFER_MIN)
     const msg = ahora + BUFFER_MIN > MIN_ULTIMO
-      ? 'Ya no quedan horarios para hoy (no se agenda dentro de la próxima hora y la última hora es 21:00).'
+      ? 'Ya no quedan horarios para hoy (no se agenda dentro de la próxima hora y la última hora es 21:10).'
       : `No podemos agendar dentro de la próxima hora. Para hoy, lo más pronto es a partir de las ${fmtMin(desde)}.`
     return { ok: false, motivo: msg, libres }
   }
 
   if (choca(min, ocupados))
-    return { ok: false, motivo: `El horario de las ${fmtMin(min)} del ${fecha} no está disponible: queda a menos de 1 hora de otra reserva (dejamos al menos 1 hora entre cada servicio agendado).`, libres }
+    return { ok: false, motivo: `El horario de las ${fmtMin(min)} del ${fecha} no está disponible: queda a menos de 45 minutos de otra reserva (dejamos al menos 45 minutos entre cada servicio agendado).`, libres }
 
   return { ok: true, libres }
 }

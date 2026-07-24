@@ -942,15 +942,15 @@ export default function ConfiguracionPage() {
                       : <span className="text-gray-400">—</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant={u.rol === 'operador' ? 'blue' : 'purple'}>{ROL_LABEL[u.rol] || u.rol}</Badge>
+                    <Badge variant={u.rol === 'operador' ? 'blue' : u.rol === 'operador2' ? 'green' : 'purple'}>{ROL_LABEL[u.rol] || u.rol}</Badge>
                   </td>
                   <td className="px-4 py-3">
-                    {(isAdminTotal || u.rol === 'operador')
+                    {(isAdminTotal || u.rol === 'operador' || u.rol === 'operador2')
                       ? <Toggle checked={u.activo === 'TRUE'} onChange={val => patch('/api/usuarios', { id: u.id, activo: val ? 'TRUE' : 'FALSE' })} />
                       : <span className={`text-xs font-medium ${u.activo === 'TRUE' ? 'text-emerald-700' : 'text-gray-400'}`}>{u.activo === 'TRUE' ? 'activo' : 'inactivo'}</span>}
                   </td>
                   <td className="px-4 py-3">
-                    {(isAdminTotal || u.rol === 'operador') ? (
+                    {(isAdminTotal || u.rol === 'operador' || u.rol === 'operador2') ? (
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => { setEditingUsuario(u); setUsuarioForm({ nombre: u.nombre, email: u.email, password: '', rol: u.rol, telefono: u.telefono || '', avisos_whatsapp: u.avisos_whatsapp || 'FALSE' }); setShowUsuarioModal(true) }}
@@ -1962,8 +1962,8 @@ function Field({ label, value, onChange, type = 'text', placeholder }: {
 }
 
 // ─── Editor de permisos por rol (Configuración Avanzada → Usuarios, solo Admin) ──
-type PermisoModulo = { key: string; label: string; def: { admin2: boolean; operador: boolean } }
-type PermisosData = { modulos: PermisoModulo[]; config: Record<string, { admin2: boolean; operador: boolean }> }
+type PermisoModulo = { key: string; label: string; def: { admin2: boolean; operador: boolean; operador2: boolean } }
+type PermisosData = { modulos: PermisoModulo[]; config: Record<string, { admin2: boolean; operador: boolean; operador2: boolean }> }
 
 function PermisosEditor({ usuarios }: { usuarios: Usuario[] }) {
   const [data, setData] = useState<PermisosData | null>(null)
@@ -1974,7 +1974,7 @@ function PermisosEditor({ usuarios }: { usuarios: Usuario[] }) {
     fetch('/api/permisos').then(r => (r.ok ? r.json() : null)).then(d => { if (d) setData(d) }).catch(() => {})
   }, [])
 
-  async function toggle(modulo: string, rol: 'admin2' | 'operador', permitido: boolean) {
+  async function toggle(modulo: string, rol: 'admin2' | 'operador' | 'operador2', permitido: boolean) {
     setSaving(`${modulo}:${rol}`); setError('')
     try {
       const r = await fetch('/api/permisos', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modulo, rol, permitido }) })
@@ -1999,7 +1999,7 @@ function PermisosEditor({ usuarios }: { usuarios: Usuario[] }) {
             <thead className="bg-gray-50">
               <tr>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Módulo</th>
-                {['Admin', 'General', 'Operador'].map(h => (
+                {['Admin', 'General', 'Operario N1', 'Operario N2'].map(h => (
                   <th key={h} className="text-center px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
                 ))}
               </tr>
@@ -2011,7 +2011,7 @@ function PermisosEditor({ usuarios }: { usuarios: Usuario[] }) {
                   <tr key={m.key} className="hover:bg-gray-50">
                     <td className="px-4 py-2.5 text-gray-800">{m.label}</td>
                     <td className="px-4 py-2.5 text-center"><span className="text-emerald-600 font-bold">✓</span></td>
-                    {(['admin2', 'operador'] as const).map(rol => (
+                    {(['admin2', 'operador', 'operador2'] as const).map(rol => (
                       <td key={rol} className="px-4 py-2.5 text-center">
                         <input type="checkbox" checked={!!c[rol]} disabled={saving === `${m.key}:${rol}`}
                           onChange={e => toggle(m.key, rol, e.target.checked)}
@@ -2027,6 +2027,7 @@ function PermisosEditor({ usuarios }: { usuarios: Usuario[] }) {
                 <td className="px-4 py-2.5 text-center"><span className="text-emerald-600 font-bold">✓</span></td>
                 <td className="px-4 py-2.5 text-center"><span className="text-gray-300">✗</span></td>
                 <td className="px-4 py-2.5 text-center"><span className="text-gray-300">✗</span></td>
+                <td className="px-4 py-2.5 text-center"><span className="text-gray-300">✗</span></td>
               </tr>
             </tbody>
           </table>
@@ -2034,7 +2035,7 @@ function PermisosEditor({ usuarios }: { usuarios: Usuario[] }) {
       )}
       {error && <div className="px-6 py-2 text-xs text-red-600">{error}</div>}
       <div className="px-6 py-3 border-t border-gray-300 text-xs text-gray-500">
-        Usuarios: {usuarios.length} · {usuarios.filter(u => u.rol === 'admin').length} Admin · {usuarios.filter(u => u.rol === 'admin2').length} General · {usuarios.filter(u => u.rol === 'operador').length} Operador
+        Usuarios: {usuarios.length} · {usuarios.filter(u => u.rol === 'admin').length} Admin · {usuarios.filter(u => u.rol === 'admin2').length} General · {usuarios.filter(u => u.rol === 'operador').length} Operario N1 · {usuarios.filter(u => u.rol === 'operador2').length} Operario N2
       </div>
     </div>
   )

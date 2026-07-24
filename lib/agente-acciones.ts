@@ -382,7 +382,7 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
     }
   }
 
-  // Franja → primera hora LIBRE de esa franja en la agenda (respeta los 60 min
+  // Franja → primera hora LIBRE de esa franja en la agenda (respeta los 45 min
   // con las demás reservas: retiros y otras eutanasias). AM=mañana, PM=tarde.
   const franja = (a.franja || '').toUpperCase() === 'PM' ? 'PM' : 'AM'
   const { hora } = await horaLibreEnFranja(a.fecha, franja)

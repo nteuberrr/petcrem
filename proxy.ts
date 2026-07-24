@@ -173,9 +173,10 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', req.url))
   }
 
-  // admin2 ("General") y operador: gateo DINÁMICO por módulo (editable, ~instantáneo).
-  if (role === 'admin2' || role === 'operador') {
-    if (role === 'operador' && pathname === '/') {
+  // admin2 ("General"), operador (Nivel 1) y operador2 (Nivel 2): gateo DINÁMICO
+  // por módulo (editable, ~instantáneo).
+  if (role === 'admin2' || role === 'operador' || role === 'operador2') {
+    if ((role === 'operador' || role === 'operador2') && pathname === '/') {
       return NextResponse.redirect(new URL('/dashboard', req.url))
     }
     const config = await getPermisosConfig()

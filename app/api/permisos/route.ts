@@ -31,7 +31,7 @@ async function leerConfigFresca(): Promise<PermisosConfig> {
   try {
     const { data } = await getSupabase().from('permisos_modulos').select('modulo,rol,permitido')
     for (const r of (data || []) as Array<{ modulo: string; rol: string; permitido: string }>) {
-      if (config[r.modulo] && (r.rol === 'admin2' || r.rol === 'operador')) {
+      if (config[r.modulo] && (r.rol === 'admin2' || r.rol === 'operador' || r.rol === 'operador2')) {
         config[r.modulo][r.rol] = isTrue(r.permitido)
       }
     }
@@ -61,7 +61,7 @@ export async function PUT(req: NextRequest) {
       : ('modulo' in body ? [body] : [])
     const claves = new Set(MODULOS.map(m => m.key))
     const rows = cambios
-      .filter(c => claves.has(c.modulo) && (c.rol === 'admin2' || c.rol === 'operador'))
+      .filter(c => claves.has(c.modulo) && (c.rol === 'admin2' || c.rol === 'operador' || c.rol === 'operador2'))
       .map(c => ({ modulo: c.modulo, rol: c.rol, permitido: c.permitido ? 'TRUE' : 'FALSE', updated_at: new Date().toISOString() }))
     if (rows.length === 0) return NextResponse.json({ error: 'Nada que actualizar.' }, { status: 400 })
     const { error } = await getSupabase().from('permisos_modulos').upsert(rows, { onConflict: 'modulo,rol' })
