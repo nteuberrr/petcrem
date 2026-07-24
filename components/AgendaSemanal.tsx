@@ -16,6 +16,65 @@ const DIAS_LBL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const SERVICIO: Record<string, string> = { CI: 'Individual', CP: 'Premium', SD: 'Sin Devolución' }
 
+// Grilla estilo Google Calendar: cada hora mide HOUR_PX y los eventos se
+// posicionan por su minuto real, con alto proporcional a la duración del bloque.
+const HOUR_PX = 56                 // alto en px de una hora de la grilla
+const START_MIN = 8 * 60           // 08:00 (primera línea de la agenda)
+const END_MIN = 24 * 60            // 24:00 (última línea)
+const TOTAL_PX = HORAS.length * HOUR_PX
+const DURACION_MIN = 45            // duración visual del bloque = separación mínima entre reservas
+// Si no es null, fuerza la hora que muestra la línea roja de "ahora" (para
+// previsualizar). En producción va en null → usa la hora real de Chile.
+const DEMO_LINEA_AHORA: { h: number; m: number } | null = null
+// Trama diagonal para la "sombra" de bloqueo (los 45 min previos a una reserva en
+// los que el bot no puede agendar otra: choca() en lib/agenda usa |dif| < 45 min).
+const SOMBRA_BG = 'repeating-linear-gradient(45deg, rgba(100,116,139,0.10) 0, rgba(100,116,139,0.10) 5px, rgba(100,116,139,0.22) 5px, rgba(100,116,139,0.22) 10px)'
+
+/** Minutos desde medianoche del inicio de un item (fallback: bloque, luego 08:00). */
+function minutosDe(it: Item): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(it.hora || '')
+  if (m) return Number(m[1]) * 60 + Number(m[2])
+  if (it.bloque >= 0) return it.bloque * 60
+  return START_MIN
+}
+
+type Colocado = { it: Item; startMin: number; endMin: number; col: number; cols: number }
+
+/**
+ * Posiciona los eventos de un día y reparte los que se solapan en columnas
+ * lado a lado (como Google Calendar). Agrupa en "clusters" de eventos que se
+ * encadenan por solapamiento; dentro de cada cluster cada evento toma la primera
+ * columna libre y todos comparten el mismo número total de columnas.
+ */
+function layoutDia(itemsDia: Item[]): Colocado[] {
+  const evs = itemsDia
+    .map(it => {
+      const start = Math.min(END_MIN, Math.max(START_MIN, minutosDe(it)))
+      return { it, startMin: start, endMin: Math.min(END_MIN, start + DURACION_MIN) }
+    })
+    .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin)
+
+  const out: Colocado[] = []
+  let cluster: Array<Colocado> = []
+  let clusterEnd = -1
+  const flush = () => {
+    const cols = cluster.reduce((mx, c) => Math.max(mx, c.col + 1), 1)
+    for (const c of cluster) out.push({ ...c, cols })
+    cluster = []
+    clusterEnd = -1
+  }
+  for (const e of evs) {
+    if (cluster.length && e.startMin >= clusterEnd) flush()
+    const usados = new Set(cluster.filter(c => c.endMin > e.startMin).map(c => c.col))
+    let col = 0
+    while (usados.has(col)) col++
+    cluster.push({ ...e, col, cols: 1 })
+    clusterEnd = Math.max(clusterEnd, e.endMin)
+  }
+  if (cluster.length) flush()
+  return out
+}
+
 /** YYYY-MM-DD en horario local (evita el corrimiento UTC). */
 function isoLocal(d: Date): string {
   const yyyy = d.getFullYear()
@@ -107,19 +166,6 @@ export default function AgendaSemanal() {
     return () => clearInterval(t)
   }, [cargar])
 
-  // items[iso][hora] — se agrupan por bloque horario (clamp 9..21 para legacy).
-  const porCelda = useMemo(() => {
-    const map: Record<string, Record<number, Item[]>> = {}
-    for (const it of items) {
-      // Muestra cada item en SU hora real (08:00–23:00). Los que caigan fuera de
-      // ese rango se acotan al borde; los que no tienen hora válida van a las 08:00.
-      const h = Math.min(23, Math.max(8, it.bloque < 0 ? 8 : it.bloque))
-      ;(map[it.fecha] ??= {})[h] ??= []
-      map[it.fecha][h].push(it)
-    }
-    return map
-  }, [items])
-
   const rango = `${dias[0].num} ${MESES[dias[0].mes]} – ${dias[6].num} ${MESES[dias[6].mes]}`
   const total = items.length
 
@@ -183,55 +229,85 @@ export default function AgendaSemanal() {
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-200 border border-amber-400" /> Por confirmar</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-200 border border-emerald-400" /> Confirmado</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-200 border border-gray-400" /> Eutanasia sin cremación (recordatorio)</span>
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{ background: SOMBRA_BG }} /> Bloqueo 45 min</span>
         <span className="inline-flex items-center gap-1">🐾 Retiro · 🏥 Vet · 🩺 Eutanasia</span>
       </div>
 
-      {/* Grilla */}
+      {/* Grilla estilo Google Calendar: columnas continuas, evento posicionado por
+          su hora real y con alto proporcional a la duración (bloque de 45 min). */}
       <div className="overflow-x-auto">
-        <div className="grid min-w-[760px]" style={{ gridTemplateColumns: '52px repeat(7, minmax(96px, 1fr))' }}>
-          {/* Fila de encabezado */}
-          <div className="sticky left-0 z-10 bg-white" />
-          {dias.map((d, i) => {
-            const esHoy = d.iso === hoyIso
-            return (
-              <div key={d.iso}
-                className={`text-center py-1.5 rounded-t-lg text-xs font-semibold ${esHoy ? 'bg-brand text-white' : 'text-gray-600'}`}>
-                <div>{DIAS_LBL[i]}</div>
-                <div className={`text-[13px] ${esHoy ? 'text-white' : 'text-gray-800'}`}>{d.num}</div>
-              </div>
-            )
-          })}
+        <div className="min-w-[760px]">
+          {/* Encabezado de días */}
+          <div className="grid" style={{ gridTemplateColumns: '52px repeat(7, minmax(96px, 1fr))' }}>
+            <div />
+            {dias.map((d, i) => {
+              const esHoy = d.iso === hoyIso
+              return (
+                <div key={d.iso}
+                  className={`text-center py-1.5 rounded-t-lg text-xs font-semibold ${esHoy ? 'bg-brand text-white' : 'text-gray-600'}`}>
+                  <div>{DIAS_LBL[i]}</div>
+                  <div className={`text-[13px] ${esHoy ? 'text-white' : 'text-gray-800'}`}>{d.num}</div>
+                </div>
+              )
+            })}
+          </div>
 
-          {/* Filas de horas */}
-          {HORAS.map(h => (
-            <Fragment key={h}>
-              <div className="sticky left-0 z-10 bg-white pr-1.5 pt-1 text-right text-[11px] font-medium text-gray-400 border-t border-gray-200">
-                {String(h).padStart(2, '0')}:00
-              </div>
-              {dias.map(d => {
-                const celda = porCelda[d.iso]?.[h] || []
-                const esHoy = d.iso === hoyIso
-                const esAhora = !!ahora && ahora.iso === d.iso && ahora.h === h
-                return (
-                  <div key={d.iso + h}
-                    className={`relative min-h-[42px] border-t border-l border-gray-200 p-1 space-y-1 ${esHoy ? 'bg-brand/5' : ''}`}>
-                    {esAhora && (
-                      <div className="absolute left-0 right-0 h-[2px] bg-red-500 z-20 pointer-events-none"
-                        style={{ top: `${(ahora!.m / 60) * 100}%` }} title={`Ahora · ${String(ahora!.h).padStart(2, '0')}:${String(ahora!.m).padStart(2, '0')}`}>
-                        <span className="absolute -left-1 -top-[3px] w-2 h-2 rounded-full bg-red-500" />
-                      </div>
-                    )}
-                    {celda.map(it => {
-                      const gris = it.tipo === 'eutanasia' && it.sinCremacion
-                      const amarillo = it.estado === 'pendiente'
-                      const cls = gris
-                        ? 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
-                        : amarillo
-                        ? 'bg-amber-100 border-amber-300 text-amber-900 hover:bg-amber-200'
-                        : 'bg-emerald-100 border-emerald-300 text-emerald-900 hover:bg-emerald-200'
-                      return (
-                        <button key={it.id} onClick={() => abrir(it)} title={detalle(it)}
-                          className={`w-full text-left rounded-md border px-1.5 py-1 leading-tight transition-colors ${cls} ${it.clienteId ? 'cursor-pointer' : 'cursor-default'}`}>
+          {/* Cuerpo: columna de horas + 7 columnas de día (continuas) */}
+          <div className="grid pt-2" style={{ gridTemplateColumns: '52px repeat(7, minmax(96px, 1fr))' }}>
+            {/* Etiquetas horarias */}
+            <div className="relative" style={{ height: TOTAL_PX }}>
+              {HORAS.map((h, i) => (
+                <div key={h} className="absolute right-1.5 -translate-y-1/2 text-right text-[11px] font-medium text-gray-400 tabular-nums"
+                  style={{ top: i * HOUR_PX }}>
+                  {String(h).padStart(2, '0')}:00
+                </div>
+              ))}
+              <div className="absolute right-1.5 -translate-y-1/2 text-right text-[11px] font-medium text-gray-400 tabular-nums" style={{ top: TOTAL_PX }}>24:00</div>
+            </div>
+
+            {/* Columnas de día. La línea roja de "ahora" cruza TODAS las columnas
+                (misma hora del día); el punto va solo en la columna de hoy. */}
+            {dias.map(d => {
+              const esHoy = d.iso === hoyIso
+              const colocados = layoutDia(items.filter(it => it.fecha === d.iso))
+              const nowMin = DEMO_LINEA_AHORA ? DEMO_LINEA_AHORA.h * 60 + DEMO_LINEA_AHORA.m
+                : ahora ? ahora.h * 60 + ahora.m : null
+              const nowTop = nowMin != null ? (nowMin - START_MIN) / 60 * HOUR_PX : null
+              const nowVisible = nowTop != null && nowTop >= 0 && nowTop <= TOTAL_PX
+              const esColHoy = DEMO_LINEA_AHORA ? d.iso === hoyIso : (!!ahora && ahora.iso === d.iso)
+              return (
+                <div key={d.iso} className={`relative border-l border-b border-gray-200 ${esHoy ? 'bg-brand/5' : ''}`} style={{ height: TOTAL_PX }}>
+                  {/* Líneas de hora */}
+                  {HORAS.map((h, i) => (
+                    <div key={h} className="absolute left-0 right-0 border-t border-gray-200" style={{ top: i * HOUR_PX }} />
+                  ))}
+                  {/* Sombra de bloqueo (45 min previos a cada reserva) + evento */}
+                  {colocados.map(({ it, startMin, endMin, col, cols }) => {
+                    const top = (startMin - START_MIN) / 60 * HOUR_PX
+                    const alto = Math.max(20, (endMin - startMin) / 60 * HOUR_PX)
+                    const wPct = 100 / cols
+                    const izq = `calc(${col * wPct}% + 1px)`
+                    const ancho = `calc(${wPct}% - 2px)`
+                    const gris = it.tipo === 'eutanasia' && it.sinCremacion
+                    const amarillo = it.estado === 'pendiente'
+                    // Las eutanasias SIN cremación no ocupan la agenda del chofer → sin sombra.
+                    const sombraTop = (Math.max(START_MIN, startMin - DURACION_MIN) - START_MIN) / 60 * HOUR_PX
+                    const sombraAlto = top - sombraTop
+                    const cls = gris
+                      ? 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
+                      : amarillo
+                      ? 'bg-amber-100 border-amber-300 text-amber-900 hover:bg-amber-200'
+                      : 'bg-emerald-100 border-emerald-300 text-emerald-900 hover:bg-emerald-200'
+                    return (
+                      <Fragment key={it.id}>
+                        {!gris && sombraAlto > 2 && (
+                          <div className="absolute rounded-t-md pointer-events-none z-0"
+                            style={{ top: sombraTop, height: sombraAlto, left: izq, width: ancho, background: SOMBRA_BG }}
+                            title="Separación mínima: no se agenda dentro de los 45 min previos a esta reserva" />
+                        )}
+                        <button onClick={() => abrir(it)} title={detalle(it)}
+                          className={`absolute overflow-hidden text-left rounded-md border px-1.5 py-0.5 leading-tight transition-colors z-10 ${cls} ${it.clienteId ? 'cursor-pointer' : 'cursor-default'}`}
+                          style={{ top: top + 1, height: alto - 2, left: izq, width: ancho }}>
                           <div className="flex items-center gap-1 text-[11px] font-bold">
                             <span>{it.hora}</span>
                             <span>{icono(it)}</span>
@@ -239,17 +315,20 @@ export default function AgendaSemanal() {
                           </div>
                           <div className="text-[10px] font-medium truncate">{it.mascota || it.quien || '—'}</div>
                         </button>
-                      )
-                    })}
-                  </div>
-                )
-              })}
-            </Fragment>
-          ))}
-
-          {/* Cierre 24:00 */}
-          <div className="sticky left-0 z-10 bg-white pr-1.5 pt-1 text-right text-[11px] font-medium text-gray-400 border-t border-gray-200">24:00</div>
-          {dias.map(d => <div key={'end' + d.iso} className="border-t border-l border-gray-200" />)}
+                      </Fragment>
+                    )
+                  })}
+                  {/* Línea de "ahora" (cruza todas las columnas; punto solo en hoy) */}
+                  {nowVisible && (
+                    <div className="absolute left-0 right-0 h-[2px] bg-red-500 z-30 pointer-events-none"
+                      style={{ top: nowTop! }} title={`Ahora · ${String(Math.floor(nowMin! / 60)).padStart(2, '0')}:${String(nowMin! % 60).padStart(2, '0')}`}>
+                      {esColHoy && <span className="absolute -left-1 -top-[3px] w-2 h-2 rounded-full bg-red-500" />}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
 
