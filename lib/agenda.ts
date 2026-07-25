@@ -22,6 +22,11 @@
  *    hora de retiro, y a la HORA DE RETIRO (`hora_retiro_crematorio`) cuando la
  *    informa — el bloqueo se "reajusta" solo (ej.: eutanasia 15:00 bloquea hasta
  *    las 16:00; el vet confirma retiro 16:00 → pasa a bloquear hasta las 17:00).
+ *
+ * BLOQUEOS MANUALES (`agenda_bloqueos`, botón "Bloquear agenda" del dashboard):
+ * rangos fecha/hora que el equipo cierra a mano (mantención, feriado propio, un
+ * viaje del chofer…). Dentro de un bloqueo el bot NO agenda ni ofrece horarios;
+ * el rango es [inicio, fin) → se puede agendar justo A la hora de término.
  */
 import { getSheetData } from './datastore'
 import { formatDateForSheet, formatHora } from './dates'
@@ -63,6 +68,78 @@ function fmtMin(min: number): string {
 }
 function bloqueDe(min: number | null): number {
   return min == null ? -1 : Math.floor(min / 60)
+}
+
+// ── Bloqueos manuales de agenda (tabla `agenda_bloqueos`) ────────────────────
+
+export const SHEET_BLOQUEOS = 'agenda_bloqueos'
+
+export interface BloqueoAgenda {
+  id: string
+  /** ISO YYYY-MM-DD */
+  desde: string
+  /** HH:MM (00:00 si el bloqueo arranca al inicio del día) */
+  horaDesde: string
+  /** ISO YYYY-MM-DD */
+  hasta: string
+  /** HH:MM (24:00 → se guarda como 23:59 desde la UI si es todo el día) */
+  horaHasta: string
+  motivo: string
+  creadoPor: string
+  fechaCreacion: string
+}
+
+/** Rango de minutos bloqueado dentro de UN día. */
+export interface RangoBloqueado { ini: number; fin: number; motivo: string; id: string }
+
+function normalizarBloqueo(r: Record<string, string>): BloqueoAgenda | null {
+  const desde = formatDateForSheet(r.fecha_inicio)
+  const hasta = formatDateForSheet(r.fecha_fin) || desde
+  if (!desde || !hasta) return null
+  return {
+    id: String(r.id ?? ''),
+    desde,
+    hasta: hasta < desde ? desde : hasta,
+    horaDesde: formatHora(r.hora_inicio) || '00:00',
+    horaHasta: formatHora(r.hora_fin) || '23:59',
+    motivo: r.motivo || '',
+    creadoPor: r.creado_por || '',
+    fechaCreacion: r.fecha_creacion || '',
+  }
+}
+
+/**
+ * Bloqueos que se cruzan con el rango [fromISO, toISO] (ambos opcionales).
+ * Best-effort: si la tabla todavía no existe devuelve [] (la agenda sigue viva).
+ */
+export async function listarBloqueos(fromISO?: string, toISO?: string): Promise<BloqueoAgenda[]> {
+  const rows = await getSheetData(SHEET_BLOQUEOS).catch(() => [] as Record<string, string>[])
+  return rows
+    .filter(r => (r.activo || 'TRUE').toUpperCase() !== 'FALSE')
+    .map(normalizarBloqueo)
+    .filter((b): b is BloqueoAgenda => !!b)
+    .filter(b => (!toISO || b.desde <= toISO) && (!fromISO || b.hasta >= fromISO))
+    .sort((a, b) => a.desde.localeCompare(b.desde) || a.horaDesde.localeCompare(b.horaDesde))
+}
+
+/**
+ * Recorta los bloqueos a los minutos que tapan de UNA fecha. Un bloqueo de
+ * varios días tapa los días intermedios completos.
+ */
+export function rangosDelDia(bloqueos: BloqueoAgenda[], fechaISO: string): RangoBloqueado[] {
+  const out: RangoBloqueado[] = []
+  for (const b of bloqueos) {
+    if (fechaISO < b.desde || fechaISO > b.hasta) continue
+    const ini = fechaISO === b.desde ? (horaMin(b.horaDesde) ?? 0) : 0
+    const fin = fechaISO === b.hasta ? (horaMin(b.horaHasta) ?? 24 * 60) : 24 * 60
+    if (fin > ini) out.push({ ini, fin, motivo: b.motivo, id: b.id })
+  }
+  return out.sort((a, b) => a.ini - b.ini)
+}
+
+/** El rango que tapa `min`, o null. Intervalo [ini, fin): la hora de término ya es agendable. */
+function bloqueadoEn(min: number, rangos: RangoBloqueado[]): RangoBloqueado | null {
+  return rangos.find(r => min >= r.ini && min < r.fin) || null
 }
 
 export interface AgendaItem {
@@ -227,9 +304,11 @@ function choca(min: number, ocupados: number[]): boolean {
  * anclada a la apertura (09:00, 09:45, 10:30, …), el corte 21:10 (siempre como
  * última hora), cada `reserva + 45 min` (así, con una reserva a las 16:30, se
  * ofrece 17:15 en vez de perder la franja) y cada `reserva - 30 min` (el hueco que
- * queda justo antes). Se filtran los que chocan con el bloqueo (30 antes / 45 después).
+ * queda justo antes). Se filtran los que chocan con el bloqueo (30 antes / 45 después)
+ * y los que caen dentro de un BLOQUEO MANUAL de la agenda (se ofrece, eso sí, la
+ * hora justo en que el bloqueo termina).
  */
-function horasLibres(fechaISO: string, hoy: string, ahora: number, ocupados: number[]): string[] {
+function horasLibres(fechaISO: string, hoy: string, ahora: number, ocupados: number[], rangos: RangoBloqueado[] = []): string[] {
   if (fechaISO < hoy) return []
   const esHoy = fechaISO === hoy
   const startMin = esHoy ? Math.max(MIN_APERTURA, ahora + BUFFER_MIN) : MIN_APERTURA
@@ -240,8 +319,9 @@ function horasLibres(fechaISO: string, hoy: string, ahora: number, ocupados: num
     if (m === MIN_ULTIMO || MIN_ULTIMO - m >= SEPARACION_MIN) candidatos.add(m)
   }
   for (const o of ocupados) { candidatos.add(o + SEP_DESPUES); candidatos.add(o - SEP_ANTES) }
+  for (const r of rangos) candidatos.add(r.fin)   // el hueco apenas se libera el bloqueo
   return [...candidatos]
-    .filter(min => min >= startMin && min <= MIN_ULTIMO && !choca(min, ocupados))
+    .filter(min => min >= startMin && min <= MIN_ULTIMO && !choca(min, ocupados) && !bloqueadoEn(min, rangos))
     .sort((a, b) => a - b)
     .map(fmtMin)
 }
@@ -263,8 +343,8 @@ export interface EvalSlot {
 export async function horaLibreEnFranja(fechaRaw: string, franja: 'AM' | 'PM'): Promise<{ hora: string | null; libresFranja: string[] }> {
   const fecha = formatDateForSheet(fechaRaw) || String(fechaRaw || '').trim()
   const { iso: hoy, min: ahora } = ahoraChile()
-  const ocupados = await ocupadosDe(fecha)
-  const libres = horasLibres(fecha, hoy, ahora, ocupados)
+  const [ocupados, bloqueos] = await Promise.all([ocupadosDe(fecha), listarBloqueos(fecha, fecha)])
+  const libres = horasLibres(fecha, hoy, ahora, ocupados, rangosDelDia(bloqueos, fecha))
   const libresFranja = libres.filter(h => {
     const hh = parseInt(h, 10)
     return franja === 'AM' ? hh < 13 : hh >= 13
@@ -276,14 +356,16 @@ export async function horaLibreEnFranja(fechaRaw: string, franja: 'AM' | 'PM'): 
 
 /**
  * Valida si se puede agendar un retiro en (fecha, hora): ventana 09:00–21:10,
- * fuera de la próxima hora si es hoy, y a 45+ minutos de cualquier otra reserva
- * (retiro o eutanasia). Devuelve además las horas libres de ese día.
+ * fuera de la próxima hora si es hoy, fuera de los bloqueos manuales de la agenda,
+ * y respetando la separación con las demás reservas (30 min antes / 45 después).
+ * Devuelve además las horas libres de ese día.
  */
 export async function evaluarSlotRetiro(fechaRaw: string, horaRaw: string): Promise<EvalSlot> {
   const fecha = formatDateForSheet(fechaRaw) || String(fechaRaw || '').trim()
   const { iso: hoy, min: ahora } = ahoraChile()
-  const ocupados = await ocupadosDe(fecha)
-  const libres = horasLibres(fecha, hoy, ahora, ocupados)
+  const [ocupados, bloqueos] = await Promise.all([ocupadosDe(fecha), listarBloqueos(fecha, fecha)])
+  const rangos = rangosDelDia(bloqueos, fecha)
+  const libres = horasLibres(fecha, hoy, ahora, ocupados, rangos)
 
   if (!fecha) return { ok: false, motivo: 'No indicaste una fecha válida.', libres }
   if (fecha < hoy) return { ok: false, motivo: `La fecha ${fecha} ya pasó.`, libres }
@@ -299,6 +381,16 @@ export async function evaluarSlotRetiro(fechaRaw: string, horaRaw: string): Prom
       ? 'Ya no quedan horarios para hoy (no se agenda dentro de la próxima hora y la última hora es 21:10).'
       : `No podemos agendar dentro de la próxima hora. Para hoy, lo más pronto es a partir de las ${fmtMin(desde)}.`
     return { ok: false, motivo: msg, libres }
+  }
+
+  // Bloqueo manual del equipo: no se agenda dentro del rango. El motivo interno
+  // NO se expone (el mensaje viaja al bot y de ahí al cliente).
+  const bloq = bloqueadoEn(min, rangos)
+  if (bloq) {
+    const franja = bloq.ini <= 0 && bloq.fin >= 24 * 60
+      ? 'todo ese día'
+      : `de ${fmtMin(bloq.ini)} a ${fmtMin(bloq.fin)}`
+    return { ok: false, motivo: `El horario de las ${fmtMin(min)} del ${fecha} no está disponible: tenemos la agenda cerrada ${franja}.`, libres }
   }
 
   if (choca(min, ocupados))

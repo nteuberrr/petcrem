@@ -378,6 +378,13 @@ export const SHEETS: Record<string, string[]> = {
     'id', 'admin_msg_id', 'cliente_wa_id', 'cliente_nombre', 'mascota',
     'pregunta', 'estado', 'fecha_creacion', 'fecha_respuesta',
   ],
+  // Bloqueos manuales de la agenda (botón "Bloquear agenda" del dashboard): rangos
+  // fecha/hora en los que el bot NO puede agendar retiros ni eutanasias. El rango
+  // es [inicio, fin): se puede agendar justo a la hora de término. Ver lib/agenda.
+  agenda_bloqueos: [
+    'id', 'fecha_inicio', 'hora_inicio', 'fecha_fin', 'hora_fin',
+    'motivo', 'creado_por', 'fecha_creacion', 'activo',
+  ],
   // ── Módulo "Estado de Resultados" (EERR) — DDL real en supabase/eerr-schema.sql ──
   // Partidas del EERR. tipo: ingreso | costo | gasto | impuesto. clave: solo para
   // las de ingreso (calculadas desde ventas): general | convenio | adicionales | eutanasias.

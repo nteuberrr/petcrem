@@ -8,6 +8,7 @@ import { EXPRESS_DIAS } from './dias-habiles'
 import { comunasDeServicio } from './adicionales-auto'
 import { COMUNAS_NO_CUBIERTAS } from './cobertura'
 import { esFeriado, nombreFeriado } from './feriados'
+import { ahoraChile, listarBloqueos, rangosDelDia, type BloqueoAgenda } from './agenda'
 
 /**
  * Agente IA del inbox de Mensajes: redacta la respuesta de atención por
@@ -537,7 +538,7 @@ function construirMensajes(historial: TurnoMensaje[]): Anthropic.MessageParam[] 
  * RELATIVAS ("hoy", "mañana", "el viernes") correctamente. Sin esto, al agendar
  * el modelo inventaba la fecha (bug: "mañana" → 16-07-2025). Es dinámico (no se cachea).
  */
-function bloqueFechaChile(): string {
+function bloqueFechaChile(bloqueos: BloqueoAgenda[] = []): string {
   const TZ = 'America/Santiago'
   // Fecha de HOY en Chile (YYYY-MM-DD), y a partir de ahí construimos cada día
   // anclando a las 12:00 UTC + i días: así el día de la semana es estable e
@@ -570,6 +571,15 @@ function bloqueFechaChile(): string {
   let proxMin = (hN * 60 + mN) + 60
   if (proxMin < OPEN) proxMin = OPEN
   else if (proxMin > CLOSE) { proxOffset = 1; proxMin = OPEN }
+  // Si el equipo BLOQUEÓ la agenda en ese momento, corre el próximo retiro hasta
+  // el fin del bloqueo (y al día siguiente si con eso se pasa del cierre). Sin
+  // esto el bot ofrecía una hora que después la herramienta le rechazaba.
+  for (let i = 0; i < 40; i++) {
+    const tapa = rangosDelDia(bloqueos, isoDe(proxOffset)).find(r => proxMin >= r.ini && proxMin < r.fin)
+    if (!tapa) break
+    proxMin = tapa.fin
+    if (proxMin > CLOSE) { proxOffset += 1; proxMin = OPEN }
+  }
   const proxHora = `${pad(Math.floor(proxMin / 60))}:${pad(proxMin % 60)}`
   const proxTxt = `${ref(proxOffset)} a las ${proxHora}`
   // ¿El PRÓXIMO RETIRO POSIBLE cae en franja de recargo "fuera de horario"?
@@ -593,6 +603,22 @@ function bloqueFechaChile(): string {
     const fer = esFeriado(isoDe(i)) ? `   ⚠ FERIADO (${nombreFeriado(isoDe(i))}) → cuenta como fin de semana: recargo fuera de horario TODO el día` : ''
     return `    ${ref(i)}${etq}${fer}`
   }).join('\n')
+  // Bloqueos de agenda que el equipo cargó a mano ("Bloquear agenda" en el
+  // dashboard): franjas donde NO se puede agendar. Se listan para que el bot no
+  // las ofrezca (la herramienta igual las rechaza, pero prometer y retractarse
+  // es la peor experiencia).
+  const fmtM = (m: number) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`
+  const bloqueosTxt = Array.from({ length: 8 }, (_, i) => {
+    const rangos = rangosDelDia(bloqueos, isoDe(i))
+    if (!rangos.length) return ''
+    const detalle = rangos
+      .map(r => (r.ini <= 0 && r.fin >= 24 * 60) ? 'TODO el día' : `de ${fmtM(r.ini)} a ${fmtM(r.fin)}`)
+      .join(' y ')
+    return `    ${ref(i)}: agenda CERRADA ${detalle}`
+  }).filter(Boolean).join('\n')
+  const seccionBloqueos = bloqueosTxt
+    ? `\n\nAGENDA CERRADA (bloqueos cargados por el equipo — NO agendes ni ofrezcas estos horarios):\n${bloqueosTxt}\n- Si el cliente pide una hora dentro de una franja cerrada, dile con naturalidad que a esa hora no tenemos disponibilidad y ofrécele la hora más cercana FUERA del bloqueo. NUNCA le expliques el motivo interno del cierre ni digas que "la agenda está bloqueada".`
+    : ''
   return `FECHA Y HORA ACTUAL (Chile, America/Santiago):
 - Hoy es ${ref(0)}.
 - Ahora son las ${horaActual} hrs.
@@ -609,7 +635,7 @@ REGLAS DE FECHA (duras):
 - MADRUGADA / TEMPRANO ≠ "hoy ya no se puede" (regla dura — este es el error del caso Jean): que sea de noche o de madrugada NO significa que el día de HOY ya pasó. La ventana de retiros de HOY es 09:00–21:10; si esa ventana todavía está por delante (p. ej. son las 02:00 y aún no son las 21:10 de hoy), ENTONCES SÍ se puede retirar HOY — ofrécelo. Solo se salta al día siguiente cuando la ventana de HOY ya cerró (después de las 21:10). Nunca ofrezcas "mañana" si el retiro de HOY todavía es posible, y nunca digas "no alcanzamos hoy" solo porque en este instante sea de madrugada. "No alcanzamos AHORA (es de noche)" es distinto de "no se puede HOY".
 - FERIADOS: si un día de la tabla está marcado como FERIADO (aunque sea día de semana), cuenta como fin de semana → el recargo de fuera de horario aplica TODO el día, no solo desde las 18:00. Cuando el retiro caiga en un feriado, avísale el recargo al cotizar y súmalo al total (igual que un fin de semana). Si el cliente pregunta "¿trabajan el feriado?", sí trabajamos, solo aclara que ese día lleva el recargo de fuera de horario.
 - NUNCA inventes ni adivines la fecha, el año, el día de la semana ni la hora; ante ambigüedad, confírmala contra la tabla antes de agendar.
-ESTA TABLA ES LA VERDAD VIGENTE aunque en el historial (tuyo o del cliente) se haya mencionado otra fecha/día — algo dicho pasada la medianoche puede haber quedado desactualizado. Antes de reutilizar una fecha del historial, verifícala contra la tabla.`
+ESTA TABLA ES LA VERDAD VIGENTE aunque en el historial (tuyo o del cliente) se haya mencionado otra fecha/día — algo dicho pasada la medianoche puede haber quedado desactualizado. Antes de reutilizar una fecha del historial, verifícala contra la tabla.${seccionBloqueos}`
 }
 
 /** Limpia el texto final del modelo (quita fences y desarma JSON heredado). */
@@ -707,7 +733,7 @@ export async function generarRespuesta(
   // —p.ej. un echo o evento de estado que gatilló el webhook—), no generamos nada:
   // evita el 400 "does not support assistant message prefill" y una respuesta espuria.
   if (base[base.length - 1].role !== 'user') return { mensaje: '', escalar: false, acciones: [] }
-  const [tarifas, recargos, productos, express, descuentos, cfg, imgsWa] = await Promise.all([
+  const [tarifas, recargos, productos, express, descuentos, cfg, imgsWa, bloqueos] = await Promise.all([
     bloqueTarifas(),
     bloqueRecargos(),
     bloqueProductos(),
@@ -715,6 +741,8 @@ export async function generarRespuesta(
     bloqueDescuentos(),
     getAgenteConfig().catch(() => null),
     listarImagenesWhatsapp().catch(() => [] as ImagenBanco[]),
+    // Bloqueos de agenda vigentes (de hoy en adelante) → el bot no ofrece esas horas.
+    listarBloqueos(ahoraChile().iso).catch(() => [] as BloqueoAgenda[]),
   ])
 
   // Bloque base + tarifas + recargos: cacheado (estable). Ajustes del operador/calibración: sin caché (cambian seguido).
@@ -731,7 +759,7 @@ ${cfg.instrucciones.trim()}`,
   ].filter(Boolean).join('\n\n')
   if (ajustes) system.push({ type: 'text', text: ajustes })
   // Fecha actual (dinámica, sin caché) → para resolver "mañana", "el viernes", etc.
-  system.push({ type: 'text', text: bloqueFechaChile() })
+  system.push({ type: 'text', text: bloqueFechaChile(bloqueos) })
   // Productos adicionales disponibles (para ofrecer/cotizar/agregar).
   if (productos) system.push({ type: 'text', text: productos })
   // Servicio Express (entrega en 2 días hábiles): qué es y cuándo ofrecerlo.

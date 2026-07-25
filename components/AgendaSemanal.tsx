@@ -11,6 +11,13 @@ type Item = {
   horaEutanasia?: string; esperandoHoraVet?: boolean; sinCremacion?: boolean
 }
 
+// Bloqueo manual de la agenda (tabla agenda_bloqueos): rango fecha/hora en el que
+// el bot no puede agendar. Rango [inicio, fin): la hora de término ya es agendable.
+type Bloqueo = {
+  id: string; desde: string; horaDesde: string; hasta: string; horaHasta: string
+  motivo: string; creadoPor: string; fechaCreacion: string
+}
+
 const HORAS = Array.from({ length: 16 }, (_, i) => 8 + i) // 8..23 (la agenda muestra de 08:00 a 24:00)
 const DIAS_LBL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -30,6 +37,8 @@ const DEMO_LINEA_AHORA: { h: number; m: number } | null = null
 // Trama diagonal para la "sombra" de bloqueo (los 30 min previos a una reserva en
 // los que el bot no puede agendar otra; ver SEP_ANTES en lib/agenda).
 const SOMBRA_BG = 'repeating-linear-gradient(45deg, rgba(100,116,139,0.10) 0, rgba(100,116,139,0.10) 5px, rgba(100,116,139,0.22) 5px, rgba(100,116,139,0.22) 10px)'
+// Trama roja para los BLOQUEOS manuales de agenda (el bot no agenda ahí).
+const BLOQUEO_BG = 'repeating-linear-gradient(45deg, rgba(220,38,38,0.10) 0, rgba(220,38,38,0.10) 6px, rgba(220,38,38,0.20) 6px, rgba(220,38,38,0.20) 12px)'
 
 /** Minutos desde medianoche del inicio de un item (fallback: bloque, luego 08:00). */
 function minutosDe(it: Item): number {
@@ -74,6 +83,31 @@ function layoutDia(itemsDia: Item[]): Colocado[] {
   }
   if (cluster.length) flush()
   return out
+}
+
+/** "HH:MM" → minutos desde medianoche (null si no calza). */
+function hhmmMin(s: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec((s || '').trim())
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null
+}
+
+/**
+ * Minutos que un bloqueo tapa de UNA fecha (null si no la toca). Un bloqueo de
+ * varios días tapa completos los días intermedios. Espejo de rangosDelDia en lib/agenda.
+ */
+function rangoBloqueoEnDia(b: Bloqueo, iso: string): { ini: number; fin: number } | null {
+  if (iso < b.desde || iso > b.hasta) return null
+  const ini = iso === b.desde ? (hhmmMin(b.horaDesde) ?? 0) : 0
+  const fin = iso === b.hasta ? (hhmmMin(b.horaHasta) ?? 24 * 60) : 24 * 60
+  return fin > ini ? { ini, fin } : null
+}
+
+/** Texto legible de un bloqueo para la lista del modal. */
+function rotuloBloqueo(b: Bloqueo): string {
+  const dia = (iso: string) => { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}` }
+  const todoElDia = b.horaDesde <= '00:00' && b.horaHasta >= '23:59'
+  if (b.desde === b.hasta) return todoElDia ? `${dia(b.desde)} · todo el día` : `${dia(b.desde)} · ${b.horaDesde}–${b.horaHasta}`
+  return `${dia(b.desde)} ${b.horaDesde} → ${dia(b.hasta)} ${b.horaHasta}`
 }
 
 /** YYYY-MM-DD en horario local (evita el corrimiento UTC). */
@@ -134,6 +168,7 @@ export default function AgendaSemanal() {
   const router = useRouter()
   const [offset, setOffset] = useState(0)
   const [items, setItems] = useState<Item[]>([])
+  const [bloqueos, setBloqueos] = useState<Bloqueo[]>([])
   const [cargado, setCargado] = useState(false)
   // Hora actual (Chile) para la línea de "ahora"; null hasta montar (evita
   // desajuste de hidratación con el SSR). Se refresca cada minuto.
@@ -158,6 +193,7 @@ export default function AgendaSemanal() {
       if (!r.ok) return
       const d = await r.json()
       setItems(Array.isArray(d?.items) ? d.items : [])
+      setBloqueos(Array.isArray(d?.bloqueos) ? d.bloqueos : [])
     } catch { /* reintenta al próximo tick */ } finally { setCargado(true) }
   }, [dias])
 
@@ -205,6 +241,94 @@ export default function AgendaSemanal() {
     } catch { setErrorEdit('Error de red. Intenta de nuevo.') }
   }
 
+  // ── Bloqueo manual de la agenda ────────────────────────────────────────────
+  // Rango fecha/hora en el que el bot NO puede agendar (mantención, viaje del
+  // chofer, un día cerrado…). Se guarda en agenda_bloqueos y lo respeta
+  // evaluarSlotRetiro / horaLibreEnFranja (lib/agenda).
+  const [modalBloqueo, setModalBloqueo] = useState(false)
+  const [bDesde, setBDesde] = useState('')
+  const [bHoraDesde, setBHoraDesde] = useState('09:00')
+  const [bHasta, setBHasta] = useState('')
+  const [bHoraHasta, setBHoraHasta] = useState('21:10')
+  const [bTodoElDia, setBTodoElDia] = useState(false)
+  const [bMotivo, setBMotivo] = useState('')
+  const [errorBloqueo, setErrorBloqueo] = useState('')
+  // id del bloqueo que se está editando (null = el formulario crea uno nuevo).
+  const [bEditando, setBEditando] = useState<string | null>(null)
+  // Todos los bloqueos vigentes (desde hoy), no solo los de la semana visible.
+  const [bloqueosLista, setBloqueosLista] = useState<Bloqueo[]>([])
+  const { ejecutar: ejecutarBloqueo, procesando: procesandoBloqueo } = useAccionUnica()
+
+  const cargarBloqueosLista = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/agenda/bloqueos?from=${hoyIso}`, { cache: 'no-store' })
+      if (!r.ok) return
+      const d = await r.json()
+      setBloqueosLista(Array.isArray(d?.bloqueos) ? d.bloqueos : [])
+    } catch { /* la lista queda como estaba */ }
+  }, [hoyIso])
+
+  /** Deja el formulario en modo "nuevo bloqueo". */
+  const resetFormBloqueo = useCallback(() => {
+    setBEditando(null)
+    setBDesde(hoyIso); setBHasta(hoyIso)
+    setBHoraDesde('09:00'); setBHoraHasta('21:10')
+    setBTodoElDia(false); setBMotivo(''); setErrorBloqueo('')
+  }, [hoyIso])
+
+  const abrirModalBloqueo = (editar?: Bloqueo) => {
+    resetFormBloqueo()
+    if (editar) cargarEnForm(editar)
+    setModalBloqueo(true)
+    cargarBloqueosLista()
+  }
+
+  /** Carga un bloqueo existente en el formulario para editarlo. */
+  function cargarEnForm(b: Bloqueo) {
+    setBEditando(b.id)
+    setBDesde(b.desde); setBHasta(b.hasta)
+    setBHoraDesde(b.horaDesde); setBHoraHasta(b.horaHasta)
+    setBTodoElDia(b.horaDesde <= '00:00' && b.horaHasta >= '23:59')
+    setBMotivo(b.motivo || ''); setErrorBloqueo('')
+  }
+
+  /** Crea el bloqueo, o guarda los cambios si se está editando uno. */
+  async function guardarBloqueo() {
+    if (!bDesde) { setErrorBloqueo('Indica la fecha de inicio.'); return }
+    const hasta = bHasta || bDesde
+    const hDesde = bTodoElDia ? '00:00' : bHoraDesde
+    const hHasta = bTodoElDia ? '23:59' : bHoraHasta
+    if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(hDesde) || !/^([01]?\d|2[0-3]):[0-5]\d$/.test(hHasta)) {
+      setErrorBloqueo('Indica horas válidas (HH:MM).'); return
+    }
+    if (hasta < bDesde) { setErrorBloqueo('La fecha de término no puede ser anterior a la de inicio.'); return }
+    if (hasta === bDesde && hHasta <= hDesde) { setErrorBloqueo('La hora de término debe ser posterior a la de inicio.'); return }
+    setErrorBloqueo('')
+    const payload = { fecha_inicio: bDesde, hora_inicio: hDesde, fecha_fin: hasta, hora_fin: hHasta, motivo: bMotivo.trim() }
+    try {
+      const r = await fetch('/api/agenda/bloqueos', {
+        method: bEditando ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bEditando ? { id: bEditando, ...payload } : payload),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { setErrorBloqueo(d?.error || (bEditando ? 'No se pudo actualizar el bloqueo.' : 'No se pudo bloquear la agenda.')); return }
+      resetFormBloqueo()
+      await Promise.all([cargar(), cargarBloqueosLista()])
+    } catch { setErrorBloqueo('Error de red. Intenta de nuevo.') }
+  }
+
+  async function quitarBloqueo(id: string) {
+    setErrorBloqueo('')
+    try {
+      const r = await fetch(`/api/agenda/bloqueos?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { setErrorBloqueo(d?.error || 'No se pudo quitar el bloqueo.'); return }
+      if (bEditando === id) resetFormBloqueo()
+      await Promise.all([cargar(), cargarBloqueosLista()])
+    } catch { setErrorBloqueo('Error de red. Intenta de nuevo.') }
+  }
+
   return (
     <div className="bg-white rounded-2xl shadow-md border border-gray-300 p-4 sm:p-5">
       {/* Encabezado + navegación */}
@@ -215,6 +339,10 @@ export default function AgendaSemanal() {
           <span className="text-xs text-gray-500 hidden sm:inline">· {rango}</span>
         </div>
         <div className="flex items-center gap-1.5">
+          <button onClick={() => abrirModalBloqueo()} title="Cerrar un rango de fecha/hora para que el bot no agende ahí"
+            className="px-3 h-8 rounded-lg border border-red-300 bg-red-50 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors mr-1">
+            🚫 Bloquear agenda
+          </button>
           <button onClick={() => setOffset(o => o - 1)} title="Semana anterior"
             className="w-8 h-8 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors">‹</button>
           <button onClick={() => setOffset(0)} disabled={offset === 0}
@@ -231,6 +359,7 @@ export default function AgendaSemanal() {
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-200 border border-emerald-400" /> Confirmado</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-200 border border-gray-400" /> Eutanasia sin cremación (recordatorio)</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{ background: SOMBRA_BG }} /> Bloqueo 30 min</span>
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-red-300" style={{ background: BLOQUEO_BG }} /> Agenda bloqueada</span>
         <span className="inline-flex items-center gap-1">🐾 Retiro · 🏥 Vet · 🩺 Eutanasia</span>
       </div>
 
@@ -282,6 +411,27 @@ export default function AgendaSemanal() {
                   {HORAS.map((h, i) => (
                     <div key={h} className="absolute left-0 right-0 border-t border-gray-200" style={{ top: i * HOUR_PX }} />
                   ))}
+                  {/* Bloqueos manuales de la agenda (el bot no agenda dentro de estas franjas) */}
+                  {bloqueos.map(b => {
+                    const r = rangoBloqueoEnDia(b, d.iso)
+                    if (!r) return null
+                    const ini = Math.max(START_MIN, r.ini), fin = Math.min(END_MIN, r.fin)
+                    if (fin <= ini) return null
+                    const top = (ini - START_MIN) / 60 * HOUR_PX
+                    const alto = (fin - ini) / 60 * HOUR_PX
+                    return (
+                      // Clickeable → abre el bloqueo para editarlo (los eventos van
+                      // en z-10, así que siguen ganando el clic donde se encimen).
+                      <button key={`b${b.id}`} onClick={() => abrirModalBloqueo(b)}
+                        className="absolute left-0 right-0 z-0 border-y border-red-200 cursor-pointer"
+                        style={{ top, height: alto, background: BLOQUEO_BG }}
+                        title={`Agenda bloqueada${b.motivo ? `: ${b.motivo}` : ''} · clic para editar`}>
+                        {alto >= 28 && (
+                          <span className="absolute top-0.5 left-1 text-[9px] font-bold uppercase tracking-wide text-red-700/80">Bloqueado</span>
+                        )}
+                      </button>
+                    )
+                  })}
                   {/* Sombra de bloqueo (30 min previos a cada reserva) + evento */}
                   {colocados.map(({ it, startMin, endMin, col, cols }) => {
                     const top = (startMin - START_MIN) / 60 * HOUR_PX
@@ -380,6 +530,95 @@ export default function AgendaSemanal() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Bloquear agenda: rango fecha/hora en el que el bot no puede agendar. */}
+      <Modal open={modalBloqueo} onClose={() => setModalBloqueo(false)} title={bEditando ? 'Editar bloqueo de agenda' : 'Bloquear agenda'}>
+        <div className="space-y-4">
+          {bEditando ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2">
+              <p className="text-xs text-amber-900">Estás <span className="font-semibold">editando</span> un bloqueo existente.</p>
+              <button onClick={resetFormBloqueo} className="text-xs font-semibold text-amber-800 hover:underline shrink-0">Cancelar edición</button>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-600">
+              Cierra un rango de fecha y hora: dentro de ese rango el bot <span className="font-semibold">no agenda</span> retiros
+              ni eutanasias, y tampoco lo ofrece como horario disponible. Los agendamientos que ya existan no se tocan.
+            </p>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] uppercase tracking-wide text-brand font-semibold block mb-1">Desde</label>
+              <div className="flex gap-2">
+                <input type="date" value={bDesde} onChange={e => setBDesde(e.target.value)}
+                  className="flex-1 min-w-0 rounded-xl border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand focus:border-brand outline-none" />
+                <input type="time" value={bHoraDesde} onChange={e => setBHoraDesde(e.target.value)} disabled={bTodoElDia}
+                  className="w-28 rounded-xl border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-brand focus:border-brand outline-none" />
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] uppercase tracking-wide text-brand font-semibold block mb-1">Hasta</label>
+              <div className="flex gap-2">
+                <input type="date" value={bHasta} min={bDesde} onChange={e => setBHasta(e.target.value)}
+                  className="flex-1 min-w-0 rounded-xl border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand focus:border-brand outline-none" />
+                <input type="time" value={bHoraHasta} onChange={e => setBHoraHasta(e.target.value)} disabled={bTodoElDia}
+                  className="w-28 rounded-xl border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-brand focus:border-brand outline-none" />
+              </div>
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={bTodoElDia} onChange={e => setBTodoElDia(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand" />
+            Todo el día (00:00 a 23:59)
+          </label>
+
+          <div>
+            <label className="text-[11px] uppercase tracking-wide text-brand font-semibold block mb-1">Motivo (opcional, uso interno)</label>
+            <input type="text" value={bMotivo} onChange={e => setBMotivo(e.target.value)} maxLength={200}
+              placeholder="Ej.: mantención del horno, chofer con licencia…"
+              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand focus:border-brand outline-none" />
+            <p className="text-[11px] text-gray-500 mt-1">El motivo no se le muestra al cliente: el bot solo dice que no hay disponibilidad y ofrece otros horarios.</p>
+          </div>
+
+          {errorBloqueo && <p className="text-xs text-red-600">{errorBloqueo}</p>}
+
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setModalBloqueo(false)}
+              className="px-4 py-2 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-50">Cerrar</button>
+            <button onClick={() => ejecutarBloqueo(guardarBloqueo)} disabled={procesandoBloqueo}
+              className={`px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 ${bEditando ? 'bg-brand hover:bg-brand-dark' : 'bg-red-600 hover:bg-red-700'}`}>
+              {procesandoBloqueo ? 'Guardando…' : bEditando ? 'Guardar cambios' : 'Bloquear'}
+            </button>
+          </div>
+
+          {/* Bloqueos vigentes (de hoy en adelante) */}
+          <div className="border-t border-gray-200 pt-3">
+            <p className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-2">Bloqueos vigentes</p>
+            {bloqueosLista.length === 0 ? (
+              <p className="text-xs text-gray-400">No hay bloqueos activos.</p>
+            ) : (
+              <ul className="space-y-1.5 max-h-48 overflow-y-auto">
+                {bloqueosLista.map(b => (
+                  <li key={b.id}
+                    className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${bEditando === b.id ? 'border-brand bg-brand/5' : 'border-gray-200'}`}>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{rotuloBloqueo(b)}</p>
+                      {b.motivo && <p className="text-[11px] text-gray-500 truncate">{b.motivo}</p>}
+                    </div>
+                    <div className="shrink-0 flex items-center gap-3">
+                      <button onClick={() => cargarEnForm(b)}
+                        className="text-xs font-semibold text-brand-soft hover:underline">Editar</button>
+                      <button onClick={() => quitarBloqueo(b.id)}
+                        className="text-xs font-semibold text-red-600 hover:underline">Quitar</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       </Modal>
     </div>
   )

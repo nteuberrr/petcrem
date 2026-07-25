@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { listarAgenda } from '@/lib/agenda'
+import { listarAgenda, listarBloqueos } from '@/lib/agenda'
 import { getSheetData, updateByIdIf } from '@/lib/datastore'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * Agenda semanal del dashboard (retiros de cremación + retiros de eutanasia).
- * GET ?from=YYYY-MM-DD&to=YYYY-MM-DD → { items } para el rango visible.
+ * GET ?from=YYYY-MM-DD&to=YYYY-MM-DD → { items, bloqueos } para el rango visible
+ * (los bloqueos manuales se crean/eliminan en /api/agenda/bloqueos).
  * La ven todos los usuarios logueados (igual que las notificaciones del bot).
  */
 export async function GET(req: NextRequest) {
@@ -18,8 +19,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const from = searchParams.get('from') || undefined
     const to = searchParams.get('to') || undefined
-    const items = await listarAgenda(from, to)
-    return NextResponse.json({ items }, { headers: { 'Cache-Control': 'no-store' } })
+    const [items, bloqueos] = await Promise.all([listarAgenda(from, to), listarBloqueos(from, to)])
+    return NextResponse.json({ items, bloqueos }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
     console.error('[agenda GET]', e)
     return NextResponse.json({ error: 'No se pudo cargar la agenda.' }, { status: 500 })
