@@ -12,6 +12,7 @@ import { findTramo } from '@/lib/tramos'
 import { anforaPremiumIncluida, servicioIncluyeAnforaPremium, repartirAnforasPremium } from '@/lib/anforas-premium'
 import { esComunaNoCubierta } from '@/lib/cobertura'
 import { aplicaReglaAuto, etiquetaRegla } from '@/lib/adicionales-auto'
+import { ORIGENES_MANUALES, labelOrigen } from '@/lib/origen-cliente'
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
@@ -22,7 +23,7 @@ type Cliente = {
   fecha_retiro: string; hora_retiro?: string; fecha_creacion: string; ciclo_id: string
   direccion_retiro?: string; direccion_despacho?: string; comuna?: string; depto?: string
   adicionales?: string
-  veterinaria_id?: string; notas?: string
+  veterinaria_id?: string; notas?: string; origen?: string
   fotos_cuadro?: string; videos_servicio?: string
   correo_diferencia_fecha?: string
   precio_servicio?: string; precio_adicionales?: string; precio_total?: string
@@ -82,6 +83,7 @@ const FORM_DEFAULT = {
   veterinaria_id: '',
   tipo_pago: '',
   estado_pago: 'pendiente',
+  origen: '',
 }
 
 const SERVICIOS = [
@@ -957,6 +959,7 @@ export default function ClientesPage() {
               <PreviewField label="Fecha de retiro" value={fmtFecha(selected.fecha_retiro)} />
               <PreviewField label="Comuna" value={selected.comuna || '—'} />
               <PreviewField label="Forma de pago" value={selected.tipo_pago || '—'} />
+              <PreviewField label="Cómo nos conoció" value={labelOrigen(selected.origen)} />
               <PreviewField label="Estado de pago" value={selected.estado_pago || 'pendiente'} />
               <PreviewField
                 label="Monto total"
@@ -1245,6 +1248,17 @@ export default function ClientesPage() {
                 <option value="pendiente">Pendiente de pago</option>
                 <option value="parcial">Pago parcial</option>
                 <option value="pagado">Pagado</option>
+              </select>
+            </div>
+            {/* Origen: con esto sabemos cuánto cuesta de verdad traer un cliente por
+                canal (inversión del canal ÷ fichas de ese canal). Las fichas que nacen
+                del agente de WhatsApp ya vienen marcadas solas. */}
+            <div className="sm:col-span-2">
+              <label className="text-xs font-semibold text-gray-700">¿Cómo nos conoció?</label>
+              <select value={form.origen} onChange={e => setForm(f => ({ ...f, origen: e.target.value }))}
+                className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                <option value="">Sin registrar</option>
+                {ORIGENES_MANUALES.map(o => <option key={o.valor} value={o.valor}>{o.label}</option>)}
               </select>
             </div>
           </div>

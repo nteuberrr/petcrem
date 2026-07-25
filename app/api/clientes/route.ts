@@ -35,6 +35,8 @@ const ClienteSchema = z.object({
   tipo_pago: z.string().min(1, 'Tipo de pago requerido'),
   estado_pago: z.string().min(1, 'Estado de pago requerido'),
   veterinaria_id: z.string().optional(),
+  /** Por dónde llegó el cliente (lib/origen-cliente). Opcional: '' = sin registrar. */
+  origen: z.string().optional(),
   adicionales: z.string().optional(),
   descuento_id: z.string().optional(),
   descuento_nombre: z.string().optional(),
@@ -97,7 +99,7 @@ export async function POST(req: NextRequest) {
       'veterinaria_id', 'adicionales', 'tipo_precios',
       'peso_declarado', 'peso_ingreso', 'despacho_id',
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
-      'fecha_defuncion', 'fecha_nacimiento', 'depto', 'notas', 'tipo_pago', 'estado_pago',
+      'fecha_defuncion', 'fecha_nacimiento', 'depto', 'notas', 'tipo_pago', 'estado_pago', 'origen',
       'precio_servicio', 'precio_adicionales', 'precio_total', 'hora_retiro',
       'greda_descontada',
     ])
@@ -158,6 +160,7 @@ export async function POST(req: NextRequest) {
       ciclo_id: '',
       despacho_id: '',
       veterinaria_id: data.veterinaria_id ?? '',
+      origen: data.origen ?? '',
       tipo_precios: snapshot.tipo_precios_efectivo,
       adicionales: data.adicionales ?? '[]',
       descuento_id: data.descuento_id ?? '',
