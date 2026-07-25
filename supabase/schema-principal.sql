@@ -1087,3 +1087,22 @@ create table if not exists "permisos_modulos" (
   primary key ("modulo", "rol")
 );
 alter table "permisos_modulos" enable row level security;
+
+-- Velocidad REAL del sitio público (Core Web Vitals de visitantes reales), la
+-- escribe /api/web-vitals con el script de lib/sitio/medicion-velocidad. Se mide
+-- acá porque CrUX/Search Console exige más tráfico del que tiene el sitio y
+-- PageSpeed solo da laboratorio. Acceso directo por getSupabase() (no datastore).
+create table if not exists web_vitals (
+  id          bigint generated always as identity primary key,
+  created_at  timestamptz not null default now(),
+  fecha       text not null default '',   -- YYYY-MM-DD (Chile)
+  ruta        text not null default '',
+  dispositivo text not null default '',   -- movil | escritorio
+  fuente      text not null default '',   -- ads | organico
+  lcp         double precision,           -- ms
+  cls         double precision,
+  inp         double precision,           -- ms
+  ttfb        double precision            -- ms
+);
+create index if not exists idx_web_vitals_fecha on web_vitals(fecha);
+alter table web_vitals enable row level security;

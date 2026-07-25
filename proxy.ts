@@ -69,6 +69,8 @@ export async function proxy(req: NextRequest) {
     // Sitio público: el route handler /sitio/* + sus assets estáticos
     // (/sitio/site.css, /sitio/js, /sitio/assets) son públicos, sin sesión.
     pathname.startsWith('/sitio') ||
+    // Medición de velocidad del sitio: la manda el navegador del visitante (sin sesión).
+    pathname === '/api/web-vitals' ||
     pathname.startsWith('/api/auth') ||
     // Política de privacidad pública (la exige Meta para publicar la app + es buena práctica).
     pathname === '/privacidad' ||

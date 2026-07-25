@@ -11,6 +11,7 @@ import { renderPostsWeb, renderPostDetalle, buscarPost } from '@/lib/sitio/blog-
 import { renderTextos } from '@/lib/sitio/paginas-html'
 import { LANDINGS, renderLanding } from '@/lib/sitio/landings'
 import { inyectarConversiones } from '@/lib/sitio/ads-conversion'
+import { scriptMedicionVelocidad } from '@/lib/sitio/medicion-velocidad'
 
 const HTML_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   // lib/sitio/ads-conversion: se perdió en el cutover del 14-jul y con él la
   // señal que alimenta el Smart Bidding).
   const fin = (html: string) => new NextResponse(
-    inyectarConversiones(prefijar ? prefijarLinksSitio(html) : html),
+    inyectarConversiones(prefijar ? prefijarLinksSitio(html) : html) + scriptMedicionVelocidad(),
     { status: 200, headers: HTML_HEADERS },
   )
 

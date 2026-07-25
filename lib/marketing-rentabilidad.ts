@@ -5,6 +5,7 @@ import { fmtPrecio } from './format'
 import { getMarketingParams } from './marketing-params'
 import { isGoogleAdsConfigurado, resumenCampanas } from './google-ads'
 import { isInsightsConfigurado, resumenAds } from './meta-insights'
+import { labelOrigen } from './origen-cliente'
 
 /**
  * RENTABILIDAD REAL del marketing: cruza el GASTO en ads (Google + Meta) contra los
@@ -38,8 +39,15 @@ export interface Rentabilidad {
   cplReal: number | null          // gasto / leads
   cpaReal: number | null          // gasto / fichas directas
   roasBlended: number | null      // ingresos directos / gasto
+  /** Fichas directas desglosadas por cómo llegó el cliente (clientes.origen). */
+  porOrigen: Array<{ valor: string; label: string; fichas: number; ingresos: number }>
+  /** % de fichas directas con origen registrado — bajo 50% el desglose no decide nada. */
+  coberturaOrigenPct: number
   avisos: string[]
 }
+
+/** Los bot_* dicen POR DÓNDE entró el mensaje, no de qué canal venía el cliente. */
+const ORIGENES_DE_CONTACTO = new Set(['bot_retiro', 'bot_eutanasia', 'bot_vet'])
 
 const TZ = 'America/Santiago'
 
@@ -124,13 +132,25 @@ export async function calcularRentabilidad(periodo: PeriodoRentabilidad = 'last_
 
   // Fichas del período (excluye borradores "Por ingresar": todavía no son venta).
   let fichasDirectas = 0, fichasConvenio = 0, ingresosDirectos = 0, ingresosConvenio = 0
+  const acumOrigen = new Map<string, { fichas: number; ingresos: number }>()
+  let conOrigen = 0
   for (const c of clientes) {
     if ((c.estado || '').toLowerCase() === 'borrador') continue
     if (!enRango(c.fecha_creacion || '', desde, hasta)) continue
     const ingreso = monto(c.precio_total) || monto(c.precio_servicio)
     if ((c.veterinaria_id || '').trim()) { fichasConvenio++; ingresosConvenio += ingreso }
-    else { fichasDirectas++; ingresosDirectos += ingreso }
+    else {
+      fichasDirectas++; ingresosDirectos += ingreso
+      const org = (c.origen || '').trim()
+      if (org) conOrigen++
+      const k = org || '(sin registrar)'
+      const prev = acumOrigen.get(k) || { fichas: 0, ingresos: 0 }
+      acumOrigen.set(k, { fichas: prev.fichas + 1, ingresos: prev.ingresos + ingreso })
+    }
   }
+  const porOrigen = [...acumOrigen.entries()]
+    .map(([valor, v]) => ({ valor, label: valor === '(sin registrar)' ? 'Sin registrar' : labelOrigen(valor), ...v }))
+    .sort((a, b) => b.fichas - a.fichas)
 
   const gastoTotal = (gastoGoogle ?? 0) + (gastoMeta ?? 0)
   const div = (a: number, b: number | null): number | null => (b && b > 0 ? Math.round(a / b) : null)
@@ -145,6 +165,8 @@ export async function calcularRentabilidad(periodo: PeriodoRentabilidad = 'last_
     cplReal: gastoTotal > 0 ? div(gastoTotal, leadsWhatsapp) : null,
     cpaReal: gastoTotal > 0 ? div(gastoTotal, fichasDirectas) : null,
     roasBlended: gastoTotal > 0 ? Math.round((ingresosDirectos / gastoTotal) * 10) / 10 : null,
+    porOrigen,
+    coberturaOrigenPct: fichasDirectas > 0 ? Math.round((conOrigen / fichasDirectas) * 1000) / 10 : 0,
     avisos,
   }
 }
@@ -172,6 +194,40 @@ export async function reporteRentabilidadTexto(periodo: PeriodoRentabilidad = 'l
   } else {
     lineas.push('- Sin gasto en ads en el período (o plataformas no configuradas): no aplican CPA/CPL/ROAS.')
   }
+  // Desglose por CÓMO LLEGÓ el cliente (clientes.origen). Es la única vía para
+  // pasar del CPA blended al costo real por canal; mientras la cobertura sea baja,
+  // se reporta como referencia y NO se usa para decidir presupuesto.
+  if (r.porOrigen.length) {
+    lineas.push(`- Fichas directas por ORIGEN (cobertura ${r.coberturaOrigenPct}% de las fichas con el dato registrado):`)
+    for (const o of r.porOrigen) {
+      const esContacto = ORIGENES_DE_CONTACTO.has(o.valor)
+      lineas.push(`   · ${o.label}: ${o.fichas} ficha(s) · ${fmtPrecio(o.ingresos)}${esContacto ? ' — ojo: dice por dónde ENTRÓ el mensaje, no de qué canal venía' : ''}`)
+    }
+    if (r.coberturaOrigenPct < 50) {
+      lineas.push('   ⚠ Cobertura baja: el equipo todavía no registra el origen en la mayoría de las fichas. NO uses este desglose para mover presupuesto; sirve solo como referencia hasta llegar al 70–80%.')
+    } else if (r.gastoGoogle != null) {
+      const g = r.porOrigen.find(o => o.valor === 'google')
+      if (g && g.fichas > 0) lineas.push(`   → Costo real por ficha de Google: ${fmtPrecio(Math.round(r.gastoGoogle / g.fichas))} (gasto de Google / fichas marcadas como Google)`)
+    }
+  }
+  // Velocidad real del sitio (usuarios de verdad, no laboratorio). Importa acá
+  // porque la experiencia de la página de destino es parte del Ad Rank: un sitio
+  // lento sube el costo por clic sin que se vea en ninguna métrica de campaña.
+  try {
+    const { resumenVitals, veredictoLcp } = await import('./web-vitals')
+    const v = await resumenVitals(28)
+    if (v.muestras > 0) {
+      lineas.push(`- Velocidad del sitio (visitas reales, últimos 28 días, ${v.muestras} mediciones):`)
+      for (const d of v.porDispositivo) {
+        lineas.push(`   · ${d.dispositivo}: LCP ${veredictoLcp(d.lcp)} · ${d.muestras} visitas` +
+          (d.cls != null ? ` · CLS ${d.cls}` : '') + (d.inp != null ? ` · INP ${Math.round(d.inp)} ms` : ''))
+      }
+      if (v.peoresRutas.length) {
+        lineas.push(`   · páginas más lentas: ${v.peoresRutas.map(r => `${r.ruta} (${veredictoLcp(r.lcp)})`).join(' · ')}`)
+      }
+    }
+  } catch { /* la tabla puede no existir todavía: el reporte sale igual */ }
+
   lineas.push('ATRIBUCIÓN: es BLENDED (todo el gasto vs todas las fichas de tutores del período; los leads incluyen orgánico). Sirve como techo/piso, NO como atribución exacta por campaña — decláralo así al reportar.')
   if (r.avisos.length) lineas.push(`Avisos: ${r.avisos.join('; ')}`)
   return lineas.join('\n')
