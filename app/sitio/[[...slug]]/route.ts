@@ -10,6 +10,7 @@ import { getFijoEutanasia } from '@/lib/eutanasia-precios'
 import { renderPostsWeb, renderPostDetalle, buscarPost } from '@/lib/sitio/blog-html'
 import { renderTextos } from '@/lib/sitio/paginas-html'
 import { LANDINGS, renderLanding } from '@/lib/sitio/landings'
+import { inyectarConversiones } from '@/lib/sitio/ads-conversion'
 
 const HTML_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
@@ -58,7 +59,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const key = (slug || []).join('/')
   // En la versión de prueba (host != dominio oficial) navegamos bajo /sitio/*.
   const prefijar = !esDominioMarketing(req.headers.get('host') || '')
-  const fin = (html: string) => new NextResponse(prefijar ? prefijarLinksSitio(html) : html, { status: 200, headers: HTML_HEADERS })
+  // Toda página del sitio sale con el tag de conversiones de Google Ads (ver
+  // lib/sitio/ads-conversion: se perdió en el cutover del 14-jul y con él la
+  // señal que alimenta el Smart Bidding).
+  const fin = (html: string) => new NextResponse(
+    inyectarConversiones(prefijar ? prefijarLinksSitio(html) : html),
+    { status: 200, headers: HTML_HEADERS },
+  )
 
   // robots.txt + sitemap.xml del sitio público.
   if (key === 'robots.txt') {
