@@ -341,7 +341,7 @@ export default function AgendaSemanal() {
         <div className="flex items-center gap-1.5">
           <button onClick={() => abrirModalBloqueo()} title="Cerrar un rango de fecha/hora para que el bot no agende ahí"
             className="px-3 h-8 rounded-lg border border-red-300 bg-red-50 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors mr-1">
-            🚫 Bloquear agenda
+            Bloquear agenda
           </button>
           <button onClick={() => setOffset(o => o - 1)} title="Semana anterior"
             className="w-8 h-8 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors">‹</button>
