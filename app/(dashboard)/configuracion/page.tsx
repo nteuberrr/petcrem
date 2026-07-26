@@ -1911,13 +1911,18 @@ function DatosPersonalesPanel() {
       </Section>
 
       <Section title="Datos de transferencia">
-        <Field label="Titular de la cuenta" value={form.titular_cuenta} onChange={v => setForm(f => ({ ...f, titular_cuenta: v }))} placeholder="Industrias NC SpA" />
+        <Row>
+          <Field label="Titular de la cuenta" value={form.titular_cuenta} onChange={v => setForm(f => ({ ...f, titular_cuenta: v }))} placeholder="Industrias NC SpA" />
+          {/* Mismo RUT que el de "Datos de la empresa": es un solo dato, editable
+              desde los dos lados para no tener que subir a buscarlo. */}
+          <Field label="RUT" value={form.rut} onChange={v => setForm(f => ({ ...f, rut: v }))} placeholder="76.xxx.xxx-x" />
+        </Row>
         <Row>
           <Field label="Banco" value={form.banco} onChange={v => setForm(f => ({ ...f, banco: v }))} placeholder="Banco de Chile" />
           <Field label="Tipo de cuenta" value={form.tipo_cuenta} onChange={v => setForm(f => ({ ...f, tipo_cuenta: v }))} placeholder="Cuenta Corriente" />
         </Row>
         <Field label="N° de cuenta" value={form.numero_cuenta} onChange={v => setForm(f => ({ ...f, numero_cuenta: v }))} placeholder="00-000-00000-00" />
-        <p className="text-[11px] text-gray-500">Se incluyen (con el RUT y el correo de arriba) en los correos de cobro (diferencia de peso y productos adicionales). El titular es el de la cuenta bancaria (puede diferir del nombre de marca).</p>
+        <p className="text-[11px] text-gray-500">Son los datos que se envían para pagar: van en los correos de cobro (diferencia de peso y productos adicionales) y el bot se los da al cliente que los pide por WhatsApp, junto con el correo de contacto. El titular es el de la cuenta bancaria (puede diferir del nombre de marca). El RUT es el mismo de la empresa: si lo cambias acá, cambia arriba.</p>
       </Section>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{error}</div>}

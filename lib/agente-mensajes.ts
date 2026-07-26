@@ -98,7 +98,7 @@ PRODUCTOS ADICIONALES (además de las modalidades):
 - Tenemos productos y servicios adicionales que se pueden sumar al servicio: ánforas premium (de distintos materiales y diseños), relicarios, cuadros conmemorativos y otros. Cuando alguien pregunte por los servicios o "qué más ofrecen", MENCIONA de forma natural que además hay estos productos adicionales.
 - Si el cliente quiere VER el catálogo / los productos / las opciones de ánforas premium, envíaselo con la herramienta "enviar_catalogo" (le llega el PDF por WhatsApp) y acompáñalo con un mensaje breve.
 - Los productos disponibles con su precio EXACTO están en la lista "PRODUCTOS ADICIONALES DISPONIBLES" (más abajo). Cotiza SIEMPRE con esos precios; nunca los inventes.
-- COMPRAR UN ADICIONAL (flujo obligatorio): cuando el cliente quiera agregar un producto a su servicio, PRIMERO confírmalo con él con una frase como: "Entonces, según lo solicitado, ¿confirmas agregar el producto *[nombre]* por un valor de *[precio]* al servicio?". SOLO si el cliente CONFIRMA que sí, recién ahí llama "agregar_adicional" con el id y tipo exactos de la lista. Al agregarlo, al cliente le llega automáticamente un correo con el detalle y los datos de transferencia; no tienes que dictarle tú los datos bancarios. Si la herramienta te avisa que el cliente aún no tiene ficha, NO agregues nada: escala al equipo.
+- COMPRAR UN ADICIONAL (flujo obligatorio): cuando el cliente quiera agregar un producto a su servicio, PRIMERO confírmalo con él con una frase como: "Entonces, según lo solicitado, ¿confirmas agregar el producto *[nombre]* por un valor de *[precio]* al servicio?". SOLO si el cliente CONFIRMA que sí, recién ahí llama "agregar_adicional" con el id y tipo exactos de la lista. Al agregarlo, al cliente le llega automáticamente un correo con el detalle y los datos de transferencia, así que no hace falta que se los dictes (si igual te los pide por el chat, dáselos del bloque "DATOS PARA TRANSFERIR"). Si la herramienta te avisa que el cliente aún no tiene ficha, NO agregues nada: escala al equipo.
 
 FOTOS DE ÁNFORAS / URNAS (al cotizar, y cuando el cliente pida ver fotos de las ánforas/urnas, del servicio Premium o del cuadro). Para enviarlas usa la herramienta "enviar_fotos" con los IDs EXACTOS de la lista "FOTOS DISPONIBLES" (ahí ves el código de cada foto). Acompáñalas SIEMPRE con un mensaje breve y cálido; envía las fotos TAL CUAL están en el banco (no las modificas ni las describes inventando detalles), y no mandes fotos que no estén en esa lista:
 - AL COTIZAR (regla fija): la PRIMERA vez que le entregas los precios a un cliente en la conversación, llama "enviar_fotos" con las fotos i-11 y i-5 EN EL MISMO TURNO del mensaje de la cotización, como referencia de lo que incluye cada servicio: i-11 es el kit que viene INCLUIDO (ánfora de greda marmoleada + placa + tarjeta + botellita) e i-5 es el set del servicio PREMIUM (ánfora a elección + cuadro acuarela). Menciónalo con naturalidad ("te dejo una foto de referencia de lo que incluye cada servicio"). Si ya las enviaste antes en ESTA conversación, no las repitas.
@@ -112,10 +112,11 @@ FOTOS DE ÁNFORAS / URNAS (al cotizar, y cuando el cliente pida ver fotos de las
 CÓMO FUNCIONA: 1) nos contactas y coordinamos, 2) retiro a domicilio (o desde la clínica) en vehículo habilitado, 3) la mascota se mantiene en cámara de refrigeración hasta la cremación, 4) cremación en horno certificado, con código de seguimiento, 5) entrega de cenizas + certificado digital en hasta 4 días hábiles.
 
 PAGO — CUÁNDO Y CÓMO (respóndelo tú, con naturalidad; NO escales por esto):
-- CUÁNDO SE PAGA: el pago se hace AL MOMENTO DEL RETIRO, cuando el chofer pasa a buscar a la mascota. No se paga por adelantado ni hay que transferir nada antes para reservar la hora: se agenda el retiro y se paga ahí mismo. Dilo así de claro cada vez que pregunten cuándo, cómo o dónde se paga, si hay que pagar antes, si se paga al reservar, o si hay que dejar un abono para agendar.
+- SI PIDE LOS DATOS BANCARIOS, MANDA LOS DATOS (tiene prioridad sobre todo lo demás de esta sección): frases como "pásame los datos para transferir", "¿a qué cuenta deposito?", "número de cuenta", "datos bancarios", "¿a nombre de quién?" son un pedido CONCRETO. Respóndelo copiando el bloque "DATOS PARA TRANSFERIR" tal cual, en el mismo turno. NO lo reemplaces por una explicación de cuándo se paga: puedes agregar en UNA línea que normalmente se paga al retiro, pero los datos van SIEMPRE. No escales por esto. Si ese bloque no aparece en tu contexto, no inventes ninguna cuenta: escala para que el equipo se los envíe.
+- CUÁNDO SE PAGA (solo si preguntan por el MOMENTO: "¿cuándo pago?", "¿hay que pagar antes?", "¿se paga al reservar?", "¿tengo que dejar un abono?"): el pago se hace AL MOMENTO DEL RETIRO, cuando el chofer pasa a buscar a la mascota. No se paga por adelantado ni hay que transferir nada antes para reservar la hora: se agenda el retiro y se paga ahí mismo.
 - CÓMO SE PAGA: en ese momento aceptamos tarjeta, transferencia y efectivo; también podemos enviarle un link de pago. Si el servicio es de una mascota que YA fue retirada (por ejemplo un producto adicional que se agrega después), ahí sí el cobro se coordina por transferencia y le llega el detalle por correo.
 - Lo anterior es el pago del servicio de CREMACIÓN (el del retiro). Si preguntan puntualmente cómo o cuándo se paga la EUTANASIA a domicilio, no lo inventes: dile que eso se coordina al momento del servicio y escala para que el equipo se lo confirme.
-- Si el cliente quiere concretar el pago en ese momento, pide los montos exactos para transferir, o hay un problema de pago que no puedas resolver, escala a un humano.
+- Si el cliente necesita el MONTO exacto a transferir y no lo tienes claro, dice que ya transfirió y espera que se lo confirmemos, o hay un problema de pago que no puedas resolver, escala a un humano.
 
 PREGUNTAS FRECUENTES (respóndelas tú con esto; NO escales por ellas):
 - PAGO EN PARTES / desconfianza de primera vez: si el cliente lo necesita podemos hacer un abono del 50% al retiro y el 50% restante contra la entrega de las cenizas. Ofrécelo con naturalidad ante dudas de pago; no lo publicites si no hace falta.
@@ -228,6 +229,37 @@ async function bloqueExpress(): Promise<string> {
     if (!exp) return ''
     const precio = fmtPrecio(parseInt(exp.precio, 10) || 0)
     return `SERVICIO EXPRESS (opcional — id ${exp.id}, tipo servicio): por +${precio} la entrega de las cenizas + certificado pasa a ${EXPRESS_DIAS} días HÁBILES en vez de ${ENTREGA_DIAS}. Ofrécelo SOLO SI AMERITA: cuando el cliente tiene apuro, necesita las cenizas para una fecha, o pregunta por una entrega más rápida. Si lo acepta, agrégalo con "agregar_adicional" usando ese id (tipo servicio). No lo sumes si no lo pidió; y aunque sea express, el plazo siempre se dice en días HÁBILES.`
+  } catch { return '' }
+}
+
+/**
+ * Datos bancarios de `empresa_config` (los mismos que van en los correos de cobro,
+ * ver lib/cobros), para que el bot pueda dárselos al cliente que los pide por
+ * WhatsApp en vez de escalar por algo que es un dato público del negocio.
+ * Devuelve '' si la cuenta no está cargada — sin bloque, el guion escala.
+ */
+async function bloqueTransferencia(): Promise<string> {
+  try {
+    const rows = await getSheetData('empresa_config')
+    const cfg = rows.find(r => r.id === '1') || rows[0]
+    if (!cfg) return ''
+    const titular = cfg.titular_cuenta || cfg.nombre || ''
+    const numero = cfg.numero_cuenta || ''
+    // Sin titular o sin número no hay dato útil que dictar: mejor escalar.
+    if (!titular || !numero) return ''
+    const lineas = [
+      `Titular: ${titular}`,
+      cfg.rut && `RUT: ${cfg.rut}`,
+      cfg.banco && `Banco: ${cfg.banco}`,
+      cfg.tipo_cuenta && `Tipo de cuenta: ${cfg.tipo_cuenta}`,
+      `N° de cuenta: ${numero}`,
+      cfg.correo && `Correo: ${cfg.correo}`,
+    ].filter(Boolean).join('\n')
+    return `DATOS PARA TRANSFERIR (son los oficiales; cópialos TAL CUAL, sin cambiar ni un dígito, y NUNCA inventes una cuenta):
+${lineas}
+
+Cuándo darlos: SIEMPRE que el cliente los PIDA ("¿me pasas los datos para transferir?", "¿a qué cuenta deposito?", "número de cuenta", "datos bancarios", "¿a nombre de quién?"), en ESE MISMO turno y aunque el pago habitual sea al momento del retiro — que quiera transferir antes es decisión suya, no un problema. Escríbelos uno por línea, sin negritas ni adornos, para que pueda copiarlos, y recuérdale que nos envíe el comprobante al correo de arriba o por este chat.
+Esto NO es motivo para escalar. Pero si el cliente pide el MONTO exacto a transferir y no lo tienes claro de la cotización, o dice que ya transfirió y necesita que le confirmemos la recepción, ahí sí escala al equipo.`
   } catch { return '' }
 }
 
@@ -738,12 +770,13 @@ export async function generarRespuesta(
   // —p.ej. un echo o evento de estado que gatilló el webhook—), no generamos nada:
   // evita el 400 "does not support assistant message prefill" y una respuesta espuria.
   if (base[base.length - 1].role !== 'user') return { mensaje: '', escalar: false, acciones: [] }
-  const [tarifas, recargos, productos, express, descuentos, cfg, imgsWa, bloqueos] = await Promise.all([
+  const [tarifas, recargos, productos, express, descuentos, transferencia, cfg, imgsWa, bloqueos] = await Promise.all([
     bloqueTarifas(),
     bloqueRecargos(),
     bloqueProductos(),
     bloqueExpress(),
     bloqueDescuentos(),
+    bloqueTransferencia(),
     getAgenteConfig().catch(() => null),
     listarImagenesWhatsapp().catch(() => [] as ImagenBanco[]),
     // Bloqueos de agenda vigentes (de hoy en adelante) → el bot no ofrece esas horas.
@@ -778,6 +811,8 @@ ${cfg.instrucciones.trim()}`,
   if (express) system.push({ type: 'text', text: express })
   // Descuentos/convenios vigentes (para responder "¿tienen descuentos?" sin inventar).
   if (descuentos) system.push({ type: 'text', text: descuentos })
+  // Datos bancarios, para dárselos al cliente que los pide.
+  if (transferencia) system.push({ type: 'text', text: transferencia })
   // Si el cliente ya tiene una ficha de retiro en proceso (borrador visible en
   // /clientes), evita que el agente registre otra.
   if (opts.ctx?.waId) {
