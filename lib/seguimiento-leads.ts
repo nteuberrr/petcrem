@@ -53,7 +53,11 @@ export async function enviarSeguimientosPendientes(opts: { maxEnvios?: number } 
     return { ...out, activo: false, motivo: 'SEGUIMIENTO_AUTO=false' }
   }
 
-  const MIN_HORAS = num(process.env.SEGUIMIENTO_MIN_HORAS, 2)      // debe llevar frío al menos esto (horas desde que se cortó)
+  // Minutos de silencio antes de escribir. Antes eran 2 horas (SEGUIMIENTO_MIN_HORAS,
+  // ya no se usa): a esa altura el lead solía estar cotizando con la competencia.
+  // Ojo: el barrido se dispara con el cron externo (cada ~15 min), así que el
+  // mensaje sale entre los 50 y los ~65 minutos.
+  const MIN_MINUTOS = num(process.env.SEGUIMIENTO_MIN_MINUTOS, 50)
   const MAX_HORAS = num(process.env.SEGUIMIENTO_MAX_HORAS, 22)     // ventana de 24h: margen bajo 24
   const HORA_MIN = num(process.env.SEGUIMIENTO_HORA_MIN, 10)       // no escribir antes de esta hora (Chile)
   const HORA_MAX = num(process.env.SEGUIMIENTO_HORA_MAX, 21)       // ni después de esta
@@ -100,8 +104,8 @@ export async function enviarSeguimientosPendientes(opts: { maxEnvios?: number } 
     // Debemos haber hablado nosotros al final (el cliente quedó en silencio).
     if (ultimo.direccion !== 'saliente') { salto('el cliente habló último'); continue }
 
-    const horasDesdeUltimo = (ahora - new Date(ultimo.ts).getTime()) / 3600000
-    if (horasDesdeUltimo < MIN_HORAS) { salto(`aún reciente (${horasDesdeUltimo.toFixed(1)}h)`); continue }
+    const minutosDesdeUltimo = (ahora - new Date(ultimo.ts).getTime()) / 60000
+    if (minutosDesdeUltimo < MIN_MINUTOS) { salto(`aún reciente (${Math.round(minutosDesdeUltimo)} min)`); continue }
 
     // Lead "tibio": tiene que haber recibido una cotización (algún saliente con precio).
     const cotizó = conTexto.some(m => m.direccion === 'saliente' && (m.cuerpo || '').includes('$'))
@@ -172,10 +176,10 @@ export async function enviarSeguimientosPendientes(opts: { maxEnvios?: number } 
 }
 
 /**
- * Barrido "oportunista" con throttle: pensado para colgarse del cron externo de
- * 10 min (el de publicar campañas) y así hacer el seguimiento cerca de las 2h de
- * enfriado, sin depender solo del cron diario. Reclama el slot (corre a lo más
- * cada ~8 min aunque lo disparen varias veces) y usa un cap chico por corrida.
+ * Barrido "oportunista" con throttle: se cuelga del cron externo (cada 15 min, el
+ * de publicar campañas) para escribir cerca de los 50 min de enfriado, sin depender
+ * solo del cron diario. Reclama el slot (corre a lo más cada ~8 min aunque lo
+ * disparen varias veces) y usa un cap chico por corrida.
  * Best-effort: nunca lanza.
  */
 export async function barridoOportunidadSeguimiento(): Promise<ResultadoSeguimiento | { activo: boolean; motivo: string }> {
