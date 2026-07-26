@@ -14,6 +14,8 @@ const API_VERSION = process.env.GEMINI_API_VERSION || 'v1beta'
 // Quality por defecto (pocos videos, prioridad calidad). Override con GEMINI_VIDEO_MODEL.
 // Opciones: veo-3.1-generate-preview (quality) | veo-3.1-fast-generate-preview | veo-3.1-lite-generate-preview
 export const VEO_MODEL = process.env.GEMINI_VIDEO_MODEL || 'veo-3.1-generate-preview'
+import { registrarUsoFijo, costoVideo } from './uso-ia'
+
 const BASE = 'https://generativelanguage.googleapis.com'
 
 export function isVeoConfigurado(): boolean {
@@ -62,6 +64,10 @@ export async function lanzarVideo(opts: LanzarVideoOpts): Promise<string> {
   const j = await r.json().catch(() => ({})) as { name?: string; error?: { message?: string } }
   if (!r.ok) throw new Error(j?.error?.message || `Veo HTTP ${r.status}`)
   if (!j?.name) throw new Error('Veo no devolvió el nombre de la operación')
+  // El video se cobra por SEGUNDO de clip y es, por lejos, lo más caro de la app:
+  // se registra al lanzar el job (una vez aceptado, se paga aunque no se descargue).
+  const segs = parseInt(String(body.parameters.durationSeconds), 10) || 8
+  await registrarUsoFijo('video', VEO_MODEL, costoVideo(VEO_MODEL, segs), `${segs}s ${body.parameters.resolution}`)
   return j.name
 }
 

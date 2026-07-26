@@ -14,6 +14,7 @@ import { lintCopy, extraerTextoHtml } from './marketing-lint'
 import { getContacto } from './email-layout'
 import { LINKS_PUBLICOS } from './links-publicos'
 import { esLogo } from './marca-logo'
+import { registrarUso } from './uso-ia'
 import { generarPieza, editarImagenPieza, regenerarImagenPieza, setImagenesPieza, ajustarPiezaEmail } from './marketing-pieza'
 import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
 import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, type SlotsPlantilla } from './marketing-plantillas'
@@ -909,14 +910,18 @@ export async function generarRespuestaMarketing(
     getMarketingParams(),
   ])
 
+  // Caché con TTL de 1 HORA (ver el mismo cambio en lib/agente-mensajes): el prefijo
+  // fijo acá es enorme (~20k tokens entre las guías de marca y las 39 herramientas) y
+  // corre en Opus. Una sesión de trabajo dura más de 5 minutos, así que con el TTL por
+  // defecto se re-escribía la caché varias veces por sesión; con 1 hora se escribe una.
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${REGLAS_INVIOLABLES}\n\n${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${PLANTILLAS_INFO}\n\n${MARCA_GRAFICO}\n\n${GUIA_SOCIAL}\n\n${GUIA_EMAIL}\n\n${GUIA_PERFIL}\n\n${tarifas}`, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: `${REGLAS_INVIOLABLES}\n\n${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${PLANTILLAS_INFO}\n\n${MARCA_GRAFICO}\n\n${GUIA_SOCIAL}\n\n${GUIA_EMAIL}\n\n${GUIA_PERFIL}\n\n${tarifas}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
   ]
   if (isGoogleAdsConfigurado()) {
     system.push({
       type: 'text',
       text: `GOOGLE ADS — tenés herramientas gads_* para leer y gestionar la cuenta real de Google Ads (además de Meta). REGLA DURA e inviolable: TODA tool de escritura (gads_pausar_campana, gads_activar_campana, gads_presupuesto, gads_keyword_estado, gads_negativa, gads_negativas_lote, gads_crear_lista_negativas_universal, gads_eliminar_lista_negativas, gads_crear_rsa, gads_agregar_callouts) exige confirmado=true, y SOLO podés pasarlo después de resumirle al dueño la acción EXACTA (qué campaña/keyword, monto anterior→nuevo, gasto reciente) y recibir un sí explícito en el chat. Nunca encadenes varias escrituras sin confirmar cada una (o el lote explícito que el dueño aprobó). En TODA escritura pasá también "motivo" (1 frase: por qué se hace) — queda en la BITÁCORA de decisiones junto con el detalle y quién aprobó; esa bitácora (consultar_bitacora) es tu memoria durable de cambios: revisala antes de comparar períodos o atribuir una mejora/caída a una causa. Para negativas de términos de búsqueda, seguí SIEMPRE el workflow de GUIA_GADS_TERMINOS (mostrar la tabla con veredicto BAD/KEEP/UNCERTAIN y esperar aprobación — para un lote aprobado de una vez usá gads_negativas_lote, no llames gads_negativa repetidas veces). gads_crear_lista_negativas_universal es de ALTO IMPACTO (afecta TODAS las campañas a la vez, no una sola) — avisale eso al dueño explícitamente antes de pedir el sí; revisá primero con gads_listas_negativas que no exista ya una lista similar. gads_crear_rsa SIEMPRE crea un anuncio PAUSADO nuevo, nunca reemplaza el que ya está corriendo — aclaráselo al dueño (revisa y activa él desde Google Ads o pidiéndotelo). gads_crear_campana (wizard de campaña nueva) crea TODO en PAUSA de una vez (presupuesto+campaña+geo+idioma+negativas+grupo+keyword+RSA) y es de ALTO IMPACTO: antes de pedir el sí, mostrale al dueño el resumen COMPLETO (nombre, presupuesto diario, keyword, URL final y los 15 titulares + 4 descripciones) y aclarale que queda en pausa hasta que él la active en Google Ads. Usá gads_auditar cuando te pidan un diagnóstico general. Cuando pidan buscar/investigar keywords NUEVAS (no las que ya están corriendo), usá gads_ideas_keywords con semillas del negocio real (servicios + comunas RM) — es de lectura, no requiere confirmación; mostrale al dueño una tabla con volumen de búsqueda, competencia y puja sugerida, y solo si te pide armar campaña con alguna encadená gads_crear_campana (con confirmación).\n\n${GUIA_GADS_ESTRUCTURA}\n\n${GUIA_GADS_BIDDING}\n\n${GUIA_GADS_RSA}\n\n${GUIA_GADS_ASSETS}\n\n${GUIA_GADS_NEGATIVAS}\n\n${GUIA_GADS_TERMINOS}\n\n${GUIA_GADS_QS}`,
-      cache_control: { type: 'ephemeral' },
+      cache_control: { type: 'ephemeral', ttl: '1h' },
     })
   }
   const ajustes = [
@@ -961,6 +966,7 @@ export async function generarRespuestaMarketing(
 
   for (let iter = 0; iter < 8; iter++) {
     const res = await getClient().messages.create({ model: MODEL, max_tokens: 2200, system, messages: convo, tools })
+    await registrarUso('marketing-chat', MODEL, res.usage)
     const texto = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
     if (texto) textoFinal = texto
     if (res.stop_reason !== 'tool_use') break

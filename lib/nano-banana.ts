@@ -16,6 +16,7 @@
  */
 
 import { ESTILO_MARCA_EN, ESTILO_GRAFICO_EN, PROHIBIDOS_EN } from './marca-visual'
+import { registrarUsoFijo, costoImagen } from './uso-ia'
 
 const API_VERSION = process.env.GEMINI_API_VERSION || 'v1beta'
 // "Nano Banana" (Gemini 2.5 Flash Image): ~3x más barato por imagen que la variante Pro.
@@ -195,6 +196,10 @@ export async function generarImagen(opts: GenerarImagenOpts): Promise<ImagenGene
       const data = inline?.data
       if (data) {
         const mime = (p.inlineData?.mimeType || p.inline_data?.mime_type || 'image/png').toLowerCase()
+        // Registro de consumo: Gemini cobra por IMAGEN generada (no por token).
+        // Se cuenta acá, en el único punto donde una imagen sale de verdad — así
+        // los descartes del QA (que igual se pagan) también quedan contados.
+        await registrarUsoFijo('imagen', MODEL, costoImagen(MODEL), editar ? 'edición' : (conTexto ? 'gráfico' : 'foto'))
         return { buffer: Buffer.from(data, 'base64'), mime, modelo: MODEL }
       }
     }

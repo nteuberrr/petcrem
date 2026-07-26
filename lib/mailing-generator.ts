@@ -7,6 +7,7 @@ import { GUIA_EMAIL } from './marketing-guia'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { LINKS_PUBLICOS } from './links-publicos'
 import { getTarifasContexto } from './tarifas-html'
+import { registrarUso } from './uso-ia'
 
 /**
  * Generador IA de campañas de mailing (B2B a la base de veterinarios).
@@ -343,6 +344,7 @@ export async function generarCampana(opts: GenerarOpts): Promise<CampanaGenerada
     messages: [{ role: 'user', content: construirInstruccion(opts) }],
   })
 
+  await registrarUso('mailing-generador', MODEL, res.usage, 'campaña')
   const toolUse = res.content.find(
     (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'generar_campana'
   )
@@ -511,6 +513,7 @@ async function revisarYPulir(
     tool_choice: { type: 'tool', name: 'entregar_revision' },
     messages: [{ role: 'user', content }],
   })
+  await registrarUso('mailing-generador', MODEL, res.usage, 'revisión')
   const tu = res.content.find(
     (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'entregar_revision'
   )

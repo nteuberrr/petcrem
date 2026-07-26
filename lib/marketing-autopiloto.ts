@@ -4,6 +4,7 @@ import { listarCalendario, crearItems, actualizarItem, type NuevoItem, type Item
 import { generarPieza } from './marketing-pieza'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { avisarAdminsWhatsapp, isWhatsappConfigured } from './whatsapp'
+import { registrarUso } from './uso-ia'
 
 /**
  * AUTOPILOTO DE MARKETING — Etapa 1 del roadmap de autonomía.
@@ -117,6 +118,7 @@ Proponé EXACTAMENTE: ${deficit.instagram} post(s) de Instagram, ${deficit.faceb
     tool_choice: { type: 'tool', name: 'proponer_plan' },
     messages: [{ role: 'user', content: instruccion }],
   })
+  await registrarUso('marketing-autopiloto', MODEL, res.usage, `semana ${ventana.lunes}`)
   const tu = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'proponer_plan')
   const raw = (tu?.input as { items?: Array<Record<string, string>> })?.items
   if (!Array.isArray(raw)) return []

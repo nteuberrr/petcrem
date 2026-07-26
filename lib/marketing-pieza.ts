@@ -15,6 +15,7 @@ import { obtenerItem, actualizarItem, listarCalendario, type ItemCalendario } fr
 import { getNextId, appendRow, getSheetData, updateById } from './datastore'
 import { uploadToR2 } from './cloudflare-r2'
 import { todayISO } from './dates'
+import { registrarUso } from './uso-ia'
 
 /** Mapea objetivo/audiencia del ítem al segmento del generador de mailing (B2B vets). */
 function mapCategoriaEmail(objetivo: string): string {
@@ -368,7 +369,9 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
     { type: 'text', text: PLANTILLAS_INFO },
     { type: 'text', text: GUIA_SOCIAL },
     { type: 'text', text: DIFERENCIADORES },
-    { type: 'text', text: MODALIDADES_SERVICIOS },
+    // Hasta acá el prefijo es 100% estático → cacheado 1 hora. Lo aprovechan los
+    // reintentos del linter (hasta 3 por pieza) y las piezas seguidas de un lote.
+    { type: 'text', text: MODALIDADES_SERVICIOS, cache_control: { type: 'ephemeral', ttl: '1h' } },
     { type: 'text', text: bancoBloque(banco, memoria.fotosUsadas) },
     ...(bloqueLogosPieza(banco) ? [{ type: 'text' as const, text: bloqueLogosPieza(banco) }] : []),
     ...(memoria.bloque ? [{ type: 'text' as const, text: memoria.bloque }] : []),
@@ -392,6 +395,7 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
       tool_choice: { type: 'tool', name: 'entregar_post' },
       messages: convo,
     })
+    await registrarUso('marketing-pieza', MODEL, res.usage, `pieza ${item.id}`)
     const tu = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'entregar_post')
     if (!tu) throw new Error('El modelo no devolvió el post')
     out = tu.input as SalidaPost
@@ -843,6 +847,7 @@ async function editarPlacaHtml(html: string, instruccion: string, opciones?: { p
       : '- Si ves marcadores como __ASSET_0__ (imágenes ya incrustadas, p. ej. el logo), copialos TAL CUAL: no los borres, no los muevas de su <img>, no los reescribas.'}\n- Si el cambio pide AGREGAR o cambiar una FOTO: reestructurá el layout para que la foto sea protagonista (full-bleed, panel lateral o mascota asomándose, según el menú de layouts), poné un <img src="FOTO:slot" .../> dimensionado con CSS donde va, y devolvé esa foto en "fotos" con un prompt fotorealista on-brand. NO inventes <img> con URLs http: las fotos nuevas SIEMPRE van como FOTO:slot.\n- Conservá el copy/los datos salvo que el cambio pida lo contrario.\n\n${MARCA_GRAFICO}`,
     messages: [{ role: 'user', content: `HTML actual de la placa:\n\`\`\`html\n${htmlSeguro}\n\`\`\`\n\nCAMBIO PEDIDO (solo esto; el resto queda igual): ${instruccion}` }],
   })
+  await registrarUso('marketing-pieza', MODEL, res.usage, 'editar placa')
   const call = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'entregar_placa')
   const input = (call?.input || {}) as { html?: string; fotos?: { slot?: string; prompt?: string; recortar?: boolean }[] }
   // Restaurar los assets enmascarados (intactos). Si el modelo borró algún marcador, el
@@ -917,6 +922,7 @@ ${GUIA_QA}`
       tools: [TOOL_QA], tool_choice: { type: 'tool', name: 'reportar_qa' },
       messages: [{ role: 'user', content: [...imgs, { type: 'text', text: `Pieza: "${(item.titulo || item.idea || '').slice(0, 120)}". Revisá las ${imgs.length} imágenes en orden.` }] }],
     })
+    await registrarUso('marketing-pieza', MODEL, res.usage, `QA visión (${imgs.length} img)`)
     const tu = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'reportar_qa')
     const out = (tu?.input as { problemas?: QAProblema[] })?.problemas
     return Array.isArray(out) ? out.filter(p => p && p.detalle) : []

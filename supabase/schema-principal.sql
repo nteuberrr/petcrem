@@ -1106,3 +1106,25 @@ create table if not exists web_vitals (
 );
 create index if not exists idx_web_vitals_fecha on web_vitals(fecha);
 alter table web_vitals enable row level security;
+
+-- Consumo de IA: una fila por llamada a un modelo (Claude) o generación de
+-- imagen/video (Gemini). La escribe lib/uso-ia (best-effort) desde cada módulo
+-- que consume IA; la lee Configuración Avanzada → Consumo IA. El costo es una
+-- ESTIMACIÓN con la tabla de precios de lib/uso-ia, no la factura del proveedor.
+-- Acceso directo por getSupabase() (no datastore: es un log, no una entidad).
+create table if not exists uso_ia (
+  id              bigint generated always as identity primary key,
+  created_at      timestamptz not null default now(),
+  fecha           text not null default '',   -- YYYY-MM-DD (Chile)
+  ts              text not null default '',   -- ISO completo
+  modulo          text not null default '',   -- bot-inbox | marketing-chat | imagen | ...
+  modelo          text not null default '',
+  entrada         bigint not null default 0,  -- input tokens NO cacheados
+  salida          bigint not null default 0,
+  cache_lectura   bigint not null default 0,
+  cache_escritura bigint not null default 0,
+  costo_usd       double precision not null default 0,
+  detalle         text not null default ''
+);
+create index if not exists idx_uso_ia_fecha on uso_ia(fecha);
+alter table uso_ia enable row level security;

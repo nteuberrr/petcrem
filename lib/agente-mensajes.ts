@@ -9,6 +9,7 @@ import { comunasDeServicio } from './adicionales-auto'
 import { COMUNAS_NO_CUBIERTAS } from './cobertura'
 import { esFeriado, nombreFeriado } from './feriados'
 import { ahoraChile, listarBloqueos, rangosDelDia, type BloqueoAgenda } from './agenda'
+import { registrarUso } from './uso-ia'
 
 /**
  * Agente IA del inbox de Mensajes: redacta la respuesta de atención por
@@ -746,8 +747,15 @@ export async function generarRespuesta(
   ])
 
   // Bloque base + tarifas + recargos: cacheado (estable). Ajustes del operador/calibración: sin caché (cambian seguido).
+  //
+  // TTL de 1 HORA (no los 5 min por defecto): el prefijo cacheado (tools + guion
+  // base + tarifas) son ~13k tokens y los mensajes llegan repartidos a lo largo
+  // del día (~60-90 diarios), así que con 5 minutos la caché casi siempre vencía
+  // y se pagaba la ESCRITURA completa (1,25×) en cada respuesta. Con 1 hora se
+  // escribe una vez por hora activa (2×) y el resto son lecturas a 1/10 del
+  // precio: baja ~60% el costo del bot, que es la línea más grande de la cuenta.
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${BASE}\n\n${DIFERENCIADORES}\n\n${tarifas}${recargos ? `\n\n${recargos}` : ''}`, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: `${BASE}\n\n${DIFERENCIADORES}\n\n${tarifas}${recargos ? `\n\n${recargos}` : ''}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
   ]
   const ajustes = [
     cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO — trátalos como la VERDAD ACTUAL del negocio, no como una nota aparte.
@@ -812,6 +820,7 @@ ${cfg.instrucciones.trim()}`,
   // Loop agéntico: el modelo puede encadenar herramienta → resultado → texto.
   for (let iter = 0; iter < 5; iter++) {
     const res = await getClient().messages.create({ model: MODEL, max_tokens: 700, system, messages: convo, tools })
+    await registrarUso('bot-inbox', MODEL, res.usage, opts.ctx?.canal || '')
 
     const texto = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
     if (texto && texto !== textos[textos.length - 1]) textos.push(texto)
@@ -919,6 +928,7 @@ export async function redactarRelayCliente(args: { notaEquipo: string; mascota?:
       content: `${ctx ? ctx + '\n' : ''}El cliente preguntó cuánto falta para que pasen a retirar a su mascota. El equipo respondió: «${args.notaEquipo}». Redacta el mensaje para el cliente.`,
     }],
   })
+  await registrarUso('bot-relay', MODEL, res.usage)
   return res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
 }
 
@@ -955,6 +965,7 @@ export async function redactarSeguimiento(
       { role: 'user', content: `[Nota interna, no la respondas literal] ${ctx ? ctx + ' ' : ''}El cliente lleva un rato sin responder y no cerró. Redacta UN mensaje breve de seguimiento para retomar el contacto, según dónde quedó la conversación.` },
     ],
   })
+  await registrarUso('bot-seguimiento', MODEL, res.usage)
   return limpiarTexto(res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim())
 }
 
@@ -975,5 +986,6 @@ export async function calibrarDesdeTranscripts(transcripts: string[]): Promise<s
     system: SYSTEM_CALIBRACION,
     messages: [{ role: 'user', content: `Conversaciones reales a analizar (${transcripts.length}):\n\n${corpus}` }],
   })
+  await registrarUso('bot-calibracion', MODEL, res.usage, `${transcripts.length} conversaciones`)
   return res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
 }
