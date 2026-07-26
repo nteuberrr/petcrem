@@ -237,6 +237,77 @@ export interface ValorCotizacionDesglose {
 type CotValor = { peso?: string; precio_snapshot?: string; fecha_servicio?: string; hora_servicio?: string }
 
 /**
+ * Config de cobro leída UNA vez, para desglosar muchas cotizaciones sin releer
+ * las hojas por cada una (lo usa el listado de /servicios).
+ */
+export interface ConfigCobroEutanasia {
+  fijo: number
+  recargoMonto: number
+  consulta: ConsultaEutanasia
+  /** Tramos de `precios_eutanasia`, para las cotizaciones legacy sin snapshot. */
+  tramos: TramoEut[]
+}
+
+export async function getConfigCobroEutanasia(): Promise<ConfigCobroEutanasia> {
+  const [fijo, recargoMonto, consulta, tramos] = await Promise.all([
+    getFijoEutanasia(),
+    getRecargoFueraHorario(),
+    getConsultaEutanasia(),
+    getSheetData(SHEET_PRECIOS).catch(() => []) as Promise<unknown> as Promise<TramoEut[]>,
+  ])
+  return { fijo, recargoMonto, consulta, tramos }
+}
+
+export interface CobroCliente {
+  /** 'eutanasia' = se realiza (o se espera realizar); 'consulta' = evaluada y no realizada. */
+  concepto: 'eutanasia' | 'consulta' | 'ninguno'
+  /** Valor del servicio, sin el recargo. */
+  base: number
+  /** Recargo fuera de horario (0 si el servicio cae dentro de horario). */
+  recargo: number
+  /** Total a cobrarle al cliente. */
+  total: number
+}
+
+type CotCobro = CotValor & { estado?: string; consulta_vet_snapshot?: string }
+
+/**
+ * Lo que se le COBRA AL CLIENTE por una cotización, con la config ya leída
+ * (versión síncrona de `desgloseValorCotizacion`, para listados).
+ *
+ *   realizada / en curso → precio del vet (snapshot o tramo) + fijo
+ *   no realizada         → consulta (lo del vet + el spread de Alma)
+ *   cancelada            → nada
+ *
+ * El recargo fuera de horario se suma en ambos casos (aplica se realice o no) y
+ * se cobra SIEMPRE fuera de la boleta, que cubre solo la cremación.
+ */
+export function cobroClienteCon(cot: CotCobro, cfg: ConfigCobroEutanasia): CobroCliente {
+  const estado = String(cot.estado || '')
+  if (estado === 'cancelada') return { concepto: 'ninguno', base: 0, recargo: 0, total: 0 }
+
+  let concepto: CobroCliente['concepto'] = 'eutanasia'
+  let base = 0
+  if (estado === 'no_realizada') {
+    concepto = 'consulta'
+    const vet = num(cot.consulta_vet_snapshot)
+    base = vet > 0 ? vet + cfg.consulta.alma : cfg.consulta.total
+  } else {
+    const snap = num(cot.precio_snapshot)
+    const precioVet = snap > 0 ? snap : (() => {
+      const peso = num(cot.peso)
+      if (!(peso > 0)) return 0
+      const tramo = findTramo(cfg.tramos, peso)
+      return tramo ? num(tramo.precio) : 0
+    })()
+    base = precioVet > 0 ? precioVet + cfg.fijo : 0
+  }
+  if (base <= 0) return { concepto: 'ninguno', base: 0, recargo: 0, total: 0 }
+  const recargo = recargoEutanasiaPara(cot.fecha_servicio, cot.hora_servicio, cfg.recargoMonto)
+  return { concepto, base, recargo, total: base + recargo }
+}
+
+/**
  * Desglose del valor a COBRAR al cliente por una cotización de eutanasia: la base
  * (precio del servicio) y el recargo fuera de horario aparte. La base usa el
  * `precio_snapshot` congelado (lo pactado con el vet) + el fijo vigente; si la

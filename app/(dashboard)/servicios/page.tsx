@@ -35,6 +35,11 @@ type Cotizacion = {
   vet_email_asignado: string
   precio_snapshot: string
   consulta_vet_snapshot?: string
+  /** Cobro AL CLIENTE, calculado en la API (el snapshot es solo el pago al vet). */
+  cobro_concepto?: string
+  cobro_base?: string
+  cobro_recargo?: string
+  cobro_total?: string
   estado_pago?: string
   fecha_pago?: string
   fecha_realizacion?: string
@@ -1336,6 +1341,33 @@ export default function ServiciosEutanasiasPage() {
                 </a>
               } />
               <FichaRow label="Pago al vet" value={<span className="font-semibold">{fmtPrecio(parseInt(detalleCoti.precio_snapshot, 10) || 0)}</span>} />
+              {/* Los dos lados del servicio: lo que se le paga al vet y lo que se le
+                  cobra al cliente (precio del vet + cargo fijo + recargo si aplica). */}
+              {(() => {
+                const total = parseInt(detalleCoti.cobro_total || '0', 10) || 0
+                if (total <= 0) return null
+                const base = parseInt(detalleCoti.cobro_base || '0', 10) || 0
+                const recargo = parseInt(detalleCoti.cobro_recargo || '0', 10) || 0
+                const esConsulta = detalleCoti.cobro_concepto === 'consulta'
+                return (
+                  <FichaRow
+                    label={esConsulta ? 'Cobro al cliente (consulta)' : 'Cobro al cliente'}
+                    value={
+                      <span className="inline-flex flex-col items-end">
+                        <span className="font-semibold text-brand">{fmtPrecio(total)}</span>
+                        {recargo > 0 && (
+                          <span className="text-[11px] text-gray-500">
+                            {fmtPrecio(base)} + {fmtPrecio(recargo)} fuera de horario
+                          </span>
+                        )}
+                        {esConsulta && (
+                          <span className="text-[11px] text-gray-500">no se realizó: se cobra la consulta</span>
+                        )}
+                      </span>
+                    }
+                  />
+                )
+              })()}
               {detalleCoti.notas && <FichaRow label="Notas" value={detalleCoti.notas} />}
             </FichaBloque>
 
@@ -1777,6 +1809,11 @@ function CotizacionCard({
                 Pago vet: <strong>{fmtPrecio(pagoVet)}</strong>
               </span>
             </div>
+            {(parseInt(c.cobro_total || '0', 10) || 0) > 0 && (
+              <div className="text-[11px] text-gray-700 text-right">
+                Cobro cliente: <strong className="text-brand">{fmtPrecio(parseInt(c.cobro_total || '0', 10) || 0)}</strong>
+              </div>
+            )}
             {c.estado_pago === 'pago_confirmado' ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-1 rounded bg-emerald-100 text-emerald-700">
                 ✓ Pago confirmado

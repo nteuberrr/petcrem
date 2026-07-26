@@ -5,7 +5,7 @@ import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { capitalizarNombre } from '@/lib/nombres'
 import { sesionConAcceso } from '@/lib/permisos-server'
 import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarClienteCotizacionEutanasia } from '@/lib/eutanasia-mailer'
-import { getConsultaEutanasia, getFijoEutanasia, getRecargoFueraHorario, recargoEutanasiaPara, cremacionOpcionesParaCorreo } from '@/lib/eutanasia-precios'
+import { getConsultaEutanasia, getFijoEutanasia, getRecargoFueraHorario, recargoEutanasiaPara, cremacionOpcionesParaCorreo, getConfigCobroEutanasia, cobroClienteCon } from '@/lib/eutanasia-precios'
 import { formatDate } from '@/lib/dates'
 
 const SHEET = 'cotizaciones_eutanasia'
@@ -50,8 +50,25 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url)
     const estado = url.searchParams.get('estado')
     const rows = await getSheetData(SHEET)
-    const filtradas = estado ? rows.filter(r => r.estado === estado) : rows
-    filtradas.sort((a, b) => (b.fecha_creacion || '').localeCompare(a.fecha_creacion || ''))
+    const filtradas0 = estado ? rows.filter(r => r.estado === estado) : rows
+    filtradas0.sort((a, b) => (b.fecha_creacion || '').localeCompare(a.fecha_creacion || ''))
+
+    // Cobro al CLIENTE (el snapshot guardado es solo el pago al vet): se calcula
+    // acá, con la config leída una vez, para que la ficha muestre los dos lados
+    // del negocio sin que el front duplique la fórmula.
+    const cfgCobro = await getConfigCobroEutanasia().catch(() => null)
+    const filtradas: Record<string, string>[] = cfgCobro
+      ? filtradas0.map(r => {
+        const c = cobroClienteCon(r, cfgCobro)
+        return {
+          ...r,
+          cobro_concepto: String(c.concepto),
+          cobro_base: String(c.base),
+          cobro_recargo: String(c.recargo),
+          cobro_total: String(c.total),
+        }
+      })
+      : filtradas0
 
     // Alerta derivada: una cotización 'no_realizada' cuya ficha de cremación
     // asociada NO se eliminó (porque el equipo ya la había ingresado) queda
