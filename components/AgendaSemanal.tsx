@@ -2,6 +2,7 @@
 import { Fragment, useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/Modal'
+import NuevaSolicitudModal from '@/components/NuevaSolicitudModal'
 import { useAccionUnica } from '@/lib/use-accion-unica'
 
 type Item = {
@@ -245,6 +246,10 @@ export default function AgendaSemanal() {
     } catch { setErrorEdit('Error de red. Intenta de nuevo.') }
   }
 
+  // Alta manual de una solicitud de retiro (antes vivía en /clientes como
+  // "Agendamiento manual"): se decide acá, mirando los huecos de la semana.
+  const [modalSolicitud, setModalSolicitud] = useState(false)
+
   // ── Bloqueo manual de la agenda ────────────────────────────────────────────
   // Rango fecha/hora en el que el bot NO puede agendar (mantención, viaje del
   // chofer, un día cerrado…). Se guarda en agenda_bloqueos y lo respeta
@@ -343,6 +348,10 @@ export default function AgendaSemanal() {
           <span className="text-xs text-gray-500 hidden sm:inline">· {rango}</span>
         </div>
         <div className="flex items-center gap-1.5">
+          <button onClick={() => setModalSolicitud(true)} title="Registrar a mano un retiro: crea la ficha «Por ingresar» y le avisa al tutor por WhatsApp"
+            className="px-3 h-8 rounded-lg bg-brand text-white text-xs font-semibold hover:bg-brand-dark shadow-md transition-colors mr-1">
+            + Nueva solicitud
+          </button>
           <button onClick={() => abrirModalBloqueo()} title="Cerrar un rango de fecha/hora para que el bot no agende ahí"
             className="px-3 h-8 rounded-lg border border-red-300 bg-red-50 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors mr-1">
             Bloquear agenda
@@ -490,6 +499,14 @@ export default function AgendaSemanal() {
       {cargado && total === 0 && (
         <p className="text-center text-xs text-gray-400 mt-3">Sin agendamientos esta semana.</p>
       )}
+
+      {/* Alta manual de una solicitud de retiro. Al crearla, refrescamos la
+          agenda para que el nuevo bloque aparezca al instante. */}
+      <NuevaSolicitudModal
+        open={modalSolicitud}
+        onClose={() => setModalSolicitud(false)}
+        onCreada={cargar}
+      />
 
       {/* Edición rápida de la hora del retiro (sin abrir la ficha). */}
       <Modal open={!!editando} onClose={() => setEditando(null)} title="Ajustar hora del retiro">
