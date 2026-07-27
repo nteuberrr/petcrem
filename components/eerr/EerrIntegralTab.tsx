@@ -173,6 +173,7 @@ interface Mov { fecha: string; fuente: string; descripcion: string; proveedor: s
 const FUENTE_CLS: Record<string, string> = {
   'Factura SII': 'bg-brand/10 text-brand', 'Manual': 'bg-amber-100 text-amber-700',
   'Rendición': 'bg-sky-100 text-sky-700', 'Ficha': 'bg-emerald-100 text-emerald-700',
+  'Eutanasia': 'bg-violet-100 text-violet-700',
 }
 
 function MovimientosPanel({ drill, onClose }: { drill: Drill; onClose: () => void }) {
@@ -228,7 +229,7 @@ function MovimientosPanel({ drill, onClose }: { drill: Drill; onClose: () => voi
             <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar detalle, proveedor, doc…" className="border border-gray-300 rounded px-2 py-1.5 text-sm w-52" />
             <select value={fuente} onChange={e => setFuente(e.target.value)} className="border border-gray-300 rounded px-2 py-1.5 text-sm">
               <option value="">Todas las fuentes</option>
-              <option>Factura SII</option><option>Manual</option><option>Rendición</option><option>Ficha</option>
+              <option>Factura SII</option><option>Manual</option><option>Rendición</option><option>Ficha</option><option>Eutanasia</option>
             </select>
             <label className="flex items-center gap-1.5 text-sm text-gray-600 ml-auto cursor-pointer">
               <input type="checkbox" checked={todos} onChange={e => setTodos(e.target.checked)} /> Todos los períodos

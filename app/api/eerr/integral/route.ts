@@ -6,6 +6,7 @@ import { getSheetData } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
+import { getConfigCobroEutanasia, margenEutanasiaCon } from '@/lib/eutanasia-precios'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
     const N = periodos.length
     const zeros = () => new Array(N).fill(0)
 
-    const [clientes, partidas, subgrupos, gastosSii, gastosMan, rendiciones, pg, pc, pe, vets] = await Promise.all([
+    const [clientes, partidas, subgrupos, gastosSii, gastosMan, rendiciones, pg, pc, pe, vets, eutanasias, cfgEut] = await Promise.all([
       getSheetData('clientes'),
       getSheetData('eerr_partidas'),
       getSheetData('eerr_subgrupos'),
@@ -88,6 +89,8 @@ export async function GET(req: NextRequest) {
       getSheetData('precios_convenio'),
       getSheetData('precios_especiales'),
       getSheetData('veterinarios'),
+      getSheetData('cotizaciones_eutanasia'),
+      getConfigCobroEutanasia(),
     ])
 
     const preciosG = pg as unknown as Tramo[]
@@ -137,7 +140,20 @@ export async function GET(req: NextRequest) {
       else inGeneral[p] += servShare / IVA
       inAdic[p] += adicShare / IVA
     }
-    const ingresoPorClave: Record<string, number[]> = { general: inGeneral, convenio: inConvenio, adicionales: inAdic, eutanasias: zeros() }
+    // ── EUTANASIAS a domicilio: el ingreso es el MARGEN (cobrado al cliente −
+    // pagado al veterinario), porque el servicio lo presta el vet y su pago se
+    // traspasa completo. Se imputa al período de la FECHA DEL SERVICIO (no la de
+    // confirmación del vet, que llega tarde) y va BRUTO: se cobra fuera de la
+    // boleta, así que no lleva la división por IVA de la cremación.
+    const inEutan = zeros()
+    for (const cot of eutanasias as Cli[]) {
+      const m = margenEutanasiaCon(cot, cfgEut)
+      if (!m) continue
+      const p = periodIdx(m.fecha)
+      if (p === undefined) continue
+      inEutan[p] += m.margen
+    }
+    const ingresoPorClave: Record<string, number[]> = { general: inGeneral, convenio: inConvenio, adicionales: inAdic, eutanasias: inEutan }
 
     // ── COSTO / GASTO / IMPUESTO: gastos asignados a cada partida, por período.
     const porPartida = new Map<string, number[]>()

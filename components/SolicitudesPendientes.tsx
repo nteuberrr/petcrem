@@ -43,6 +43,9 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
   const router = useRouter()
   // Abre la ficha borrador del cliente (si la solicitud ya la tiene).
   const abrirFicha = (clienteId?: string) => { if (clienteId) router.push(`/clientes/${clienteId}`) }
+  // Abre la ficha de la EUTANASIA, donde se puede confirmar si se realizó o no
+  // sin depender de que el veterinario lo marque. La ven todos los roles.
+  const abrirEutanasia = (e: Eutanasia) => router.push(`/eutanasias/${encodeURIComponent(e.id)}`)
   const [pendientes, setPendientes] = useState<Solicitud[]>([])
   const [confirmadas, setConfirmadas] = useState<Solicitud[]>([])
   const [eutanasias, setEutanasias] = useState<Eutanasia[]>([])
@@ -208,16 +211,23 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
               const cuandoEut = `${e.fecha_servicio ? fmtFecha(e.fecha_servicio) : '—'}${e.hora_servicio ? ` · ${e.hora_servicio}` : ''}`
               return (
                 <div key={e.id}
-                  onClick={() => abrirFicha(e.cliente_id)}
-                  role={e.cliente_id ? 'button' : undefined}
-                  title={e.cliente_id ? 'Abrir ficha del cliente' : undefined}
-                  className={`rounded-xl border-2 ${cls} shadow-sm p-3 flex flex-col gap-1 min-h-[150px] ${e.cliente_id ? 'cursor-pointer hover:brightness-95 transition-all' : ''}`}>
+                  onClick={() => abrirEutanasia(e)}
+                  role="button"
+                  title="Abrir la ficha de la eutanasia (confirmar si se realizó, ver vet y datos)"
+                  className={`rounded-xl border-2 ${cls} shadow-sm p-3 flex flex-col gap-1 min-h-[150px] cursor-pointer hover:brightness-95 transition-all`}>
                   <div className="flex items-center justify-between gap-1">{badge}</div>
                   <p className="font-bold text-gray-900 text-sm truncate mt-1">{e.mascota_nombre || '—'}</p>
                   <p className="text-xs text-gray-700 truncate">👤 {e.cliente_nombre || '—'}</p>
                   {e.vet_nombre && <p className="text-[11px] text-gray-600 truncate">🩺 {e.vet_nombre}</p>}
                   <p className="text-[11px] text-gray-600 leading-tight mt-auto">🗓 {cuandoEut}{e.hora_retiro_crematorio ? ` · retiro ${e.hora_retiro_crematorio}` : ''}</p>
                   <p className="text-[11px] text-gray-600 leading-tight truncate">📍 {[e.direccion, e.comuna].filter(Boolean).join(', ') || '—'}</p>
+                  {e.cliente_id && (
+                    <button
+                      onClick={ev => { ev.stopPropagation(); abrirFicha(e.cliente_id) }}
+                      className="mt-1 self-start text-[11px] font-semibold text-brand-soft hover:underline">
+                      Ver ficha de cremación →
+                    </button>
+                  )}
                 </div>
               )
             })}

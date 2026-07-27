@@ -1216,7 +1216,18 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       {/* Eutanasia a domicilio asociada (solo lectura) */}
       {cliente.eutanasia && (
         <div className="bg-white rounded-xl shadow-md border-2 border-amber-300 p-6 mb-6">
-          <h2 className="text-base font-bold text-gray-900 mb-1">🩺 Eutanasia a domicilio</h2>
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <h2 className="text-base font-bold text-gray-900">🩺 Eutanasia a domicilio</h2>
+            {cliente.eutanasia.id && (
+              <button
+                type="button"
+                onClick={() => router.push(`/eutanasias/${encodeURIComponent(cliente.eutanasia!.id)}`)}
+                title="Abrir la ficha de la eutanasia (confirmar si se realizó, ver vet y pago)"
+                className="shrink-0 text-xs font-semibold text-brand-soft hover:underline">
+                Abrir ficha de la eutanasia →
+              </button>
+            )}
+          </div>
           <p className="text-xs text-gray-500 mb-4">Esta ficha viene de una eutanasia a domicilio. El valor de la eutanasia se cobra aparte y <strong>NO se incluye en la boleta</strong> (la boleta es solo por la cremación).</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <InfoField label="Hora Vet (visita)" value={cliente.eutanasia.hora_servicio || '—'} />

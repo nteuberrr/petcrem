@@ -307,6 +307,47 @@ export function cobroClienteCon(cot: CotCobro, cfg: ConfigCobroEutanasia): Cobro
   return { concepto, base, recargo, total: base + recargo }
 }
 
+export interface MargenEutanasia {
+  /** Total cobrado al cliente (eutanasia o consulta, con recargo si aplica). */
+  cobro: number
+  /** Lo que se le paga al veterinario (snapshot congelado). */
+  pagoVet: number
+  /** Lo que le queda a Alma = cobro − pago al vet. Es el INGRESO del EERR. */
+  margen: number
+  concepto: CobroCliente['concepto']
+  /** Fecha con la que se imputa al período: la del SERVICIO (no la de cierre — el
+   *  vet a veces confirma días después y el ingreso se iría de mes). */
+  fecha: string
+}
+
+/**
+ * MARGEN de una eutanasia = lo cobrado al cliente − lo pagado al veterinario.
+ * Es lo que entra al Estado de Resultados en la cuenta "Eutanasias": el servicio
+ * lo presta el vet (pasamos su pago completo), así que el ingreso real de Alma es
+ * el diferencial (el cargo fijo + el recargo fuera de horario, o el spread de la
+ * consulta cuando no se realiza).
+ *
+ * Solo cuentan las cotizaciones CERRADAS (realizada / no realizada): las abiertas
+ * todavía no son un ingreso y las canceladas no dejan nada. Va SIN IVA-ectomía:
+ * la eutanasia se cobra fuera de la boleta (ver /api/eerr/balance).
+ */
+export function margenEutanasiaCon(cot: CotCobro & { fecha_realizacion?: string }, cfg: ConfigCobroEutanasia): MargenEutanasia | null {
+  const estado = String(cot.estado || '')
+  if (estado !== 'realizada' && estado !== 'no_realizada') return null
+  const cobroCliente = cobroClienteCon(cot, cfg)
+  if (cobroCliente.total <= 0) return null
+  const pagoVet = estado === 'realizada'
+    ? num(cot.precio_snapshot)
+    : (num(cot.consulta_vet_snapshot) || cfg.consulta.vet)
+  return {
+    cobro: cobroCliente.total,
+    pagoVet,
+    margen: cobroCliente.total - pagoVet,
+    concepto: cobroCliente.concepto,
+    fecha: String(cot.fecha_servicio || '') || (cot.fecha_realizacion || '').slice(0, 10),
+  }
+}
+
 /**
  * Desglose del valor a COBRAR al cliente por una cotización de eutanasia: la base
  * (precio del servicio) y el recargo fuera de horario aparte. La base usa el

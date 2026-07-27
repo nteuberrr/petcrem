@@ -153,6 +153,7 @@ function detalle(it: Item): string {
       : it.tipo === 'eutanasia' && it.esperandoHoraVet
       ? `⏳ Esperando que el veterinario informe la hora de retiro (se muestra en la hora de la eutanasia${it.horaEutanasia ? ` ${it.horaEutanasia}` : ''})`
       : it.estado === 'pendiente' ? 'Pendiente de confirmación' : 'Confirmado',
+    it.tipo === 'eutanasia' ? '→ Clic: abre la ficha de la eutanasia' : null,
   ].filter(Boolean)
   return partes.join('\n')
 }
@@ -208,7 +209,8 @@ export default function AgendaSemanal() {
 
   // Edición rápida de la hora directamente desde la agenda (sin abrir la ficha,
   // para no arriesgar un "Registrar ficha" accidental que avise al tutor). Solo
-  // para retiros; las eutanasias las coordina el veterinario → abren la ficha.
+  // para retiros; las eutanasias abren su ficha en Servicios (la hora la coordina
+  // el veterinario, pero ahí se confirma si se realizó o no).
   const [editando, setEditando] = useState<Item | null>(null)
   const [nuevaHora, setNuevaHora] = useState('')
   const [errorEdit, setErrorEdit] = useState('')
@@ -219,8 +221,10 @@ export default function AgendaSemanal() {
       setEditando(it)
       setNuevaHora(it.hora || '')
       setErrorEdit('')
-    } else if (it.clienteId) {
-      router.push(`/clientes/${it.clienteId}`)
+    } else {
+      // Eutanasia: abre SU ficha, donde se confirma si se realizó o no (la ven
+      // todos los roles). El id del item viene como `e<idCotizacion>`.
+      router.push(`/eutanasias/${encodeURIComponent(it.id.replace(/^e/, ''))}`)
     }
   }
 
@@ -457,7 +461,7 @@ export default function AgendaSemanal() {
                             title="Separación mínima: no se agenda dentro de los 30 min previos a esta reserva" />
                         )}
                         <button onClick={() => abrir(it)} title={detalle(it)}
-                          className={`absolute overflow-hidden text-left rounded-md border px-1.5 py-0.5 leading-tight transition-colors z-10 ${cls} ${it.clienteId ? 'cursor-pointer' : 'cursor-default'}`}
+                          className={`absolute overflow-hidden text-left rounded-md border px-1.5 py-0.5 leading-tight transition-colors z-10 cursor-pointer ${cls}`}
                           style={{ top: top + 1, height: alto - 2, left: izq, width: ancho }}>
                           <div className="flex items-center gap-1 text-[11px] font-bold">
                             <span>{it.hora}</span>

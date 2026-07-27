@@ -47,6 +47,13 @@ export const MODULOS: Modulo[] = [
   { key: 'rendiciones', label: 'Rendiciones', pages: ['/rendiciones'], apis: ['/api/rendiciones'], def: { admin2: true, operador: false, operador2: false } },
   { key: 'bases', label: 'Veterinarios (Bases)', pages: ['/bases'], apis: ['/api/veterinarios'], def: { admin2: true, operador: false, operador2: false } },
   { key: 'servicios', label: 'Servicios (Eutanasias)', pages: ['/servicios'], apis: ['/api/eutanasias', '/api/servicios'], def: { admin2: true, operador: false, operador2: false } },
+  // Ficha de UNA eutanasia (la que se abre desde el dashboard / la agenda): ver
+  // sus datos y confirmar si se realizó o no. La tienen TODOS los roles a
+  // propósito — el veterinario muchas veces no marca su enlace del correo y sin
+  // esto nadie más puede cerrar el caso. NO abre Precios ni Veterinarios de
+  // convenio: sus prefijos (/eutanasias, /api/eutanasias/ficha) son más
+  // específicos que los de 'servicios', así que ganan solo para la ficha.
+  { key: 'eutanasia-ficha', label: 'Ficha de eutanasia (abrirla desde el dashboard y confirmar el resultado)', pages: ['/eutanasias'], apis: ['/api/eutanasias/ficha'], def: { admin2: true, operador: true, operador2: true } },
   { key: 'reportes', label: 'Reportes', pages: ['/reportes'], apis: ['/api/reportes'], def: { admin2: true, operador: false, operador2: false } },
   { key: 'configuracion', label: 'Configuración (Precios, Artículos, Descuentos, Jornada)', pages: ['/configuracion'], apis: ['/api/precios', '/api/productos', '/api/categorias-productos', '/api/especies', '/api/servicios', '/api/descuentos', '/api/tipos-servicio', '/api/jornada-config', '/api/empresa/informe'], def: { admin2: true, operador: false, operador2: false } },
   { key: 'mailing', label: 'Campañas (Mail / Instagram / Facebook)', pages: ['/mailing'], apis: ['/api/mailing'], def: { admin2: false, operador: false, operador2: false } },

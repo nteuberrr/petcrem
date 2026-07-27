@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateById, deleteRow } from '@/lib/datastore'
 import { sesionConAcceso } from '@/lib/permisos-server'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
-import { getConsultaEutanasia } from '@/lib/eutanasia-precios'
 import { parsePeso } from '@/lib/numbers'
-import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarClienteAgradecimientoEutanasia, enviarMailNoRealizada } from '@/lib/eutanasia-mailer'
+import { enviarCoordinarConFamilia, enviarClienteVetAsignado } from '@/lib/eutanasia-mailer'
 import { formatDate } from '@/lib/dates'
 import { crearClienteBorrador } from '@/lib/cliente-borrador'
+import { camposResultado, efectosResultado, esResultado } from '@/lib/eutanasia-resultado'
 
 const SHEET = 'cotizaciones_eutanasia'
 
@@ -103,24 +103,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
-    // Marcadores de timestamp si cambia el estado a algunos específicos
-    if (partial.estado === 'realizada' && !rows[idx].fecha_realizacion) {
-      partial.fecha_realizacion = new Date().toISOString()
-    }
-    // Al pasar a 'realizada' inicializamos el estado de pago si no lo tenía,
-    // así aparece automáticamente en el listado histórico esperando que el
-    // admin marque 'pago_confirmado' luego de transferir.
-    if (partial.estado === 'realizada' && !rows[idx].estado_pago && !partial.estado_pago) {
-      partial.estado_pago = 'pendiente_pago'
-    }
-    // Al pasar a 'no_realizada': sellamos la fecha de cierre (para el pago),
-    // inicializamos estado_pago y congelamos el pago al vet por la consulta.
-    if (partial.estado === 'no_realizada') {
-      if (!rows[idx].fecha_realizacion) partial.fecha_realizacion = new Date().toISOString()
-      if (!rows[idx].estado_pago && !partial.estado_pago) partial.estado_pago = 'pendiente_pago'
-      if (!rows[idx].consulta_vet_snapshot && !partial.consulta_vet_snapshot) {
-        partial.consulta_vet_snapshot = String((await getConsultaEutanasia()).vet)
-      }
+    // Cierre con resultado (realizada / no realizada): fecha de cierre, estado de
+    // pago y snapshot de la consulta. Misma regla que la ficha del dashboard.
+    if (esResultado(partial.estado)) {
+      Object.assign(partial, await camposResultado(rows[idx], partial.estado, partial))
     }
     if (partial.estado === 'cancelada' && !rows[idx].fecha_cancelacion) {
       partial.fecha_cancelacion = new Date().toISOString()
@@ -213,39 +199,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
-    // Transición a 'realizada' desde el panel → agradecimiento + reseña al tutor
-    // (mismo correo que dispara el flujo del vet). Guardado contra reenvíos.
-    if (partial.estado === 'realizada' && rows[idx].estado !== 'realizada' && updated.cliente_email) {
-      try {
-        await enviarClienteAgradecimientoEutanasia({
-          clienteEmail: updated.cliente_email,
-          clienteNombre: updated.cliente_nombre,
-          mascotaNombre: updated.mascota_nombre,
-        })
-      } catch (e) { console.warn('[cotizaciones PATCH] agradecimiento al cliente falló:', e) }
-    }
-
-    // Transición a 'no_realizada' desde el panel → elimina el borrador de cremación
-    // (la mascota sigue viva) y paga la consulta al vet. Guardado contra reenvíos.
-    if (partial.estado === 'no_realizada' && rows[idx].estado !== 'no_realizada') {
-      if (updated.cliente_id) {
-        try {
-          const clientes = await getSheetData('clientes')
-          const ci = clientes.findIndex(r => String(r.id) === String(updated.cliente_id))
-          if (ci !== -1 && (clientes[ci].estado || '') === 'borrador') await deleteRow('clientes', ci)
-        } catch (e) { console.warn('[cotizaciones PATCH] no se pudo eliminar borrador:', e) }
-      }
-      if (updated.vet_email_asignado) {
-        try {
-          await enviarMailNoRealizada({
-            vetEmail: updated.vet_email_asignado,
-            vetNombre: updated.vet_nombre_asignado || '',
-            mascotaNombre: updated.mascota_nombre,
-            consultaVet: parseInt(updated.consulta_vet_snapshot || '0', 10) || (await getConsultaEutanasia()).vet,
-            fechaRealizacionISO: (updated.fecha_realizacion || new Date().toISOString()).slice(0, 10),
-          })
-        } catch (e) { console.warn('[cotizaciones PATCH] correo no-realizada al vet falló:', e) }
-      }
+    // Cierre con resultado → agradecimiento al tutor (realizada) o borrado del
+    // borrador + aviso de pago de consulta al vet (no realizada). Best-effort y
+    // guardado contra reenvíos (solo si el estado cambió).
+    if (esResultado(partial.estado)) {
+      await efectosResultado(updated, rows[idx].estado || '')
     }
 
     return NextResponse.json({ ...updated, aviso: avisoToggle })

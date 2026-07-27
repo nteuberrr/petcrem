@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Toggle } from '@/components/ui/Toggle'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
@@ -188,8 +189,22 @@ function cotizacionFormDefault() {
   }
 }
 
+/**
+ * `useSearchParams` exige un límite de Suspense (el deep link `?coti=<id>` que
+ * usan el dashboard y la agenda para abrir la ficha de una eutanasia).
+ */
 export default function ServiciosEutanasiasPage() {
+  return (
+    <Suspense fallback={null}>
+      <ServiciosEutanasiasContenido />
+    </Suspense>
+  )
+}
+
+function ServiciosEutanasiasContenido() {
   const [tab, setTab] = useState<Tab>('Cotizaciones')
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
   // Cotizaciones
   const [cotis, setCotis] = useState<Cotizacion[]>([])
@@ -226,6 +241,9 @@ export default function ServiciosEutanasiasPage() {
   const [vetsSeleccionados, setVetsSeleccionados] = useState<Set<string>>(new Set())
   const [enviando, setEnviando] = useState(false)
   const [resultEnvio, setResultEnvio] = useState<{ tipo: 'ok' | 'error'; mensaje: string } | null>(null)
+  // Confirmación del resultado (realizada / no realizada) desde la ficha.
+  const [guardandoResultado, setGuardandoResultado] = useState(false)
+  const [resultadoMsg, setResultadoMsg] = useState('')
 
   const cargarCotis = useCallback(async () => {
     setLoadingCotis(true)
@@ -485,6 +503,7 @@ export default function ServiciosEutanasiasPage() {
     setMatchingDiag(null)
     setVetsSeleccionados(new Set())
     setResultEnvio(null)
+    setResultadoMsg('')
     setMatchingLoading(true)
     try {
       const r = await fetch(`/api/eutanasias/cotizaciones/${c.id}/buscar-vets`, { method: 'POST' })
@@ -497,6 +516,33 @@ export default function ServiciosEutanasiasPage() {
     } finally {
       setMatchingLoading(false)
     }
+  }
+
+  // ─── Deep link `?coti=<id>` ───────────────────────────────────────────────
+  // El dashboard (notificaciones + agenda) y la ficha de cremación enlazan acá
+  // para abrir DIRECTO la ficha de una eutanasia. Se aplica una sola vez por id
+  // (ref) para que cerrar el modal no lo vuelva a abrir.
+  const cotiParam = searchParams.get('coti')
+  const cotiParamAplicado = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!cotiParam || cotis.length === 0) return
+    if (cotiParamAplicado.current === cotiParam) return
+    cotiParamAplicado.current = cotiParam
+    const c = cotis.find(x => String(x.id) === String(cotiParam))
+    if (!c) return
+    setTab('Cotizaciones')
+    abrirDetalleCotizacion(c)
+    // `abrirDetalleCotizacion` no va en deps: se redefine en cada render y el ref
+    // ya garantiza que esto corre una sola vez por id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cotiParam, cotis])
+
+  /** Cierra la ficha de la cotización y limpia el `?coti=` de la URL. */
+  function cerrarDetalleCotizacion() {
+    setDetalleCoti(null)
+    setResultEnvio(null)
+    if (cotiParam) router.replace('/servicios', { scroll: false })
   }
 
   function toggleVetSeleccionado(id: string) {
@@ -543,24 +589,33 @@ export default function ServiciosEutanasiasPage() {
     await cargarCotis()
   }
 
-  async function marcarRealizada(id: string) {
-    if (!confirm('¿Marcar como realizada? Se le enviará al tutor el agradecimiento con la reseña.')) return
-    await fetch(`/api/eutanasias/cotizaciones/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado: 'realizada' }),
-    })
-    await cargarCotis()
-  }
-
-  async function marcarNoRealizada(id: string) {
-    if (!confirm('¿Marcar como NO realizada? Se paga la consulta al veterinario y se elimina el borrador de cremación.')) return
-    await fetch(`/api/eutanasias/cotizaciones/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado: 'no_realizada' }),
-    })
-    await cargarCotis()
+  /**
+   * Confirma el RESULTADO de la eutanasia desde la ficha (no depende de que el
+   * veterinario lo marque con su enlace por correo — pasa seguido que no lo hace
+   * y el equipo queda sin poder cerrar el caso).
+   */
+  async function marcarResultado(id: string, estado: 'realizada' | 'no_realizada') {
+    const aviso = estado === 'realizada'
+      ? '¿Confirmar que la eutanasia SÍ se realizó?\n\nSe le envía al tutor el agradecimiento con la reseña y el pago al veterinario queda pendiente.'
+      : '¿Confirmar que la eutanasia NO se realizó?\n\nSe le paga la consulta al veterinario y se elimina el borrador de la ficha de cremación.'
+    if (!confirm(aviso)) return
+    setGuardandoResultado(true)
+    setResultadoMsg('')
+    try {
+      const r = await fetch(`/api/eutanasias/cotizaciones/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setResultadoMsg(j?.error || 'No se pudo guardar el resultado.'); return }
+      await cargarCotis()
+      cerrarDetalleCotizacion()
+    } catch {
+      setResultadoMsg('Error de red. Intenta de nuevo.')
+    } finally {
+      setGuardandoResultado(false)
+    }
   }
 
   async function eliminarCotizacion(id: string) {
@@ -1312,7 +1367,7 @@ export default function ServiciosEutanasiasPage() {
       {/* Modal ficha completa de cotización */}
       <Modal
         open={!!detalleCoti}
-        onClose={() => { setDetalleCoti(null); setResultEnvio(null) }}
+        onClose={cerrarDetalleCotizacion}
         title={detalleCoti ? `Cotización N° ${detalleCoti.id}` : ''}
       >
         {detalleCoti && (
@@ -1421,6 +1476,41 @@ export default function ServiciosEutanasiasPage() {
                   <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 leading-snug">
                     ⚠️ El veterinario indicó que la eutanasia <strong>no se realizó</strong>, pero la ficha de cremación{detalleCoti.ficha_codigo ? <> <strong>{detalleCoti.ficha_codigo}</strong></> : ''} <strong>ya está ingresada</strong> (no se eliminó automáticamente). Revisa la ficha y decide si corresponde eliminarla.
                   </div>
+                )}
+              </FichaBloque>
+            )}
+
+            {/* Bloque: RESULTADO — el equipo lo confirma sin depender del vet.
+                Pasa seguido que el veterinario no marca su enlace del correo y el
+                caso queda trabado (no se libera la ficha ni el pago). */}
+            {!['realizada', 'no_realizada', 'cancelada'].includes(detalleCoti.estado) && (
+              <FichaBloque titulo="¿Se realizó la eutanasia?">
+                <p className="text-xs text-gray-600 leading-snug">
+                  Confírmalo acá si el veterinario no lo marcó desde su enlace.
+                  {detalleCoti.vet_nombre_asignado
+                    ? <> Asignada a <strong>{detalleCoti.vet_nombre_asignado}</strong>.</>
+                    : <> Todavía no hay veterinario asignado.</>}
+                </p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <button
+                    onClick={() => marcarResultado(detalleCoti.id, 'realizada')}
+                    disabled={guardandoResultado}
+                    className="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-600/40 text-white font-semibold rounded-lg">
+                    {guardandoResultado ? 'Guardando…' : '✓ Sí, se realizó'}
+                  </button>
+                  <button
+                    onClick={() => marcarResultado(detalleCoti.id, 'no_realizada')}
+                    disabled={guardandoResultado}
+                    className="px-4 py-2 text-sm bg-slate-600 hover:bg-slate-700 disabled:bg-slate-600/40 text-white font-semibold rounded-lg">
+                    ✗ No se realizó
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-2 leading-snug">
+                  Realizada: se le envía el agradecimiento al tutor y el pago al vet queda pendiente.
+                  No realizada: se le paga la consulta al vet y se elimina el borrador de la ficha de cremación.
+                </p>
+                {resultadoMsg && (
+                  <p className="text-xs text-red-600 mt-2">{resultadoMsg}</p>
                 )}
               </FichaBloque>
             )}
@@ -1534,25 +1624,20 @@ export default function ServiciosEutanasiasPage() {
 
             {/* Acciones administrativas */}
             <div className="flex flex-wrap gap-2 justify-end pt-2 border-t border-gray-300">
-              <button onClick={() => { abrirEditarCotizacion(detalleCoti); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">
+              {detalleCoti.cliente_id && (
+                <button onClick={() => router.push(`/clientes/${detalleCoti.cliente_id}`)} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 font-medium mr-auto">
+                  Ver ficha de cremación →
+                </button>
+              )}
+              <button onClick={() => { abrirEditarCotizacion(detalleCoti); cerrarDetalleCotizacion() }} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">
                 Editar
               </button>
-              {detalleCoti.estado === 'aceptada' && (
-                <>
-                  <button onClick={() => { marcarRealizada(detalleCoti.id); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium">
-                    Marcar realizada
-                  </button>
-                  <button onClick={() => { marcarNoRealizada(detalleCoti.id); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium">
-                    Marcar no realizada
-                  </button>
-                </>
-              )}
               {!['realizada', 'no_realizada', 'cancelada'].includes(detalleCoti.estado) && (
-                <button onClick={() => { cancelarCotizacion(detalleCoti.id); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 border border-amber-200 rounded-lg font-medium">
+                <button onClick={() => { cancelarCotizacion(detalleCoti.id); cerrarDetalleCotizacion() }} className="px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 border border-amber-200 rounded-lg font-medium">
                   Cancelar
                 </button>
               )}
-              <button onClick={() => { eliminarCotizacion(detalleCoti.id); setDetalleCoti(null) }} className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg font-medium">
+              <button onClick={() => { eliminarCotizacion(detalleCoti.id); cerrarDetalleCotizacion() }} className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg font-medium">
                 Eliminar
               </button>
             </div>

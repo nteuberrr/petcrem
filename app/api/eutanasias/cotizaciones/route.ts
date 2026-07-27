@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
+import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns, updateById } from '@/lib/datastore'
+import { crearClienteBorrador } from '@/lib/cliente-borrador'
 import { buscarComuna } from '@/lib/comunas'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { capitalizarNombre } from '@/lib/nombres'
@@ -180,6 +181,36 @@ export async function POST(req: NextRequest) {
       creado_por: session?.user?.name || session?.user?.email || '',
     }
     await appendRow(SHEET, row)
+
+    // Ficha de cremación BORRADOR ("Por ingresar" en /clientes), igual que en el
+    // alta por el bot (ver lib/eutanasia-cotizaciones): la eutanasia con cremación
+    // siempre deja algo que retirar. Sin ella la cotización no se liga a una ficha
+    // (cliente_id vacío) y el equipo tenía que ingresarla a mano.
+    // Best-effort: no bloquea la creación de la cotización.
+    if (row.incluye_cremacion !== 'FALSE') {
+      try {
+        const borradorId = await crearClienteBorrador({
+          nombre_tutor: row.cliente_nombre,
+          nombre_mascota: row.mascota_nombre,
+          telefono: row.cliente_telefono,
+          email: row.cliente_email,
+          direccion_retiro: row.direccion,
+          comuna: row.comuna,
+          peso_declarado: row.peso,
+          // El alta manual no captura la modalidad (el tutor la elige después,
+          // con el correo de opciones) → la ficha queda sin código de servicio.
+          codigo_servicio: '',
+          origen: 'bot_eutanasia',
+          notas: `Cremación tras eutanasia a domicilio (cotización N° ${id}).`,
+        })
+        if (borradorId) {
+          row.cliente_id = borradorId
+          await updateById(SHEET, String(id), row)
+        }
+      } catch (e) {
+        console.warn('[cotizaciones POST] no se pudo crear la ficha borrador:', e)
+      }
+    }
 
     // Asignación manual → dispara los mismos correos que el flujo natural:
     //  · al veterinario: "coordina con la familia" (contacto + botón confirmar);

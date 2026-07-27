@@ -6,6 +6,7 @@ import { getSheetData } from '@/lib/datastore'
 import { formatDateForSheet } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
+import { getConfigCobroEutanasia, margenEutanasiaCon } from '@/lib/eutanasia-precios'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,7 +56,23 @@ export async function GET(req: NextRequest) {
 
     const movimientos: Mov[] = []
 
-    if (partida.tipo === 'ingreso') {
+    if (partida.tipo === 'ingreso' && (partida.clave || '') === 'eutanasias') {
+      // Eutanasias: una línea por servicio cerrado, con el MARGEN (lo cobrado al
+      // cliente menos lo que se le paga al veterinario). Ver lib/eutanasia-precios.
+      const [cots, cfg] = await Promise.all([getSheetData('cotizaciones_eutanasia'), getConfigCobroEutanasia()])
+      for (const cot of cots as Cli[]) {
+        const m = margenEutanasiaCon(cot, cfg)
+        if (!m || m.margen <= 0 || !enPeriodo(m.fecha)) continue
+        movimientos.push({
+          fecha: m.fecha,
+          fuente: 'Eutanasia',
+          descripcion: `${cot.mascota_nombre || ''}${cot.cliente_nombre ? ' · ' + cot.cliente_nombre : ''}${m.concepto === 'consulta' ? ' (consulta, no se realizó)' : ''}`.trim(),
+          proveedor: cot.vet_nombre_asignado || '',
+          documento: `N° ${cot.id} · cobro ${m.cobro.toLocaleString('es-CL')} − vet ${m.pagoVet.toLocaleString('es-CL')}`,
+          monto: Math.round(m.margen),
+        })
+      }
+    } else if (partida.tipo === 'ingreso') {
       const clave = partida.clave || ''
       const [clientes, pg, pc, pe, vets] = await Promise.all([
         getSheetData('clientes'), getSheetData('precios_generales'), getSheetData('precios_convenio'), getSheetData('precios_especiales'), getSheetData('veterinarios'),
