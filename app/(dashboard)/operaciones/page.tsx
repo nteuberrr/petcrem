@@ -4,6 +4,7 @@ import { fmtLitros, fmtNumero, fmtKg, fmtFecha, fmtPrecio } from '@/lib/format'
 import { CHART } from '@/lib/chart-colors'
 import { todayISO, formatHora, horaToMinutos, formatDateForSheet } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
+import { TablaScroll, THEAD_STICKY, HistorialPie } from '@/components/ui/TablaScroll'
 import VehiculoTab from '@/components/VehiculoTab'
 import DespachosTab from '@/components/DespachosTab'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
@@ -486,9 +487,9 @@ export default function OperacionesPage() {
         {ciclos.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">Sin ciclos registrados</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
+          <TablaScroll>
+            <table className="w-full text-sm min-w-[900px]">
+              <thead className={THEAD_STICKY}>
                 <tr>
                   {['N° Ciclo', 'Fecha', 'Mascotas', 'Litros inicio', 'Litros fin', 'Litros usados', 'Lt/kg', 'Lt/mascota', 'Temp. cámara', 'Acciones', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
@@ -561,8 +562,9 @@ export default function OperacionesPage() {
                 })}
               </tbody>
             </table>
-          </div>
+          </TablaScroll>
         )}
+        <HistorialPie total={ciclos.length} singular="ciclo" plural="ciclos" />
       </div>
 
       {/* Modal editar ciclo */}
@@ -707,9 +709,9 @@ export default function OperacionesPage() {
             {cargas.length === 0 ? (
               <div className="p-8 text-center text-gray-400 text-sm">Sin cargas registradas</div>
             ) : (
-              <div className="overflow-x-auto">
+              <TablaScroll>
               <table className="w-full text-sm min-w-[520px]">
-                <thead className="bg-gray-50">
+                <thead className={THEAD_STICKY}>
                   <tr>
                     {['Fecha', 'Litros', 'Costo total', 'Costo/L', 'Notas', ''].map(h => (
                       <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
@@ -747,8 +749,9 @@ export default function OperacionesPage() {
                   })}
                 </tbody>
               </table>
-              </div>
+              </TablaScroll>
             )}
+            <HistorialPie total={cargas.length} singular="carga" plural="cargas" />
           </div>
 
           {/* Modal editar carga de petróleo */}

@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
+import { TablaScroll, THEAD_STICKY, HistorialPie } from '@/components/ui/TablaScroll'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { proximosDiasHabiles, agregarDiasHabiles, isoFecha, tieneExpress, EXPRESS_DIAS } from '@/lib/dias-habiles'
 
@@ -629,9 +630,9 @@ export default function DespachosTab() {
         {despachos.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">Sin recorridos registrados</div>
         ) : (
-          <div className="overflow-x-auto">
+          <TablaScroll>
           <table className="w-full text-sm min-w-[680px]">
-            <thead className="bg-gray-50">
+            <thead className={THEAD_STICKY}>
               <tr>
                 {['N° Global', 'N° Recorrido', 'Fecha', 'Estado', 'Entregas', 'Nota', 'Acciones', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
@@ -735,8 +736,9 @@ export default function DespachosTab() {
               })}
             </tbody>
           </table>
-          </div>
+          </TablaScroll>
         )}
+        <HistorialPie total={despachos.length} singular="recorrido" plural="recorridos" />
       </div>
 
       {/* Modal selección */}

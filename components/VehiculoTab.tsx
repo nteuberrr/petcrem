@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { fmtLitros, fmtPrecio, fmtNumero } from '@/lib/format'
 import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
+import { TablaScroll, THEAD_STICKY, HistorialPie } from '@/components/ui/TablaScroll'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
@@ -212,9 +213,9 @@ export default function VehiculoTab() {
         {cargas.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">Sin cargas registradas</div>
         ) : (
-          <div className="overflow-x-auto">
+          <TablaScroll>
           <table className="w-full text-sm min-w-[820px]">
-            <thead className="bg-gray-50">
+            <thead className={THEAD_STICKY}>
               <tr>
                 {['Fecha', 'Km odómetro', 'Litros', 'Precio/lt', 'Costo total', 'Km/lt anterior', 'Comentarios', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
@@ -263,8 +264,9 @@ export default function VehiculoTab() {
               })}
             </tbody>
           </table>
-          </div>
+          </TablaScroll>
         )}
+        <HistorialPie total={cargas.length} singular="carga" plural="cargas" />
       </div>
 
       {/* Modal editar carga vehículo */}

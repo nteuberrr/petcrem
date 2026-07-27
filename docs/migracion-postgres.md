@@ -113,8 +113,9 @@ Script `scripts/importar-a-postgres.ts` (LISTO):
 ## 7. Cutover y rollback
 - **Cutover**: re-import final (para traer lo último de Sheets), luego setear
   `DATA_BACKEND=postgres` en producción (Vercel env) y redeploy. Opcional: dejar un job que
-  **espeje** Postgres→Sheets (reusando/adaptando `sync-database`) para conservar la "vista en
-  planilla" y un backup vivo.
+  **espeje** Postgres→Sheets para conservar la "vista en planilla" y un backup vivo.
+  (Histórico: existía un endpoint `sync-database` que normalizaba/renumeraba la planilla;
+  se eliminó el 2026-07-27 por decisión del dueño — no se usa más.)
 - **Rollback**: `DATA_BACKEND=sheets` + redeploy. Como Sheets quedó intacto durante toda la prueba,
   volver es instantáneo y sin pérdida.
 
@@ -145,8 +146,8 @@ Hoy el respaldo es el Apps Script que copia la planilla a Drive cada 48 h
    Supabase → control e historial propios. **Obligatorio en free tier** (que no trae backups).
 2. **Backups gestionados de Supabase.** Free: no hay. **Pro ($25/mes): diarios automáticos, 7 días
    de retención** (+ PITR en planes mayores). Se suma al pasar a Pro.
-3. **Espejo Postgres → Sheets (opcional, recomendado).** Job que copia a la misma planilla
-   (reusando `sync-database`): conserva la "vista en planilla" para mirar a mano Y mantiene vivo el
+3. **Espejo Postgres → Sheets (opcional, recomendado).** Job que copia a la misma planilla:
+   conserva la "vista en planilla" para mirar a mano Y mantiene vivo el
    Apps Script de Drive actual como copia secundaria. No se pierde nada de lo de hoy.
    - **Dos cadencias distintas:** (a) el **espejo** Postgres→planilla corre **cada 24 h**
      (decisión del cliente) vía cron → la planilla queda al día. (b) el **Apps Script** que copia la
