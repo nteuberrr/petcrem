@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
+import { getSupabase, isSupabaseConfigured, traerTodasLasFilas } from '@/lib/supabase'
 import { getSheetData } from '@/lib/datastore'
 import { esAdmin } from '@/lib/roles'
 
@@ -82,10 +82,13 @@ export async function GET(req: Request) {
   // Distribución por estado para la campaña pedida
   let distribucion: Record<string, number> = {}
   if (campanaId) {
-    const { data: counts, error: countErr } = await supabase
-      .from('mailing_logs')
-      .select('estado')
-      .eq('campana_id', campanaId)
+    const { filas: counts, error: countErr } = await traerTodasLasFilas<{ estado: string | null }>(
+      (desde, hasta) => supabase
+        .from('mailing_logs')
+        .select('estado')
+        .eq('campana_id', campanaId)
+        .order('id', { ascending: true })
+        .range(desde, hasta))
     if (!countErr && counts) {
       for (const r of counts) {
         const e = r.estado || '(null)'
@@ -116,10 +119,15 @@ export async function GET(req: Request) {
     }
     // Reales: agregación rápida sobre TODOS los logs (no solo los 50 que muestra la tabla)
     try {
-      const { data: allLogs, error: aggErr } = await supabase
+      const { filas: allLogs, error: aggErr } = await traerTodasLasFilas<{
+        estado: string | null; fecha_envio: string | null; fecha_entrega: string | null
+        fecha_apertura: string | null; fecha_click: string | null; fecha_rebote: string | null
+      }>((desde, hasta) => supabase
         .from('mailing_logs')
         .select('estado, fecha_envio, fecha_entrega, fecha_apertura, fecha_click, fecha_rebote')
         .eq('campana_id', campanaId)
+        .order('id', { ascending: true })
+        .range(desde, hasta))
       if (!aggErr && allLogs) {
         let enviados = 0, entregados = 0, aperturas = 0, clicks = 0, rebotes = 0, spam = 0, fallidos = 0
         for (const l of allLogs) {

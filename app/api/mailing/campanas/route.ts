@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getSheetData, appendRow, getNextId, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 import { todayISO } from '@/lib/dates'
-import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
+import { getSupabase, isSupabaseConfigured, traerTodasLasFilas } from '@/lib/supabase'
 import { esAdmin } from '@/lib/roles'
 
 const SHEET = 'mailing_campanas'
@@ -41,10 +41,19 @@ export async function GET() {
     try {
       const supabase = getSupabase()
       const campanaIds = rows.map(r => r.id).filter(Boolean)
-      const { data: logs, error } = await supabase
+      // Paginado obligatorio: PostgREST corta en 1000 filas SIN avisar, y como
+      // devuelve las más viejas primero, las campañas recientes quedaban con
+      // TODO en 0 (bug 2026-07-28). Ver traerTodasLasFilas.
+      const { filas: logs, error } = await traerTodasLasFilas<{
+        campana_id: string; estado: string | null
+        fecha_envio: string | null; fecha_entrega: string | null
+        fecha_apertura: string | null; fecha_click: string | null; fecha_rebote: string | null
+      }>((desde, hasta) => supabase
         .from('mailing_logs')
         .select('campana_id, estado, fecha_envio, fecha_entrega, fecha_apertura, fecha_click, fecha_rebote')
         .in('campana_id', campanaIds)
+        .order('id', { ascending: true })
+        .range(desde, hasta))
       if (!error && logs) {
         // Acumulador por campana_id
         const acc = new Map<string, { enviados: number; entregados: number; aperturas: number; clicks: number; rebotes: number; spam: number; fallidos: number }>()

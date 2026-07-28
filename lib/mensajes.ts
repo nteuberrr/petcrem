@@ -1,4 +1,4 @@
-import { getMensajesSupabase } from './supabase'
+import { getMensajesSupabase, traerTodasLasFilas } from './supabase'
 
 /**
  * Capa de datos del módulo "Mensajes" (inbox unificado). Todo el acceso es
@@ -407,11 +407,17 @@ export async function getTranscriptsParaCalibracion(maxConversaciones = 60, maxM
   if (error) throw new Error(error.message)
   const ids = (convs ?? []).map(c => (c as { id: number }).id)
   if (!ids.length) return []
-  const { data: msgs, error: e2 } = await sb.from(T_MSG).select('conversacion_id, direccion, cuerpo, ts')
-    .in('conversacion_id', ids).not('cuerpo', 'is', null).order('ts', { ascending: true })
-  if (e2) throw new Error(e2.message)
+  // Paginado: 60 conversaciones pasan de 1000 mensajes y PostgREST cortaba en
+  // silencio — y como el orden es ascendente, se perdían los mensajes MÁS
+  // NUEVOS, justo los que interesan para calibrar.
+  const { filas: msgs, error: e2 } = await traerTodasLasFilas<{ conversacion_id: number; direccion: Direccion; cuerpo: string | null; ts: string }>(
+    (desde, hasta) => sb.from(T_MSG).select('conversacion_id, direccion, cuerpo, ts')
+      .in('conversacion_id', ids).not('cuerpo', 'is', null)
+      .order('ts', { ascending: true }).order('id', { ascending: true })
+      .range(desde, hasta))
+  if (e2) throw new Error(e2)
   const porConv = new Map<number, string[]>()
-  for (const m of (msgs ?? []) as Array<{ conversacion_id: number; direccion: Direccion; cuerpo: string | null }>) {
+  for (const m of msgs) {
     const txt = (m.cuerpo ?? '').trim().slice(0, 400)
     if (!txt) continue
     const arr = porConv.get(m.conversacion_id) ?? []

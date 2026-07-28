@@ -5,7 +5,7 @@ import { getSheetData, updateRow } from '@/lib/datastore'
 import { getFromR2 } from '@/lib/cloudflare-r2'
 import { sendBatch, isResendConfigured } from '@/lib/resend-mailer'
 import { renderForVet } from '@/lib/mailing-render'
-import { getSupabase, isSupabaseConfigured, type MailingLogInsert } from '@/lib/supabase'
+import { getSupabase, isSupabaseConfigured, traerTodasLasFilas, type MailingLogInsert } from '@/lib/supabase'
 import { esAdmin } from '@/lib/roles'
 
 interface Filtros {
@@ -93,16 +93,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Importante: los logs con estado='failed' NO cuentan como enviados —
     // esos fueron errores transitorios que vale la pena reintentar.
     const supabase = getSupabase()
-    const { data: logs, error: logsErr } = await supabase
+    // Paginado: sin esto, una campaña de más de 1000 destinatarios devolvía solo
+    // los primeros 1000 logs → los del final se veían como "no enviados" y la
+    // reanudación les MANDABA EL CORREO DE NUEVO.
+    const { filas: logs, error: logsErr, truncado } = await traerTodasLasFilas<{
+      id: number; vet_id: string | null; vet_email: string | null; estado: string | null
+    }>((desde, hasta) => supabase
       .from('mailing_logs')
       .select('id, vet_id, vet_email, estado')
       .eq('campana_id', id)
+      .order('id', { ascending: true })
+      .range(desde, hasta))
     if (logsErr) {
-      console.error('[reanudar] error leyendo logs:', logsErr.message)
-      return NextResponse.json({ error: `Error leyendo logs: ${logsErr.message}` }, { status: 500 })
+      console.error('[reanudar] error leyendo logs:', logsErr)
+      return NextResponse.json({ error: `Error leyendo logs: ${logsErr}` }, { status: 500 })
     }
-    const logsOk = (logs ?? []).filter(l => l.estado !== 'failed')
-    const logsFailed = (logs ?? []).filter(l => l.estado === 'failed')
+    if (truncado) {
+      // Con la lista incompleta no podemos garantizar que no reenviemos.
+      return NextResponse.json({ error: 'No se pudo leer el listado completo de envíos; no reanudo para no duplicar correos.' }, { status: 500 })
+    }
+    const logsOk = logs.filter(l => l.estado !== 'failed')
+    const logsFailed = logs.filter(l => l.estado === 'failed')
     const yaEnviadosIds = new Set(logsOk.map(l => l.vet_id).filter(Boolean))
     const yaEnviadosEmails = new Set(logsOk.map(l => (l.vet_email ?? '').toLowerCase()).filter(Boolean))
 

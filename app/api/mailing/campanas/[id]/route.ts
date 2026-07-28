@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData, updateRow, deleteRow, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { uploadToR2, deleteFromR2 } from '@/lib/cloudflare-r2'
-import { getSupabase, isSupabaseConfigured } from '@/lib/supabase'
+import { getSupabase, isSupabaseConfigured, traerTodasLasFilas } from '@/lib/supabase'
 import { esAdmin } from '@/lib/roles'
 
 const SHEET = 'mailing_campanas'
@@ -37,13 +37,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   let logsCampana: Record<string, unknown>[] = []
   if (isSupabaseConfigured()) {
     const supabase = getSupabase()
-    const { data, error } = await supabase
+    // Paginado: una campaña con más de 1000 destinatarios se truncaba en silencio.
+    const { filas, error } = await traerTodasLasFilas<Record<string, unknown>>((desde, hasta) => supabase
       .from('mailing_logs')
       .select('*')
       .eq('campana_id', id)
       .order('id', { ascending: true })
-    if (error) console.error('[campanas/get] supabase error:', error.message)
-    else logsCampana = data || []
+      .range(desde, hasta))
+    if (error) console.error('[campanas/get] supabase error:', error)
+    else logsCampana = filas
   }
   return NextResponse.json({ ...row, logs: logsCampana })
 }
