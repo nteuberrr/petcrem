@@ -106,7 +106,12 @@ async function checkRSAs(): Promise<Hallazgo[]> {
       accionSugerida: 'Pinnear 3 variantes de la keyword en la posición 1 (nunca en la 2) — asegura relevancia de anuncio y sube Quality Score.',
     })
   }
-  const home = ads.filter(a => a.finalUrl && /\/?$/.test(a.finalUrl) && !a.finalUrl.split('/').slice(3).join('/'))
+  // Apuntar a la home es un problema en campañas de servicio (ahí queremos la landing por
+  // keyword), pero es lo CORRECTO en la campaña de MARCA: quien busca "alma animal" quiere
+  // el sitio, no una landing de captación. Sin esta excepción el hallazgo salía todas las
+  // semanas en el informe como falso positivo (revisado 2026-07-27).
+  const esCampanaMarca = (nombre: string) => /\bmarca\b/i.test(nombre)
+  const home = ads.filter(a => a.finalUrl && !a.finalUrl.split('/').slice(3).join('/') && !esCampanaMarca(a.campana))
   if (home.length > 0) {
     out.push({
       id: 'rsa-apunta-a-home',

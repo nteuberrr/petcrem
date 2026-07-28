@@ -827,6 +827,98 @@ export async function crearRSA(
   return rn || ''
 }
 
+export interface DetalleRSA extends AdGoogle {
+  /** resourceName del `ad` (customers/X/ads/Y) — el que acepta `actualizarRSA`. */
+  adResourceName: string
+  titulares: { texto: string; pinnedSlot1: boolean }[]
+  descripciones_texto: string[]
+  path1: string
+  path2: string
+}
+
+/** Lee el CONTENIDO completo de los RSA activos (texto + pins + URL), no solo los conteos
+ *  de `listarAds` — necesario para completar/corregir un anuncio existente sin perder lo
+ *  que ya tenía (la API pide el array entero de titulares, no acepta un "append"). */
+export async function detalleAdsRSA(): Promise<DetalleRSA[]> {
+  const rows = await gaqlSearch(`
+    SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, ad_group_ad.status,
+           ad_group_ad.ad.resource_name,
+           ad_group_ad.ad.responsive_search_ad.headlines,
+           ad_group_ad.ad.responsive_search_ad.descriptions,
+           ad_group_ad.ad.responsive_search_ad.path1,
+           ad_group_ad.ad.responsive_search_ad.path2,
+           ad_group_ad.ad.final_urls, ad_group_ad.ad_strength
+    FROM ad_group_ad
+    WHERE ad_group_ad.status = 'ENABLED' AND campaign.status = 'ENABLED'
+  `)
+  return rows.map(r => {
+    const adGroupAd = (r.adGroupAd || {}) as Record<string, unknown>
+    const ad = (adGroupAd.ad || {}) as Record<string, unknown>
+    const rsa = (ad.responsiveSearchAd || {}) as Record<string, unknown>
+    const headlines = (rsa.headlines || []) as Array<{ text?: string; pinnedField?: string }>
+    const descripciones = (rsa.descriptions || []) as Array<{ text?: string }>
+    const finalUrls = (ad.finalUrls || []) as string[]
+    const titulares = headlines.map(h => ({ texto: String(h.text || ''), pinnedSlot1: h.pinnedField === 'HEADLINE_1' }))
+    return {
+      campana: String(r.campaign?.name || ''),
+      campanaId: String(r.campaign?.id || ''),
+      grupoAnuncio: String(r.adGroup?.name || ''),
+      grupoAnuncioId: String(r.adGroup?.id || ''),
+      status: String(adGroupAd.status || ''),
+      headlines: titulares.length,
+      headlinesPinned: headlines.filter(h => h.pinnedField).length,
+      descripciones: descripciones.length,
+      adStrength: String(adGroupAd.adStrength || 's/d'),
+      finalUrl: finalUrls[0] || '',
+      adResourceName: String(ad.resourceName || ''),
+      titulares,
+      descripciones_texto: descripciones.map(d => String(d.text || '')),
+      path1: String(rsa.path1 || ''),
+      path2: String(rsa.path2 || ''),
+    }
+  })
+}
+
+/**
+ * Edita EN SITIO un RSA ya existente (AdService.mutateAds): completa titulares, ajusta
+ * pins o corrige la URL final SIN crear un anuncio nuevo — así el anuncio conserva su id
+ * y su historial de rendimiento (a diferencia de `crearRSA`, que suma una versión PAUSED
+ * para comparar side-by-side). Google lo vuelve a mandar a revisión tras editarlo.
+ *
+ * OJO: la API REEMPLAZA el array completo de titulares/descripciones, no hace append —
+ * pasá SIEMPRE la lista entera (leela con `detalleAdsRSA`). Solo se envían los campos
+ * presentes en `cambios` (updateMask acotado).
+ */
+export async function actualizarRSA(
+  adResourceName: string,
+  cambios: {
+    headlines?: { texto: string; pinnedSlot1?: boolean }[]
+    descriptions?: string[]
+    finalUrl?: string
+  },
+  validateOnly = false,
+): Promise<void> {
+  if (!adResourceName) throw new Error('Falta el resourceName del anuncio.')
+  const rsa: Record<string, unknown> = {}
+  const paths: string[] = []
+  if (cambios.headlines) {
+    rsa.headlines = cambios.headlines.map(h => ({ text: h.texto.trim(), ...(h.pinnedSlot1 ? { pinnedField: 'HEADLINE_1' } : {}) }))
+    paths.push('responsive_search_ad.headlines')
+  }
+  if (cambios.descriptions) {
+    rsa.descriptions = cambios.descriptions.map(d => ({ text: d.trim() }))
+    paths.push('responsive_search_ad.descriptions')
+  }
+  const update: Record<string, unknown> = { resourceName: adResourceName }
+  if (paths.length) update.responsiveSearchAd = rsa
+  if (cambios.finalUrl) {
+    update.finalUrls = [cambios.finalUrl.trim()]
+    paths.push('final_urls')
+  }
+  if (!paths.length) throw new Error('No hay cambios que aplicar.')
+  await gaqlMutate('ads', [{ update, updateMask: paths.join(',') }], validateOnly)
+}
+
 /** Elimina un anuncio (para deshacer una prueba, o retirar una versión vieja). */
 export async function eliminarAd(adGroupAdResourceName: string): Promise<void> {
   if (!adGroupAdResourceName) throw new Error('Falta el resourceName del anuncio.')
