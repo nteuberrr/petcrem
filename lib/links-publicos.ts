@@ -14,5 +14,6 @@ export function LINKS_PUBLICOS(): string {
   return `LINKS PÚBLICOS DE ACCIÓN (los ÚNICOS links de la app que puedes usar en CTAs/botones, según el objetivo de la pieza):
 - Inscripción de CLÍNICAS/VETERINARIAS al convenio de CREMACIÓN (la clínica queda inscrita al instante, con tarifas de convenio): ${base}/convenio-veterinarias
 - Inscripción de VETERINARIOS a la red de EUTANASIAS a domicilio: ${base}/convenio-eutanasias
-- Registro de mascota para TUTORES (autoatención): ${base}/registro-mascota`
+
+NO existe un link de autoregistro para TUTORES: las fichas las abre el equipo (o el bot al agendar el retiro). Nunca inventes ni publiques uno.`
 }

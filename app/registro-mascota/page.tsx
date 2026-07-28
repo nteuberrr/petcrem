@@ -63,20 +63,17 @@ export default function RegistroMascotaPage() {
   const [form, setForm] = useState(() => ({ ...FORM_DEFAULT, fecha_retiro: todayISO() }))
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState('')
-  const [exito, setExito] = useState<{ modo: 'crear' | 'completar'; codigo?: string; nombre_mascota: string; precio_total?: number } | null>(null)
-  // Modo: 'crear' (auto-atención: genera código) o 'completar' (link firmado del
-  // WhatsApp de retiro confirmado: solo completa el borrador, sin código).
-  const [modo, setModo] = useState<'crear' | 'completar'>('crear')
+  const [exito, setExito] = useState<{ nombre_mascota: string } | null>(null)
   const [token, setToken] = useState<string>('')
+  const [sinLink, setSinLink] = useState(false)
   const [yaIngresada, setYaIngresada] = useState(false)
 
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('ficha') || ''
     if (t) {
-      // Modo completar: cargar el borrador y prellenar.
+      // Cargar el borrador del link firmado y prellenar el formulario.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setToken(t)
-      setModo('completar')
       fetch(`/api/clientes/completar-borrador?t=${encodeURIComponent(t)}`)
         .then(r => r.json())
         .then(d => {
@@ -108,13 +105,11 @@ export default function RegistroMascotaPage() {
         })
         .catch(() => setError('No pudimos cargar tu ficha. Intenta nuevamente.'))
     } else {
-      fetch('/api/clientes/publico')
-        .then(r => r.json())
-        .then(d => {
-          setEspecies(Array.isArray(d?.especies) ? d.especies : [])
-          setTramos(Array.isArray(d?.tramos) ? d.tramos : [])
-        })
-        .catch(() => {})
+      // Sin link firmado no hay nada que completar. El autoregistro abierto (que
+      // creaba la ficha con código y correo de bienvenida sin que hubiéramos
+      // retirado a la mascota) se eliminó por decisión del dueño (2026-07-28).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSinLink(true)
     }
   }, [])
 
@@ -141,33 +136,18 @@ export default function RegistroMascotaPage() {
       direccion_despacho: form.misma_direccion ? form.direccion_retiro : form.direccion_despacho,
     }
     try {
-      if (modo === 'completar') {
-        const r = await fetch('/api/clientes/completar-borrador', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ t: token, ...payload }),
-        })
-        const d = await r.json().catch(() => ({}))
-        if (r.ok) {
-          setExito({ modo: 'completar', nombre_mascota: d.nombre_mascota || form.nombre_mascota })
-        } else if (r.status === 409 || d?.yaIngresada) {
-          setYaIngresada(true)
-        } else {
-          setError(d?.error ?? 'No pudimos guardar tus datos. Revisa e inténtalo de nuevo.')
-        }
+      const r = await fetch('/api/clientes/completar-borrador', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ t: token, ...payload }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok) {
+        setExito({ nombre_mascota: d.nombre_mascota || form.nombre_mascota })
+      } else if (r.status === 409 || d?.yaIngresada) {
+        setYaIngresada(true)
       } else {
-        const r = await fetch('/api/clientes/publico', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-        const d = await r.json().catch(() => ({}))
-        if (r.ok) {
-          setExito({ modo: 'crear', codigo: d.codigo, nombre_mascota: d.nombre_mascota, precio_total: d.precio_total })
-          setForm({ ...FORM_DEFAULT, fecha_retiro: todayISO() })
-        } else {
-          setError(d?.error ?? 'No pudimos registrar la ficha. Revisa los datos e inténtalo de nuevo.')
-        }
+        setError(d?.error ?? 'No pudimos guardar tus datos. Revisa e inténtalo de nuevo.')
       }
     } catch {
       setError('Error de red. Verifica tu conexión e inténtalo de nuevo.')
@@ -183,11 +163,9 @@ export default function RegistroMascotaPage() {
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
           <div>
             <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>🐾 Crematorio Alma Animal</p>
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mt-2">{modo === 'completar' ? 'Completa los datos de tu mascota' : 'Registro de tu mascota'}</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mt-2">Completa los datos de tu mascota</h1>
             <p className="text-base sm:text-lg mt-3 opacity-95 max-w-2xl">
-              {modo === 'completar'
-                ? 'Tu retiro ya está confirmado. Completa lo que puedas para agilizar el ingreso — y si algo no lo sabes, no te preocupes: lo coordinamos al momento del retiro.'
-                : 'Completa los datos para coordinar el servicio. Es un paso simple y nos permite acompañarte con todo el cuidado que mereces.'}
+              Tu retiro ya está confirmado. Completa lo que puedas para agilizar el ingreso — y si algo no lo sabes, no te preocupes: lo coordinamos al momento del retiro.
             </p>
           </div>
           <img src={LOGO} alt="Alma Animal" className="hidden sm:block h-24 w-auto shrink-0" />
@@ -202,7 +180,21 @@ export default function RegistroMascotaPage() {
           </div>
         )}
 
-        {yaIngresada ? (
+        {sinLink ? (
+          /* Sin el link firmado no hay ficha que completar: acá no se abren
+             servicios nuevos, eso lo coordina el equipo. */
+          <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6 sm:p-8 text-center">
+            <div className="text-5xl mb-3">🐾</div>
+            <p className="text-base text-gray-800">
+              Este formulario se abre con el <strong>link que te enviamos por WhatsApp</strong> cuando confirmamos el retiro de tu mascota.
+            </p>
+            <p className="text-sm text-gray-600 mt-3">
+              Si necesitas coordinar un servicio o no encuentras tu link, escríbenos a{' '}
+              <a href="https://wa.me/56978640811" className="underline" style={{ color: COLOR }}>+56 9 7864 0811</a>{' '}
+              o a <a href="mailto:contacto@crematorioalmaanimal.cl" className="underline" style={{ color: COLOR }}>contacto@crematorioalmaanimal.cl</a> y lo vemos contigo.
+            </p>
+          </div>
+        ) : yaIngresada ? (
           <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6 sm:p-8 text-center">
             <div className="text-5xl mb-3">🐾</div>
             <p className="text-base text-gray-800">
@@ -341,9 +333,7 @@ export default function RegistroMascotaPage() {
           <button type="submit" disabled={enviando}
             className="w-full px-6 py-3.5 text-white font-semibold rounded-lg disabled:opacity-60 transition-opacity text-base"
             style={{ backgroundColor: COLOR }}>
-            {enviando
-              ? (modo === 'completar' ? 'Guardando…' : 'Registrando…')
-              : (modo === 'completar' ? 'Guardar mis datos' : 'Registrar a mi mascota')}
+            {enviando ? 'Guardando…' : 'Guardar mis datos'}
           </button>
         </form>
         )}
@@ -357,28 +347,16 @@ export default function RegistroMascotaPage() {
       </main>
 
       {/* Pop-up de confirmación */}
-      <Modal open={!!exito} onClose={() => setExito(null)} title={exito?.modo === 'completar' ? '¡Datos recibidos!' : '¡Registro completado!'}>
+      <Modal open={!!exito} onClose={() => setExito(null)} title="¡Datos recibidos!">
         {exito && (
           <div className="text-center py-2">
             <div className="text-5xl mb-3">🐾</div>
             <p className="text-base text-gray-800 mb-3">
               Gracias por confiar en nosotros para cuidar de <strong>{exito.nombre_mascota}</strong>.
             </p>
-            {exito.modo === 'completar' ? (
-              <p className="text-sm text-gray-600">
-                Recibimos los datos. Nuestro equipo revisará y confirmará el ingreso, y te llegará el código de tu mascota por correo. No necesitas hacer nada más.
-              </p>
-            ) : (
-              <>
-                <div className="rounded-xl p-4 my-4" style={{ backgroundColor: CREAM, border: `1px solid ${HAIRLINE}` }}>
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Código de tu mascota</p>
-                  <p className="text-2xl font-bold mt-1" style={{ color: COLOR }}>{exito.codigo}</p>
-                </div>
-                <p className="text-sm text-gray-600">
-                  Te enviamos este código a tu correo. Nuestro equipo se contactará contigo para coordinar el retiro.
-                </p>
-              </>
-            )}
+            <p className="text-sm text-gray-600">
+              Recibimos los datos. Nuestro equipo revisará y confirmará el ingreso, y te llegará el código de tu mascota por correo. No necesitas hacer nada más.
+            </p>
             <button onClick={() => setExito(null)} className="mt-6 px-6 py-2.5 text-white font-medium rounded-lg" style={{ backgroundColor: COLOR }}>
               Entendido
             </button>

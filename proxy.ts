@@ -101,10 +101,11 @@ export async function proxy(req: NextRequest) {
     pathname === '/api/veterinarios/inscribir' ||
     // Tabla de tarifas de convenio para el landing (solo lectura de precios_convenio).
     pathname === '/api/veterinarios/precios-convenio' ||
-    // Registro público de mascota (auto-atención del tutor) + su endpoint de
-    // metadata/creación. Cliente general "sin veterinaria", sin sesión.
+    // Completar la ficha desde el link firmado que manda el bot. La página solo
+    // funciona CON ese token: el registro público abierto (que creaba fichas con
+    // código y correo de bienvenida sin que hubiéramos retirado a la mascota) se
+    // eliminó por decisión del dueño (2026-07-28) — nunca se usó.
     pathname === '/registro-mascota' ||
-    pathname === '/api/clientes/publico' ||
     // Completar el borrador desde el link firmado del WhatsApp de retiro
     // confirmado (auth = token HMAC; NO genera código, solo enriquece el borrador).
     pathname === '/api/clientes/completar-borrador' ||
