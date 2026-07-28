@@ -202,6 +202,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   // Correos transaccionales enviados al tutor (estado de entrega por etapa).
   const [correos, setCorreos] = useState<CorreoCliente[]>([])
 
+  // Reenvío del correo de ingreso (bienvenida + código + links de foto/video,
+  // que se regeneran con 48 h nuevas de vigencia).
+  const [reenviandoIngreso, setReenviandoIngreso] = useState(false)
+  const [feedbackIngreso, setFeedbackIngreso] = useState<{ kind: 'ok' | 'error'; msg: string } | null>(null)
+
   // Eliminar ficha (admin only)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
@@ -396,6 +401,29 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       setFeedbackCert({ kind: 'error', msg: e instanceof Error ? e.message : 'Error al enviar' })
     } finally {
       setEnviandoCert(false)
+    }
+  }
+
+  // Reenvía al tutor el correo de ingreso con links NUEVOS (los del correo
+  // original vencen a las 48 h). Va al correo que hoy tiene la ficha.
+  async function reenviarCorreoIngreso() {
+    if (reenviandoIngreso) return
+    if (!window.confirm(`Se reenviará el correo de ingreso de ${cliente?.nombre_mascota || 'la mascota'} a ${cliente?.email}, con enlaces nuevos para subir la foto y solicitar el video (48 h de vigencia). ¿Continuar?`)) return
+    setFeedbackIngreso(null)
+    setReenviandoIngreso(true)
+    try {
+      const res = await fetch(`/api/clientes/${id}/reenviar-registro`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setFeedbackIngreso({ kind: 'error', msg: data?.error ?? 'No se pudo reenviar el correo' })
+        return
+      }
+      setFeedbackIngreso({ kind: 'ok', msg: `Correo de ingreso reenviado a ${data.to} con enlaces nuevos.` })
+      await fetchCorreos()
+    } catch (e) {
+      setFeedbackIngreso({ kind: 'error', msg: e instanceof Error ? e.message : 'Error al reenviar' })
+    } finally {
+      setReenviandoIngreso(false)
     }
   }
 
@@ -883,6 +911,17 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               <p className="text-sm text-gray-600 mt-1">Tutor: <span className="font-semibold text-gray-900">{cliente.nombre_tutor || '—'}</span></p>
             </div>
             {cliente.estado !== 'borrador' && (
+              <div className="flex flex-wrap items-start gap-2 w-full sm:w-auto sm:shrink-0">
+                {/* Reenvía la bienvenida al tutor regenerando los links firmados
+                    (subir foto / solicitar video), que vencen a las 48 h. */}
+                <button
+                  onClick={reenviarCorreoIngreso}
+                  disabled={reenviandoIngreso || !cliente.email}
+                  title={!cliente.email ? 'La ficha no tiene correo registrado' : `Reenviar el correo de ingreso a ${cliente.email} con enlaces nuevos`}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 border border-brand/40 text-brand hover:bg-brand/10 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {reenviandoIngreso ? '⌛ Enviando…' : '✉️ Reenviar correo de ingreso a cliente'}
+                </button>
               <div className="relative w-full sm:w-auto sm:shrink-0" ref={docsMenuRef}>
                 {/* Inputs ocultos: compartidos por el menú y el botón de evidencia del peso. */}
                 <input
@@ -996,8 +1035,18 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   </div>
                 )}
               </div>
+              </div>
             )}
           </div>
+          {feedbackIngreso && (
+            <div className={`mt-4 rounded-lg px-3 py-2 text-xs font-medium border ${
+              feedbackIngreso.kind === 'ok'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-red-50 border-red-200 text-red-800'
+            }`}>
+              {feedbackIngreso.msg}
+            </div>
+          )}
           {feedbackCert && (
             <div className={`mt-4 rounded-lg px-3 py-2 text-xs font-medium border ${
               feedbackCert.kind === 'ok'
