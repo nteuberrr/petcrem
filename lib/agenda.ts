@@ -42,6 +42,10 @@ const SEP_ANTES = 30                   // bloqueo ANTES de una reserva (dueño 2
 const SEP_DESPUES = 45                 // bloqueo DESPUÉS de una reserva
 const SEPARACION_MIN = SEP_DESPUES     // paso de la grilla de horas ofrecidas
 const BUFFER_MIN = 60                   // no se agenda dentro de la próxima hora (lead time del chofer)
+// Cierre del HORARIO DE ATENCIÓN (09:00–22:00). Es el tope de las EUTANASIAS a
+// domicilio, que las presta un vet de la red: ahí manda la hora que pidió el
+// cliente, no la ventana del chofer (dueño 2026-07-28, ver evaluarHoraEutanasia).
+const MIN_CIERRE_ATENCION = 22 * 60
 // Eutanasia: el vet informa la hora de la VISITA (acordada con el cliente) y
 // nuestro chofer pasa a retirar ~30 min después → la agenda muestra ese desfase.
 const DESFASE_RETIRO_MIN = 30
@@ -402,6 +406,46 @@ export async function horaLibreEnFranja(fechaRaw: string, franja: 'AM' | 'PM'): 
   const ref = (franja === 'AM' ? 10 : 16) * 60
   const orden = [...libresFranja].sort((a, b) => Math.abs((horaMin(a) ?? 0) - ref) - Math.abs((horaMin(b) ?? 0) - ref))
   return { hora: orden[0] || null, libresFranja }
+}
+
+/**
+ * Valida la hora EXACTA que pidió el cliente para una EUTANASIA a domicilio.
+ *
+ * A diferencia del retiro (lo hace NUESTRO chofer, con su ventana y su hora de
+ * anticipación), la eutanasia la presta un veterinario de la red que después
+ * confirma disponibilidad. Por eso acá MANDA la hora que pidió el cliente
+ * (decisión del dueño 2026-07-28, caso Gasparín: pidió las 21:00 y el sistema la
+ * agendó a las 17:30): se respeta dentro del horario de atención 09:00–22:00 —el
+ * mismo que el bot le promete— y solo se rechaza si de verdad no se puede:
+ * fecha pasada, hora inválida, agenda bloqueada por el equipo o choque con otra
+ * reserva. NO aplica el corte de las 21:10 ni el buffer de la próxima hora.
+ */
+export async function evaluarHoraEutanasia(fechaRaw: string, horaRaw: string): Promise<EvalSlot> {
+  const fecha = formatDateForSheet(fechaRaw) || String(fechaRaw || '').trim()
+  const { iso: hoy, min: ahora } = ahoraChile()
+  const [ocupados, bloqueos] = await Promise.all([ocupadosDe(fecha), listarBloqueos(fecha, fecha)])
+  const rangos = rangosDelDia(bloqueos, fecha)
+  const libres = horasLibres(fecha, hoy, ahora, ocupados, rangos)
+
+  if (!fecha) return { ok: false, motivo: 'No indicaste una fecha válida.', libres }
+  if (fecha < hoy) return { ok: false, motivo: `La fecha ${fecha} ya pasó.`, libres }
+
+  const min = horaMin(horaRaw)
+  if (min == null) return { ok: false, motivo: 'La hora no es válida (usa formato HH:MM).', libres }
+  if (min < MIN_APERTURA || min > MIN_CIERRE_ATENCION)
+    return { ok: false, motivo: `Atendemos de ${fmtMin(MIN_APERTURA)} a ${fmtMin(MIN_CIERRE_ATENCION)}: esa hora queda fuera del horario de atención.`, libres }
+  if (fecha === hoy && min < ahora)
+    return { ok: false, motivo: `Las ${fmtMin(min)} de hoy ya pasaron.`, libres }
+
+  const bloq = bloqueadoEn(min, rangos)
+  if (bloq) {
+    const franja = bloq.ini <= 0 && bloq.fin >= 24 * 60 ? 'todo ese día' : `de ${fmtMin(bloq.ini)} a ${fmtMin(bloq.fin)}`
+    return { ok: false, motivo: `El horario de las ${fmtMin(min)} del ${fecha} no está disponible: tenemos la agenda cerrada ${franja}.`, libres }
+  }
+  if (choca(min, ocupados))
+    return { ok: false, motivo: `El horario de las ${fmtMin(min)} del ${fecha} no está disponible: queda muy pegado a otro servicio ya agendado (dejamos al menos 30 minutos antes y 45 después).`, libres }
+
+  return { ok: true, libres }
 }
 
 /**

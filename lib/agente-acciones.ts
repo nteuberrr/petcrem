@@ -7,7 +7,7 @@ import { agregarDiasHabiles, isoFecha, tieneExpress, EXPRESS_DIAS } from './dias
 import { fmtPrecio } from './format'
 import { precioClienteEutanasia, getConsultaEutanasia, getRecargoFueraHorario, recargoEutanasiaPara } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
-import { evaluarSlotRetiro, horaLibreEnFranja } from './agenda'
+import { evaluarSlotRetiro, evaluarHoraEutanasia, horaLibreEnFranja } from './agenda'
 import { capitalizarNombre } from './nombres'
 import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional } from './cobros'
@@ -543,16 +543,48 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
     }
   }
 
-  // Franja → primera hora LIBRE de esa franja en la agenda (respeta los 45 min
-  // con las demás reservas: retiros y otras eutanasias). AM=mañana, PM=tarde.
-  const franja = (a.franja || '').toUpperCase() === 'PM' ? 'PM' : 'AM'
-  const { hora } = await horaLibreEnFranja(a.fecha, franja)
-  if (!hora) {
-    const otra = franja === 'PM' ? 'la mañana' : 'la tarde'
-    return `NO agendes: la franja de ${franja === 'PM' ? 'la tarde' : 'la mañana'} del ${formatDate(a.fecha)} ya está completa (dejamos al menos 1 hora entre cada servicio agendado). Ofrécele al cliente ${otra} de ese día u otro día, y vuelve a llamar la herramienta cuando elija.`
+  // HORA DEL SERVICIO. Si el cliente acordó una hora EXACTA, esa manda: se valida
+  // contra la agenda y, si no se puede, NO se agenda ni se mueve en silencio — se
+  // le devuelven al modelo las horas libres para que las converse con el cliente.
+  //
+  // Caso real (Gasparín, 2026-07-28): la clienta pidió las 21:00, el agente se lo
+  // confirmó por escrito y la solicitud salió agendada a las 17:30, porque la
+  // herramienta solo recibía la FRANJA y `horaLibreEnFranja` elige la hora libre
+  // más cercana a la representativa de la franja (10:00 AM / 16:00 PM).
+  const horaPedida = /^([01]?\d|2[0-3]):[0-5]\d$/.test((a.hora || '').trim())
+    ? (a.hora || '').trim().padStart(5, '0')
+    : ''
+  // Con hora exacta, la franja sale de ella (corte 13:00) — así el match de vets
+  // usa la franja real y no la que hubiera mandado el modelo.
+  const franja: 'AM' | 'PM' = horaPedida
+    ? (parseInt(horaPedida.slice(0, 2), 10) < 13 ? 'AM' : 'PM')
+    : ((a.franja || '').toUpperCase() === 'PM' ? 'PM' : 'AM')
+
+  let hora = ''
+  if (horaPedida) {
+    const ev = await evaluarHoraEutanasia(a.fecha, horaPedida)
+    if (!ev.ok) {
+      const libres = ev.libres.length
+        ? ` Horas libres ese día: ${ev.libres.join(', ')}.`
+        : ' Ese día ya no quedan horas libres.'
+      return `NO agendes: no podemos tomar las ${horaPedida} del ${formatDate(a.fecha)}. Motivo: ${ev.motivo || 'esa hora no está disponible.'}${libres} ` +
+        `Explícaselo al cliente con calidez, ofrécele esas horas (o el día siguiente) y vuelve a llamar la herramienta con la hora que ELIJA. ` +
+        `NUNCA agendes una hora distinta de la que acordaste con el cliente: si no se puede, se conversa, no se cambia por dentro.`
+    }
+    hora = horaPedida
+  } else {
+    // Sin hora exacta: primera hora LIBRE de la franja (respeta la separación con
+    // las demás reservas). AM=mañana, PM=tarde.
+    const { hora: h } = await horaLibreEnFranja(a.fecha, franja)
+    if (!h) {
+      const otra = franja === 'PM' ? 'la mañana' : 'la tarde'
+      return `NO agendes: la franja de ${franja === 'PM' ? 'la tarde' : 'la mañana'} del ${formatDate(a.fecha)} ya está completa (dejamos al menos 1 hora entre cada servicio agendado). Ofrécele al cliente ${otra} de ese día u otro día, y vuelve a llamar la herramienta cuando elija.`
+    }
+    hora = h
   }
+
   const sinCremacion = (a.tipo_servicio_cremacion || '').toUpperCase() === 'NINGUNA'
-  const notas = `Solicitud vía WhatsApp (bot). Franja preferida: ${franja === 'PM' ? 'tarde' : 'mañana'}.` +
+  const notas = `Solicitud vía WhatsApp (bot). ${horaPedida ? `Hora acordada con el cliente: ${horaPedida}.` : `Franja preferida: ${franja === 'PM' ? 'tarde' : 'mañana'} (sin hora exacta).`}` +
     (sinCremacion ? ' SIN cremación (el tutor no la quiere).' : (a.tipo_servicio_cremacion ? ` Cremación elegida: ${a.tipo_servicio_cremacion}.` : ''))
 
   const [{ cliente: precioBase }, recargoMonto] = await Promise.all([precioClienteEutanasia(peso), getRecargoFueraHorario()])
@@ -590,7 +622,7 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
     `Tutor: ${a.nombre_tutor}\n` +
     `Mascota: ${a.nombre_mascota} (${a.especie}, ${peso} kg)\n` +
     `Dirección: ${a.direccion}, ${res.comunaCanon}\n` +
-    `Fecha: ${formatDate(a.fecha)} · ${franja === 'PM' ? 'tarde' : 'mañana'}\n` +
+    `Fecha: ${formatDate(a.fecha)} · ${hora} hrs (${franja === 'PM' ? 'tarde' : 'mañana'})\n` +
     cremTxt +
     (waCliente ? `Cliente: +${waCliente}` : '') + (a.email ? ` · ${a.email}\n` : '\n') +
     (res.matched > 0
@@ -602,12 +634,16 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
     ? ` El valor del servicio para el cliente es ${fmtPrecio(cliente)}${recargoFuera > 0 ? ` (incluye ${fmtPrecio(recargoFuera)} de recargo por ser fuera de horario, sobre ${fmtPrecio(precioBase)}). Avísale ese recargo con claridad al cliente` : ''}.`
     : ''
 
+  // La HORA queda explícita en el resultado: el modelo debe confirmarle al cliente
+  // exactamente la que se registró (nunca otra).
+  const horaTxt = ` Quedó registrada para el ${formatDate(a.fecha)} a las ${hora} hrs: confírmale esa MISMA hora al cliente.`
+
   if (res.matched === 0) {
     return `Registré la solicitud de eutanasia (N° ${res.id}) pero ahora mismo no hay veterinarios disponibles para ${res.comunaCanon} en esa fecha/franja. ` +
-      `Dile al cliente que su solicitud quedó INGRESADA y que el equipo lo contactará a la brevedad para coordinar.${precioTxt}`
+      `Dile al cliente que su solicitud quedó INGRESADA y que el equipo lo contactará a la brevedad para coordinar.${horaTxt}${precioTxt}`
   }
   return `Solicitud de eutanasia registrada (N° ${res.id}) y enviada a ${res.enviados} veterinario${res.enviados === 1 ? '' : 's'} de nuestra red en ${res.comunaCanon}. ` +
-    `Dile al cliente que su solicitud quedó INGRESADA y que nos pondremos en contacto por este mismo medio apenas un veterinario confirme su disponibilidad.${precioTxt}`
+    `Dile al cliente que su solicitud quedó INGRESADA y que nos pondremos en contacto por este mismo medio apenas un veterinario confirme su disponibilidad.${horaTxt}${precioTxt}`
 }
 
 /**
