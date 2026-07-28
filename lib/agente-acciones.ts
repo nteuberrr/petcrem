@@ -54,6 +54,50 @@ async function botonesATodosLosAdmins(body: string, botones: BotonWa[]): Promise
   return { ok, error: error || undefined }
 }
 
+/**
+ * Cierra la carrera de la SOLICITUD DUPLICADA (defensa en profundidad).
+ *
+ * Los guards de "este cliente ya tiene una solicitud pendiente" se hacen con un
+ * SELECT antes del INSERT: si dos turnos del agente corren en paralelo (pasaba
+ * cuando el cliente mandaba dos mensajes casi juntos — ver el debounce del
+ * webhook), ninguno ve la fila del otro y ambos agendan. Caso real 2026-07-28:
+ * solicitudes #57 y #58, mismo tutor, misma mascota, misma hora, dos avisos al
+ * equipo.
+ *
+ * Por eso, DESPUÉS de insertar, releemos y comparamos ids: si existe una
+ * solicitud rival con id MENOR, esta perdió la carrera → se anula (estado
+ * 'duplicada', solo si sigue pendiente) y el caller no avisa al equipo. Devuelve
+ * el id de la solicitud ganadora, o null si esta es la válida.
+ */
+async function anularSiDuplicada(
+  miId: number | string,
+  esRival: (s: Record<string, string>) => boolean,
+): Promise<string | null> {
+  const mio = parseInt(String(miId), 10) || 0
+  let rival: Record<string, string> | undefined
+  try {
+    rival = (await getSheetData(SHEET_RETIRO))
+      .filter(s => (parseInt(s.id, 10) || 0) < mio && esRival(s))
+      .sort((a, b) => (parseInt(a.id, 10) || 0) - (parseInt(b.id, 10) || 0))[0]
+  } catch (e) {
+    console.warn('[agente-acciones] no pude verificar solicitudes duplicadas:', e)
+    return null // best-effort: ante un fallo de lectura, seguimos el flujo normal
+  }
+  if (!rival) return null
+  try {
+    await updateByIdIf(
+      SHEET_RETIRO, String(miId),
+      { estado: 'pendiente' },
+      { estado: 'duplicada', fecha_resolucion: new Date().toISOString() },
+    )
+  } catch (e) { console.warn('[agente-acciones] no pude anular la solicitud duplicada:', e) }
+  console.warn(`[agente-acciones] solicitud ${miId} anulada por duplicada (gana ${rival.id})`)
+  return rival.id
+}
+
+/** Últimos 9 dígitos de un número, para comparar teléfonos con formatos distintos. */
+const tel9de = (n: string) => (n || '').replace(/\D/g, '').slice(-9)
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Handlers de las herramientas del agente de WhatsApp (tool-use). El webhook los
 // inyecta en generarRespuesta(); solo se le ofrecen al modelo las acciones que
@@ -132,6 +176,16 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
     fecha_creacion: todayISO(),
     fecha_resolucion: '',
   })
+
+  // Perdedor de una carrera (dos turnos del agente en paralelo): se anula y no
+  // se avisa al equipo, así el retiro no queda agendado dos veces.
+  const ganadora = await anularSiDuplicada(id, s =>
+    tel9de(s.cliente_wa_id) === tel9 &&
+    (s.estado === 'pendiente' ||
+      (s.estado === 'confirmada' && s.fecha_retiro === a.fecha && s.hora_retiro === a.hora)))
+  if (ganadora) {
+    return `Esta solicitud YA había quedado registrada (N° ${ganadora}) — se estaba procesando en paralelo. NO registres otra ni repitas el aviso: dile al cliente, cálido y breve, que su solicitud de retiro ya está recibida y que le confirmaremos a la brevedad.`
+  }
 
   const resumen =
     `🐾 *Nueva solicitud de retiro*\n\n` +
@@ -310,6 +364,17 @@ async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<s
     vet_nombre: unico.nombre || '',
     vet_email: unico.correo || '',
   })
+
+  // Mismo cierre de carrera que en el flujo del tutor, pero acotado al MISMO
+  // retiro (un vet sí agenda varios seguidos): misma mascota, fecha y hora.
+  const ganadora = await anularSiDuplicada(id, s =>
+    ['pendiente', 'confirmada'].includes(s.estado || '') &&
+    tel9de(s.cliente_wa_id) === tel9de(waVet) &&
+    (s.nombre_mascota || '').trim().toLowerCase() === a.nombre_mascota.trim().toLowerCase() &&
+    s.fecha_retiro === a.fecha && s.hora_retiro === a.hora)
+  if (ganadora) {
+    return `Este retiro YA había quedado registrado (N° ${ganadora}) — se estaba procesando en paralelo. NO registres otro ni repitas el aviso: confírmale al veterinario, breve, que la solicitud de retiro de ${a.nombre_mascota} ya está recibida y que le avisaremos apenas la validemos.`
+  }
 
   const resumen =
     `🐾 *Nueva solicitud de retiro (VETERINARIO)*\n\n` +

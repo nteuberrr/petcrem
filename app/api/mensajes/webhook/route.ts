@@ -30,7 +30,7 @@ const DEBOUNCE_MS = 5000
  * Canales: whatsapp (flujo completo, con tools de agendamiento) e instagram
  * (informa/cotiza/escala; sin tools de agendamiento — esos corren por WhatsApp).
  */
-async function autoResponder(conv: Conversacion, contacto: Contacto) {
+async function autoResponder(conv: Conversacion, contacto: Contacto, miMsgId?: number) {
   if (process.env.AGENTE_AUTO_RESPONDER === 'false') return
   if (!isAgenteConfigurado()) return
   const esIg = conv.canal === 'instagram'
@@ -45,17 +45,35 @@ async function autoResponder(conv: Conversacion, contacto: Contacto) {
   // ── Debounce anti-ráfaga ──────────────────────────────────────────────────
   // El cliente suele mandar varias preguntas en mensajes separados y seguidos;
   // cada uno dispara este webhook. Sin esto, el bot respondía UNA VEZ POR
-  // MENSAJE. Solución: marcamos el ts del último mensaje ENTRANTE, esperamos
-  // DEBOUNCE_MS y volvemos a mirar. Si en ese lapso llegó otro mensaje entrante
-  // MÁS NUEVO, este turno se abandona (lo responderá el webhook de ese mensaje,
-  // ya con el contexto completo). Así una tanda de preguntas → UNA respuesta.
-  const tsUltimoEntrante = (msgs: Awaited<ReturnType<typeof getMensajes>>) =>
-    msgs.filter(m => m.direccion === 'entrante').reduce((mx, m) => Math.max(mx, new Date(m.ts as string).getTime() || 0), 0)
-  const t0 = tsUltimoEntrante(await getMensajes(conv.id))
+  // MENSAJE. Regla: de todos los webhooks en vuelo responde SOLO el del ÚLTIMO
+  // mensaje entrante; esperamos DEBOUNCE_MS y, si al despertar el último entrante
+  // ya no es el mío, abandono el turno (lo responderá el webhook de ese mensaje,
+  // con el contexto completo). Así una tanda de preguntas → UNA respuesta.
+  //
+  // ⚠️ La identidad se compara por ID DE FILA, no por timestamp: los ts de
+  // WhatsApp tienen granularidad de SEGUNDOS, así que dos mensajes seguidos
+  // suelen compartir ts (o el 2º ya está insertado cuando el 1º toma su marca) y
+  // el criterio "¿llegó algo más nuevo?" daba FALSO en ambos → los dos turnos
+  // respondían. Eso duplicaba la respuesta y, peor, las acciones: dos llamadas
+  // concurrentes a solicitar_retiro se saltaban mutuamente el guard de "ya hay
+  // una pendiente" y agendaban el retiro dos veces (caso real 2026-07-28,
+  // solicitudes #57/#58). Con el id (secuencia monotónica) el desempate es
+  // determinista: exactamente UNO de los turnos concurrentes continúa.
+  const ultimoEntranteId = (msgs: Awaited<ReturnType<typeof getMensajes>>): number => {
+    const entrantes = msgs.filter(m => m.direccion === 'entrante')
+    return entrantes.length ? Number(entrantes[entrantes.length - 1].id) : 0
+  }
+  const soyElUltimo = (msgs: Awaited<ReturnType<typeof getMensajes>>) =>
+    !miMsgId || ultimoEntranteId(msgs) === miMsgId
+  // getMensajes viene ordenado por (ts, id) → el último entrante es el real.
+  if (!soyElUltimo(await getMensajes(conv.id))) {
+    console.log('[agente] ya hay un mensaje más nuevo — este turno se salta:', conv.id, miMsgId)
+    return
+  }
   await new Promise(r => setTimeout(r, DEBOUNCE_MS))
   const msgsFrescos = await getMensajes(conv.id)
-  if (tsUltimoEntrante(msgsFrescos) > t0) {
-    console.log('[agente] llegó otro mensaje durante el debounce — este turno se salta:', conv.id)
+  if (!soyElUltimo(msgsFrescos)) {
+    console.log('[agente] llegó otro mensaje durante el debounce — este turno se salta:', conv.id, miMsgId)
     return
   }
 
@@ -316,8 +334,9 @@ async function procesarEntrante(value: Record<string, unknown>, msg: MetaMsg) {
     cuerpo = `[${tipo}]`
   }
 
+  let insertado
   try {
-    await insertarMensaje({
+    insertado = await insertarMensaje({
       conversacion_id: conv.id,
       direccion: 'entrante',
       cuerpo,
@@ -336,8 +355,11 @@ async function procesarEntrante(value: Record<string, unknown>, msg: MetaMsg) {
   }
 
   // Auto-respuesta del agente solo para mensajes de texto, tras responder a Meta.
+  // Pasamos el id de ESTE mensaje: el debounce lo usa para que, de varios webhooks
+  // en vuelo, responda solo el del último entrante (ver autoResponder).
   if (msg.type === 'text' && cuerpo) {
-    after(() => autoResponder(conv, contacto).catch(e => console.error('[agente] autoResponder:', e)))
+    const miId = Number(insertado?.id)
+    after(() => autoResponder(conv, contacto, miId).catch(e => console.error('[agente] autoResponder:', e)))
   }
 }
 
@@ -474,8 +496,9 @@ async function procesarEntranteIG(ev: IgEvento) {
   }
   if (!cuerpo && !mediaUrl) cuerpo = '[mensaje]'
 
+  let insertado
   try {
-    await insertarMensaje({
+    insertado = await insertarMensaje({
       conversacion_id: conv.id, direccion: 'entrante', cuerpo, tipo,
       media_url: mediaUrl, provider_message_id: msg.mid,
       ts: new Date(ev.timestamp || Date.now()).toISOString(),
@@ -487,7 +510,8 @@ async function procesarEntranteIG(ev: IgEvento) {
   }
 
   if (msg.text) {
-    after(() => autoResponder(conv, contacto).catch(e => console.error('[agente ig] autoResponder:', e)))
+    const miId = Number(insertado?.id)
+    after(() => autoResponder(conv, contacto, miId).catch(e => console.error('[agente ig] autoResponder:', e)))
   }
 }
 

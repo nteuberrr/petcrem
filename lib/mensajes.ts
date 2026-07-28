@@ -163,7 +163,13 @@ export async function getConversacion(id: number): Promise<ConversacionConContac
 
 export async function getMensajes(conversacionId: number): Promise<Mensaje[]> {
   const sb = getMensajesSupabase()
-  const { data, error } = await sb.from(T_MSG).select('*').eq('conversacion_id', conversacionId).order('ts', { ascending: true })
+  // Orden por ts + id: los ts de WhatsApp vienen con granularidad de SEGUNDOS, así
+  // que dos mensajes del mismo segundo quedaban en orden indefinido (el historial
+  // le podía llegar invertido al agente). El id (secuencia) desempata.
+  const { data, error } = await sb.from(T_MSG).select('*')
+    .eq('conversacion_id', conversacionId)
+    .order('ts', { ascending: true })
+    .order('id', { ascending: true })
   if (error) throw new Error(error.message)
   return (data ?? []) as Mensaje[]
 }
