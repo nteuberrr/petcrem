@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 const COLOR = '#143C64'
 const AMBER = '#F2B84B'
 
-interface Resultado { ok: boolean; error?: string; hora?: string; mascota_nombre?: string }
+interface Resultado { ok: boolean; error?: string; hora?: string; hora_retiro?: string; mascota_nombre?: string }
 
 /**
  * Página pública. El VETERINARIO llega desde el link del correo de coordinación
@@ -50,7 +50,7 @@ export default function HoraRetiroPage() {
           {token && (estado === 'inicial' || estado === 'enviando' || (data && !data.ok)) && (
             <form onSubmit={enviar} className="space-y-4">
               <p className="text-sm text-gray-700 leading-relaxed">
-                Indícanos la <strong>hora que acordaste con el cliente</strong> para la visita. Nuestro chofer pasará a retirar a la mascota <strong>dentro de la hora siguiente</strong>, así que confirma que sea la hora que quedaste con la familia.
+                Indícanos la <strong>hora del procedimiento</strong> que acordaste con la familia. Con esa hora agendamos el retiro: nuestro chofer pasa a buscar a la mascota <strong>30 minutos después</strong>.
               </p>
               <div>
                 <label className="block text-sm font-medium text-gray-900 mb-1">Hora acordada con el cliente</label>
@@ -75,8 +75,9 @@ export default function HoraRetiroPage() {
               <p className="text-5xl mb-3">🕒</p>
               <h2 className="text-xl font-bold text-gray-900 mb-1">¡Gracias!</h2>
               <p className="text-sm text-gray-600 mt-2">
-                Registramos la hora acordada: <strong style={{ color: COLOR }}>{data.hora}</strong>
-                {data.mascota_nombre ? ` por ${data.mascota_nombre}` : ''}. Nuestro chofer pasará a retirar a la mascota dentro de la hora siguiente.
+                Registramos el procedimiento a las <strong style={{ color: COLOR }}>{data.hora}</strong>
+                {data.mascota_nombre ? ` por ${data.mascota_nombre}` : ''}.
+                {data.hora_retiro ? <> Nuestro chofer pasará a retirar a la mascota a las <strong style={{ color: COLOR }}>{data.hora_retiro}</strong> (30 minutos después).</> : ' Nuestro chofer pasará a retirar a la mascota 30 minutos después.'}
               </p>
               <p className="text-xs text-gray-500 mt-4">Si necesitas cambiarla, vuelve a abrir este mismo enlace.</p>
             </div>

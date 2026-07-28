@@ -46,9 +46,33 @@ const BUFFER_MIN = 60                   // no se agenda dentro de la próxima ho
 // domicilio, que las presta un vet de la red: ahí manda la hora que pidió el
 // cliente, no la ventana del chofer (dueño 2026-07-28, ver evaluarHoraEutanasia).
 const MIN_CIERRE_ATENCION = 22 * 60
-// Eutanasia: el vet informa la hora de la VISITA (acordada con el cliente) y
-// nuestro chofer pasa a retirar ~30 min después → la agenda muestra ese desfase.
-const DESFASE_RETIRO_MIN = 30
+// Eutanasia: el vet informa la hora del PROCEDIMIENTO (la que acordó con la
+// familia) y nuestro chofer pasa a retirar 30 min después. Ese retiro se agenda
+// al informarse la hora (dueño 2026-07-28) y queda guardado en la cotización
+// (`hora_retiro_crematorio`), así que la agenda ya lo lee tal cual.
+export const DESFASE_RETIRO_MIN = 30
+
+/**
+ * Hora del RETIRO del crematorio para una eutanasia: la del procedimiento + 30
+ * min. Devuelve '' si la hora no es válida. Fuente única del desfase — la usan
+ * el endpoint donde el vet informa la hora y cualquier vista que lo recalcule.
+ */
+export function horaRetiroDeEutanasia(horaServicio: string): string {
+  const min = horaMin(horaServicio)
+  if (min == null) return ''
+  return fmtMin(Math.min(min + DESFASE_RETIRO_MIN, 24 * 60 - 1))
+}
+
+/**
+ * ¿Esa hora queda fuera de la ventana de retiros del chofer (09:00–21:10)? Se usa
+ * para avisarle al equipo cuando el retiro de una eutanasia tardía cae fuera y
+ * hay que coordinarlo a mano (la eutanasia sí se puede agendar hasta las 22:00).
+ */
+export function fueraDeVentanaRetiro(horaHHMM: string): boolean {
+  const min = horaMin(horaHHMM)
+  if (min == null) return false
+  return min < MIN_APERTURA || min > MIN_ULTIMO
+}
 
 const TZ = 'America/Santiago'
 
@@ -294,10 +318,10 @@ export async function listarAgenda(
     const horaRetiro = (c.hora_retiro_crematorio || '').trim()
     const tieneRetiro = !!horaRetiro
     const realizada = estado === 'realizada'
-    // El vet informa la hora ACORDADA con el cliente (la visita); nuestro chofer
-    // pasa a retirar ~30 min después. La agenda del crematorio muestra ese +30.
-    const baseMin = horaMin(tieneRetiro ? horaRetiro : c.hora_servicio)
-    const min = (baseMin != null && tieneRetiro) ? baseMin + DESFASE_RETIRO_MIN : baseMin
+    // `hora_retiro_crematorio` YA es la hora del retiro (procedimiento + 30 min,
+    // agendada cuando el vet informa la hora). Mientras no la informe, el bloque
+    // se muestra en la hora de la eutanasia, en amarillo.
+    const min = horaMin(tieneRetiro ? horaRetiro : c.hora_servicio)
     out.push({
       id: `e${c.id}`,
       tipo: 'eutanasia',

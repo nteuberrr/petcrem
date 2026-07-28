@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
 import { isWhatsappConfigured, avisarAdminsWhatsapp, enviarTextoWhatsapp } from '@/lib/whatsapp'
-import { formatDate } from '@/lib/dates'
+import { formatDate, formatDateForSheet } from '@/lib/dates'
+import { horaRetiroDeEutanasia, fueraDeVentanaRetiro } from '@/lib/agenda'
 import { esFueraDeHorario } from '@/lib/adicionales-auto'
 import { recargoEutanasiaPara, getRecargoFueraHorario } from '@/lib/eutanasia-precios'
 import { esFeriado, nombreFeriado } from '@/lib/feriados'
@@ -54,7 +55,22 @@ export async function POST(req: NextRequest) {
     // (caso Gasparín 2026-07-28: la vet coordinó 20:30 y el sistema seguía
     // mostrando las 17:30). Update PARCIAL por id: no reescribe el resto de la fila.
     const horaAnterior = (c.hora_servicio || '').trim()
-    await updateByIdIf(SHEET_COTI, c.id, {}, { hora_retiro_crematorio: hora, hora_servicio: hora })
+    // Nuestro RETIRO se agenda 30 min después del procedimiento (dueño 2026-07-28):
+    // el vet informa la hora de la eutanasia y el chofer pasa a buscarla enseguida.
+    const horaRetiro = horaRetiroDeEutanasia(hora) || hora
+    await updateByIdIf(SHEET_COTI, c.id, {}, { hora_servicio: hora, hora_retiro_crematorio: horaRetiro })
+
+    // La ficha de cremación queda con esa misma hora de retiro (nace del
+    // agendamiento sin fecha/hora propias): así el equipo la ve en la ficha y el
+    // recargo fuera de horario se calcula con la hora real del retiro.
+    if (c.cliente_id) {
+      try {
+        await updateByIdIf('clientes', String(c.cliente_id), {}, {
+          fecha_retiro: formatDateForSheet(c.fecha_servicio) || String(c.fecha_servicio || ''),
+          hora_retiro: horaRetiro,
+        })
+      } catch (e) { console.warn('[hora-retiro] no se pudo actualizar la ficha:', e) }
+    }
 
     if (isWhatsappConfigured()) {
       try {
@@ -62,9 +78,10 @@ export async function POST(req: NextRequest) {
           `🕒 *Hora coordinada por el veterinario* (Eutanasia N° ${c.id})\n\n` +
           `Mascota: ${c.mascota_nombre}\nTutor: ${c.cliente_nombre}\n` +
           `Vet: ${c.vet_nombre_asignado || '—'}\n` +
-          `Servicio: ${formatDate(c.fecha_servicio)} *${hora}*` +
+          `Eutanasia: ${formatDate(c.fecha_servicio)} *${hora}*` +
           (horaAnterior && horaAnterior !== hora ? ` (antes ${horaAnterior})` : '') + '\n' +
-          `${c.direccion}, ${c.comuna}`)
+          `*Retiro agendado a las ${horaRetiro}* (30 min después) · ${c.direccion}, ${c.comuna}` +
+          (fueraDeVentanaRetiro(horaRetiro) ? '\n⚠ El retiro queda fuera de la ventana habitual (hasta las 21:10): coordínalo a mano.' : ''))
       } catch (e) { console.warn('[hora-retiro] aviso admin falló:', e) }
     }
 
@@ -74,13 +91,16 @@ export async function POST(req: NextRequest) {
     try {
       const sinCremacion = (c.tipo_servicio_cremacion || '').toUpperCase() === 'NINGUNA'
       const waCliente = (c.cliente_wa_id || c.cliente_telefono || '').replace(/\D/g, '')
-      // El recargo es UNO SOLO por atención: solo se avisa si APARECE con la hora
-      // nueva (con la anterior no lo había). Si la atención ya lo llevaba, no hay
-      // nada nuevo que contar — avisarlo igual le sonaba al cliente a $20.000.
+      // El recargo es UNO SOLO por atención (la lleve la eutanasia o el retiro de
+      // la cremación) y solo se avisa si APARECE con la hora nueva: si la atención
+      // ya lo llevaba, no hay nada nuevo que contar — avisarlo igual le sonaba al
+      // cliente a $20.000.
       const montoRecargo = await getRecargoFueraHorario().catch(() => 0)
-      const recargoAntes = recargoEutanasiaPara(c.fecha_servicio, horaAnterior, montoRecargo)
-      const recargoAhora = recargoEutanasiaPara(c.fecha_servicio, hora, montoRecargo)
-      if (!sinCremacion && waCliente && recargoAntes <= 0 && recargoAhora > 0 && isWhatsappConfigured() && esFueraDeHorario(c.fecha_servicio, hora)) {
+      const llevaRecargo = (horaEut: string, horaRet: string) =>
+        recargoEutanasiaPara(c.fecha_servicio, horaEut, montoRecargo) > 0 || esFueraDeHorario(c.fecha_servicio, horaRet)
+      const recargoAntes = llevaRecargo(horaAnterior, (c.hora_retiro_crematorio || '').trim())
+      const recargoAhora = llevaRecargo(hora, horaRetiro)
+      if (!sinCremacion && waCliente && !recargoAntes && recargoAhora && isWhatsappConfigured()) {
         const otros = await getSheetData('otros_servicios').catch(() => [])
         const fh = otros.find(s => (s.auto_regla || '') === 'fuera_horario' && String(s.activo || '').toUpperCase() === 'TRUE')
         const monto = fh ? (parseInt(fh.precio, 10) || 0) : 10000
@@ -91,7 +111,7 @@ export async function POST(req: NextRequest) {
           : (dSem === 0 || dSem === 6) ? 'por ser fin de semana'
           : 'por ser después de las 18:00'
         const msg =
-          `Hola ${tutor}, la veterinaria nos informó que la hora del servicio de ${mascota} quedó coordinada para las ${hora} hrs. ` +
+          `Hola ${tutor}, la veterinaria nos informó que la hora del servicio de ${mascota} quedó coordinada para las ${hora} hrs (pasamos a retirarla a las ${horaRetiro} hrs). ` +
           `Por ese horario se suma un recargo de ${fmtPrecio(monto)} por fuera de horario (${motivo}), una sola vez ` +
           `(queda especificado en nuestra web). Te lo comentamos para que no sea una sorpresa al momento del cobro. ` +
           `Cualquier duda, quedamos atentos por aquí 🐾 — Crematorio Alma Animal`
@@ -99,7 +119,7 @@ export async function POST(req: NextRequest) {
       }
     } catch (e) { console.warn('[hora-retiro] aviso fuera de horario al cliente falló:', e) }
 
-    return NextResponse.json({ ok: true, hora, mascota_nombre: c.mascota_nombre })
+    return NextResponse.json({ ok: true, hora, hora_retiro: horaRetiro, mascota_nombre: c.mascota_nombre })
   } catch (e) {
     console.error('[eutanasias/hora-retiro] error:', e)
     return NextResponse.json({ ok: false, error: 'Error procesando la hora.' }, { status: 500 })
