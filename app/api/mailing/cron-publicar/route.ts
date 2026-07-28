@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { listarCalendario, claimPublicacion, finalizarPublicacion, marcarErrorPublicacion, type ItemCalendario } from '@/lib/marketing-calendario'
 import { publicarEnCanal, isFacebookConfigurado, isInstagramConfigurado } from '@/lib/meta-publish'
 import { barridoOportunidadSeguimiento } from '@/lib/seguimiento-leads'
@@ -38,7 +38,7 @@ async function autorizado(req: NextRequest): Promise<boolean> {
     if (auth === `Bearer ${secret}`) return true
   }
   const session = await getServerSession(authOptions)
-  return esAdminTotal((session?.user as { role?: string })?.role)
+  return esAdmin((session?.user as { role?: string })?.role)
 }
 
 async function ejecutar(req: NextRequest) {

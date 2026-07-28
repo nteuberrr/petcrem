@@ -64,8 +64,22 @@ export function renderServiciosWeb(servicios: Serv[], desdePorSlug: Record<strin
     + '.aa-serv-btn{display:inline-block;align-self:flex-start;background:#143C64;color:#fff;font-size:14px;font-weight:600;border-radius:999px;padding:9px 22px;transition:background .15s ease}'
     + '.aa-serv-card:hover .aa-serv-btn{background:#0e2c4b}'
     + '@media (max-width:560px){.aa-serv-grid{grid-template-columns:1fr;gap:18px}.aa-serv-card>img{height:220px}}'
+    // Franja del Servicio Express, debajo de la grilla (pedido del dueño
+    // 2026-07-28: ese espacio quedaba vacío antes del footer).
+    + '.aa-express{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:34px 0 6px;padding:20px 24px;background:#FBF8F3;border:1px solid #e6e0d6;border-left:5px solid #F2B84B;border-radius:16px;box-shadow:0 2px 10px rgba(20,60,100,.06)}'
+    + '.aa-express-ico{font-size:26px;line-height:1}'
+    + '.aa-express-txt{flex:1;min-width:240px;color:#143C64;font-size:17px;font-weight:700;line-height:1.4}'
+    + '.aa-express-txt small{display:block;margin-top:4px;color:#5b6b7a;font-size:14px;font-weight:400}'
+    + '.aa-express-chip{background:#143C64;color:#fff;font-size:13.5px;font-weight:700;border-radius:999px;padding:8px 16px;white-space:nowrap}'
+    + '@media (max-width:560px){.aa-express{padding:18px}.aa-express-txt{font-size:16px}}'
     + '</style>'
-  return css + `<div class="aa-serv-grid">${pub.map(s => tarjeta(s, desdePorSlug[s.slug])).join('')}</div>`
+  const express = '<div class="aa-express">'
+    + '<span class="aa-express-ico" aria-hidden="true">⚡</span>'
+    + '<div class="aa-express-txt">Contrata nuestro Servicio Express y te entregamos en 48 horas hábiles'
+    + '<small>Un adicional para quien necesita las cenizas antes. Consúltalo al coordinar el retiro.</small></div>'
+    + '<span class="aa-express-chip">48 h hábiles</span>'
+    + '</div>'
+  return css + `<div class="aa-serv-grid">${pub.map(s => tarjeta(s, desdePorSlug[s.slug])).join('')}</div>` + express
 }
 
 /**

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { calcularEmbudoSemanal } from '@/lib/embudo-semanal'
 
 /**
@@ -12,7 +12,7 @@ export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!esAdminTotal((session?.user as { role?: string })?.role)) {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   const raw = parseInt(req.nextUrl.searchParams.get('semanas') || '16', 10)

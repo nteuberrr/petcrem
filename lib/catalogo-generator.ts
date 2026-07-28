@@ -377,7 +377,7 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
   }
   page.drawLine({ start: { x: MARGIN, y: y }, end: { x: MARGIN + CONTENT_W, y }, thickness: 1, color: C.navy })
   gap(10)
-  for (const ln of wrapText('El valor final se determina por el peso de tu mascota según la tarifa vigente. El Servicio Express (entrega en 2 días hábiles) está disponible como adicional.', f.regular, 8.5, CONTENT_W)) {
+  for (const ln of wrapText('El valor final se determina por el peso de tu mascota según la tarifa vigente. El Servicio Express (entrega en 48 horas hábiles) está disponible como adicional.', f.regular, 8.5, CONTENT_W)) {
     text(ln, MARGIN, y, 8.5, f.regular, C.muted); gap(12)
   }
   gap(10)

@@ -50,7 +50,11 @@ function tarjetaProducto(p: Prod): string {
 function tarjetaServicio(s: Prod): string {
   const precio = num(s.precio)
   let detalle = ''
-  if (s.auto_regla === 'fuera_horario') {
+  if (/express/i.test(s.nombre || '')) {
+    // Copy oficial del Express (dueño 2026-07-28). 48 h hábiles = los 2 días
+    // hábiles de EXPRESS_DIAS, dicho como lo comunicamos al cliente.
+    detalle = 'Te entregamos las cenizas de tu mascota en 48 horas hábiles.'
+  } else if (s.auto_regla === 'fuera_horario') {
     detalle = 'Retiros después de las 18:00 hrs (lun a vie), y todo el día los fines de semana y feriados.'
   } else if (s.auto_regla === 'distancia') {
     let comunas: string[] = []

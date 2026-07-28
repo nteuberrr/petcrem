@@ -120,6 +120,17 @@ function ctaRow(s: SlotsPlantilla, oscuro: boolean): string {
 function logoImg(url: string | undefined, abs: string, w = 168): string {
   return url ? `<img src="${esc(url)}" width="${w}" style="position:absolute;${abs}" />` : ''
 }
+/** Logo EN FLUJO (no absoluto): para apilarlo debajo del texto sin encimarse. */
+function logoFlow(url: string | undefined, w = 168): string {
+  return url ? `<div style="display:flex"><img src="${esc(url)}" width="${w}" /></div>` : ''
+}
+/**
+ * Alto reservado abajo para el logo. El lockup (huella + "ALMA ANIMAL" + bajada)
+ * es casi cuadrado: a 150-168px de ancho mide ~150px de alto, y con su margen
+ * inferior ocupa hasta ~200px. Con los 120px que había antes, un cuerpo largo se
+ * le metía encima. Es padding, así que solo agrega aire.
+ */
+const ZONA_LOGO = 200
 function bgColor(fondo?: string): string {
   return fondo === 'crema' ? CREAM : fondo === 'blanco' ? WHITE : NAVY
 }
@@ -146,7 +157,7 @@ function portada(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlan
   const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:32px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:26px">${esc(clampText(s.bajada, 130))}</span>` : ''
   const cta = ctaRow(s, oscuro)
   const lgBottom = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 168)
-  const textBlock = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:64px ${PAD}px 120px ${PAD}px">${eyebrowText}${tit}${bajada}${ruleGold()}${cta}</div>`
+  const textBlock = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:64px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eyebrowText}${tit}${bajada}${ruleGold()}${cta}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${banda}${textBlock}${lgBottom}</div>`
   return { html, fotos }
 }
@@ -176,7 +187,7 @@ function contenido(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPl
     `<div style="display:flex;flex-direction:row;align-items:flex-start;gap:16px"><div style="display:flex;width:11px;height:11px;border-radius:6px;background:${GOLD};margin-top:12px;flex-shrink:0"></div><span style="font-family:Inter;font-weight:600;font-size:30px;color:${col};line-height:1.3">${esc(clampText(b, 90))}</span></div>`).join('')
   const bullets = items ? `<div style="display:flex;flex-direction:column;gap:18px;margin-top:34px">${items}</div>` : ''
   const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:56px ${PAD}px 120px ${PAD}px">${eb}${tit}${bajada}${bullets}</div>`
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:56px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${tit}${bajada}${bullets}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${banda}${body}${lg}</div>`
   return { html, fotos }
 }
@@ -190,7 +201,7 @@ function dato(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantil
   const label = s.dato_label ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.dato_label, C.w - PAD * 2, 56, 34)}px;color:${col};line-height:1.15;margin-top:12px">${esc(clampText(s.dato_label, 40))}</span>` : ''
   const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:24px">${esc(clampText(s.bajada, 120))}</span>` : ''
   const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;align-items:flex-start;padding:64px ${PAD}px 120px ${PAD}px">${eb}${big}${label}${ruleGold()}${bajada}</div>`
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;align-items:flex-start;padding:64px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${big}${label}${ruleGold()}${bajada}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
   return { html, fotos: [] }
 }
@@ -202,9 +213,14 @@ function foto(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantil
   const frase = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2, 58, 34)}px;color:${WHITE};line-height:1.15">${esc(clampText(s.titulo, 70))}</span>` : ''
   // velo SOLO en la franja inferior (degradé que se desvanece) — no tapa la foto.
   const velo = `<div style="display:flex;position:absolute;bottom:0;left:0;width:${C.w}px;height:${Math.round(C.h * 0.42)}px;background:linear-gradient(to bottom, rgba(20,60,100,0) 0%, rgba(20,60,100,0.82) 78%)"></div>`
-  const texto = frase ? `<div style="display:flex;flex-direction:column;position:absolute;bottom:150px;left:${PAD}px;width:${C.w - PAD * 2}px">${frase}</div>` : ''
-  const lg = logoImg(o.logoBlanco, `bottom:52px;left:${PAD}px`, 168)
-  const html = `<div style="display:flex;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}"><img src="${src}" width="${C.w}" height="${C.h}" style="object-fit:cover;display:block" />${velo}${texto}${lg}</div>`
+  // Frase y logo APILADOS en una sola columna anclada abajo. Antes iban los dos
+  // como absolutos abajo-izquierda (texto en bottom:150 y logo en bottom:52) y,
+  // como el logo mide ~150px de alto, el titular le caía justo encima: el "logo
+  // montado" que reportó el dueño (2026-07-28). Apilados no pueden pisarse,
+  // cualquiera sea el alto del logo o el largo de la frase.
+  const bloqueTexto = frase ? `<div style="display:flex;flex-direction:column;margin-bottom:36px">${frase}</div>` : ''
+  const pie = `<div style="display:flex;flex-direction:column;align-items:flex-start;position:absolute;left:${PAD}px;bottom:52px;width:${C.w - PAD * 2}px">${bloqueTexto}${logoFlow(o.logoBlanco, 168)}</div>`
+  const html = `<div style="display:flex;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}"><img src="${src}" width="${C.w}" height="${C.h}" style="object-fit:cover;display:block" />${velo}${pie}</div>`
   return { html, fotos }
 }
 
@@ -224,7 +240,7 @@ function cierre(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlant
   const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:22px">${esc(clampText(s.bajada, 120))}</span>` : ''
   const cta = ctaRow(s, oscuro)
   const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 168)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px 120px ${PAD}px">${tit}${bajada}${cta}</div>`
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${tit}${bajada}${cta}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${banda}${body}${lg}</div>`
   return { html, fotos }
 }
@@ -239,7 +255,7 @@ function cita(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantil
   const frase = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2, 68, 40)}px;color:${col};line-height:1.24">${esc(clampText(s.titulo, 200))}</span>` : ''
   const autor = s.bajada ? `<span style="font-family:Inter;font-weight:600;font-size:30px;color:${oscuro ? SOFT : INK};margin-top:30px">— ${esc(clampText(s.bajada, 60))}</span>` : ''
   const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:64px ${PAD}px 120px ${PAD}px">${eb}${comilla}${frase}${autor}</div>`
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:64px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${comilla}${frase}${autor}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
   return { html, fotos: [] }
 }
@@ -263,7 +279,9 @@ function split(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlanti
   const cta = ctaRow(s, oscuro)
   const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:44px;right:44px`, 120)
   const fotoCol = `<div style="display:flex;width:${fotoW}px;height:${C.h}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${fotoW}" height="${C.h}" style="object-fit:cover;display:block" /></div>`
-  const textCol = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:64px 56px 100px 56px">${eb}${tit}${bajada}${bullets}${cta}</div>`
+  // 170 abajo: el logo del panel (120px de ancho ≈ 107 de alto + 44 de margen)
+  // llega hasta ~150px desde el borde; con 100 se le encimaban los bullets/CTA.
+  const textCol = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:64px 56px 170px 56px">${eb}${tit}${bajada}${bullets}${cta}</div>`
   const html = `<div style="display:flex;flex-direction:row;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${fotoCol}${textCol}${lg}</div>`
   return { html, fotos }
 }
@@ -281,7 +299,7 @@ function numeros(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlan
     `<div style="display:flex;flex-direction:row;align-items:center;gap:24px"><div style="display:flex;align-items:center;justify-content:center;width:66px;height:66px;border-radius:34px;background:${GOLD};flex-shrink:0"><span style="font-family:Inter;font-weight:700;font-size:36px;color:${NAVY}">${i + 1}</span></div><span style="font-family:Inter;font-weight:600;font-size:32px;color:${col};line-height:1.25">${esc(clampText(b, 76))}</span></div>`).join('')
   const lista = rows ? `<div style="display:flex;flex-direction:column;gap:26px;margin-top:40px">${rows}</div>` : ''
   const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px 120px ${PAD}px">${eb}${tit}${bajada}${lista}</div>`
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${tit}${bajada}${lista}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
   return { html, fotos: [] }
 }
@@ -302,7 +320,7 @@ function marco(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlanti
   const tit = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, marcoW, 50, 34)}px;color:${col};line-height:1.22;margin-top:40px">${esc(clampText(s.titulo, 90))}</span>` : ''
   const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:28px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:14px">${esc(clampText(s.bajada, 120))}</span>` : ''
   const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:46px;right:${PAD - 16}px`, 130)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:72px ${PAD}px 110px ${PAD}px">${cuadro}${tit}${bajada}</div>`
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:72px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${cuadro}${tit}${bajada}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
   return { html, fotos }
 }

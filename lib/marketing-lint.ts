@@ -93,6 +93,27 @@ function lintTildes(texto: string): string | null {
     : null
 }
 
+/**
+ * Placa SIN MENSAJE: su texto visible es solo el eslogan y/o el nombre de marca
+ * ("Huellas que no se borran", "Crematorio Alma Animal"). Eso ya lo dice el LOGO
+ * que va pegado en la pieza → la placa queda repitiendo la firma y sin comunicar
+ * nada (queja del dueño 2026-07-28: "contenido de bajo valor que no pude usar").
+ * Toda placa tiene que aportar UNA idea concreta: un dato, un beneficio, un paso
+ * del proceso, una frase con contenido propio o un llamado a la acción.
+ */
+function lintSinMensaje(texto: string): string | null {
+  const resto = (texto || '')
+    .replace(/huellas?\s+que\s+no\s+se\s+borran/gi, ' ')
+    .replace(/crematorio/gi, ' ')
+    .replace(/alma\s+animal/gi, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+  if (resto.length >= 14) return null
+  return 'La placa no comunica nada: es (casi) solo el eslogan y/o el nombre de la marca, que YA van en el logo. '
+    + 'Reescribila con UNA idea concreta y útil (un dato, un beneficio, un paso del proceso, un testimonio o un llamado a la acción). '
+    + 'El eslogan NUNCA es el titular de una pieza.'
+}
+
 const digitos = (s: string): string => (s || '').replace(/\D/g, '')
 
 /** Detecta un teléfono escrito que NO coincide con el oficial (incluye truncados). */
@@ -147,6 +168,8 @@ export function lintCopy(args: { caption?: string; placas?: string[]; telefono?:
     if (tildes) out.push({ campo, problema: tildes })
     const glifos = glifosRotos(p)
     if (glifos.length) out.push({ campo, problema: `Caracteres que el motor de placas NO puede dibujar (saldrían como cajas rotas): ${glifos.join(' ')}. Sacá flechas/emojis/símbolos; usá texto.` })
+    const vacio = lintSinMensaje(p)
+    if (vacio) out.push({ campo, problema: vacio })
   })
   return out
 }

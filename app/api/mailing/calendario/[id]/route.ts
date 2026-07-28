@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { actualizarItem, eliminarItem, obtenerItem, validarCambioEstado, type ItemCalendario } from '@/lib/marketing-calendario'
 
 /**
@@ -17,7 +17,7 @@ const EDITABLES: (keyof ItemCalendario)[] = [
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
-  if (!esAdminTotal((session?.user as { role?: string })?.role)) {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return { denied: NextResponse.json({ error: 'Solo admin' }, { status: 403 }), session: null }
   }
   return { denied: null, session }

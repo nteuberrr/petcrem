@@ -56,7 +56,10 @@ export const MODULOS: Modulo[] = [
   { key: 'eutanasia-ficha', label: 'Ficha de eutanasia (abrirla desde el dashboard y confirmar el resultado)', pages: ['/eutanasias'], apis: ['/api/eutanasias/ficha'], def: { admin2: true, operador: true, operador2: true } },
   { key: 'reportes', label: 'Reportes', pages: ['/reportes'], apis: ['/api/reportes'], def: { admin2: true, operador: false, operador2: false } },
   { key: 'configuracion', label: 'Configuración (Precios, Artículos, Descuentos, Jornada)', pages: ['/configuracion'], apis: ['/api/precios', '/api/productos', '/api/categorias-productos', '/api/especies', '/api/servicios', '/api/descuentos', '/api/tipos-servicio', '/api/jornada-config', '/api/empresa/informe'], def: { admin2: true, operador: false, operador2: false } },
-  { key: 'mailing', label: 'Campañas (Mail / Instagram / Facebook)', pages: ['/mailing'], apis: ['/api/mailing'], def: { admin2: false, operador: false, operador2: false } },
+  // Marketing COMPLETO (campañas de correo + agente + calendario/publicaciones +
+  // embudo + métricas + Ads). admin2 ("General") lo tiene por decisión del dueño
+  // (2026-07-28): antes las sub-APIs internas eran owner-only y solo veía Campañas.
+  { key: 'mailing', label: 'Marketing (Campañas, Agente, Calendario, Embudo, Ads)', pages: ['/mailing'], apis: ['/api/mailing'], def: { admin2: true, operador: false, operador2: false } },
   { key: 'facturacion', label: 'Facturación (Boletas, Facturas, NC)', pages: ['/facturacion'], apis: ['/api/facturacion'], def: { admin2: false, operador: false, operador2: false } },
   // Panel administrador del sitio público (Web). Owner-only por defecto, activable.
   { key: 'web', label: 'Web (sitio público)', pages: ['/web'], apis: ['/api/web'], def: { admin2: false, operador: false, operador2: false } },

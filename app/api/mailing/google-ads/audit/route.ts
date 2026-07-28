@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { isGoogleAdsConfigurado, esTokenVencido } from '@/lib/google-ads'
 import { auditarCuenta } from '@/lib/google-ads-audit'
 
@@ -12,13 +12,13 @@ import { auditarCuenta } from '@/lib/google-ads-audit'
  */
 export const maxDuration = 60
 
-async function esDueño(): Promise<boolean> {
+async function puedeMarketing(): Promise<boolean> {
   const session = await getServerSession(authOptions)
-  return esAdminTotal((session?.user as { role?: string })?.role)
+  return esAdmin((session?.user as { role?: string })?.role)
 }
 
 export async function GET() {
-  if (!(await esDueño())) return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
+  if (!(await puedeMarketing())) return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   if (!isGoogleAdsConfigurado()) {
     return NextResponse.json({ error: 'Google Ads no está configurado (faltan credenciales OAuth/developer token).' }, { status: 400 })
   }

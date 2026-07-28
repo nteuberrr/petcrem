@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { isAdsGestionConfigurado, listarCampanas, pausarCampana, activarCampana, ajustarPresupuesto } from '@/lib/meta-ads'
 
 /**
@@ -13,13 +13,13 @@ import { isAdsGestionConfigurado, listarCampanas, pausarCampana, activarCampana,
  */
 export const maxDuration = 60
 
-async function esDueño(): Promise<boolean> {
+async function puedeMarketing(): Promise<boolean> {
   const session = await getServerSession(authOptions)
-  return esAdminTotal((session?.user as { role?: string })?.role)
+  return esAdmin((session?.user as { role?: string })?.role)
 }
 
 export async function GET() {
-  if (!(await esDueño())) return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
+  if (!(await puedeMarketing())) return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   if (!isAdsGestionConfigurado()) return NextResponse.json({ error: 'Meta no está configurado (falta META_GRAPH_TOKEN).' }, { status: 400 })
   try {
     return NextResponse.json(await listarCampanas())
@@ -29,7 +29,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await esDueño())) return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
+  if (!(await puedeMarketing())) return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   if (!isAdsGestionConfigurado()) return NextResponse.json({ error: 'Meta no está configurado.' }, { status: 400 })
   const body = await req.json().catch(() => ({})) as { accion?: string; campana_id?: string; monto_clp?: number }
   const id = (body.campana_id || '').trim()

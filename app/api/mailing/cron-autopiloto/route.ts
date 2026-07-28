@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { correrAutopilotoSemanal } from '@/lib/marketing-autopiloto'
 
 /**
@@ -17,7 +17,7 @@ async function autorizado(req: NextRequest): Promise<boolean> {
   const secret = process.env.CRON_SECRET
   if (secret && req.headers.get('authorization') === `Bearer ${secret}`) return true
   const session = await getServerSession(authOptions)
-  return esAdminTotal((session?.user as { role?: string })?.role)
+  return esAdmin((session?.user as { role?: string })?.role)
 }
 
 async function ejecutar(req: NextRequest) {

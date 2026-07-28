@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { listarVideos, eliminarVideo, guardarVideo } from '@/lib/mailing-videos'
 import { lanzarVideo, isVeoConfigurado } from '@/lib/veo'
 
@@ -21,7 +21,7 @@ export const maxDuration = 120
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
-  if (!esAdminTotal((session?.user as { role?: string })?.role)) {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return { denied: NextResponse.json({ error: 'Solo admin' }, { status: 403 }), session: null }
   }
   return { denied: null, session }

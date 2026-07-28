@@ -228,7 +228,7 @@ async function bloqueExpress(): Promise<string> {
     const exp = otros.find(r => (r.activo || '').toUpperCase() === 'TRUE' && /express/i.test(r.nombre || ''))
     if (!exp) return ''
     const precio = fmtPrecio(parseInt(exp.precio, 10) || 0)
-    return `SERVICIO EXPRESS (opcional — id ${exp.id}, tipo servicio): por +${precio} la entrega de las cenizas + certificado pasa a ${EXPRESS_DIAS} días HÁBILES en vez de ${ENTREGA_DIAS}. Ofrécelo SOLO SI AMERITA: cuando el cliente tiene apuro, necesita las cenizas para una fecha, o pregunta por una entrega más rápida. Si lo acepta, agrégalo con "agregar_adicional" usando ese id (tipo servicio). No lo sumes si no lo pidió; y aunque sea express, el plazo siempre se dice en días HÁBILES.`
+    return `SERVICIO EXPRESS (opcional — id ${exp.id}, tipo servicio): por +${precio} la entrega de las cenizas + certificado pasa a 48 HORAS HÁBILES (= ${EXPRESS_DIAS} días hábiles) en vez de ${ENTREGA_DIAS} días hábiles. Al cliente dilo así: "te entregamos las cenizas de tu mascota en 48 horas hábiles". Ofrécelo SOLO SI AMERITA: cuando el cliente tiene apuro, necesita las cenizas para una fecha, o pregunta por una entrega más rápida. Si lo acepta, agrégalo con "agregar_adicional" usando ese id (tipo servicio). No lo sumes si no lo pidió; y aunque sea express, el plazo siempre es en HÁBILES (48 h hábiles, no 48 h corridas).`
   } catch { return '' }
 }
 

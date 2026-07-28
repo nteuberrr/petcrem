@@ -11,6 +11,15 @@
 
 /** Reglas para el redactor/diseñador de piezas sociales (IG/FB). */
 export const GUIA_SOCIAL = `GUÍA DE CONTENIDO SOCIAL (Instagram/Facebook 2026 — reglas de calidad, aplicalas):
+PRUEBA DE VALOR (lo PRIMERO: pasá cada pieza por acá antes de entregarla; si falla algún punto, cambiá la pieza, no la maquilles)
+1. ¿QUÉ SE LLEVA quien la ve? Tiene que haber UNA cosa concreta: un dato, un plazo, un precio de referencia, un paso del proceso, la respuesta a una duda real, una historia/testimonio o una oferta clara. Si la respuesta es "que existimos" o "que somos cálidos", NO SIRVE: es contenido de relleno y el dueño no lo publica.
+2. ¿PODRÍA FIRMARLA CUALQUIER CREMATORIO? Si sí, es genérica. Metele lo que solo nosotros podemos decir: entrega en 4 días hábiles (48 horas hábiles con el Servicio Express), retiro habitualmente en menos de 3 horas, abiertos los 7 días de 09:00 a 22:00, instalaciones propias sin externalizar, trazabilidad con código y certificado.
+3. ¿EL TITULAR SE ENTIENDE SOLO, sin leer el caption? Una frase decorativa sin sujeto ("Un adiós con amor", "Siempre en tu corazón") NO es un titular: no informa ni engancha.
+4. ¿YA LO DIJIMOS ASÍ en las últimas piezas? Si el ángulo, el titular o el molde se repiten, cambialos.
+CREATIVIDAD (el dueño la pide EXPRESAMENTE — no te quedes en lo seguro)
+- Tenés libertad total de ÁNGULO. Ejemplos de ángulos que sí valen: la duda que la gente no se atreve a preguntar ("¿de verdad me entregan las cenizas de MI mascota?"), el detrás de escena del proceso paso a paso, un mito a derribar, la comparación honesta entre modalidades, qué hacer en la primera hora tras el fallecimiento, cómo explicárselo a un niño, la carta de un tutor, el dato que sorprende, señales para saber cuándo llamar al veterinario.
+- La marca la sostienen la voz, la paleta y las plantillas — el CONTENIDO tiene que ser TUYO y arriesgar. Preferí siempre lo específico y útil por sobre lo bonito y vacío.
+- Sobriedad no es blandura: se puede ser directo, informativo y hasta contraintuitivo sin perder el respeto. Lo que NO se puede es ser irrelevante.
 DIMENSIÓN Y ZONA SEGURA
 - Todo el feed en 4:5 vertical (1080x1350). Los elementos críticos (titular, logo, cara del animal, CTA) van en el TERCIO CENTRAL y con 60-80px de aire desde cada borde: el grid del perfil recorta a 3:4 y no debe cortar nada importante.
 CAPTION (Instagram funciona como buscador — keywords > hashtags)

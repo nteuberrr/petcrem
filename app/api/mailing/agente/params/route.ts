@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { getMarketingParams, updateMarketingParams, type MarketingParams } from '@/lib/marketing-params'
 
 /**
@@ -12,7 +12,7 @@ import { getMarketingParams, updateMarketingParams, type MarketingParams } from 
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
-  if (!esAdminTotal((session?.user as { role?: string })?.role)) {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   return null

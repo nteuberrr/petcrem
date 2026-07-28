@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { performancePosts, isInsightsConfigurado } from '@/lib/meta-insights'
 
 /**
@@ -13,7 +13,7 @@ export const maxDuration = 30
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!esAdminTotal((session?.user as { role?: string })?.role)) {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   if (!isInsightsConfigurado()) return NextResponse.json({})

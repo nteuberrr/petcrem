@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { obtenerItem } from '@/lib/marketing-calendario'
 import { getFromR2, keyFromPublicUrl } from '@/lib/cloudflare-r2'
 import JSZip from 'jszip'
@@ -40,7 +40,7 @@ async function bajar(url: string): Promise<Buffer | null> {
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
-  if (!esAdminTotal((session?.user as { role?: string })?.role)) {
+  if (!esAdmin((session?.user as { role?: string })?.role)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   const { id } = await params
