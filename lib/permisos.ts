@@ -44,7 +44,9 @@ export const MODULOS: Modulo[] = [
   // resultado que el fallback histórico, ahora gobernado por el editor).
   { key: 'asistencia', label: 'Asistencia', pages: ['/asistencia'], apis: ['/api/asistencia', '/api/jornada-config', '/api/retiros-adicionales', '/api/pagos-retiros'], def: { admin2: true, operador: true, operador2: true } },
   { key: 'mensajes', label: 'Mensajes', pages: ['/mensajes'], apis: ['/api/mensajes', '/api/solicitudes-retiro'], def: { admin2: true, operador: false, operador2: false } },
-  { key: 'rendiciones', label: 'Rendiciones', pages: ['/rendiciones'], apis: ['/api/rendiciones'], def: { admin2: true, operador: false, operador2: false } },
+  // /api/equipo = listado básico del equipo (para elegir de quién es el gasto).
+  // Va acá porque /api/usuarios es Configuración Avanzada (solo el dueño).
+  { key: 'rendiciones', label: 'Rendiciones', pages: ['/rendiciones'], apis: ['/api/rendiciones', '/api/equipo'], def: { admin2: true, operador: false, operador2: false } },
   { key: 'bases', label: 'Veterinarios (Bases)', pages: ['/bases'], apis: ['/api/veterinarios'], def: { admin2: true, operador: false, operador2: false } },
   { key: 'servicios', label: 'Servicios (Eutanasias)', pages: ['/servicios'], apis: ['/api/eutanasias', '/api/servicios'], def: { admin2: true, operador: false, operador2: false } },
   // Ficha de UNA eutanasia (la que se abre desde el dashboard / la agenda): ver

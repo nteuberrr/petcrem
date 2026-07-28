@@ -5,6 +5,7 @@ import { fmtPrecio } from '@/lib/format'
 import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
+import { PageHeader, Card, Button } from '@/components/ui/kit'
 
 type Rendicion = {
   id: string; usuario: string; descripcion: string; fecha: string
@@ -53,7 +54,9 @@ export default function RendicionesPage() {
   const fetchAll = useCallback(async () => {
     const [r, u, p] = await Promise.all([
       fetch('/api/rendiciones').then(r => r.json()),
-      fetch('/api/usuarios').then(r => r.json()),
+      // /api/equipo (no /api/usuarios, que es Configuración Avanzada y le daba 403
+      // a admin2 → el selector le quedaba con un solo nombre).
+      fetch('/api/equipo').then(r => r.json()).catch(() => []),
       fetch('/api/rendiciones/partidas').then(r => r.json()).catch(() => []),
     ])
     setRendiciones(Array.isArray(r) ? r : [])
@@ -217,55 +220,48 @@ export default function RendicionesPage() {
 
   return (
     <div className="max-w-6xl space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold text-brand tracking-tight">Rendiciones</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Gastos del personal y control de pagos</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => { resetForm(); setShowCrear(true) }}
-            className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-            + Nueva rendición
-          </button>
-          <button onClick={() => setShowPagar(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-            💰 Pagar rendiciones
-          </button>
-          <button onClick={descargarInforme}
-            className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-            ↓ Descargar informe
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Rendiciones"
+        subtitle="Gastos del personal y control de pagos"
+        icon={<span className="text-3xl">🧾</span>}
+        actions={<>
+          <Button onClick={() => { resetForm(); setShowCrear(true) }}>+ Nueva rendición</Button>
+          <Button variant="gold" onClick={() => setShowPagar(true)}>💰 Pagar rendiciones</Button>
+          <Button variant="secondary" onClick={descargarInforme}>↓ Descargar informe</Button>
+        </>}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-          <div className="flex items-baseline justify-between mb-2">
-            <p className="text-xs font-medium text-amber-700 uppercase tracking-wide">Pendientes de pago</p>
-            <p className="text-2xl font-bold text-amber-900">{fmtPrecio(totalPendientes)}</p>
+        <Card className="p-5 border-l-4 border-l-amber-400">
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <p className="text-xs font-bold text-amber-700 uppercase tracking-wide">Pendientes de pago</p>
+            <p className="text-2xl font-extrabold text-amber-900">{fmtPrecio(totalPendientes)}</p>
           </div>
           {pendientesPorUsuarioArr.length > 0 ? (
-            <div className="mt-3 divide-y divide-amber-200 border-t border-amber-200">
+            <div className="mt-3 divide-y divide-gray-200 border-t border-gray-200">
               {pendientesPorUsuarioArr.map(([usuario, monto]) => (
                 <div key={usuario} className="flex items-center justify-between py-1.5 text-sm">
-                  <span className="text-amber-900">{usuario}</span>
-                  <span className="font-semibold text-amber-900">{fmtPrecio(monto)}</span>
+                  <span className="text-gray-700">{usuario}</span>
+                  <span className="font-semibold text-gray-900">{fmtPrecio(monto)}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-xs text-amber-700 italic mt-2">Sin pendientes</p>
+            <p className="text-xs text-gray-400 italic mt-2">Sin pendientes</p>
           )}
-        </div>
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
-          <p className="text-xs font-medium text-emerald-700 uppercase tracking-wide">Total pagado</p>
-          <p className="text-2xl font-bold text-emerald-900 mt-1">{fmtPrecio(totalPagados)}</p>
-        </div>
+        </Card>
+        <Card className="p-5 border-l-4 border-l-emerald-500">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Total pagado</p>
+            <p className="text-2xl font-extrabold text-emerald-900">{fmtPrecio(totalPagados)}</p>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">{rendiciones.filter(r => r.estado === 'pagado').length} rendiciones pagadas</p>
+        </Card>
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 bg-white border border-gray-300 rounded-2xl shadow-md px-4 py-3">
         <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value as typeof filtroEstado)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
           <option value="todos">Todos los estados</option>
@@ -311,22 +307,22 @@ export default function RendicionesPage() {
       )}
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-x-auto">
+      <Card className="overflow-x-auto">
         <table className="w-full text-sm min-w-[920px]">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="px-3 py-3 w-8 text-center">{esPrincipal && <input type="checkbox" checked={todasSel} onChange={toggleAll} title="Seleccionar todas" />}</th>
+              <th className="px-3 py-3 w-8 text-center">{esPrincipal && <input type="checkbox" checked={todasSel} onChange={toggleAll} title="Seleccionar todas" className="accent-[#143C64] w-4 h-4 cursor-pointer" />}</th>
               {['Usuario', 'Descripción', 'Fecha', 'Monto', 'Documento', 'Clasif.', 'Partida', 'Estado', ''].map((h, i) => (
-                <th key={i} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
+                <th key={i} className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-200">
             {filtered.map(r => {
               const esAporte = (r.clasificacion || 'rendicion') === 'aporte'
               return (
-                <tr key={r.id} className={`hover:bg-gray-50 ${sel.has(r.id) ? 'bg-brand/10/40' : ''}`}>
-                  <td className="px-3 py-3 text-center">{esPrincipal && <input type="checkbox" checked={sel.has(r.id)} onChange={() => toggleSel(r.id)} />}</td>
+                <tr key={r.id} className={`transition-colors ${sel.has(r.id) ? 'bg-brand/5' : 'hover:bg-gray-50'}`}>
+                  <td className="px-3 py-3 text-center">{esPrincipal && <input type="checkbox" checked={sel.has(r.id)} onChange={() => toggleSel(r.id)} className="accent-[#143C64] w-4 h-4 cursor-pointer" />}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{r.usuario}</td>
                   <td className="px-4 py-3 text-gray-700">{r.descripcion}</td>
                   <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(r.fecha)}</td>
@@ -343,23 +339,31 @@ export default function RendicionesPage() {
                   <td className="px-4 py-3">
                     <Badge variant={r.estado === 'pagado' ? 'green' : 'yellow'}>{r.estado}</Badge>
                   </td>
+                  {/* Acciones VISIBLES (antes eran texto gris-300/400, casi invisible
+                      y fuera del estándar del resto del sitio). */}
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     {esPrincipal ? (
-                      <>
-                        <button onClick={() => editar(r)} className="text-xs text-gray-400 hover:text-brand mr-3">Editar</button>
-                        <button onClick={() => eliminar(r)} className="text-xs text-gray-300 hover:text-red-600">Eliminar</button>
-                      </>
+                      <div className="inline-flex gap-2">
+                        <button onClick={() => editar(r)}
+                          className="rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 hover:border-brand hover:text-brand transition-colors">
+                          Editar
+                        </button>
+                        <button onClick={() => eliminar(r)}
+                          className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors">
+                          Eliminar
+                        </button>
+                      </div>
                     ) : <span className="text-gray-300">—</span>}
                   </td>
                 </tr>
               )
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-400">Sin rendiciones</td></tr>
+              <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-gray-400">Sin rendiciones</td></tr>
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* Modal nueva rendición */}
       <Modal open={showCrear} onClose={() => { setShowCrear(false); resetForm() }} title={editId ? 'Editar rendición' : 'Nueva rendición'}>

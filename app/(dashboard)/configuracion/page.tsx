@@ -631,7 +631,7 @@ export default function ConfiguracionPage() {
                 📄 Descargar catálogo de productos
               </a>
               <button onClick={() => { setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '', stock: '' }); setShowProdModal(true) }}
-                className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+                className="shrink-0 whitespace-nowrap bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
             </div>
           </div>
           {productos.length === 0 ? (
@@ -709,7 +709,7 @@ export default function ConfiguracionPage() {
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Especies</h2>
             <button onClick={() => { setEditingEspecie(null); setEspecieForm({ nombre: '', letra: '' }); setShowEspecieModal(true) }}
-              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+              className="shrink-0 whitespace-nowrap bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50"><tr>{['Nombre', 'Letra', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
@@ -747,7 +747,7 @@ export default function ConfiguracionPage() {
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Tipos de servicio</h2>
             <button onClick={() => { setEditingTipoServicio(null); setTipoServicioForm({ nombre: '', codigo: '', plazo_entrega_dias: '4' }); setShowTipoServicioModal(true) }}
-              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+              className="shrink-0 whitespace-nowrap bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50"><tr>{['Nombre', 'Código', 'Plazo entrega', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
@@ -786,7 +786,7 @@ export default function ConfiguracionPage() {
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Otros Productos/Servicios</h2>
             <button onClick={() => { setEditingOtro(null); setOtroForm({ nombre: '', precio: '', auto_regla: '', comunas: '' }); setShowOtroModal(true) }}
-              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+              className="shrink-0 whitespace-nowrap bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50"><tr>{['Nombre', 'Precio', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>
@@ -829,13 +829,15 @@ export default function ConfiguracionPage() {
       {/* ─── DESCUENTOS ─── */}
       {tab === 'Descuentos' && (
         <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
-            <div>
+          {/* gap-4 + min-w-0: la bajada de Descuentos es larga y sin esto le comía
+              el ancho al botón "+ Agregar", que salía partido en dos líneas. */}
+          <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-gray-300">
+            <div className="min-w-0">
               <h2 className="font-semibold text-gray-900">Descuentos</h2>
               <p className="text-xs text-gray-400 mt-0.5">Variable (%) o Fijo (monto en CLP) · Aplica SOLO al precio de la cremación (los adicionales se pagan completos) · El logo es el que se muestra en la web (Web → Convenios controla cuáles aparecen)</p>
             </div>
             <button onClick={() => { setEditingDescuento(null); setDescuentoForm({ nombre: '', tipo: 'variable', valor: '' }); setShowDescuentoModal(true) }}
-              className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
+              className="shrink-0 whitespace-nowrap bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50"><tr>{['Logo', 'Nombre', 'Tipo', 'Valor', 'Estado', ''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>)}</tr></thead>

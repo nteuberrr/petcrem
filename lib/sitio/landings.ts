@@ -166,7 +166,11 @@ export const LANDINGS: Record<string, Landing> = {
 
 const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-function waLink(msg: string): string {
+/** Link de WhatsApp al número público, con el mensaje ya escrito. Fuente ÚNICA
+ *  del número para todo el sitio (lo reusa, p.ej., la franja del Express en
+ *  /servicios). Un click en un href wa.me dispara además la conversión de Ads
+ *  (ver lib/sitio/ads-conversion.ts). */
+export function waLink(msg: string): string {
   return `https://wa.me/${WA}?text=${encodeURIComponent(msg)}`
 }
 

@@ -6,6 +6,7 @@
  */
 
 import { BASE_URL } from './render'
+import { waLink } from './landings'
 
 type Serv = Record<string, string>
 
@@ -70,14 +71,17 @@ export function renderServiciosWeb(servicios: Serv[], desdePorSlug: Record<strin
     + '.aa-express-ico{font-size:26px;line-height:1}'
     + '.aa-express-txt{flex:1;min-width:240px;color:#143C64;font-size:17px;font-weight:700;line-height:1.4}'
     + '.aa-express-txt small{display:block;margin-top:4px;color:#5b6b7a;font-size:14px;font-weight:400}'
-    + '.aa-express-chip{background:#143C64;color:#fff;font-size:13.5px;font-weight:700;border-radius:999px;padding:8px 16px;white-space:nowrap}'
-    + '@media (max-width:560px){.aa-express{padding:18px}.aa-express-txt{font-size:16px}}'
+    + '.aa-express-chip{display:inline-block;background:#143C64;color:#fff;font-size:14px;font-weight:700;border-radius:999px;padding:11px 22px;white-space:nowrap;text-decoration:none;transition:background .15s ease,transform .15s ease}'
+    + '.aa-express-chip:hover{background:#0e2c4b;transform:translateY(-1px)}'
+    + '@media (max-width:560px){.aa-express{padding:18px}.aa-express-txt{font-size:16px}.aa-express-chip{width:100%;text-align:center}}'
     + '</style>'
+  // El chip es el CTA: abre WhatsApp con el mensaje ya escrito, así el agente
+  // sabe de entrada que viene por el Express y cotiza la cremación incluyéndolo.
   const express = '<div class="aa-express">'
     + '<span class="aa-express-ico" aria-hidden="true">⚡</span>'
     + '<div class="aa-express-txt">Contrata nuestro Servicio Express y te entregamos en 48 horas hábiles'
-    + '<small>Un adicional para quien necesita las cenizas antes. Consúltalo al coordinar el retiro.</small></div>'
-    + '<span class="aa-express-chip">48 h hábiles</span>'
+    + '<small>Un adicional para quien necesita las cenizas antes. Escríbenos y lo coordinamos.</small></div>'
+    + `<a class="aa-express-chip" href="${esc(waLink('Hola, estoy interesado en el servicio de cremación express'))}" target="_blank" rel="noopener">Lo quiero por WhatsApp</a>`
     + '</div>'
   return css + `<div class="aa-serv-grid">${pub.map(s => tarjeta(s, desdePorSlug[s.slug])).join('')}</div>` + express
 }

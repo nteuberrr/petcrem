@@ -917,10 +917,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 <button
                   onClick={reenviarCorreoIngreso}
                   disabled={reenviandoIngreso || !cliente.email}
-                  title={!cliente.email ? 'La ficha no tiene correo registrado' : `Reenviar el correo de ingreso a ${cliente.email} con enlaces nuevos`}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 border border-brand/40 text-brand hover:bg-brand/10 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={!cliente.email ? 'La ficha no tiene correo registrado' : `Reenviar el correo de ingreso a ${cliente.email}, con enlaces nuevos de foto y video (48 h)`}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1 whitespace-nowrap border border-brand/40 text-brand hover:bg-brand/10 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {reenviandoIngreso ? '⌛ Enviando…' : '✉️ Reenviar correo de ingreso a cliente'}
+                  {reenviandoIngreso ? '⌛ Enviando…' : '✉️ Reenviar correo de ingreso'}
                 </button>
               <div className="relative w-full sm:w-auto sm:shrink-0" ref={docsMenuRef}>
                 {/* Inputs ocultos: compartidos por el menú y el botón de evidencia del peso. */}
