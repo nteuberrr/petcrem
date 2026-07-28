@@ -7,7 +7,8 @@ import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-mailer'
 import { resolverVet, enviarCodigoVet } from '@/lib/vet-cremacion-mailer'
 import { todayISO } from '@/lib/dates'
-import { calcularSnapshotFicha, type AdicionalItem } from '@/lib/price-calculator'
+import { calcularSnapshotFicha, leerSnapshotFicha, type AdicionalItem } from '@/lib/price-calculator'
+import { crearEstimadorFichas } from '@/lib/precio-estimado'
 import { capitalizarNombre } from '@/lib/nombres'
 import { sincronizarSaldoParcial } from '@/lib/cobros'
 
@@ -80,6 +81,35 @@ export async function GET(req: NextRequest) {
         })
       }
     } catch { /* la lista sale igual, sin la línea de eutanasia */ }
+
+    // Valor a cobrar ESTIMADO (NO persistido) de las fichas BORRADOR: las que
+    // nacen de un agendamiento (bot, manual o eutanasia) entran "por ingresar"
+    // y sin precio congelado. Se calcula en vivo con las tablas vigentes para
+    // que la ficha muestre su monto desde el minuto cero. Solo borradores: una
+    // ficha vieja sin snapshot NO se re-tarifica con los precios de hoy.
+    try {
+      const sinSnapshot = rows.filter(r => (r.estado || '') === 'borrador' && !leerSnapshotFicha(r))
+      if (sinSnapshot.length) {
+        const estimar = await crearEstimadorFichas()
+        const est = new Map(sinSnapshot.map(r => [String(r.id), estimar(r)]))
+        rows = rows.map(r => {
+          const e = est.get(String(r.id))
+          if (!e) return r
+          return {
+            ...r,
+            precio_estimado: 'TRUE',
+            precio_estimado_servicio: String(e.servicio),
+            precio_estimado_adicionales: String(e.adicionales),
+            precio_estimado_descuento: String(e.descuento),
+            precio_estimado_total: String(e.total),
+            precio_estimado_lineas: JSON.stringify(e.lineas),
+            precio_estimado_modalidad: e.codigo_servicio,
+            precio_estimado_modalidad_asumida: e.modalidad_asumida ? 'TRUE' : 'FALSE',
+            precio_estimado_falta_peso: e.falta_peso ? 'TRUE' : 'FALSE',
+          }
+        })
+      }
+    } catch (e) { console.warn('[clientes GET] no se pudo estimar el valor de las fichas sin snapshot:', e) }
 
     return NextResponse.json(rows)
   } catch (e) {

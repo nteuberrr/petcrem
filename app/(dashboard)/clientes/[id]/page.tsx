@@ -10,7 +10,7 @@ import { formatDateForSheet } from '@/lib/dates'
 import { parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { anforaPremiumIncluida, servicioIncluyeAnforaPremium, repartirAnforasPremium } from '@/lib/anforas-premium'
-import { aplicaReglaAuto } from '@/lib/adicionales-auto'
+import { aplicaReglaAuto, cremacionLlevaRecargoFueraHorario } from '@/lib/adicionales-auto'
 import { esAdmin } from '@/lib/roles'
 
 type Certificado = {
@@ -112,6 +112,8 @@ type ClienteDetalle = {
    *  cobra aparte y NO va en la boleta (esa es solo por la cremación). */
   eutanasia?: {
     id: string
+    /** Fecha del servicio (ISO) — con la hora de retiro define si el retiro va fuera de horario. */
+    fecha_servicio?: string
     hora_servicio: string
     hora_retiro_crematorio: string
     estado: string
@@ -624,36 +626,47 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   // registrada no cambia sola sus adicionales al editarla).
   const autoAgregadosRef = useRef<Set<string>>(new Set())
   const autoQuitadosRef = useRef<Set<string>>(new Set())
-  // Si la ficha viene de una eutanasia a domicilio, el recargo fuera de horario ya
-  // se cobra con la eutanasia (aparte de la boleta) → la cremación NO vuelve a
-  // sumar su propio recargo de retiro fuera de horario (evita el cobro doble).
-  const deEutanasia = !!cliente?.eutanasia
+  // Recargo fuera de horario: UNO SOLO por atención (ver lib/adicionales-auto).
+  // Si la eutanasia asociada ya lo cobra (va fuera de boleta), la cremación NO lo
+  // suma. Si la eutanasia quedó dentro de horario pero el retiro no, lo cobra la
+  // cremación. Mientras la ficha no tenga fecha/hora propias, el retiro es el que
+  // coordinó el veterinario (hora_retiro_crematorio de la eutanasia).
+  const eutanasiaCobraRecargo = (cliente?.eutanasia?.recargo_fuera_horario ?? 0) > 0
+  const eutFecha = cliente?.eutanasia?.fecha_servicio || ''
+  const eutHoraRetiro = cliente?.eutanasia?.hora_retiro_crematorio || ''
   useEffect(() => {
     if (cliente?.estado !== 'borrador') return
-    const ctx = { fecha: form.fecha_retiro, hora: form.hora_retiro, comuna: form.comuna }
+    const ctx = {
+      fecha: form.fecha_retiro || eutFecha,
+      hora: form.hora_retiro || eutHoraRetiro,
+      comuna: form.comuna,
+    }
     setAdicionales(prev => {
       let next = prev
       for (const s of otrosServicios) {
         if (!(s.auto_regla || '').trim()) continue
         const esFueraHorario = (s.auto_regla || '').trim() === 'fuera_horario'
-        // Con eutanasia asociada, el recargo fuera de horario ya lo cobra la
-        // eutanasia (fuera de boleta) → la cremación NUNCA lo lleva.
-        const aplica = deEutanasia && esFueraHorario ? false : aplicaReglaAuto(s, ctx)
+        const aplica = esFueraHorario
+          ? cremacionLlevaRecargoFueraHorario({
+              retiroFueraHorario: aplicaReglaAuto(s, ctx),
+              eutanasiaYaCobraRecargo: eutanasiaCobraRecargo,
+            })
+          : aplicaReglaAuto(s, ctx)
         const presente = next.some(a => a.tipo === 'servicio' && a.id === s.id)
         if (aplica && !presente && !autoQuitadosRef.current.has(s.id)) {
           autoAgregadosRef.current.add(s.id)
           next = [...next, { tipo: 'servicio' as const, id: s.id, nombre: s.nombre, precio: parseFloat(s.precio) || 0, qty: 1 }]
-        } else if (!aplica && presente && (autoAgregadosRef.current.has(s.id) || (deEutanasia && esFueraHorario))) {
+        } else if (!aplica && presente && (autoAgregadosRef.current.has(s.id) || (esFueraHorario && eutanasiaCobraRecargo))) {
           // Se saca si lo agregamos nosotros, o SIEMPRE si es el recargo fuera de
-          // horario y la ficha va con eutanasia — aunque viniera persistido en los
-          // adicionales guardados (así se corrige el cobro doble al abrir/registrar).
+          // horario y ese recargo ya lo cobra la eutanasia — aunque viniera
+          // persistido en los adicionales guardados (corrige el cobro doble).
           autoAgregadosRef.current.delete(s.id)
           next = next.filter(a => !(a.tipo === 'servicio' && a.id === s.id))
         }
       }
       return next
     })
-  }, [cliente?.estado, form.fecha_retiro, form.hora_retiro, form.comuna, otrosServicios, deEutanasia])
+  }, [cliente?.estado, form.fecha_retiro, form.hora_retiro, form.comuna, otrosServicios, eutanasiaCobraRecargo, eutFecha, eutHoraRetiro])
 
   function toggleAdicional(tipo: 'producto' | 'servicio', item: { id: string; nombre: string; precio: string }) {
     const existing = adicionales.find(a => a.tipo === tipo && a.id === item.id)
@@ -793,6 +806,16 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   // Si el vet tiene precios especiales, el selector queda bloqueado en "especial".
   const precioBloqueado = precioOptions.length === 1 && precioOptions[0].value === 'especial'
 
+  // ── Valor a cobrar (cabecera). Se muestra SIEMPRE, también en las fichas que
+  // vienen de un agendamiento (bot / manual / eutanasia) y todavía están "por
+  // ingresar": ahí el precio aún no está congelado, así que el monto es una
+  // ESTIMACIÓN en vivo con las tablas vigentes (se congela al registrar).
+  const eutanasiaValorHeader = cliente.eutanasia?.valor_cliente ?? 0
+  const totalACobrarHeader = Math.round(totalServicio) + eutanasiaValorHeader
+  const precioCongelado = (parseInt(String(cliente.precio_total || '0'), 10) || 0) > 0
+  const precioEsEstimado = !precioCongelado
+  const faltaModalidad = !form.codigo_servicio
+
   const certUltimo = certificadosEmitidos[0]
   const puedeGenerarCert = cliente.estado === 'cremado' || cliente.estado === 'despachado'
 
@@ -909,6 +932,32 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-brand truncate">{cliente.nombre_mascota}</h1>
               <p className="text-sm text-gray-600 mt-1">Tutor: <span className="font-semibold text-gray-900">{cliente.nombre_tutor || '—'}</span></p>
+
+              {/* Valor a cobrar por los servicios contratados. Visible siempre —
+                  en una ficha por ingresar es la estimación en vivo. */}
+              <div className="mt-3 rounded-xl border-2 border-brand/25 bg-cream px-4 py-2.5">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-gray-600">Valor a cobrar</span>
+                  <span className="text-xl font-extrabold text-brand">{fmtPrecio(totalACobrarHeader)}</span>
+                  {precioEsEstimado && (
+                    <span className="text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded"
+                      title="El precio se congela al registrar la ficha; por ahora se calcula con las tablas de precios vigentes.">
+                      estimado
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-600 mt-1 leading-tight">
+                  {pesoKg <= 0
+                    ? 'Falta el peso de la mascota para calcular el valor.'
+                    : <>
+                        {tablaNombre} · {codigoServ} · {fmtPrecio(precioServicio)}
+                        {totalAdicionales > 0 && <> + adicionales {fmtPrecio(totalAdicionales)}</>}
+                        {montoDescuento > 0 && <> − descuento {fmtPrecio(montoDescuento)}</>}
+                        {eutanasiaValorHeader > 0 && <> + eutanasia {fmtPrecio(eutanasiaValorHeader)} <span className="text-gray-400">(fuera de boleta)</span></>}
+                      </>}
+                  {faltaModalidad && pesoKg > 0 && <> · <span className="text-amber-800 font-semibold">falta confirmar la modalidad (estimado como Cremación Individual)</span></>}
+                </p>
+              </div>
             </div>
             {cliente.estado !== 'borrador' && (
               <div className="flex flex-wrap items-start gap-2 w-full sm:w-auto sm:shrink-0">
@@ -1798,7 +1847,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       {/* Resumen del servicio */}
       <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-gray-900">Resumen del servicio</h2>
+          <h2 className="text-base font-semibold text-gray-900">
+            Resumen del servicio
+            {precioEsEstimado && (
+              <span className="ml-2 text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded align-middle">
+                estimado
+              </span>
+            )}
+          </h2>
           <span className="text-xs text-gray-400">{tablaNombre}</span>
         </div>
 

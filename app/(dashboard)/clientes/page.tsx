@@ -29,6 +29,14 @@ type Cliente = {
   precio_servicio?: string; precio_adicionales?: string; precio_total?: string
   /** Valor a cobrar de la eutanasia a domicilio asociada (fuera de boleta); lo agrega el GET de la lista. */
   eutanasia_valor?: string
+  /** Estimación EN VIVO del valor a cobrar (fichas sin precio congelado: las que
+   *  nacen de un agendamiento y siguen "por ingresar"). La agrega el GET. */
+  precio_estimado?: string
+  precio_estimado_total?: string
+  precio_estimado_lineas?: string
+  precio_estimado_modalidad?: string
+  precio_estimado_modalidad_asumida?: string
+  precio_estimado_falta_peso?: string
   descuento_monto?: string; descuento_nombre?: string
 }
 type Especie = { id: string; nombre: string; letra: string; activo: string }
@@ -569,11 +577,13 @@ export default function ClientesPage() {
 
   // Resumen del servicio para la tarjeta de la lista: servicio + adicionales
   // (con "Incluido" para el ánfora premium de una Cremación Premium) + total.
-  // null si la ficha no tiene snapshot de precio (borrador/legacy).
-  function resumenServicio(c: Cliente): { lineas: { nombre: string; valor: string; verde?: boolean }[]; total: number } | null {
+  // Si la ficha todavía no tiene precio congelado (las que nacen de un
+  // agendamiento y siguen "por ingresar"), se muestra la ESTIMACIÓN en vivo que
+  // calcula el GET, marcada como tal — así toda ficha muestra su valor a cobrar.
+  function resumenServicio(c: Cliente): { lineas: { nombre: string; valor: string; verde?: boolean }[]; total: number; estimado?: boolean; nota?: string } | null {
     const servicioPrecio = intCLP(c.precio_servicio)
     const total = intCLP(c.precio_total)
-    if (servicioPrecio <= 0 && total <= 0) return null
+    if (servicioPrecio <= 0 && total <= 0) return resumenEstimado(c)
     const cs = (c.codigo_servicio || 'CI').toUpperCase()
     const lineas: { nombre: string; valor: string; verde?: boolean }[] = [
       { nombre: NOMBRE_MODALIDAD[cs] || 'Cremación', valor: fmtPrecio(servicioPrecio) },
@@ -601,6 +611,50 @@ export default function ClientesPage() {
   }
 
   /**
+   * Resumen de una ficha SIN precio congelado, a partir de la estimación en vivo
+   * del GET (`precio_estimado_*`). Devuelve null solo si no se pudo estimar
+   * (p. ej. la ficha todavía no tiene peso): ahí la tarjeta avisa qué falta.
+   */
+  function resumenEstimado(c: Cliente): { lineas: { nombre: string; valor: string; verde?: boolean }[]; total: number; estimado: boolean; nota?: string } | null {
+    if (String(c.precio_estimado || '').toUpperCase() !== 'TRUE') return null
+    const eutanasia = intCLP(c.eutanasia_valor)
+    const faltaPeso = String(c.precio_estimado_falta_peso || '').toUpperCase() === 'TRUE'
+    if (faltaPeso && eutanasia <= 0) {
+      return { lineas: [{ nombre: 'Falta el peso para calcular', valor: '—' }], total: 0, estimado: true, nota: 'Falta el peso' }
+    }
+    let lineasEst: { nombre: string; monto: number; incluido?: boolean }[] = []
+    try {
+      const arr = JSON.parse(c.precio_estimado_lineas || '[]')
+      if (Array.isArray(arr)) lineasEst = arr
+    } catch { /* sin desglose: queda solo el total */ }
+    const lineas = lineasEst.map(l => ({
+      nombre: l.nombre,
+      valor: l.incluido ? 'Incluido' : fmtPrecio(l.monto),
+      verde: l.incluido,
+    }))
+    if (eutanasia > 0) lineas.push({ nombre: 'Eutanasia a domicilio (fuera de boleta)', valor: fmtPrecio(eutanasia), verde: false })
+    const nota = String(c.precio_estimado_modalidad_asumida || '').toUpperCase() === 'TRUE'
+      ? 'Falta la modalidad (estimado como Individual)'
+      : faltaPeso ? 'Falta el peso de la mascota' : undefined
+    return { lineas, total: intCLP(c.precio_estimado_total) + eutanasia, estimado: true, nota }
+  }
+
+  /**
+   * Valor a cobrar de una ficha: el precio congelado si ya lo tiene, y si no la
+   * estimación en vivo que agrega el GET (fichas nacidas de un agendamiento que
+   * siguen "por ingresar"). Incluye la eutanasia asociada (fuera de boleta).
+   */
+  function valorFicha(c: Cliente): { total: number; estimado: boolean } {
+    const congelado = intCLP(c.precio_total)
+    const eutanasia = intCLP(c.eutanasia_valor)
+    if (congelado > 0) return { total: congelado + eutanasia, estimado: false }
+    if (String(c.precio_estimado || '').toUpperCase() === 'TRUE') {
+      return { total: intCLP(c.precio_estimado_total) + eutanasia, estimado: true }
+    }
+    return { total: eutanasia, estimado: eutanasia > 0 }
+  }
+
+  /**
    * Monto que FALTA cobrar de una ficha. Suma dos cosas:
    *  - el total del servicio, si todavía no se pagó. En 'parcial' NO se cuenta:
    *    el resto ya vive como un cobro 'saldo' (si no, se contaría doble).
@@ -608,7 +662,7 @@ export default function ClientesPage() {
    */
   function montoPendiente(c: Cliente): number {
     const estado = (c.estado_pago || '').toLowerCase()
-    const base = estado === 'pagado' || estado === 'parcial' ? 0 : intCLP(c.precio_total) + intCLP(c.eutanasia_valor)
+    const base = estado === 'pagado' || estado === 'parcial' ? 0 : valorFicha(c).total
     const cobros = cobrosPend
       .filter(x => String(x.cliente_id) === String(c.id))
       .reduce((s, x) => s + (parseFloat(String(x.monto).replace(/[^\d.-]/g, '')) || 0), 0)
@@ -870,7 +924,15 @@ export default function ClientesPage() {
                 </div>
                 {resumen && (
                   <div className="w-40 shrink-0 border-l border-gray-200 pl-3">
-                    <p className="text-[10px] uppercase tracking-wide font-bold text-gray-500 mb-1.5">Resumen del servicio</p>
+                    <p className="text-[10px] uppercase tracking-wide font-bold text-gray-500 mb-1.5">
+                      Resumen del servicio
+                      {resumen.estimado && (
+                        <span className="ml-1 text-[9px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1 py-px rounded normal-case tracking-normal"
+                          title="Valor calculado con las tablas de precios vigentes. Se congela al registrar la ficha.">
+                          estimado
+                        </span>
+                      )}
+                    </p>
                     <div className="space-y-1">
                       {resumen.lineas.map((l, i) => (
                         <div key={i} className="flex justify-between gap-2 text-[11px] leading-tight">
@@ -882,6 +944,9 @@ export default function ClientesPage() {
                         <span className="font-bold text-gray-700">Total</span>
                         <span className="font-bold text-brand">{fmtPrecio(resumen.total)}</span>
                       </div>
+                      {resumen.nota && (
+                        <p className="text-[10px] text-amber-800 leading-tight">⚠ {resumen.nota}</p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -923,8 +988,8 @@ export default function ClientesPage() {
               <PreviewField label="Cómo nos conoció" value={labelOrigen(selected.origen)} />
               <PreviewField label="Estado de pago" value={selected.estado_pago || 'pendiente'} />
               <PreviewField
-                label="Monto total"
-                value={fmtPrecio(intCLP(selected.precio_total) + intCLP(selected.eutanasia_valor))}
+                label={`Monto total${valorFicha(selected).estimado ? ' (estimado)' : ''}`}
+                value={fmtPrecio(valorFicha(selected).total)}
               />
               {selected.estado_pago !== 'pagado' && (
                 <PreviewField label="Monto pendiente" value={fmtPrecio(montoPendiente(selected))} />

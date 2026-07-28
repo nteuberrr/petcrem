@@ -31,6 +31,8 @@
 import { getSheetData } from './datastore'
 import { formatDateForSheet, formatHora } from './dates'
 import { incluyeCremacion } from './eutanasia-cremacion'
+import { crearEstimadorFichas, valorFicha, type EstimacionFicha } from './precio-estimado'
+import { getConfigCobroEutanasia, cobroClienteCon, type ConfigCobroEutanasia } from './eutanasia-precios'
 
 export const HORA_APERTURA = 9         // primera hora de la agenda (09:00)
 export const HORA_ULTIMO_RETIRO = 21   // hora de referencia de la agenda; el corte real es 21:10
@@ -162,13 +164,25 @@ export interface AgendaItem {
   esperandoHoraVet?: boolean
   /** Eutanasia SIN cremación: solo recordatorio (etiqueta gris), NO bloquea la agenda. */
   sinCremacion?: boolean
+  /** Valor a cobrar por lo agendado (cremación + eutanasia si corresponde). */
+  valor?: number
+  /** true mientras el precio no esté congelado en la ficha (es una estimación). */
+  valorEstimado?: boolean
 }
 
 /**
  * Items de la agenda en un rango [fromISO, toISO] (ambos opcionales, ISO). El
  * rango se compara como string ISO. Ordenados por fecha y hora.
+ *
+ * `conValor` agrega el valor a cobrar de cada agendamiento (lee las tablas de
+ * precios): lo pide la vista del dashboard. El chequeo de slots del bot NO lo
+ * usa — así el agendamiento no paga esas lecturas extra.
  */
-export async function listarAgenda(fromISO?: string, toISO?: string): Promise<AgendaItem[]> {
+export async function listarAgenda(
+  fromISO?: string,
+  toISO?: string,
+  opts: { conValor?: boolean } = {},
+): Promise<AgendaItem[]> {
   const [retiros, cotis, clientes] = await Promise.all([
     getSheetData('solicitudes_retiro').catch(() => [] as Record<string, string>[]),
     getSheetData('cotizaciones_eutanasia').catch(() => [] as Record<string, string>[]),
@@ -177,6 +191,31 @@ export async function listarAgenda(fromISO?: string, toISO?: string): Promise<Ag
   const clientePorId = new Map(clientes.map(c => [String(c.id), c]))
   const inRange = (iso: string) => (!fromISO || iso >= fromISO) && (!toISO || iso <= toISO)
   const out: AgendaItem[] = []
+
+  // Valor a cobrar de cada agendamiento: el precio congelado de la ficha si ya
+  // lo tiene, si no la estimación en vivo (fichas "por ingresar" y solicitudes
+  // que todavía no generaron ficha). Best-effort: si falla, la agenda sale sin
+  // montos. Ver lib/precio-estimado.
+  let estimar: ((row: Record<string, string>) => EstimacionFicha) | null = null
+  let cfgEut: ConfigCobroEutanasia | null = null
+  if (opts.conValor) {
+    try {
+      [estimar, cfgEut] = await Promise.all([crearEstimadorFichas(), getConfigCobroEutanasia()])
+    } catch (e) { console.warn('[agenda] sin estimación de precios:', e) }
+  }
+  const valorDe = (ficha: Record<string, string> | undefined, fallback: Record<string, string>) => {
+    if (!estimar) return {}
+    const v = ficha ? valorFicha(ficha, estimar) : { total: estimar(fallback).total, estimado: true }
+    return { valor: v.total, valorEstimado: v.estimado }
+  }
+  /** Eutanasia: lo que se cobra por la eutanasia (fuera de boleta) + la cremación. */
+  const valorEutanasia = (cot: Record<string, string>) => {
+    if (!cfgEut) return {}
+    const eut = cobroClienteCon(cot, cfgEut).total
+    const ficha = cot.cliente_id ? clientePorId.get(String(cot.cliente_id)) : undefined
+    const crem = ficha && estimar ? valorFicha(ficha, estimar) : null
+    return { valor: eut + (crem?.total ?? 0), valorEstimado: crem ? crem.estimado : true }
+  }
 
   for (const r of retiros) {
     const estado = (r.estado || '').toLowerCase()
@@ -204,6 +243,15 @@ export async function listarAgenda(fromISO?: string, toISO?: string): Promise<Ag
       direccion: r.direccion || '',
       tipo_servicio: r.tipo_servicio || '',
       clienteId: r.cliente_id || '',
+      ...valorDe(ficha, {
+        peso_declarado: r.peso || '',
+        codigo_servicio: r.tipo_servicio || '',
+        veterinaria_id: r.veterinaria_id || '',
+        comuna: r.comuna || '',
+        fecha_retiro: r.fecha_retiro || '',
+        hora_retiro: r.hora_retiro || '',
+        adicionales: '[]',
+      }),
     })
   }
 
@@ -234,6 +282,7 @@ export async function listarAgenda(fromISO?: string, toISO?: string): Promise<Ag
         horaEutanasia: formatHora(c.hora_servicio) || '',
         esperandoHoraVet: false,
         sinCremacion: true,
+        ...valorEutanasia(c),
       })
       continue
     }
@@ -261,6 +310,7 @@ export async function listarAgenda(fromISO?: string, toISO?: string): Promise<Ag
       clienteId: c.cliente_id || '',
       horaEutanasia: formatHora(c.hora_servicio) || '',
       esperandoHoraVet: !tieneRetiro,
+      ...valorEutanasia(c),
     })
   }
 

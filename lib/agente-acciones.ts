@@ -13,11 +13,13 @@ import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional } from './cobros'
 import { repartirAnforasPremium } from './anforas-premium'
 import { esComunaNoCubierta } from './cobertura'
+import { findTramo, precioDelTramo } from './tramos'
+import { aplicaReglaAuto, cremacionLlevaRecargoFueraHorario } from './adicionales-auto'
 import { ajustarStockAdicionales } from './stock'
 import { generarCatalogoPdf } from './catalogo-generator'
 import { uploadToR2 } from './cloudflare-r2'
 import { upsertContacto, getOrCreateConversacion, insertarMensaje } from './mensajes'
-import type { HandlersAgente, AccionRetiro, AccionReprogramar, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionConsultaEta, AccionConsultaEstado, AccionAgregarAdicional, CtxAgente } from './agente-mensajes'
+import type { HandlersAgente, AccionRetiro, AccionReprogramar, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionCotizarCremacion, AccionConsultaEta, AccionConsultaEstado, AccionAgregarAdicional, CtxAgente } from './agente-mensajes'
 
 /**
  * Valida que una dirección + comuna exista y caiga dentro de Chile (geocoding).
@@ -401,6 +403,77 @@ async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<s
     `NO le digas que ya está confirmada.`
 }
 
+// ─── Cotización de cremación (determinística) ────────────────────────────────
+
+/**
+ * Cotiza la CREMACIÓN con los precios reales de la tabla: resuelve el tramo del
+ * peso con `findTramo` (regla de borde canónica) y arma las tres modalidades ya
+ * con los recargos que correspondan.
+ *
+ * Nace de un error real (caso Yami, 2026-07-28): el modelo leía la tabla de
+ * tramos del prompt y cotizó una mascota de 1,5 kg con el tramo 2–5 kg
+ * ($85.000 en vez de $75.000), y encima presentó el recargo dos veces. Con esta
+ * herramienta el modelo NO calcula nada: copia los montos que le devolvemos.
+ *
+ * El recargo FUERA DE HORARIO se cobra UNA sola vez por atención: si la
+ * eutanasia asociada ya lo lleva, acá no se suma (ver lib/adicionales-auto).
+ */
+async function cotizarCremacion(a: AccionCotizarCremacion): Promise<string> {
+  const peso = Number(a.peso)
+  if (!Number.isFinite(peso) || peso <= 0) {
+    return 'Necesito el peso aproximado de la mascota para cotizar la cremación. Pídeselo al cliente.'
+  }
+  const [tramos, otros] = await Promise.all([
+    getSheetData('precios_generales').catch(() => [] as Record<string, string>[]),
+    getSheetData('otros_servicios').catch(() => [] as Record<string, string>[]),
+  ])
+  const tramo = findTramo(tramos as never, peso)
+  if (!tramo) {
+    return 'No encontré un tramo de precio para ese peso. No inventes un valor: ofrécele que un miembro del equipo lo contacte o escala a un humano.'
+  }
+  const base = {
+    CI: precioDelTramo(tramo as never, 'CI'),
+    CP: precioDelTramo(tramo as never, 'CP'),
+    SD: precioDelTramo(tramo as never, 'SD'),
+  }
+
+  // Recargos automáticos con la MISMA regla de la ficha (lib/adicionales-auto).
+  const activo = (r: Record<string, string>) => String(r.activo || '').toUpperCase() === 'TRUE'
+  const ctx = { fecha: formatDateForSheet(a.fecha) || String(a.fecha || ''), hora: String(a.hora || ''), comuna: String(a.comuna || '') }
+  const recargos: { nombre: string; monto: number }[] = []
+  for (const s of otros.filter(r => activo(r) && (r.auto_regla || '').trim())) {
+    const esFueraHorario = (s.auto_regla || '').trim() === 'fuera_horario'
+    const aplica = esFueraHorario
+      ? cremacionLlevaRecargoFueraHorario({
+          retiroFueraHorario: aplicaReglaAuto(s, ctx),
+          eutanasiaYaCobraRecargo: !!a.eutanasia_fuera_horario,
+        })
+      : aplicaReglaAuto(s, ctx)
+    if (aplica) recargos.push({ nombre: s.nombre || (esFueraHorario ? 'Retiro fuera de horario' : 'Adicional por distancia'), monto: parseInt(s.precio, 10) || 0 })
+  }
+  const sumaRecargos = recargos.reduce((s, r) => s + r.monto, 0)
+
+  const linea = (cod: 'CI' | 'CP' | 'SD', nombre: string) =>
+    `- ${nombre}: ${fmtPrecio(base[cod])}${sumaRecargos > 0 ? ` + recargos ${fmtPrecio(sumaRecargos)} = TOTAL ${fmtPrecio(base[cod] + sumaRecargos)}` : ''}`
+
+  const detalleRecargos = recargos.length
+    ? `\nRecargos que aplican (van como UNA línea aparte, y se suman UNA sola vez):\n${recargos.map(r => `- ${r.nombre}: ${fmtPrecio(r.monto)}`).join('\n')}`
+    : '\nNo aplica ningún recargo con los datos actuales: NO menciones recargos.'
+
+  // Con eutanasia fuera de horario el recargo YA se cobra con la eutanasia: la
+  // cremación no lo suma, pero el cliente igual tiene que oírlo UNA vez (si no,
+  // lo descubre al pagar). Nunca dos veces.
+  const notaEut = a.eutanasia_fuera_horario
+    ? `\nATENCIÓN: la eutanasia ya lleva el recargo fuera de horario, así que la cremación NO lo suma (el recargo se cobra UNA sola vez en toda la atención, no dos). Igual dile al cliente que hay UN recargo por fuera de horario y que va con la eutanasia — que no lo descubra al pagar.`
+    : ''
+
+  return `PRECIOS EXACTOS de cremación para ${peso} kg (tramo ${tramo.peso_min}–${tramo.peso_max} kg). Escríbelos TAL CUAL, sin recalcular ni redondear:
+${linea('CI', 'Cremación Individual')}
+${linea('CP', 'Cremación Premium')}
+${linea('SD', 'Cremación Sin Devolución')}${detalleRecargos}${notaEut}
+Reglas al escribir la cotización: da UN precio final por modalidad (con los recargos ya sumados) y muestra el recargo como una línea aparte del desglose. NUNCA digas "a esto hay que sumarle X" después de haber dado un total, ni sumes el mismo recargo dos veces.`
+}
+
 // ─── Flujo B: eutanasia a domicilio ──────────────────────────────────────────
 
 /**
@@ -417,8 +490,12 @@ async function cotizarEutanasia(a: AccionCotizarEutanasia): Promise<string> {
   if (cliente <= 0) {
     return 'No tengo el precio de la eutanasia a domicilio configurado para ese peso ahora mismo. Ofrécele que un miembro del equipo lo contacte para darle el valor, o escala a un humano.'
   }
+  // El recargo fuera de horario es UNO SOLO por atención: si además hay cremación
+  // lo cobra ella (cotizar_cremacion ya lo resuelve). Antes esta nota decía
+  // "súmalo a la eutanasia" mientras el prompt decía "va en la cremación" → el
+  // modelo lo sumaba dos veces y le informaba $20.000 al cliente (caso Yami).
   const notaRecargo = recargo > 0
-    ? ` IMPORTANTE: si el servicio queda fuera de horario (fin de semana, feriado o desde las 18:00), se suma un recargo de ${fmtPrecio(recargo)} a ese valor (aplica se realice o no la eutanasia). Avísaselo si la fecha/hora que pide cae fuera de horario, para que no sea una sorpresa.`
+    ? ` Estos dos valores son los del servicio: no les sumes tarifas de cremación. Si la fecha/hora del servicio cae fuera de horario (fin de semana, feriado o desde las 18:00) se cobra un recargo de ${fmtPrecio(recargo)} UNA SOLA VEZ en TODA la atención (aplica se realice o no la eutanasia): nómbralo una sola vez y súmalo una sola vez al total. Si además hay cremación, NO lo cobres de nuevo ahí — cotiza la cremación con "cotizar_cremacion" pasándole eutanasia_fuera_horario=true y usa los montos que devuelva.`
     : ''
   return `Es un servicio de EVALUACIÓN a domicilio: un veterinario de la red visita a la mascota y evalúa si corresponde la eutanasia. Explícale al cliente con claridad los dos valores: si SE REALIZA la eutanasia, el valor es ${fmtPrecio(cliente)} (mascota de ${peso} kg); si al evaluar NO corresponde realizarla, se cobra solo la consulta de ${fmtPrecio(consulta.total)}. NO expliques cómo se reparte ese monto internamente.${notaRecargo} Si decide avanzar, junta los datos y agéndala.`
 }
@@ -791,5 +868,5 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
 
 /** Handlers disponibles para el agente (Flujo A: retiro · Flujo B: eutanasia). */
 export function handlersAgente(): HandlersAgente {
-  return { solicitarRetiro, reprogramarRetiro, solicitarRetiroVet, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro, consultarEstadoMascota, enviarCatalogo, agregarAdicional }
+  return { solicitarRetiro, reprogramarRetiro, solicitarRetiroVet, cotizarCremacion, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro, consultarEstadoMascota, enviarCatalogo, agregarAdicional }
 }

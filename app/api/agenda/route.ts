@@ -19,7 +19,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const from = searchParams.get('from') || undefined
     const to = searchParams.get('to') || undefined
-    const [items, bloqueos] = await Promise.all([listarAgenda(from, to), listarBloqueos(from, to)])
+    const [items, bloqueos] = await Promise.all([
+      listarAgenda(from, to, { conValor: true }),
+      listarBloqueos(from, to),
+    ])
     return NextResponse.json({ items, bloqueos }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
     console.error('[agenda GET]', e)

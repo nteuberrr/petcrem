@@ -1,13 +1,17 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { fmtFecha } from '@/lib/format'
+import { fmtFecha, fmtPrecio } from '@/lib/format'
 
 type Solicitud = {
   id: string; cliente_nombre: string; nombre_mascota: string; peso: string
   direccion: string; comuna: string; fecha_retiro: string; hora_retiro: string
   tipo_servicio: string; origen: string; vet_nombre: string; cliente_wa_id: string
   cliente_id: string
+  /** Valor a cobrar por los servicios agendados (lo calcula el GET). */
+  valor?: number
+  /** true mientras el precio no esté congelado en la ficha. */
+  valor_estimado?: boolean
 }
 
 type Eutanasia = {
@@ -15,6 +19,8 @@ type Eutanasia = {
   comuna: string; direccion: string; fecha_servicio: string; hora_servicio: string
   hora_retiro_crematorio: string; vet_nombre: string; cliente_id: string
   estado_cronograma: 'esperando' | 'tomada'
+  /** Valor a cobrar: eutanasia (fuera de boleta) + cremación. Lo calcula el GET. */
+  valor?: number; valor_eutanasia?: number; valor_cremacion?: number
 }
 
 const SERVICIO: Record<string, string> = { CI: 'Individual', CP: 'Premium', SD: 'Sin Devolución' }
@@ -24,6 +30,21 @@ const esVet = (s: Solicitud) => s.origen === 'bot_vet' || !!s.vet_nombre
 const quien = (s: Solicitud) => (esVet(s) ? (s.vet_nombre || 'Veterinario') : (s.cliente_nombre || '—'))
 const direccion = (s: Solicitud) => [s.direccion, s.comuna].filter(Boolean).join(', ') || '—'
 const cuando = (s: Solicitud) => `${s.fecha_retiro ? fmtFecha(s.fecha_retiro) : '—'}${s.hora_retiro ? ` · ${s.hora_retiro}` : ''}`
+
+/**
+ * Valor a cobrar por lo agendado. Va en TODAS las tarjetas: mientras la ficha no
+ * esté registrada el precio no está congelado, así que se muestra como estimado
+ * (calculado con las tablas de precios vigentes). Sin peso todavía no hay monto.
+ */
+function Valor({ monto, estimado = true, detalle }: { monto?: number; estimado?: boolean; detalle?: string }) {
+  if (monto == null) return null
+  return (
+    <p className="text-[11px] leading-tight" title={detalle}>
+      <span className="font-bold text-gray-900">💲 {monto > 0 ? fmtPrecio(monto) : 'Falta el peso'}</span>
+      {monto > 0 && estimado && <span className="ml-1 text-[10px] font-semibold text-gray-500">(estimado)</span>}
+    </p>
+  )
+}
 
 /**
  * Panel del bot en el DASHBOARD. Grilla de cuadrados que se acumulan hacia la
@@ -130,6 +151,7 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
                   </div>
                   <p className="text-xs text-gray-700 truncate mt-0.5">{esVet(s) ? '🏥 ' : ''}{quien(s)}</p>
                   {s.peso && <p className="text-[11px] text-gray-500">{s.peso} kg</p>}
+                  <Valor monto={s.valor} estimado={s.valor_estimado !== false} detalle="Valor a cobrar por el servicio agendado" />
                   <p className="text-[11px] text-gray-500 mt-1 leading-tight truncate">📍 {direccion(s)}</p>
                   <p className="text-[11px] text-gray-500 leading-tight">🗓 {cuando(s)}</p>
                 </div>
@@ -180,6 +202,7 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
                 <p className="font-bold text-gray-900 text-sm truncate mt-1">{s.nombre_mascota || '—'}</p>
                 <p className="text-xs text-gray-700 truncate">{esVet(s) ? '🏥 ' : '👤 '}{quien(s)}</p>
                 {s.peso && <p className="text-[11px] text-gray-500">{s.peso} kg</p>}
+                <Valor monto={s.valor} estimado={s.valor_estimado !== false} detalle="Valor a cobrar por el servicio agendado" />
                 <p className="text-[11px] text-gray-600 leading-tight mt-auto">🗓 {cuando(s)}</p>
                 <p className="text-[11px] text-gray-600 leading-tight truncate">📍 {direccion(s)}</p>
               </div>
@@ -219,6 +242,10 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
                   <p className="font-bold text-gray-900 text-sm truncate mt-1">{e.mascota_nombre || '—'}</p>
                   <p className="text-xs text-gray-700 truncate">👤 {e.cliente_nombre || '—'}</p>
                   {e.vet_nombre && <p className="text-[11px] text-gray-600 truncate">🩺 {e.vet_nombre}</p>}
+                  <Valor
+                    monto={e.valor}
+                    detalle={`Eutanasia ${fmtPrecio(e.valor_eutanasia ?? 0)} (fuera de boleta)${(e.valor_cremacion ?? 0) > 0 ? ` + cremación ${fmtPrecio(e.valor_cremacion!)}` : ''}`}
+                  />
                   <p className="text-[11px] text-gray-600 leading-tight mt-auto">🗓 {cuandoEut}{e.hora_retiro_crematorio ? ` · retiro ${e.hora_retiro_crematorio}` : ''}</p>
                   <p className="text-[11px] text-gray-600 leading-tight truncate">📍 {[e.direccion, e.comuna].filter(Boolean).join(', ') || '—'}</p>
                   {e.cliente_id && (

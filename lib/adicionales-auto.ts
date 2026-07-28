@@ -76,6 +76,33 @@ export function aplicaReglaAuto(
   return false
 }
 
+/**
+ * REGLA ÚNICA DEL RECARGO FUERA DE HORARIO (dueño 2026-07-28).
+ *
+ * El recargo se cobra UNA SOLA VEZ por atención, aunque caigan fuera de horario
+ * las DOS partes del servicio (la eutanasia a domicilio y el retiro para la
+ * cremación). Es decir:
+ *   - solo la eutanasia fuera de horario  → $10.000 (va con la eutanasia)
+ *   - solo el retiro fuera de horario     → $10.000 (va en la cremación)
+ *   - las dos fuera de horario            → $10.000, NO $20.000
+ *
+ * Prioridad: si la eutanasia YA lo está cobrando (su recargo va fuera de boleta,
+ * ver lib/eutanasia-precios), la cremación NO vuelve a sumarlo. Si la eutanasia
+ * quedó dentro de horario pero el retiro no, lo cobra la cremación.
+ *
+ * Antes la ficha simplemente NUNCA sumaba el recargo cuando venía de una
+ * eutanasia: eso evitaba el cobro doble pero dejaba SIN cobrar el caso real de
+ * eutanasia a las 15:45 con retiro a las 19:00.
+ */
+export function cremacionLlevaRecargoFueraHorario(ctx: {
+  /** El retiro para la cremación cae fuera de horario. */
+  retiroFueraHorario: boolean
+  /** La eutanasia asociada ya está cobrando su propio recargo fuera de horario. */
+  eutanasiaYaCobraRecargo: boolean
+}): boolean {
+  return ctx.retiroFueraHorario && !ctx.eutanasiaYaCobraRecargo
+}
+
 /** Etiqueta corta de la regla (UI de Configuración y hints de la ficha). */
 export function etiquetaRegla(regla: string | undefined): string {
   if (regla === 'fuera_horario') return 'Auto: fuera de horario (18:00+, fin de semana y feriados)'

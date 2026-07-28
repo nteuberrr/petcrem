@@ -4,6 +4,7 @@ import { verifyToken } from '@/lib/eutanasia-tokens'
 import { isWhatsappConfigured, avisarAdminsWhatsapp, enviarTextoWhatsapp } from '@/lib/whatsapp'
 import { formatDate } from '@/lib/dates'
 import { esFueraDeHorario } from '@/lib/adicionales-auto'
+import { recargoEutanasiaPara, getRecargoFueraHorario } from '@/lib/eutanasia-precios'
 import { esFeriado, nombreFeriado } from '@/lib/feriados'
 import { fmtPrecio } from '@/lib/format'
 
@@ -65,7 +66,11 @@ export async function POST(req: NextRequest) {
     try {
       const sinCremacion = (c.tipo_servicio_cremacion || '').toUpperCase() === 'NINGUNA'
       const waCliente = (c.cliente_wa_id || c.cliente_telefono || '').replace(/\D/g, '')
-      if (!sinCremacion && waCliente && isWhatsappConfigured() && esFueraDeHorario(c.fecha_servicio, hora)) {
+      // El recargo es UNO SOLO por atención: si la EUTANASIA ya lo lleva (su hora
+      // también cae fuera de horario), la cremación no suma otro y no hay nada
+      // nuevo que avisar — si no, el cliente escuchaba $20.000.
+      const recargoEut = recargoEutanasiaPara(c.fecha_servicio, c.hora_servicio, await getRecargoFueraHorario().catch(() => 0))
+      if (!sinCremacion && waCliente && recargoEut <= 0 && isWhatsappConfigured() && esFueraDeHorario(c.fecha_servicio, hora)) {
         const otros = await getSheetData('otros_servicios').catch(() => [])
         const fh = otros.find(s => (s.auto_regla || '') === 'fuera_horario' && String(s.activo || '').toUpperCase() === 'TRUE')
         const monto = fh ? (parseInt(fh.precio, 10) || 0) : 10000

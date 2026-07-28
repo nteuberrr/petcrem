@@ -4,12 +4,15 @@ import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/Modal'
 import NuevaSolicitudModal from '@/components/NuevaSolicitudModal'
 import { useAccionUnica } from '@/lib/use-accion-unica'
+import { fmtPrecio } from '@/lib/format'
 
 type Item = {
   id: string; tipo: 'retiro' | 'eutanasia'; fecha: string; hora: string; bloque: number
   estado: 'pendiente' | 'confirmada'; mascota: string; quien: string; esVet: boolean
   comuna: string; direccion: string; tipo_servicio?: string; clienteId?: string
   horaEutanasia?: string; esperandoHoraVet?: boolean; sinCremacion?: boolean
+  /** Valor a cobrar por lo agendado (lo calcula /api/agenda). */
+  valor?: number; valorEstimado?: boolean
 }
 
 // Bloqueo manual de la agenda (tabla agenda_bloqueos): rango fecha/hora en el que
@@ -148,6 +151,9 @@ function detalle(it: Item): string {
     it.mascota && `Mascota: ${it.mascota}`,
     it.quien && `${it.esVet ? 'Veterinario' : 'Tutor'}: ${it.quien}`,
     it.tipo_servicio && `Servicio: ${SERVICIO[it.tipo_servicio] || it.tipo_servicio}`,
+    it.valor != null && (it.valor > 0
+      ? `Valor a cobrar: ${fmtPrecio(it.valor)}${it.valorEstimado ? ' (estimado)' : ''}`
+      : 'Valor a cobrar: falta el peso para calcularlo'),
     (it.direccion || it.comuna) && `📍 ${[it.direccion, it.comuna].filter(Boolean).join(', ')}`,
     eutSinCrem
       ? 'Sin retiro del crematorio: el chofer no pasa a buscarla. No bloquea la agenda.'
@@ -518,6 +524,14 @@ export default function AgendaSemanal() {
                 {editando.esVet ? '🏥 ' : '🐾 '}{editando.quien || '—'}
                 {(editando.direccion || editando.comuna) ? ` · ${[editando.direccion, editando.comuna].filter(Boolean).join(', ')}` : ''}
               </p>
+              {editando.valor != null && (
+                <p className="text-xs text-gray-700 mt-1">
+                  <span className="font-semibold">Valor a cobrar:</span>{' '}
+                  {editando.valor > 0
+                    ? <><span className="font-bold text-brand">{fmtPrecio(editando.valor)}</span>{editando.valorEstimado && <span className="text-gray-500"> (estimado)</span>}</>
+                    : <span className="text-amber-800">falta el peso para calcularlo</span>}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-4">
               <div className="text-center">

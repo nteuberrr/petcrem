@@ -5,6 +5,7 @@ import { getSheetData, updateById, ensureColumns, deleteRow } from '@/lib/datast
 import { ajustarStock, ajustarStockAdicionales } from '@/lib/stock'
 import { gredaEsperada, aplicarCambioGreda } from '@/lib/greda-stock'
 import { parseDecimal } from '@/lib/numbers'
+import { formatDateForSheet } from '@/lib/dates'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-mailer'
@@ -57,6 +58,10 @@ export async function GET(
         } catch { /* config no disponible */ }
         eutanasia = {
           id: cot.id || '',
+          // La fecha del servicio + la hora de retiro coordinada por el vet son las
+          // que definen si el RETIRO de la cremación cae fuera de horario (la ficha
+          // recién creada todavía no tiene fecha/hora propias).
+          fecha_servicio: formatDateForSheet(cot.fecha_servicio) || String(cot.fecha_servicio || ''),
           hora_servicio: cot.hora_servicio || '',
           hora_retiro_crematorio: cot.hora_retiro_crematorio || '',
           estado: cot.estado || '',
