@@ -20,9 +20,11 @@ const clasifLabel = (c: string) => ((c || 'rendicion') === 'aporte' ? 'Aporte' :
 export default function RendicionesPage() {
   const { data: session, status } = useSession()
   const role = session?.user?.role
-  // Admin principal: ve TODO y es el único que edita/elimina. admin2: ve, crea y paga.
-  const esPrincipal = status === 'authenticated' && (role === 'admin' || role === undefined)
-  const puedeVer = esPrincipal || role === 'admin2'
+  // admin y admin2 ("General") tienen acceso TOTAL a rendiciones: ver, crear, pagar,
+  // editar y eliminar (decisión del dueño 2026-07-28; antes admin2 solo veía, creaba
+  // y pagaba). El backend gatea igual con esAdmin en PATCH/DELETE.
+  const esPrincipal = status === 'authenticated' && (role === 'admin' || role === 'admin2' || role === undefined)
+  const puedeVer = esPrincipal
 
   const [rendiciones, setRendiciones] = useState<Rendicion[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])

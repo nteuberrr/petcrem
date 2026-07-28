@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { getSheetData, appendRow, updateById, getNextId, deleteById, ensureColumns, ensureSheet } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 
-// Editar/eliminar rendiciones existentes es solo del admin principal; admin2 puede
-// ver, crear y pagar (gateado en proxy.ts), pero no corregir/borrar.
-async function noEsPrincipal(): Promise<boolean> {
+// Editar/eliminar rendiciones: admin y admin2 ("General"), que tiene acceso TOTAL al
+// módulo por decisión del dueño (2026-07-28). El acceso al módulo en sí lo gobierna
+// el editor de permisos (lib/permisos, módulo 'rendiciones').
+async function sinPermiso(): Promise<boolean> {
   const s = await getServerSession(authOptions)
-  return !esAdminTotal((s?.user as { role?: string })?.role)
+  return !esAdmin((s?.user as { role?: string })?.role)
 }
 
 const HOJA = 'rendiciones'
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    if (await noEsPrincipal()) return NextResponse.json({ error: 'Solo el administrador principal puede editar rendiciones.' }, { status: 403 })
+    if (await sinPermiso()) return NextResponse.json({ error: 'No autorizado para editar rendiciones.' }, { status: 403 })
     const body = await req.json()
     const { id, ids, ...updates } = body
     await ensure()
@@ -110,7 +111,7 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    if (await noEsPrincipal()) return NextResponse.json({ error: 'Solo el administrador principal puede eliminar rendiciones.' }, { status: 403 })
+    if (await sinPermiso()) return NextResponse.json({ error: 'No autorizado para eliminar rendiciones.' }, { status: 403 })
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
