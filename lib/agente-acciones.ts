@@ -7,7 +7,8 @@ import { agregarDiasHabiles, isoFecha, tieneExpress, EXPRESS_DIAS } from './dias
 import { fmtPrecio } from './format'
 import { precioClienteEutanasia, getConsultaEutanasia, getRecargoFueraHorario, recargoEutanasiaPara } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
-import { evaluarSlotRetiro, evaluarHoraEutanasia, horaLibreEnFranja } from './agenda'
+import { evaluarSlotRetiro, evaluarHoraEutanasia, horaLibreEnFranja, ahoraChile } from './agenda'
+import { yaFueRetirada } from './ficha-retiro'
 import { capitalizarNombre } from './nombres'
 import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional } from './cobros'
@@ -873,7 +874,11 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
   // ficha (ya lo hicimos arriba) y el CHOFER lo cobra al momento del retiro — NO
   // se envía ningún correo de pago (nos pasó con Mona: se le cobró un relicario
   // antes de retirar a la mascota).
-  const fichaRegistrada = (ficha.codigo || '').trim() !== '' && (ficha.estado || '').toLowerCase() !== 'borrador'
+  // Ojo: "registrada" NO es lo mismo que "retirada". El equipo a veces deja la
+  // ficha lista antes de salir a buscarla (caso Channel, 2026-07-28: registrada
+  // una hora antes del retiro → se cobró el adicional por transferencia igual).
+  // Por eso la fecha/hora de retiro manda: si todavía no llega, el chofer cobra.
+  const fichaRegistrada = yaFueRetirada(ficha, ahoraChile())
 
   if (cobrables.length > 0 && fichaRegistrada) {
     try {

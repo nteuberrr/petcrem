@@ -11,6 +11,7 @@ import { parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { anforaPremiumIncluida, servicioIncluyeAnforaPremium, repartirAnforasPremium } from '@/lib/anforas-premium'
 import { aplicaReglaAuto, cremacionLlevaRecargoFueraHorario } from '@/lib/adicionales-auto'
+import { retiroPendiente, ahoraEnChile } from '@/lib/ficha-retiro'
 import { esAdmin } from '@/lib/roles'
 
 type Certificado = {
@@ -567,6 +568,19 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
   async function handleSave(opts?: { registrar?: boolean }) {
     const registrar = opts?.registrar === true
+    // Registrar la ficha es el INGRESO oficial: genera el código y le manda el
+    // correo de bienvenida al tutor. Si el retiro todavía no ocurre, avisamos —
+    // registrarla antes adelanta ese correo y hace que los adicionales se cobren
+    // por transferencia en vez de cobrarlos el chofer (caso Channel, 2026-07-28).
+    if (registrar && retiroPendiente(form, ahoraEnChile())) {
+      const cuando = `${form.fecha_retiro ? fmtFecha(form.fecha_retiro) : ''}${form.hora_retiro ? ` a las ${form.hora_retiro}` : ''}`.trim()
+      const ok = confirm(
+        `Todavía no retiran a ${form.nombre_mascota || 'la mascota'} (retiro agendado ${cuando}).\n\n` +
+        'Al registrar la ficha ahora se le envía al tutor el correo de bienvenida con el código, como si ya estuviera con nosotros.\n\n' +
+        '¿Registrar de todas formas?',
+      )
+      if (!ok) return
+    }
     setSaving(true)
     // Calcular snapshot del descuento al momento de guardar.
     // Si no aplica descuento o el descuento ya no existe, limpiamos las columnas.

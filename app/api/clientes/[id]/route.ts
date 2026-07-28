@@ -6,6 +6,8 @@ import { ajustarStock, ajustarStockAdicionales } from '@/lib/stock'
 import { gredaEsperada, aplicarCambioGreda } from '@/lib/greda-stock'
 import { parseDecimal } from '@/lib/numbers'
 import { formatDateForSheet } from '@/lib/dates'
+import { yaFueRetirada } from '@/lib/ficha-retiro'
+import { ahoraChile } from '@/lib/agenda'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-mailer'
@@ -281,11 +283,12 @@ export async function PATCH(
       }
     }
 
-    // COBRO por productos adicionales AGREGADOS a una ficha YA registrada (NO al
-    // registrar: ahí los adicionales son parte de la cotización inicial). Diff
-    // old-vs-new: cada adicional nuevo dispara el correo + WhatsApp de cobro y
-    // crea un "cobro pendiente". Best-effort. Mismo camino que usa el bot.
-    if (body.adicionales !== undefined && !body.registrar && String(rows[idx].codigo || '').trim()) {
+    // COBRO por productos adicionales AGREGADOS a una ficha YA RETIRADA (NO al
+    // registrar: ahí los adicionales son parte de la cotización inicial; y NO si
+    // la mascota todavía no la retiran: eso lo cobra el chofer en el retiro, ver
+    // lib/ficha-retiro). Diff old-vs-new: cada adicional nuevo dispara el correo
+    // + WhatsApp de cobro y crea un "cobro pendiente". Mismo camino que el bot.
+    if (body.adicionales !== undefined && !body.registrar && yaFueRetirada(updated as Record<string, string>, ahoraChile())) {
       try {
         type AdRaw = { tipo?: string; id?: string; nombre?: string; precio?: number; qty?: number }
         const keyOf = (a: AdRaw) => `${a.tipo || ''}:${a.id || ''}:${a.nombre || ''}`
