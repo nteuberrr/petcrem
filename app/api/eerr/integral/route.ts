@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { getSheetData } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { getConfigCobroEutanasia, margenEutanasiaCon } from '@/lib/eutanasia-precios'
+import { getPagosRetirosEerr, partidaRetiros } from '@/lib/eerr-retiros'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,7 @@ type Cli = Record<string, string>
 
 async function noAutorizado(): Promise<boolean> {
   const s = await getServerSession(authOptions)
-  return !esAdminTotal((s?.user as { role?: string })?.role)
+  return !esAdmin((s?.user as { role?: string })?.role)
 }
 
 function labelMes(k: string): string {
@@ -78,13 +79,14 @@ export async function GET(req: NextRequest) {
     const N = periodos.length
     const zeros = () => new Array(N).fill(0)
 
-    const [clientes, partidas, subgrupos, gastosSii, gastosMan, rendiciones, pg, pc, pe, vets, eutanasias, cfgEut] = await Promise.all([
+    const [clientes, partidas, subgrupos, gastosSii, gastosMan, rendiciones, pagosRetiros, pg, pc, pe, vets, eutanasias, cfgEut] = await Promise.all([
       getSheetData('clientes'),
       getSheetData('eerr_partidas'),
       getSheetData('eerr_subgrupos'),
       getSheetData('eerr_gastos_sii'),
       getSheetData('eerr_gastos_manuales'),
       getSheetData('rendiciones'),
+      getPagosRetirosEerr(),
       getSheetData('precios_generales'),
       getSheetData('precios_convenio'),
       getSheetData('precios_especiales'),
@@ -177,6 +179,10 @@ export async function GET(req: NextRequest) {
       // aportes (préstamos a la empresa) no van al resultado.
       if (r.tipo_documento === 'boleta' && r.clasificacion !== 'aporte' && r.partida_id) add(r.partida_id, r.fecha, parseInt(r.monto) || 0)
     }
+    // Pagos de retiros adicionales (Asistencia → Adicionales): automáticos, al mes
+    // del pago, en la partida marcada con la clave `retiros_adicionales`.
+    const pRetiros = partidaRetiros(partidas as Cli[])
+    if (pRetiros) for (const p of pagosRetiros) add(pRetiros.id, p.fecha, p.monto)
 
     const sgById = new Map<string, { nombre: string; orden: number }>()
     for (const s of subgrupos as Cli[]) sgById.set(s.id, { nombre: s.nombre, orden: parseInt(s.orden) || 0 })

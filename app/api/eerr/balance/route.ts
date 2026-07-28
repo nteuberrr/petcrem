@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { getSheetData } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseDecimalOr0 } from '@/lib/numbers'
@@ -47,7 +47,7 @@ const mesDe = (f: string): string => (formatDateForSheet(f) || '').slice(0, 7)
 
 export async function GET() {
   const s = await getServerSession(authOptions)
-  if (!esAdminTotal((s?.user as { role?: string })?.role)) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+  if (!esAdmin((s?.user as { role?: string })?.role)) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   try {
     const hoyMes = todayISO().slice(0, 7)
     const hasta = hoyMes < DESDE ? DESDE : hoyMes

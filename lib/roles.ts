@@ -67,7 +67,7 @@ export const MATRIZ_ACCESOS: ModuloAcceso[] = [
   { modulo: 'Campañas (FB/IG/TikTok/Mail)', roles: ['admin'], nota: 'Solo el administrador principal.' },
   { modulo: 'Facturación (Boletas, Facturas, NC)', roles: ['admin'], nota: 'Por defecto solo el administrador principal; puede habilitarse a otros roles.' },
   { modulo: 'Web (panel del sitio público)', roles: ['admin'], nota: 'Por defecto solo el administrador principal; puede habilitarse a otros roles.' },
-  { modulo: 'Estado de Resultados (EERR)', roles: ['admin'], nota: 'Solo el administrador principal.' },
+  { modulo: 'Estado de Resultados (EERR)', roles: ['admin', 'admin2'] },
   { modulo: 'Reportes', roles: ['admin', 'admin2'] },
   { modulo: 'Configuración · Precios', roles: ['admin', 'admin2'] },
   { modulo: 'Configuración · Artículos (Servicios, Bodega, Otros Productos)', roles: ['admin', 'admin2'] },

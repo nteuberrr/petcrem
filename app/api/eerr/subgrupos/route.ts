@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { getSheetData, appendRow, updateById, deleteById, getNextId } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 
@@ -12,7 +12,7 @@ const TIPOS = ['ingreso', 'costo', 'gasto', 'impuesto']
 
 async function noAutorizado(): Promise<boolean> {
   const s = await getServerSession(authOptions)
-  return !esAdminTotal((s?.user as { role?: string })?.role)
+  return !esAdmin((s?.user as { role?: string })?.role)
 }
 function esDuplicado(e: unknown): boolean {
   const m = String(e).toLowerCase()

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { getSheetData, updateById } from '@/lib/datastore'
 
 export const dynamic = 'force-dynamic'
@@ -10,7 +10,7 @@ const SHEET = 'eerr_proveedores'
 
 async function noAutorizado(): Promise<boolean> {
   const s = await getServerSession(authOptions)
-  return !esAdminTotal((s?.user as { role?: string })?.role)
+  return !esAdmin((s?.user as { role?: string })?.role)
 }
 
 export async function GET() {

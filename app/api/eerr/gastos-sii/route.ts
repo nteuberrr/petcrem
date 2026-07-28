@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { getSheetData, appendRow, updateById, getNextId } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 import { parseCsvSii, decodeCsvSii } from '@/lib/eerr-sii'
@@ -14,7 +14,7 @@ const TIPOS = ['costo', 'gasto', 'impuesto']
 
 async function noAutorizado(): Promise<boolean> {
   const s = await getServerSession(authOptions)
-  return !esAdminTotal((s?.user as { role?: string })?.role)
+  return !esAdmin((s?.user as { role?: string })?.role)
 }
 
 const claveDedup = (rut: string, tipoDoc: string, folio: string) => `${rut}|${tipoDoc}|${folio}`

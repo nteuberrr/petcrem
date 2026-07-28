@@ -65,7 +65,9 @@ export const MODULOS: Modulo[] = [
   { key: 'facturacion', label: 'Facturación (Boletas, Facturas, NC)', pages: ['/facturacion'], apis: ['/api/facturacion'], def: { admin2: false, operador: false, operador2: false } },
   // Panel administrador del sitio público (Web). Owner-only por defecto, activable.
   { key: 'web', label: 'Web (sitio público)', pages: ['/web'], apis: ['/api/web'], def: { admin2: false, operador: false, operador2: false } },
-  { key: 'eerr', label: 'Estado de Resultados', pages: ['/estado-resultados'], apis: ['/api/eerr'], def: { admin2: false, operador: false, operador2: false } },
+  // Estado de Resultados: admin2 ("General") lo tiene COMPLETO por decisión del
+  // dueño (2026-07-28) — antes era owner-only (los routes exigían esAdminTotal).
+  { key: 'eerr', label: 'Estado de Resultados', pages: ['/estado-resultados'], apis: ['/api/eerr'], def: { admin2: true, operador: false, operador2: false } },
 ]
 
 export type PermisosConfig = Record<string, { admin2: boolean; operador: boolean; operador2: boolean }>

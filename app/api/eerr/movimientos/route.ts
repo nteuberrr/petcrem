@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
+import { esAdmin } from '@/lib/roles'
 import { getSheetData } from '@/lib/datastore'
 import { formatDateForSheet } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { getConfigCobroEutanasia, margenEutanasiaCon } from '@/lib/eutanasia-precios'
+import { CLAVE_RETIROS, getPagosRetirosEerr } from '@/lib/eerr-retiros'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +18,7 @@ interface Mov { fecha: string; fuente: string; descripcion: string; proveedor: s
 
 async function noAutorizado(): Promise<boolean> {
   const s = await getServerSession(authOptions)
-  return !esAdminTotal((s?.user as { role?: string })?.role)
+  return !esAdmin((s?.user as { role?: string })?.role)
 }
 function esConvenio(c: Cli): boolean {
   const e = c.tipo_precios
@@ -128,6 +129,17 @@ export async function GET(req: NextRequest) {
       for (const r of rend) if (r.tipo_documento === 'boleta' && r.clasificacion !== 'aporte' && r.partida_id === partidaId && enPeriodo(r.fecha)) {
         const monto = parseInt(r.monto) || 0
         if (monto > 0) movimientos.push({ fecha: r.fecha, fuente: 'Rendición', descripcion: r.descripcion || '', proveedor: r.usuario || '', documento: 'Boleta', monto })
+      }
+      // Pagos de retiros adicionales (Asistencia → Adicionales), al mes del pago.
+      if ((partida.clave || '') === CLAVE_RETIROS) {
+        for (const p of await getPagosRetirosEerr()) {
+          if (!enPeriodo(p.fecha)) continue
+          movimientos.push({
+            fecha: p.fecha, fuente: 'Retiros adicionales',
+            descripcion: `${p.cantidad} retiro${p.cantidad === 1 ? '' : 's'} fuera de jornada`,
+            proveedor: p.usuario, documento: `Pago N° ${p.id}`, monto: p.monto,
+          })
+        }
       }
     }
 

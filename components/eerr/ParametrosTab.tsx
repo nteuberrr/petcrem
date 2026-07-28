@@ -130,7 +130,13 @@ export default function ParametrosTab() {
       ) : (
         <>
           {flechas(idx > 0, idx < lista.length - 1, () => mover(lista, idx, -1), () => mover(lista, idx, 1))}
-          <span className={`flex-1 text-sm ${p.activo === 'TRUE' ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{p.nombre}</span>
+          <span className={`flex-1 text-sm ${p.activo === 'TRUE' ? 'text-gray-800' : 'text-gray-400 line-through'}`}>
+            {p.nombre}
+            {p.clave === 'retiros_adicionales' && (
+              <span title="Se llena sola con los pagos de retiros adicionales (Asistencia → Adicionales), en el mes del pago. No los cargues además a mano."
+                className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand align-middle">automática</span>
+            )}
+          </span>
           <select value={idsSg.has(p.subgrupo_id || '') ? p.subgrupo_id : ''} onChange={e => reasignar(p, e.target.value)}
             title="Subgrupo" className="text-xs border border-gray-300 rounded px-1 py-0.5 text-gray-500 max-w-[130px]">
             <option value="">Sin subgrupo</option>
