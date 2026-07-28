@@ -46,17 +46,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Esta solicitud fue cancelada.' })
     }
 
-    // Update PARCIAL por id (solo esta columna): robusto y sin reescribir la fila.
-    await updateByIdIf(SHEET_COTI, c.id, {}, { hora_retiro_crematorio: hora })
+    // La hora que informa el vet es la que ACORDÓ CON LA FAMILIA (así se la pide
+    // el correo: "apenas coordines la hora de la visita, infórmanosla"), o sea la
+    // hora REAL del servicio. Por eso se guarda también en `hora_servicio` y no
+    // solo en `hora_retiro_crematorio`: si no, la ficha, la agenda y el recargo
+    // fuera de horario se quedan con la hora que eligió el bot al agendar
+    // (caso Gasparín 2026-07-28: la vet coordinó 20:30 y el sistema seguía
+    // mostrando las 17:30). Update PARCIAL por id: no reescribe el resto de la fila.
+    const horaAnterior = (c.hora_servicio || '').trim()
+    await updateByIdIf(SHEET_COTI, c.id, {}, { hora_retiro_crematorio: hora, hora_servicio: hora })
 
     if (isWhatsappConfigured()) {
       try {
         await avisarAdminsWhatsapp(
-          `🕒 *Hora de retiro informada por el veterinario* (Eutanasia N° ${c.id})\n\n` +
+          `🕒 *Hora coordinada por el veterinario* (Eutanasia N° ${c.id})\n\n` +
           `Mascota: ${c.mascota_nombre}\nTutor: ${c.cliente_nombre}\n` +
           `Vet: ${c.vet_nombre_asignado || '—'}\n` +
-          `Eutanasia: ${formatDate(c.fecha_servicio)} ${c.hora_servicio || ''}\n` +
-          `*Retiro del crematorio a las ${hora}* · ${c.direccion}, ${c.comuna}`)
+          `Servicio: ${formatDate(c.fecha_servicio)} *${hora}*` +
+          (horaAnterior && horaAnterior !== hora ? ` (antes ${horaAnterior})` : '') + '\n' +
+          `${c.direccion}, ${c.comuna}`)
       } catch (e) { console.warn('[hora-retiro] aviso admin falló:', e) }
     }
 
@@ -66,11 +74,13 @@ export async function POST(req: NextRequest) {
     try {
       const sinCremacion = (c.tipo_servicio_cremacion || '').toUpperCase() === 'NINGUNA'
       const waCliente = (c.cliente_wa_id || c.cliente_telefono || '').replace(/\D/g, '')
-      // El recargo es UNO SOLO por atención: si la EUTANASIA ya lo lleva (su hora
-      // también cae fuera de horario), la cremación no suma otro y no hay nada
-      // nuevo que avisar — si no, el cliente escuchaba $20.000.
-      const recargoEut = recargoEutanasiaPara(c.fecha_servicio, c.hora_servicio, await getRecargoFueraHorario().catch(() => 0))
-      if (!sinCremacion && waCliente && recargoEut <= 0 && isWhatsappConfigured() && esFueraDeHorario(c.fecha_servicio, hora)) {
+      // El recargo es UNO SOLO por atención: solo se avisa si APARECE con la hora
+      // nueva (con la anterior no lo había). Si la atención ya lo llevaba, no hay
+      // nada nuevo que contar — avisarlo igual le sonaba al cliente a $20.000.
+      const montoRecargo = await getRecargoFueraHorario().catch(() => 0)
+      const recargoAntes = recargoEutanasiaPara(c.fecha_servicio, horaAnterior, montoRecargo)
+      const recargoAhora = recargoEutanasiaPara(c.fecha_servicio, hora, montoRecargo)
+      if (!sinCremacion && waCliente && recargoAntes <= 0 && recargoAhora > 0 && isWhatsappConfigured() && esFueraDeHorario(c.fecha_servicio, hora)) {
         const otros = await getSheetData('otros_servicios').catch(() => [])
         const fh = otros.find(s => (s.auto_regla || '') === 'fuera_horario' && String(s.activo || '').toUpperCase() === 'TRUE')
         const monto = fh ? (parseInt(fh.precio, 10) || 0) : 10000
@@ -82,7 +92,7 @@ export async function POST(req: NextRequest) {
           : 'por ser después de las 18:00'
         const msg =
           `Hola ${tutor}, la veterinaria nos informó que la hora del servicio de ${mascota} quedó coordinada para las ${hora} hrs. ` +
-          `El retiro para la cremación tiene un recargo adicional de ${fmtPrecio(monto)} por fuera de horario (${motivo}) ` +
+          `Por ese horario se suma un recargo de ${fmtPrecio(monto)} por fuera de horario (${motivo}), una sola vez ` +
           `(queda especificado en nuestra web). Te lo comentamos para que no sea una sorpresa al momento del cobro. ` +
           `Cualquier duda, quedamos atentos por aquí 🐾 — Crematorio Alma Animal`
         await enviarTextoWhatsapp(waCliente, msg)
