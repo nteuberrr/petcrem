@@ -130,22 +130,25 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
     return `No pude validar la dirección "${a.direccion}, ${a.comuna}". Pídele al cliente que la confirme o la corrija (calle y número) y vuelve a registrarla. NO la registres aún.`
   }
 
-  const slot = await evaluarSlotRetiro(a.fecha, a.hora)
-  if (!slot.ok) {
-    const libres = slot.libres.length ? ` Horarios disponibles ese día: ${slot.libres.join(', ')}.` : ''
-    return `NO registres este retiro: ${slot.motivo}${libres} Explícaselo al cliente con amabilidad y ofrécele uno de los horarios disponibles; vuelve a llamar la herramienta solo cuando acuerden una hora válida.`
-  }
-
   await ensureSheet(SHEET_RETIRO)
   await ensureColumns(SHEET_RETIRO, COLS_RETIRO)
 
   const waCliente = (ctx.waId || '').replace(/\D/g, '')
+  const tel9 = waCliente.slice(-9)
 
+  // ⚠️ Los dos candados anti-duplicado van ANTES de evaluar la hora, a propósito.
+  // Iban después y el bot chocaba consigo mismo (caso real Dharma, 2026-07-29):
+  // dos mensajes seguidos del cliente separados por más que el debounce dispararon
+  // dos turnos; el 1º agendó las 21:00 y el 2º, al evaluar esa misma hora, la vio
+  // OCUPADA — por la reserva que acababa de crear el 1º— y le respondió al cliente
+  // "las 21:00 ya no está disponible", ofreciéndole otros horarios, justo antes de
+  // que le llegara la confirmación de esas 21:00. Los candados nunca se ejecutaban
+  // porque la evaluación de slot ya había cortado con un return.
+  //
   // No permitir una SEGUNDA solicitud si el cliente YA tiene una ficha de retiro
   // en proceso. La fuente de verdad es lo VISIBLE en /clientes (ficha "borrador"/
   // por ingresar), no el log interno: así, cuando el equipo la registra o la
   // elimina, el cliente puede volver a pedir.
-  const tel9 = waCliente.slice(-9)
   const clientes = await getSheetData('clientes')
   const enProceso = clientes.find(c => c.estado === 'borrador' && (c.telefono || '').replace(/\D/g, '').slice(-9) === tel9)
   if (enProceso) {
@@ -161,6 +164,12 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
   )
   if (pendientePrevia) {
     return `Este cliente YA tiene una solicitud de retiro PENDIENTE de confirmación${pendientePrevia.nombre_mascota ? ` (${pendientePrevia.nombre_mascota})` : ''}. NO registres otra. Dile, cálido y breve, que ya recibimos su solicitud y la estamos confirmando; si necesita cambiar algún dato, que nos lo indique.`
+  }
+
+  const slot = await evaluarSlotRetiro(a.fecha, a.hora)
+  if (!slot.ok) {
+    const libres = slot.libres.length ? ` Horarios disponibles ese día: ${slot.libres.join(', ')}.` : ''
+    return `NO registres este retiro: ${slot.motivo}${libres} Explícaselo al cliente con amabilidad y ofrécele uno de los horarios disponibles; vuelve a llamar la herramienta solo cuando acuerden una hora válida.`
   }
 
   const id = await getNextId(SHEET_RETIRO)
@@ -231,12 +240,11 @@ async function reprogramarRetiro(a: AccionReprogramar, ctx: CtxAgente): Promise<
     return 'No pude identificar el WhatsApp del cliente para reprogramar el retiro. Escala a un humano.'
   }
 
-  const slot = await evaluarSlotRetiro(a.fecha, a.hora)
-  if (!slot.ok) {
-    const libres = slot.libres.length ? ` Horarios disponibles ese día: ${slot.libres.join(', ')}.` : ''
-    return `NO reprogrames: ${slot.motivo}${libres} Explícaselo al cliente con amabilidad y ofrécele uno de los horarios disponibles; vuelve a llamar la herramienta solo cuando acuerden una hora válida.`
-  }
-
+  // Primero se busca el retiro del cliente y RECIÉN DESPUÉS se evalúa la hora
+  // nueva, excluyéndolo del cálculo: una reserva no puede bloquearse a sí misma.
+  // Al revés (como estaba), mover un retiro de 21:00 a 20:45 chocaba contra su
+  // propio horario actual —30 min antes / 45 después— y el bot respondía que no
+  // había disponibilidad. Mismo defecto que el de solicitarRetiro.
   await ensureSheet(SHEET_RETIRO)
   await ensureColumns(SHEET_RETIRO, COLS_RETIRO)
   const solicitudes = await getSheetData(SHEET_RETIRO)
@@ -246,6 +254,12 @@ async function reprogramarRetiro(a: AccionReprogramar, ctx: CtxAgente): Promise<
   const sol = propias[0]
   if (!sol) {
     return 'Este cliente no tiene ningún retiro pendiente ni confirmado a su nombre para reprogramar. Si quiere agendar uno nuevo, usa la herramienta solicitar_retiro_cremacion en vez de esta.'
+  }
+
+  const slot = await evaluarSlotRetiro(a.fecha, a.hora, { excluirAgendaId: `r${sol.id}` })
+  if (!slot.ok) {
+    const libres = slot.libres.length ? ` Horarios disponibles ese día: ${slot.libres.join(', ')}.` : ''
+    return `NO reprogrames: ${slot.motivo}${libres} Explícaselo al cliente con amabilidad y ofrécele uno de los horarios disponibles; vuelve a llamar la herramienta solo cuando acuerden una hora válida.`
   }
 
   const fechaAnterior = formatDate(sol.fecha_retiro)

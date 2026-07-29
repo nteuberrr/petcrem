@@ -349,11 +349,17 @@ export async function listarAgenda(
 /**
  * Minutos de inicio de TODAS las reservas de una fecha (retiros + eutanasias,
  * con o sin hora de retiro informada), para el bloqueo del bot al minuto.
+ *
+ * `excluirId` saca de la cuenta una reserva puntual (id de AgendaItem, p. ej.
+ * `r12`). Se usa al REPROGRAMAR: la reserva que se está moviendo no puede
+ * bloquearse a sí misma — si no, mover un retiro de 21:00 a 20:45 "choca" con su
+ * propio horario actual y el bot responde que no hay disponibilidad.
  */
-async function ocupadosDe(fechaISO: string): Promise<number[]> {
+async function ocupadosDe(fechaISO: string, excluirId?: string): Promise<number[]> {
   const items = await listarAgenda(fechaISO, fechaISO)
   const out: number[] = []
   for (const it of items) {
+    if (excluirId && it.id === excluirId) continue
     // Las eutanasias SIN cremación no ocupan slot: el chofer no pasa a retirar,
     // así que su horario queda libre para agendar otros retiros.
     if (it.tipo === 'eutanasia' && it.sinCremacion) continue
@@ -477,11 +483,19 @@ export async function evaluarHoraEutanasia(fechaRaw: string, horaRaw: string): P
  * fuera de la próxima hora si es hoy, fuera de los bloqueos manuales de la agenda,
  * y respetando la separación con las demás reservas (30 min antes / 45 después).
  * Devuelve además las horas libres de ese día.
+ *
+ * `opts.excluirAgendaId` ignora una reserva existente al evaluar (y al listar las
+ * horas libres): es la que se está REPROGRAMANDO, que no debe bloquearse a sí
+ * misma. Formato de id de AgendaItem — para un retiro, `r${solicitud.id}`.
  */
-export async function evaluarSlotRetiro(fechaRaw: string, horaRaw: string): Promise<EvalSlot> {
+export async function evaluarSlotRetiro(
+  fechaRaw: string,
+  horaRaw: string,
+  opts: { excluirAgendaId?: string } = {},
+): Promise<EvalSlot> {
   const fecha = formatDateForSheet(fechaRaw) || String(fechaRaw || '').trim()
   const { iso: hoy, min: ahora } = ahoraChile()
-  const [ocupados, bloqueos] = await Promise.all([ocupadosDe(fecha), listarBloqueos(fecha, fecha)])
+  const [ocupados, bloqueos] = await Promise.all([ocupadosDe(fecha, opts.excluirAgendaId), listarBloqueos(fecha, fecha)])
   const rangos = rangosDelDia(bloqueos, fecha)
   const libres = horasLibres(fecha, hoy, ahora, ocupados, rangos)
 
