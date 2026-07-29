@@ -122,7 +122,10 @@ export const SHEETS: Record<string, string[]> = {
   otros_servicios: ['id', 'nombre', 'precio', 'activo', 'auto_regla', 'comunas', 'fecha_creacion'],
   // Cobros que perseguimos por ficha: producto ADICIONAL agregado o DIFERENCIA
   // de peso. estado: pendiente → cliente_confirmo → pagado.
-  cobros: ['id', 'cliente_id', 'tipo', 'detalle', 'monto', 'estado', 'message_id', 'fecha_creacion', 'fecha_cliente_confirmo', 'fecha_pagado'],
+  // boleta_id: boleta (39) emitida por ESE cobro al confirmarse el pago (guard de
+  // idempotencia + trazabilidad). Solo 'adicional' y 'diferencia'; el 'saldo'
+  // cierra la ficha y su boleta va en clientes.boleta_id.
+  cobros: ['id', 'cliente_id', 'tipo', 'detalle', 'monto', 'estado', 'message_id', 'fecha_creacion', 'fecha_cliente_confirmo', 'fecha_pagado', 'boleta_id'],
   descuentos: ['id', 'nombre', 'tipo', 'valor', 'activo', 'foto_url', 'mostrar_web', 'fecha_creacion'],
   usuarios: ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion', 'telefono', 'avisos_whatsapp'],
   asistencia: [

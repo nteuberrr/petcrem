@@ -33,13 +33,19 @@ export interface Cobro {
   fecha_creacion: string
   fecha_cliente_confirmo: string
   fecha_pagado: string
+  /** Boleta (39) emitida por este cobro al confirmarse el pago. '' = sin emitir. */
+  boleta_id: string
 }
 
+// ⚠️ toCobro DEBE mapear todas las columnas: `marcarCobroPagado`/`marcarClienteConfirmo`
+// escriben con updateById (fila COMPLETA), así que un campo que no viaje en el
+// objeto se persiste como '' y se pierde (mismo bug que borraba clientes.boleta_id).
 function toCobro(r: Record<string, string>): Cobro {
   return {
     id: r.id || '', cliente_id: r.cliente_id || '', tipo: r.tipo || '', detalle: r.detalle || '',
     monto: r.monto || '0', estado: r.estado || 'pendiente', message_id: r.message_id || '',
     fecha_creacion: r.fecha_creacion || '', fecha_cliente_confirmo: r.fecha_cliente_confirmo || '', fecha_pagado: r.fecha_pagado || '',
+    boleta_id: r.boleta_id || '',
   }
 }
 
@@ -49,8 +55,16 @@ export async function crearCobro(clienteId: string, tipo: TipoCobro, detalle: st
   await appendRow(TABLE, {
     id, cliente_id: String(clienteId), tipo, detalle: detalle.slice(0, 500), monto: String(Math.round(monto)),
     estado: 'pendiente', message_id: '', fecha_creacion: new Date().toISOString(), fecha_cliente_confirmo: '', fecha_pagado: '',
+    boleta_id: '',
   })
   return String(id)
+}
+
+/** Anota en el cobro la boleta que se emitió por él. */
+export async function marcarBoletaCobro(id: string, boletaId: string): Promise<void> {
+  const c = await obtenerCobro(id)
+  if (!c) return
+  await updateById(TABLE, id, { ...c, boleta_id: String(boletaId) })
 }
 
 /** Cobros NO pagados de una ficha (para el banner "cobro pendiente"). */

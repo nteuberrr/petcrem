@@ -2,6 +2,7 @@ import { getSheetData, appendRow, updateByIdIf, getNextId } from './datastore'
 import { todayISO } from './dates'
 import { uploadToR2 } from './cloudflare-r2'
 import { enviarBoletaCliente } from './cliente-mailer'
+import { marcarBoletaCobro } from './cobros'
 import { avisarAdminsWhatsapp } from './whatsapp'
 import { sendEmail } from './resend-mailer'
 import { renderEmailLayout, getContacto, escapeHtml } from './email-layout'
@@ -23,6 +24,14 @@ import {
  */
 
 const SHEET = 'documentos_tributarios'
+
+/**
+ * Tipos de cobro posterior que SÍ emiten su propia boleta al confirmarse el pago
+ * (decisión del dueño 2026-07-29): plata cobrada después de la boleta original,
+ * que si no quedaría sin documentar. 'saldo' NO va: ese cierra el pago de la
+ * ficha completa y su boleta es la de la ficha.
+ */
+const TIPOS_COBRO_CON_BOLETA = ['adicional', 'diferencia']
 
 export type EmisorInfo = DteEmisor
 
@@ -274,6 +283,80 @@ export async function emitirBoletaSiCorresponde(
   } catch (e) {
     console.warn('[facturacion] error emitiendo boleta automática (no bloqueante):', e)
     avisar('la emisión de la boleta automática falló con un error inesperado.')
+    return { emitida: false }
+  }
+}
+
+/**
+ * Emite la BOLETA (39) de un COBRO POSTERIOR de una ficha ya facturada: producto
+ * adicional pedido después, o diferencia de peso. La boleta original cubrió el
+ * monto de ese momento, así que esta plata quedaría sin documentar.
+ *
+ * Es SOLO por el monto del cobro (no por el total de la ficha), y sale al
+ * confirmarse el pago recibido — misma regla que el resto: se boletea cuando el
+ * pago está en casa. Idempotente por `cobros.boleta_id`.
+ *
+ * Los cobros tipo 'saldo' NO pasan por acá: esos cierran el pago de la ficha
+ * completa y su boleta es la de la ficha (clientes.boleta_id).
+ */
+export async function emitirBoletaCobroSiCorresponde(
+  cobro: { id: string; cliente_id: string; tipo: string; detalle: string; monto: string; boleta_id?: string },
+  meta: { creadoPorNombre?: string } = {},
+): Promise<{ emitida: boolean; boleta_id?: string }> {
+  if (!TIPOS_COBRO_CON_BOLETA.includes(cobro.tipo)) return { emitida: false }
+  if (String(cobro.boleta_id || '').trim()) return { emitida: false }
+  const monto = parseInt(String(cobro.monto || '0'), 10) || 0
+  if (monto <= 0) return { emitida: false }
+  if (!isOpenFacturaConfigurado()) return { emitida: false }
+
+  const ficha = (await getSheetData('clientes')).find(c => String(c.id) === String(cobro.cliente_id))
+  if (!ficha) return { emitida: false }
+  // Mismas guardas que la boleta de la ficha: solo tutor (las de convenio se
+  // facturan al vet, mensual y manual) y solo fichas ya registradas.
+  if (String(ficha.veterinaria_id || '').trim()) return { emitida: false }
+  if (String(ficha.estado || '') === 'borrador' || !String(ficha.codigo || '').trim()) return { emitida: false }
+
+  const mascota = (ficha.nombre_mascota || 'mascota').trim()
+  const tutor = (ficha.nombre_tutor || mascota).trim()
+  const esDiferencia = cobro.tipo === 'diferencia'
+  const nombreLinea = esDiferencia
+    ? `Diferencia de peso — cremación de ${mascota}`
+    : (cobro.detalle || 'Producto adicional').trim()
+  const avisar = (extra: string) => avisarAdminsWhatsapp(
+    `⚠️ *Boleta SII no emitida*\n\nEl cobro de ${String(ficha.codigo || '#' + ficha.id)} (${mascota}) por ${fmtPrecio(monto)} se confirmó pagado pero ${extra}\n\nEmítela a mano desde Facturación → emisión manual.`
+  ).catch(e => console.warn('[facturacion] no se pudo avisar al admin por WhatsApp:', e))
+
+  try {
+    const r = await emitirDocumento({
+      tipo: DTE_BOLETA_AFECTA,
+      receptorTipo: 'tutor',
+      receptorId: String(ficha.id || ''),
+      receptor: { RUTRecep: '66666666-6', RznSocRecep: tutor, CorreoRecep: (ficha.email || '').trim() || undefined },
+      lineas: [{ nombre: nombreLinea.slice(0, 80), cantidad: 1, montoBruto: monto, descripcion: esDiferencia ? undefined : 'Producto adicional' }],
+      resumen: `${esDiferencia ? 'Diferencia' : 'Adicional'} ${(ficha.codigo || '').trim()} · ${mascota}`.trim(),
+      cliente: { nombre: tutor, email: (ficha.email || '').trim() || undefined },
+      creadoPorId: undefined,
+      creadoPorNombre: meta.creadoPorNombre || 'Automático (cobro adicional pagado)',
+    })
+    if (!r.ok || !r.documento?.id) { avisar(`la boleta automática falló:\n${r.error || 'error desconocido'}`); return { emitida: false } }
+
+    await marcarBoletaCobro(String(cobro.id), String(r.documento.id))
+
+    // Enviarle la boleta al tutor, igual que la de la ficha (best-effort).
+    const email = (ficha.email || '').trim()
+    if (email) {
+      try {
+        await enviarBoletaCliente({
+          email, nombreMascota: mascota, nombreTutor: tutor, clienteId: String(ficha.id || ''),
+          folio: r.documento.folio, montoTotal: parseInt(r.documento.monto_total, 10) || monto,
+          pdfUrl: r.documento.pdf_url,
+        })
+      } catch (e) { console.error('[facturacion] error enviando boleta de cobro al tutor:', e) }
+    }
+    return { emitida: true, boleta_id: String(r.documento.id) }
+  } catch (e) {
+    console.warn('[facturacion] error emitiendo boleta de cobro (no bloqueante):', e)
+    avisar('la emisión falló con un error inesperado.')
     return { emitida: false }
   }
 }

@@ -3,15 +3,18 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { marcarCobroPagado } from '@/lib/cobros'
 import { getSheetData, updateByIdIf } from '@/lib/datastore'
-import { emitirBoletaSiCorresponde } from '@/lib/facturacion'
+import { emitirBoletaSiCorresponde, emitirBoletaCobroSiCorresponde } from '@/lib/facturacion'
 
 /**
  * PATCH /api/cobros/[id]  — el equipo confirma que RECIBIÓ el pago de un cobro
  * (adicional / diferencia / saldo) → estado=pagado → cierra la cobranza (deja de
  * aparecer el banner en la ficha). Requiere sesión (mismo acceso que la ficha).
  *
- * Si el cobro es un 'saldo' de PAGO PARCIAL, al recibirlo la ficha queda PAGADA y
- * recién ahí se emite la boleta (por el total). Best-effort: no rompe el cierre.
+ * Boleta según el tipo de cobro (best-effort, nunca rompe el cierre):
+ *  · 'saldo'  → completa el pago de la ficha: queda PAGADA y se emite la boleta
+ *               por el TOTAL de la ficha.
+ *  · 'adicional' / 'diferencia' → plata cobrada DESPUÉS de la boleta original:
+ *               se emite una boleta propia por SOLO ese monto.
  */
 export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -31,6 +34,10 @@ export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ i
           if (r.boleta_id) boletaId = r.boleta_id
         }
       } catch (e) { console.warn('[cobros PATCH] cierre de saldo parcial falló:', e) }
+    } else if (cobro.cliente_id) {
+      // Adicional pedido después / diferencia de peso: boleta por SOLO ese monto.
+      const r = await emitirBoletaCobroSiCorresponde(cobro, { creadoPorNombre: `Automático (${cobro.tipo} pagado)` })
+      if (r.boleta_id) boletaId = r.boleta_id
     }
 
     return NextResponse.json({ ok: true, cobro, boleta_id: boletaId || undefined })
