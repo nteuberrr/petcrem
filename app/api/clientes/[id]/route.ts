@@ -124,6 +124,16 @@ export async function PATCH(
       'fotos_mascota', 'fotos_cuadro', 'videos_servicio', 'fotos_evidencia',
       'correo_diferencia_fecha', 'correo_diferencia_monto',
       'greda_descontada', // lo administra el sync de greda de abajo, nunca el form
+      // Punteros a documentos tributarios YA emitidos: los escriben solo los flujos
+      // de emisión (emitirBoletaSiCorresponde, /pendientes/[id]/reintentar,
+      // facturar-vets) y son el seguro contra emitir dos veces. Bug real
+      // (2026-07-29): la ficha manda de vuelta todo el form, así que un "Guardar"
+      // posterior a la emisión —con el form cargado ANTES, p. ej. tras confirmar el
+      // saldo de un pago parcial— los pisaba con ''. La ficha volvía a aparecer
+      // como "pagada sin boleta" y el botón Emitir habría emitido un DUPLICADO real
+      // al SII (pasó con Lucky, Max y Elvis). Nada los repone: la emisión solo se
+      // dispara en la transición a pagado.
+      'boleta_id', 'factura_vet_id',
     ]
     for (const k of CAMPOS_SISTEMA) delete normalizedBody[k]
     for (const k of ['peso_declarado', 'peso_ingreso']) {
