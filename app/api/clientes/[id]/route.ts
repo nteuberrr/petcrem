@@ -322,12 +322,20 @@ export async function PATCH(
       }
     }
 
-    // EMISIÓN AUTOMÁTICA DE BOLETA (39) AL TUTOR cuando la ficha pasa a PAGADA.
-    // Solo en la transición real pendiente/parcial → pagada (el helper aplica el
-    // resto de las guardas: tutor, registrada, sin boleta previa). Best-effort.
+    // EMISIÓN AUTOMÁTICA DE BOLETA (39) AL TUTOR. Dispara cuando la ficha se
+    // vuelve elegible EN ESTE REQUEST, por cualquiera de los dos caminos:
+    //   · pasó a pagada (pendiente/parcial → pagada), o
+    //   · se acaba de REGISTRAR (código recién generado) viniendo ya pagada — el
+    //     tutor pagó en el acto, así que no hay transición de estado_pago que
+    //     dispare. Antes ese caso quedaba sin documento (lo tapaba el POS, que
+    //     desde 2026-07-29 ya no emite).
+    // La condición NO alcanza a una ficha vieja ya pagada que solo se edita: ese
+    // es el backlog histórico y se emite a mano desde Facturación, no de golpe al
+    // guardar. El helper aplica el resto de las guardas (tutor, registrada, sin
+    // boleta previa) y es idempotente por `boleta_id`. Best-effort.
     const pagoAntes = String(rows[idx].estado_pago || '').toLowerCase()
     const pagoAhora = String(updated.estado_pago || '').toLowerCase()
-    if (pagoAntes !== 'pagado' && pagoAhora === 'pagado') {
+    if (pagoAhora === 'pagado' && (pagoAntes !== 'pagado' || !!codigoGenerado)) {
       const { boleta_id } = await emitirBoletaSiCorresponde(updated as Record<string, string>, { creadoPorNombre: 'Automático (pago confirmado)' })
       if (boleta_id) updated.boleta_id = boleta_id
     }

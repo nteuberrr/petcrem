@@ -11,6 +11,7 @@ import { calcularSnapshotFicha, leerSnapshotFicha, type AdicionalItem } from '@/
 import { crearEstimadorFichas } from '@/lib/precio-estimado'
 import { capitalizarNombre } from '@/lib/nombres'
 import { sincronizarSaldoParcial } from '@/lib/cobros'
+import { emitirBoletaSiCorresponde } from '@/lib/facturacion'
 
 const ClienteSchema = z.object({
   nombre_mascota: z.string().min(1, 'Nombre de mascota requerido'),
@@ -228,6 +229,22 @@ export async function POST(req: NextRequest) {
       catch (e) { console.warn('[clientes POST] no se pudo crear el saldo parcial:', e) }
     }
 
+    // BOLETA (39) AL TUTOR cuando la ficha NACE ya pagada: se registra (código
+    // generado) y el tutor pagó en el acto, así que no hay transición
+    // pendiente→pagado que dispare la emisión del PATCH. Antes esto quedaba sin
+    // documento y lo tapaba la boleta del POS; con el POS ya sin emitir (2026-07-29)
+    // la app es el ÚNICO emisor y el hueco dejaba ventas sin boletear (caso real:
+    // G117-CI Afonso). El helper aplica las guardas (tutor, registrada, pagada, sin
+    // boleta previa) y es idempotente por `boleta_id`. Best-effort: si falla avisa
+    // al admin por WhatsApp y no rompe el alta.
+    // (`row` trae números en pesos/precios; el helper coacciona todo con String()
+    // antes de usarlo, de ahí el cast vía unknown.)
+    let boletaEmitidaId = ''
+    if (estadoPagoFinal === 'pagado') {
+      const { boleta_id } = await emitirBoletaSiCorresponde(row as unknown as Record<string, string>, { creadoPorNombre: 'Automático (pagada al registrar)' })
+      if (boleta_id) boletaEmitidaId = boleta_id
+    }
+
     // Mail de bienvenida al tutor con el código de su mascota (best-effort:
     // no bloquea la creación de la ficha si Resend falla o no está configurado).
     try {
@@ -253,7 +270,7 @@ export async function POST(req: NextRequest) {
       console.warn('[clientes POST] fallo mail código al vet (no bloqueante):', e)
     }
 
-    return NextResponse.json({ ...row }, { status: 201 })
+    return NextResponse.json({ ...row, ...(boletaEmitidaId ? { boleta_id: boletaEmitidaId } : {}) }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })
   }
