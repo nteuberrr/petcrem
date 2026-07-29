@@ -100,11 +100,35 @@ const SERVICIOS = [
   { nombre: 'Cremación Sin Devolución', codigo: 'SD' },
 ]
 
+/** Filtro de situación de la ficha (de a uno). El rango de fechas, la forma de
+ *  pago y la veterinaria son filtros aparte que se COMBINAN con este. */
+type FiltroSituacion = 'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado'
+  | 'pago_pendiente' | 'datos_pendientes' | 'falta_peso' | 'diferencia'
+  | 'pendiente_cobro' | 'correo_malo'
+
+/** Formas de pago del alta de ficha + "sin definir" para las que no la tienen. */
+const FORMAS_PAGO = [
+  { id: 'transferencia', label: 'Transferencia' },
+  { id: 'pos', label: 'POS' },
+  { id: 'efectivo', label: 'Efectivo' },
+  { id: 'link', label: 'Link de pago' },
+  { id: '__sin__', label: 'Sin definir' },
+] as const
+
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [buscar, setBuscar] = useState('')
-  const [filtro, setFiltro] = useState<'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado' | 'pago_pendiente' | 'este_mes' | 'esta_semana' | 'datos_pendientes' | 'falta_peso' | 'diferencia' | 'pendiente_cobro' | 'correo_malo'>('todos')
+  // Los filtros son INDEPENDIENTES y se combinan (AND): situación + rango de
+  // fechas + forma(s) de pago + veterinaria. Solo la situación es de a una.
+  const [filtro, setFiltro] = useState<FiltroSituacion>('todos')
   const [filtroVet, setFiltroVet] = useState('') // '' = todas · '__general__' = sin vet · id de vet
+  // Rango de fechas: sobre la fecha de retiro o la de creación de la ficha.
+  const [fechaCampo, setFechaCampo] = useState<'fecha_retiro' | 'fecha_creacion'>('fecha_retiro')
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
+  // Formas de pago seleccionadas (multi). Vacío = todas.
+  const [filtroPagos, setFiltroPagos] = useState<string[]>([])
+  const togglePago = (v: string) => setFiltroPagos(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [selected, setSelected] = useState<Cliente | null>(null)
@@ -357,20 +381,11 @@ export default function ClientesPage() {
   // Ids de fichas con al menos un cobro NO pagado (de la tabla `cobros`).
   const idsConCobroPendiente = useMemo(() => new Set(cobrosPend.map(c => String(c.cliente_id))), [cobrosPend])
 
-  // Resultados filtrados por buscador + filtro
+  // Resultados filtrados: TODOS los filtros se combinan (AND) — situación,
+  // rango de fechas, forma de pago, veterinaria y buscador.
   const resultados = useMemo(() => {
     const q = buscar.trim().toLowerCase()
-    const hoy = new Date()
-    const startMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-    const startSemana = new Date(hoy); startSemana.setDate(hoy.getDate() - 6); startSemana.setHours(0, 0, 0, 0)
-
-    const parseFecha = (s?: string) => {
-      if (!s) return null
-      const iso = formatDateForSheet(s)
-      if (!iso) return null
-      const d = new Date(`${iso}T12:00:00`)
-      return isNaN(d.getTime()) ? null : d
-    }
+    const pagosSel = new Set(filtroPagos)
 
     // Últimos primero (reversa)
     const ordenados = [...clientes].reverse()
@@ -395,13 +410,20 @@ export default function ClientesPage() {
       // Filtro por veterinaria (independiente del filtro de estado)
       if (filtroVet === '__general__' && (c.veterinaria_id || '').trim()) return false
       if (filtroVet && filtroVet !== '__general__' && c.veterinaria_id !== filtroVet) return false
-      if (filtro === 'este_mes') {
-        const f = parseFecha(c.fecha_retiro)
-        if (!f || f < startMes) return false
+      // Filtro por rango de fechas (sobre retiro o creación). Las fichas sin esa
+      // fecha quedan fuera apenas se define un extremo del rango.
+      if (fechaDesde || fechaHasta) {
+        // Las fechas vienen como ISO o serial de Excel: normalizar a YYYY-MM-DD
+        // (comparable como string) antes de comparar contra los inputs.
+        const iso = formatDateForSheet(c[fechaCampo])
+        if (!iso) return false
+        if (fechaDesde && iso < fechaDesde) return false
+        if (fechaHasta && iso > fechaHasta) return false
       }
-      if (filtro === 'esta_semana') {
-        const f = parseFecha(c.fecha_retiro)
-        if (!f || f < startSemana) return false
+      // Filtro por forma(s) de pago
+      if (pagosSel.size) {
+        const tp = (c.tipo_pago || '').trim().toLowerCase()
+        if (!pagosSel.has(tp || '__sin__')) return false
       }
       // Filtro por buscador
       if (q) {
@@ -416,7 +438,7 @@ export default function ClientesPage() {
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buscar, filtro, filtroVet, clientes, preciosGenerales, preciosConvenio, cobrosPend, idsCorreoMalo])
+  }, [buscar, filtro, filtroVet, fechaCampo, fechaDesde, fechaHasta, filtroPagos, clientes, preciosGenerales, preciosConvenio, cobrosPend, idsCorreoMalo])
 
   const nBorradores = useMemo(() => clientes.filter(c => c.estado === 'borrador').length, [clientes])
 
@@ -446,10 +468,43 @@ export default function ClientesPage() {
   // del dashboard: /clientes?filtro=borrador). Se lee una vez al montar.
   useEffect(() => {
     const f = new URLSearchParams(window.location.search).get('filtro')
-    const validos = ['todos', 'borrador', 'pendiente', 'cremado', 'despachado', 'pago_pendiente', 'este_mes', 'esta_semana', 'datos_pendientes', 'falta_peso', 'diferencia']
+    if (!f) return
+    // Compatibilidad: `este_mes` / `esta_semana` eran chips de situación; ahora
+    // son atajos del rango de fechas.
+    if (f === 'este_mes' || f === 'esta_semana') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      aplicarRango(f === 'este_mes' ? 'mes' : 'semana')
+      return
+    }
+    const validos: FiltroSituacion[] = ['todos', 'borrador', 'pendiente', 'cremado', 'despachado', 'pago_pendiente', 'datos_pendientes', 'falta_peso', 'diferencia', 'pendiente_cobro', 'correo_malo']
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (f && validos.includes(f)) setFiltro(f as typeof filtro)
+    if ((validos as string[]).includes(f)) setFiltro(f as FiltroSituacion)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /** Atajos del rango de fechas (setean desde/hasta en ISO). */
+  function aplicarRango(rango: 'hoy' | 'semana' | 'mes' | 'mes_pasado') {
+    const hoy = new Date()
+    const iso = (d: Date) => formatDateForSheet(d)
+    if (rango === 'hoy') { setFechaDesde(todayISO()); setFechaHasta(todayISO()); return }
+    if (rango === 'semana') {
+      const desde = new Date(hoy); desde.setDate(hoy.getDate() - 6)
+      setFechaDesde(iso(desde)); setFechaHasta(todayISO()); return
+    }
+    if (rango === 'mes') {
+      setFechaDesde(iso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)))
+      setFechaHasta(todayISO()); return
+    }
+    // Mes pasado completo
+    setFechaDesde(iso(new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)))
+    setFechaHasta(iso(new Date(hoy.getFullYear(), hoy.getMonth(), 0)))
+  }
+
+  /** ¿Hay algún filtro activo además del buscador? */
+  const hayFiltros = filtro !== 'todos' || !!filtroVet || !!fechaDesde || !!fechaHasta || filtroPagos.length > 0
+  function limpiarFiltros() {
+    setFiltro('todos'); setFiltroVet(''); setFechaDesde(''); setFechaHasta(''); setFiltroPagos([])
+  }
 
   // Cargo AUTOMÁTICO de otros servicios (fuera de horario / distancia): según
   // fecha/hora/comuna del retiro se pre-cargan solos en los adicionales, siempre
@@ -796,7 +851,7 @@ export default function ClientesPage() {
           className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand"
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-gray-600 mr-1">Filtrar:</span>
+          <span className="text-xs font-semibold text-gray-600 mr-1">Situación:</span>
           {([
             { id: 'todos', label: 'Todos' },
             { id: 'borrador', label: '🗂 Por ingresar' },
@@ -805,8 +860,6 @@ export default function ClientesPage() {
             { id: 'despachado', label: '📦 Despachados' },
             { id: 'pago_pendiente', label: '⚠ Pago pendiente' },
             { id: 'correo_malo', label: '✉️ Correo rebotado' },
-            { id: 'este_mes', label: 'Este mes' },
-            { id: 'esta_semana', label: 'Esta semana' },
             { id: 'datos_pendientes', label: '📝 Datos pendientes' },
           ] as const).map(opt => {
             const active = filtro === opt.id
@@ -828,6 +881,55 @@ export default function ClientesPage() {
             )
           })}
         </div>
+        {/* Rango de fechas — se combina con el resto de los filtros */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-gray-600 mr-1">Fecha de:</span>
+          <select value={fechaCampo} onChange={e => setFechaCampo(e.target.value as typeof fechaCampo)}
+            className="border-2 border-gray-300 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand">
+            <option value="fecha_retiro">Retiro</option>
+            <option value="fecha_creacion">Creación de la ficha</option>
+          </select>
+          <label className="text-xs text-gray-600">Desde</label>
+          <input type="date" value={fechaDesde} max={fechaHasta || undefined} onChange={e => setFechaDesde(e.target.value)}
+            className="border-2 border-gray-300 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand" />
+          <label className="text-xs text-gray-600">Hasta</label>
+          <input type="date" value={fechaHasta} min={fechaDesde || undefined} onChange={e => setFechaHasta(e.target.value)}
+            className="border-2 border-gray-300 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand" />
+          {([
+            { id: 'hoy', label: 'Hoy' },
+            { id: 'semana', label: 'Últimos 7 días' },
+            { id: 'mes', label: 'Este mes' },
+            { id: 'mes_pasado', label: 'Mes pasado' },
+          ] as const).map(r => (
+            <button key={r.id} onClick={() => aplicarRango(r.id)}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold border-2 border-gray-300 bg-white text-gray-700 hover:border-brand hover:bg-brand/10 transition-colors">
+              {r.label}
+            </button>
+          ))}
+          {(fechaDesde || fechaHasta) && (
+            <button onClick={() => { setFechaDesde(''); setFechaHasta('') }} className="text-xs text-brand-soft hover:underline">Quitar fechas</button>
+          )}
+        </div>
+
+        {/* Forma de pago — multi-selección */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-gray-600 mr-1">Forma de pago:</span>
+          {FORMAS_PAGO.map(fp => {
+            const active = filtroPagos.includes(fp.id)
+            return (
+              <button key={fp.id} onClick={() => togglePago(fp.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
+                  active ? 'bg-brand border-brand text-white shadow-md' : 'bg-white border-gray-300 text-gray-700 hover:border-brand hover:bg-brand/10'
+                }`}>
+                {fp.label}
+              </button>
+            )
+          })}
+          {filtroPagos.length > 0 && (
+            <button onClick={() => setFiltroPagos([])} className="text-xs text-brand-soft hover:underline">Quitar</button>
+          )}
+        </div>
+
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-gray-600 mr-1">Veterinaria:</span>
           <select value={filtroVet} onChange={e => setFiltroVet(e.target.value)}
@@ -840,9 +942,17 @@ export default function ClientesPage() {
             <button onClick={() => setFiltroVet('')} className="text-xs text-brand-soft hover:underline">Quitar filtro</button>
           )}
         </div>
-        <p className="text-xs text-gray-500 mt-3">
-          {resultados.length} resultado{resultados.length !== 1 ? 's' : ''} · {clientes.length} en total
-        </p>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-gray-500">
+            {resultados.length} resultado{resultados.length !== 1 ? 's' : ''} · {clientes.length} en total
+          </p>
+          {hayFiltros && (
+            <button onClick={limpiarFiltros}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border-2 border-gray-300 bg-white text-gray-700 hover:border-brand hover:bg-brand/10 transition-colors">
+              Limpiar filtros
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Cards de resultados */}
