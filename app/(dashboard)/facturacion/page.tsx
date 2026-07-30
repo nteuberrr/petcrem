@@ -18,6 +18,9 @@ export interface DocResumen {
   pdf_url: string
   openfactura_url: string
   fecha_emision: string
+  /** Monto ya acreditado por notas de crédito PARCIALES (0 si no tiene). */
+  abonado: number
+  monto_total: number
 }
 
 export interface VentaBoleta {
@@ -67,6 +70,8 @@ export interface Documento {
   openfactura_url: string
   documento_anulado_id: string
   nc_id: string
+  /** Ya acreditado por NC parciales — el modal lo usa para ofrecer el saldo. */
+  abonado?: number
 }
 
 const TABS: { key: TipoTab; label: string }[] = [
@@ -156,9 +161,22 @@ function DocVenta({ factura, boleta }: { factura: DocResumen | null; boleta: Doc
   if (!doc) return <span className="text-xs text-gray-400">Sin documento</span>
   if (doc.estado === 'anulado') return <Badge variant="red">{factura ? 'Factura anulada' : 'Boleta anulada'}</Badge>
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex flex-wrap items-center gap-1.5">
       <Badge variant={factura ? 'blue' : 'green'}>{factura ? 'Factura' : 'Boleta'}</Badge>
       <span className="text-xs font-mono font-bold text-brand">{doc.folio || 'emitida'}</span>
+      {doc.abonado > 0 && <Badge variant="yellow">NC parcial {fmtPrecio(doc.abonado)}</Badge>}
+    </span>
+  )
+}
+
+/** Estado de la boleta de una venta a tutor, con el aviso de NC parcial si la tiene. */
+function DocBoleta({ boleta }: { boleta: DocResumen | null }) {
+  if (!boleta) return <span className="text-xs text-gray-400">Sin emitir</span>
+  if (boleta.estado === 'anulado') return <Badge variant="red">Anulada</Badge>
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <span className="text-xs font-mono font-bold text-brand">{boleta.folio || '—'}</span>
+      {boleta.abonado > 0 && <Badge variant="yellow">NC parcial {fmtPrecio(boleta.abonado)}</Badge>}
     </span>
   )
 }
@@ -244,22 +262,14 @@ function BoletasTab() {
                         <div className="md:hidden mt-1 flex flex-wrap items-center gap-2">
                           <span className="text-xs text-gray-500">{v.fecha ? fmtFecha(v.fecha) : '—'}</span>
                           <BadgePago estado={v.estado_pago} />
-                          {v.boleta
-                            ? (v.boleta.estado === 'anulado'
-                                ? <Badge variant="red">Anulada</Badge>
-                                : <span className="text-xs font-mono font-bold text-brand">{v.boleta.folio || '—'}</span>)
-                            : <span className="text-xs text-gray-400">Sin emitir</span>}
+                          <DocBoleta boleta={v.boleta} />
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-gray-700 hidden md:table-cell">{v.fecha ? fmtFecha(v.fecha) : '—'}</td>
                       <td className="px-2 md:px-4 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(v.monto)}</td>
                       <td className="px-4 py-2.5 hidden md:table-cell"><BadgePago estado={v.estado_pago} /></td>
                       <td className="px-4 py-2.5 hidden md:table-cell">
-                        {v.boleta
-                          ? (v.boleta.estado === 'anulado'
-                              ? <Badge variant="red">Anulada</Badge>
-                              : <span className="text-xs"><span className="font-mono font-bold text-brand">{v.boleta.folio || '—'}</span></span>)
-                          : <span className="text-xs text-gray-400">Sin emitir</span>}
+                        <DocBoleta boleta={v.boleta} />
                       </td>
                       <td className="px-2 md:px-4 py-2.5">
                         <div className="flex flex-col items-end gap-1">
@@ -269,10 +279,11 @@ function BoletasTab() {
                               <button onClick={() => setAnular({
                                 id: v.boleta!.id, tipo_dte: '39', folio: v.boleta!.folio, estado: v.boleta!.estado,
                                 ambiente: v.boleta!.ambiente, fecha_emision: v.boleta!.fecha_emision,
-                                receptor_razon_social: v.nombre_tutor, receptor_rut: '', monto_total: String(v.monto),
+                                receptor_razon_social: v.nombre_tutor, receptor_rut: '',
+                                monto_total: String(v.boleta!.monto_total || v.monto),
                                 resumen: '', mes_facturado: '', pdf_url: v.boleta!.pdf_url, openfactura_url: v.boleta!.openfactura_url,
-                                documento_anulado_id: '', nc_id: '',
-                              })} className="text-xs font-semibold text-red-600 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50">Anular</button>
+                                documento_anulado_id: '', nc_id: '', abonado: v.boleta!.abonado,
+                              })} className="text-xs font-semibold text-red-600 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50">Nota de crédito</button>
                             )}
                             {!v.boleta && v.estado_pago === 'pagado' && (
                               <button onClick={() => emitir(v)} disabled={emitiendo === v.id}
@@ -463,10 +474,11 @@ function FacturasTab({ onAbrirLote }: { onAbrirLote: () => void }) {
                                   id: doc.id, tipo_dte: esFactura ? '33' : '39', folio: doc.folio, estado: doc.estado,
                                   ambiente: doc.ambiente, fecha_emision: doc.fecha_emision,
                                   receptor_razon_social: esFactura ? v.vet_nombre : (v.nombre_mascota || v.codigo),
-                                  receptor_rut: esFactura ? v.vet_rut : '', monto_total: String(v.monto),
+                                  receptor_rut: esFactura ? v.vet_rut : '',
+                                  monto_total: String(doc.monto_total || v.monto),
                                   resumen: '', mes_facturado: v.mes, pdf_url: doc.pdf_url, openfactura_url: doc.openfactura_url,
-                                  documento_anulado_id: '', nc_id: '',
-                                })} className="text-xs font-semibold text-red-600 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50">Anular</button>
+                                  documento_anulado_id: '', nc_id: '', abonado: doc.abonado,
+                                })} className="text-xs font-semibold text-red-600 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50">Nota de crédito</button>
                               )
                             })()}
                             {!v.factura && !v.boleta && (
@@ -584,24 +596,42 @@ function NotasCreditoTab() {
   )
 }
 
-// AnularModal se conserva para anular documentos desde donde se necesite (hoy la
-// anulación se hace desde la ficha del cliente / el flujo de NC ya existente).
+/**
+ * Nota de crédito sobre un documento emitido, en dos modos:
+ *  - TOTAL: lo anula por completo y libera la ficha (vuelve a quedar sin documento).
+ *  - PARCIAL: acredita solo una parte; el documento sigue vigente por el saldo. Sirve
+ *    para devoluciones o correcciones de monto sin tirar abajo el documento entero.
+ * Aplica igual a boletas (incluidas las de fichas de convenio) y a facturas.
+ */
 export function AnularModal({ documento, onClose, onAnulado }: { documento: Documento; onClose: () => void; onAnulado: () => void }) {
+  const [modo, setModo] = useState<'total' | 'parcial'>((documento.abonado ?? 0) > 0 ? 'parcial' : 'total')
+  const [monto, setMonto] = useState('')
   const [motivo, setMotivo] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [err, setErr] = useState('')
-  const [ok, setOk] = useState<{ folio?: string } | null>(null)
+  const [ok, setOk] = useState<{ folio?: string; parcial?: boolean } | null>(null)
+
+  const montoDoc = parseFloat(documento.monto_total) || 0
+  const abonado = documento.abonado ?? 0
+  const saldo = Math.max(0, montoDoc - abonado)
 
   async function confirmar() {
     setEnviando(true); setErr('')
     try {
+      const monto_num = modo === 'parcial' ? parseInt(monto, 10) : undefined
+      if (modo === 'parcial' && (!monto_num || monto_num <= 0)) {
+        setErr('Ingresá el monto a acreditar.'); setEnviando(false); return
+      }
+      if (modo === 'parcial' && monto_num! > saldo) {
+        setErr(`El monto no puede superar el saldo del documento (${fmtPrecio(saldo)}).`); setEnviando(false); return
+      }
       const r = await fetch(`/api/facturacion/${documento.id}/anular`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ motivo }),
+        body: JSON.stringify({ motivo, ...(monto_num !== undefined ? { monto: monto_num } : {}) }),
       })
       const d = await r.json()
-      if (!r.ok) setErr(d.error || 'No se pudo anular.')
-      else setOk({ folio: d.notaCredito?.folio })
+      if (!r.ok) setErr(d.error || 'No se pudo emitir la nota de crédito.')
+      else setOk({ folio: d.notaCredito?.folio, parcial: !!d.parcial })
     } catch { setErr('Error de red') }
     setEnviando(false)
   }
@@ -609,20 +639,70 @@ export function AnularModal({ documento, onClose, onAnulado }: { documento: Docu
   const tipoLabel = documento.tipo_dte === '39' ? 'boleta' : 'factura'
 
   return (
-    <Modal open onClose={onClose} title={`Anular ${tipoLabel} folio ${documento.folio}`}>
+    <Modal open onClose={onClose} title={`Nota de crédito — ${tipoLabel} folio ${documento.folio}`}>
       {ok ? (
         <div className="text-center py-2">
           <div className="text-4xl mb-2">✅</div>
-          <p className="text-gray-800">Se generó la Nota de Crédito {ok.folio ? `folio ${ok.folio}` : ''} que anula este documento.</p>
+          <p className="text-gray-800">
+            Se generó la Nota de Crédito {ok.folio ? `folio ${ok.folio}` : ''}
+            {ok.parcial ? ` que abona parcialmente esta ${tipoLabel}.` : ' que anula este documento.'}
+          </p>
           <Button className="mt-4" onClick={onAnulado}>Listo</Button>
         </div>
       ) : (
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Esto va a emitir una <strong>Nota de Crédito</strong> que anula el {tipoLabel} <strong>#{documento.folio}</strong> por
-            {' '}{fmtPrecio(parseFloat(documento.monto_total) || 0)}, a nombre de <strong>{documento.receptor_razon_social}</strong>.
-            Esta acción no se puede deshacer.
-          </p>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm space-y-1">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Total de la {tipoLabel}</span>
+              <span className="font-semibold text-gray-900">{fmtPrecio(montoDoc)}</span>
+            </div>
+            {abonado > 0 && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Ya acreditado con NC</span>
+                  <span className="font-semibold text-amber-700">− {fmtPrecio(abonado)}</span>
+                </div>
+                <div className="flex justify-between border-t border-gray-200 pt-1">
+                  <span className="text-gray-600">Saldo</span>
+                  <span className="font-bold text-gray-900">{fmtPrecio(saldo)}</span>
+                </div>
+              </>
+            )}
+            <div className="text-xs text-gray-500 pt-1">A nombre de {documento.receptor_razon_social}</div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {([['total', 'Anulación total', `Anula la ${tipoLabel} completa y la deja sin efecto`],
+               ['parcial', 'Abono parcial', 'Acredita solo una parte; el documento sigue vigente']] as const).map(([k, titulo, desc]) => (
+              <button key={k} type="button" disabled={k === 'total' && abonado > 0}
+                onClick={() => { setModo(k); setErr('') }}
+                title={k === 'total' && abonado > 0 ? 'No disponible: el documento ya tiene notas de crédito parciales.' : undefined}
+                className={`text-left border-2 rounded-xl px-3 py-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${modo === k ? 'border-brand bg-brand/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                <div className="text-sm font-semibold text-gray-900">{titulo}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {k === 'total' && abonado > 0 ? 'No disponible: ya tiene NC parciales' : desc}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {modo === 'parcial' ? (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Monto a acreditar (máx. {fmtPrecio(saldo)})</label>
+              <input type="number" min={1} max={saldo} value={monto} onChange={e => setMonto(e.target.value)}
+                className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              <p className="text-xs text-gray-500 mt-1">
+                La {tipoLabel} sigue vigente por el saldo y la ficha queda documentada igual.
+                {documento.tipo_dte === '39' && ' La comisión del veterinario, si la hay, no se modifica.'}
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              La {tipoLabel} queda anulada y la ficha vuelve a quedar <strong>sin documento</strong> (se le puede emitir
+              otro, y si era de convenio vuelve a la propuesta mensual). Esta acción no se puede deshacer.
+            </p>
+          )}
+
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Motivo (opcional)</label>
             <input value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej: error en el monto"
@@ -631,7 +711,9 @@ export function AnularModal({ documento, onClose, onAnulado }: { documento: Docu
           {err && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{err}</p>}
           <div className="flex gap-2 justify-end pt-2 border-t border-gray-200">
             <Button variant="secondary" onClick={onClose} disabled={enviando}>Cancelar</Button>
-            <Button variant="danger" onClick={confirmar} disabled={enviando}>{enviando ? 'Anulando…' : 'Sí, anular y generar NC'}</Button>
+            <Button variant="danger" onClick={confirmar} disabled={enviando}>
+              {enviando ? 'Emitiendo…' : modo === 'parcial' ? 'Emitir NC parcial' : 'Sí, anular y generar NC'}
+            </Button>
           </div>
         </div>
       )}

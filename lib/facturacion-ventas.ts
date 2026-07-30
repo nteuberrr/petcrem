@@ -2,6 +2,7 @@ import { getSheetData } from './datastore'
 import { formatDateForSheet } from './dates'
 import { parsePeso } from './numbers'
 import { calcularPrecioFicha, type Tramo } from './ficha-precio'
+import { abonadoDeDocumento } from './facturacion'
 
 /**
  * Vistas de VENTAS de la sección Facturación (distinto de los DOCUMENTOS emitidos):
@@ -27,6 +28,10 @@ export interface DocResumen {
   pdf_url: string
   openfactura_url: string
   fecha_emision: string
+  /** Monto ya acreditado por notas de crédito PARCIALES (0 si no tiene). */
+  abonado: number
+  /** Monto del documento (para calcular el saldo tras los abonos parciales). */
+  monto_total: number
 }
 
 export interface VentaBoleta {
@@ -97,6 +102,8 @@ async function mapaDocumentos(): Promise<Map<string, DocResumen>> {
       pdf_url: d.pdf_url || '',
       openfactura_url: d.openfactura_url || '',
       fecha_emision: d.fecha_emision || '',
+      abonado: abonadoDeDocumento(String(d.id), docs),
+      monto_total: parseInt(String(d.monto_total || '0'), 10) || 0,
     })
   }
   return m

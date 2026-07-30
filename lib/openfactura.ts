@@ -233,9 +233,22 @@ export interface ConstruirNcOpts {
   /** Folio del documento que se está anulando. */
   folioOriginal: number | string
   fechaOriginal: string
+  /**
+   * TRUE = abono PARCIAL (CodRef 3, "corrige montos"): acredita solo una parte y el
+   * documento original sigue vigente. FALSE/omitido = anulación TOTAL (CodRef 1).
+   */
+  parcial?: boolean
+  /** Texto de la referencia (RazonRef). Por defecto según el modo. */
+  razon?: string
 }
 
-/** Arma el payload de una Nota de Crédito (61) que ANULA un documento existente. Emisión DIRECTA. */
+/**
+ * Arma el payload de una Nota de Crédito (61) sobre un documento existente.
+ * Emisión DIRECTA. Dos modos, según el `CodRef` de la referencia al SII:
+ *   - TOTAL   (CodRef 1, "anula documento de referencia") — el documento muere.
+ *   - PARCIAL (CodRef 3, "corrige montos") — abona una parte; el documento original
+ *     sigue vigente por el saldo. Las `lineas` traen solo el monto a acreditar.
+ */
 export function construirNcPayload(o: ConstruirNcOpts): DtePayload {
   const detalle = detalleNeto(o.lineas)
   const bruto = o.lineas.reduce((s, l) => s + Math.round(l.montoBruto) * (l.cantidad ?? 1), 0)
@@ -251,15 +264,16 @@ export function construirNcPayload(o: ConstruirNcOpts): DtePayload {
         Totales: { MntNeto: mntNeto, TasaIVA: 19, IVA: iva, MntTotal: bruto },
       },
       Detalle: detalle,
-      // Referencia al documento que se anula (CodRef 1 = anula). En emisión directa
-      // va en dte.Referencia (en self-service iba en selfService.documentReference).
+      // Referencia al documento afectado. CodRef 1 = anula, CodRef 3 = corrige montos
+      // (abono parcial). En emisión directa va en dte.Referencia (en self-service iba
+      // en selfService.documentReference).
       Referencia: [{
         NroLinRef: 1,
         TpoDocRef: String(o.tipoDocumentoOriginal),
         FolioRef: String(o.folioOriginal),
         FchRef: o.fechaOriginal,
-        CodRef: 1,
-        RazonRef: 'Anula documento',
+        CodRef: o.parcial ? 3 : 1,
+        RazonRef: (o.razon || (o.parcial ? 'Abono parcial' : 'Anula documento')).slice(0, 90),
       }],
     },
   }

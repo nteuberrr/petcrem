@@ -430,9 +430,38 @@ export interface AnularOpts {
   dev?: boolean
   creadoPorId?: string
   creadoPorNombre?: string
+  /**
+   * Monto a acreditar para un ABONO PARCIAL (NC con CodRef 3, "corrige montos"):
+   * el documento original sigue vigente por el saldo. Omitido = anulación TOTAL.
+   */
+  monto?: number
 }
 
-/** Anula un documento emitido: genera una NC (61) que lo referencia y lo marca 'anulado'. */
+/**
+ * Total ya acreditado sobre un documento por notas de crédito PARCIALES.
+ *
+ * No hace falta marcar la NC como parcial en ninguna columna: una anulación total
+ * deja el documento en 'anulado', así que cualquier NC que apunte a un documento
+ * todavía 'emitido' es necesariamente un abono parcial. (Y una NC no se puede
+ * anular, por lo que ninguna se cae después.)
+ */
+export function abonadoDeDocumento(documentoId: string, todos: Record<string, string>[]): number {
+  return todos
+    .filter(r => r.tipo_dte === String(DTE_NOTA_CREDITO) && String(r.documento_anulado_id || '') === String(documentoId))
+    .reduce((s, r) => s + (parseInt(String(r.monto_total || '0'), 10) || 0), 0)
+}
+
+/**
+ * Emite una Nota de Crédito (61) sobre un documento emitido.
+ *
+ *  - Sin `monto` → ANULACIÓN TOTAL: replica el detalle original, marca el documento
+ *    'anulado' y libera la ficha (vuelve a la propuesta mensual / se puede
+ *    re-documentar). Se bloquea si el documento ya tiene abonos parciales: sumarle
+ *    una anulación total acreditaría más de lo emitido.
+ *  - Con `monto` → ABONO PARCIAL: una sola línea por ese monto; el documento sigue
+ *    vigente por el saldo, la ficha NO se libera y la comisión del vet no se toca
+ *    (si hay que corregirla, va por "Ajustar saldo" en Descuentos Convenios).
+ */
 export async function anularDocumento(o: AnularOpts): Promise<EmitirDocResultado> {
   const rows = await getSheetData(SHEET)
   const doc = rows.find(r => r.id === o.documentoId)
@@ -441,9 +470,43 @@ export async function anularDocumento(o: AnularOpts): Promise<EmitirDocResultado
   if (doc.tipo_dte === String(DTE_NOTA_CREDITO)) return { ok: false, error: 'Una Nota de Crédito no se puede anular.' }
   if (!doc.folio) return { ok: false, error: 'El documento no tiene folio (no se emitió correctamente).' }
 
+  const montoDoc = parseInt(String(doc.monto_total || '0'), 10) || 0
+  const abonado = abonadoDeDocumento(doc.id, rows)
+  const saldo = montoDoc - abonado
+  const esParcial = o.monto !== undefined && o.monto !== null
+
+  if (esParcial) {
+    const monto = Math.round(Number(o.monto) || 0)
+    if (monto <= 0) return { ok: false, error: 'El monto a acreditar debe ser mayor a 0.' }
+    if (monto > saldo) {
+      return {
+        ok: false,
+        error: abonado > 0
+          ? `El monto supera el saldo del documento (${fmtPrecio(saldo)}, ya acreditado ${fmtPrecio(abonado)}).`
+          : `El monto supera el total del documento (${fmtPrecio(saldo)}).`,
+      }
+    }
+  } else if (abonado > 0) {
+    return {
+      ok: false,
+      error: `Este documento ya tiene notas de crédito por ${fmtPrecio(abonado)}. Emití un abono parcial por el saldo (${fmtPrecio(saldo)}) en vez de una anulación total.`,
+    }
+  }
+
   const emisor = await getEmisor()
   let detalle: LineaItem[] = []
   try { detalle = JSON.parse(doc.detalle_json || '[]') } catch { /* deja detalle vacío */ }
+  // En el abono parcial el detalle NO es el del documento original: es una sola
+  // línea por el monto acreditado (el SII lo lee como corrección de montos).
+  if (esParcial) {
+    const etiqueta = doc.tipo_dte === '39' ? 'boleta' : 'factura'
+    detalle = [{
+      nombre: `Abono sobre ${etiqueta} folio ${doc.folio}`.slice(0, 80),
+      cantidad: 1,
+      montoBruto: Math.round(Number(o.monto) || 0),
+      ...(o.motivo?.trim() ? { descripcion: o.motivo.trim().slice(0, 990) } : {}),
+    }]
+  }
   const receptor: DteReceptor | undefined = doc.receptor_rut ? {
     RUTRecep: doc.receptor_rut,
     RznSocRecep: doc.receptor_razon_social || undefined,
@@ -461,6 +524,8 @@ export async function anularDocumento(o: AnularOpts): Promise<EmitirDocResultado
     tipoDocumentoOriginal: parseInt(doc.tipo_dte, 10),
     folioOriginal: doc.folio,
     fechaOriginal: doc.fecha_emision,
+    parcial: esParcial,
+    razon: o.motivo?.trim() || undefined,
   })
   const r = await emitirDTE(payload, { dev: o.dev, idempotencyKey: `NC_${ncId}` })
   if (!r.ok) return { ok: false, error: r.error }
@@ -496,8 +561,12 @@ export async function anularDocumento(o: AnularOpts): Promise<EmitirDocResultado
     monto_neto: String(neto),
     monto_iva: String(iva),
     monto_total: String(total),
-    detalle_json: doc.detalle_json,
-    resumen: `Anula ${etiquetaOriginal} folio ${doc.folio}`,
+    // En el abono parcial guardamos el detalle REAL de la NC (la línea del abono),
+    // no el del documento original: es lo que se emitió y lo que suma el saldo.
+    detalle_json: esParcial ? JSON.stringify(detalle) : doc.detalle_json,
+    resumen: esParcial
+      ? `Abona ${etiquetaOriginal.toLowerCase()} folio ${doc.folio}`
+      : `Anula ${etiquetaOriginal} folio ${doc.folio}`,
     mes_facturado: '',
     fichas_json: '[]',
     openfactura_url: r.selfServiceUrl || '',
@@ -512,31 +581,37 @@ export async function anularDocumento(o: AnularOpts): Promise<EmitirDocResultado
     fecha_creacion: todayISO(),
   }
   await appendRow(SHEET, ncRow)
-  await updateByIdIf(SHEET, doc.id, {}, { estado: 'anulado', nc_id: ncId })
 
-  // Si el documento anulado facturaba fichas a un vet, liberarlas (vuelven a la
-  // próxima propuesta mensual en vez de quedar invisibles para siempre).
-  if (doc.fichas_json && doc.fichas_json !== '[]') {
-    let fichas: Array<{ id: string }> = []
-    try { fichas = JSON.parse(doc.fichas_json) } catch { /* nada que liberar */ }
-    for (const f of fichas) {
-      await updateByIdIf('clientes', f.id, {}, { factura_vet_id: '' })
+  // ⚠️ Todo lo que sigue es exclusivo de la anulación TOTAL. En un abono parcial el
+  // documento sigue VIGENTE por el saldo: no se marca 'anulado', la ficha no se
+  // libera (sigue documentada) y la comisión del vet no se toca.
+  if (!esParcial) {
+    await updateByIdIf(SHEET, doc.id, {}, { estado: 'anulado', nc_id: ncId })
+
+    // Si el documento anulado facturaba fichas a un vet, liberarlas (vuelven a la
+    // próxima propuesta mensual en vez de quedar invisibles para siempre).
+    if (doc.fichas_json && doc.fichas_json !== '[]') {
+      let fichas: Array<{ id: string }> = []
+      try { fichas = JSON.parse(doc.fichas_json) } catch { /* nada que liberar */ }
+      for (const f of fichas) {
+        await updateByIdIf('clientes', f.id, {}, { factura_vet_id: '' })
+      }
     }
-  }
 
-  // Si lo anulado era la BOLETA de una ficha, liberarla también: si no, quedaría
-  // marcada como documentada para siempre (fuera de la propuesta mensual y sin
-  // poder re-emitirle nada). El `expected` es la guarda fina: solo limpia si esta
-  // era efectivamente SU boleta — las boletas de cobros posteriores (adicional /
-  // diferencia) apuntan al mismo tutor pero viven en `cobros.boleta_id`.
-  if (doc.receptor_tipo === 'tutor' && String(doc.receptor_id || '').trim()) {
-    const liberada = await updateByIdIf(
-      'clientes', String(doc.receptor_id), { boleta_id: String(doc.id) }, { boleta_id: '' },
-    )
-    // Esa boleta era la que devengaba la comisión del vet que derivó → se cae con ella.
-    if (liberada) {
-      try { await anularComisionPorFicha(String(doc.receptor_id)) }
-      catch (e) { console.warn('[facturacion] no se pudo anular la comisión de la ficha:', e) }
+    // Si lo anulado era la BOLETA de una ficha, liberarla también: si no, quedaría
+    // marcada como documentada para siempre (fuera de la propuesta mensual y sin
+    // poder re-emitirle nada). El `expected` es la guarda fina: solo limpia si esta
+    // era efectivamente SU boleta — las boletas de cobros posteriores (adicional /
+    // diferencia) apuntan al mismo tutor pero viven en `cobros.boleta_id`.
+    if (doc.receptor_tipo === 'tutor' && String(doc.receptor_id || '').trim()) {
+      const liberada = await updateByIdIf(
+        'clientes', String(doc.receptor_id), { boleta_id: String(doc.id) }, { boleta_id: '' },
+      )
+      // Esa boleta era la que devengaba la comisión del vet que derivó → se cae con ella.
+      if (liberada) {
+        try { await anularComisionPorFicha(String(doc.receptor_id)) }
+        catch (e) { console.warn('[facturacion] no se pudo anular la comisión de la ficha:', e) }
+      }
     }
   }
 
