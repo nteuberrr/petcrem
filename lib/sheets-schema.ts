@@ -97,6 +97,10 @@ export const SHEETS: Record<string, string[]> = {
     'direccion', 'comuna', 'telefono', 'correo',
     'nombre_contacto', 'cargo_contacto',
     'tipo_precios', 'precios_especiales', 'activo', 'fecha_creacion',
+    // precios_indexados: '' | 'general' | 'convenio'. Si viene con valor, los tramos
+    // de esta vet en `precios_especiales` son una copia VIVA de esa tabla base y se
+    // re-sincronizan al tocarla (lib/precios-indexados.ts).
+    'precios_indexados',
   ],
   precios_generales: ['id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd'],
   precios_convenio: ['id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd'],

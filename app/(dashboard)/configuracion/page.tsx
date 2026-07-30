@@ -29,7 +29,7 @@ type Especie = { id: string; nombre: string; letra: string; activo: string }
 type TipoServicio = { id: string; nombre: string; codigo: string; plazo_entrega_dias: string; activo: string }
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string; auto_regla?: string; comunas?: string }
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string; foto_url?: string }
-type Vet = { id: string; nombre: string; activo: string; tipo_precios: string }
+type Vet = { id: string; nombre: string; activo: string; tipo_precios: string; precios_indexados?: string }
 type Usuario = { id: string; nombre: string; email: string; rol: string; activo: string; telefono?: string; avisos_whatsapp?: string }
 
 export default function ConfiguracionPage() {
@@ -212,7 +212,9 @@ export default function ConfiguracionPage() {
   const [especialForm, setEspecialForm] = useState({ veterinaria_id: '', peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' })
   const [especialVetFiltro, setEspecialVetFiltro] = useState('')
   const [showDuplicarModal, setShowDuplicarModal] = useState(false)
-  const [duplicarForm, setDuplicarForm] = useState({ destino: '', origen: '' })
+  // indexar: deja la copia VIVA (sigue a la tabla base cuando cambie). Solo aplica
+  // si el origen es 'general' o 'convenio' — ver lib/precios-indexados.ts.
+  const [duplicarForm, setDuplicarForm] = useState({ destino: '', origen: '', indexar: true })
   const [usuarioForm, setUsuarioForm] = useState({ nombre: '', email: '', password: '', rol: 'operador', telefono: '', avisos_whatsapp: 'FALSE' })
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -322,21 +324,45 @@ export default function ConfiguracionPage() {
     await refresh('precios')
   }
   const duplicarTabla = async () => guardado(async () => {
-    const { destino, origen } = duplicarForm
+    const { destino, origen, indexar } = duplicarForm
     if (!destino || !origen) { alert('Elige la veterinaria destino y la tabla de origen.'); return }
     const yaTiene = preciosE.filter(pe => pe.veterinaria_id === destino).length
     if (yaTiene > 0 && !confirm(`Esta veterinaria ya tiene ${yaTiene} tramo(s) especiales. Se REEMPLAZARÁN por la copia. ¿Continuar?`)) return
+    const indexable = origen === 'general' || origen === 'convenio'
     const res = await fetch('/api/precios/especiales/duplicar', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ veterinaria_id: destino, origen, reemplazar: yaTiene > 0 }),
+      body: JSON.stringify({ veterinaria_id: destino, origen, reemplazar: yaTiene > 0, indexar: indexable && indexar }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) { alert(`Error al duplicar: ${data.error ?? res.status}`); return }
     setShowDuplicarModal(false)
-    setDuplicarForm({ destino: '', origen: '' })
+    setDuplicarForm({ destino: '', origen: '', indexar: true })
     setEspecialVetFiltro(destino)
     await refresh('precios')
-    alert(`Listo: ${data.copiados} tramo(s) copiados${data.reemplazados ? ` (se reemplazaron ${data.reemplazados})` : ''}. Ajústalos si hace falta.`)
+    await refresh('veterinarios')
+    alert(data.indexado
+      ? `Listo: ${data.copiados} tramo(s) copiados y la tabla quedó INDEXADA a los ${data.indexado === 'general' ? 'precios generales' : 'precios de convenio'}. Cuando esos precios cambien, los de esta veterinaria se actualizan solos.`
+      : `Listo: ${data.copiados} tramo(s) copiados${data.reemplazados ? ` (se reemplazaron ${data.reemplazados})` : ''}. Ajústalos si hace falta.`)
+  })
+
+  /** Origen al que está indexada la tabla de una veterinaria ('' = tarifa propia). */
+  const indexadoDe = (v: Vet | undefined) => {
+    const o = String(v?.precios_indexados ?? '')
+    return o === 'general' || o === 'convenio' ? o : ''
+  }
+
+  /** Quita el indexado: los tramos copiados pasan a ser tarifa propia, editable. */
+  const quitarIndexado = async (vetId: string) => guardado(async () => {
+    const v = vets.find(x => x.id === vetId)
+    if (!confirm(`Quitar el indexado de ${v?.nombre ?? 'esta veterinaria'}?
+
+Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla base.`)) return
+    const res = await fetch('/api/precios/especiales/indexado', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ veterinaria_id: vetId }),
+    })
+    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error ?? 'No se pudo quitar el indexado.'); return }
+    await refresh('veterinarios')
   })
   const normalizarIds = async () => {
     if (!confirm('¿Renumerar IDs de todos los tramos (general, convenio y especiales)? Los IDs quedarán secuenciales 1, 2, 3...')) return
@@ -491,7 +517,7 @@ export default function ConfiguracionPage() {
                     <p className="text-xs text-gray-400 mt-0.5">Tarifas personalizadas asignadas a una veterinaria</p>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => { setDuplicarForm({ destino: especialVetFiltro || '', origen: '' }); setShowDuplicarModal(true) }}
+                    <button onClick={() => { setDuplicarForm({ destino: especialVetFiltro || '', origen: '', indexar: true }); setShowDuplicarModal(true) }}
                       className="border border-brand/30 text-brand hover:bg-brand/10 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                       ⎘ Duplicar tabla
                     </button>
@@ -525,11 +551,30 @@ export default function ConfiguracionPage() {
                 const maxPesoMin = tramos.length ? Math.max(...tramos.map(t => parseFloat(t.peso_min) || 0)) : 0
                 return (
                   <div key={vetId} className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
-                    <div className="px-6 py-3 border-b border-gray-300 bg-gray-50 flex items-center justify-between">
-                      <p className="font-semibold text-gray-900 text-sm">{vet?.nombre ?? `Veterinaria #${vetId}`}</p>
+                    <div className="px-6 py-3 border-b border-gray-300 bg-gray-50 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-gray-900 text-sm">{vet?.nombre ?? `Veterinaria #${vetId}`}</p>
+                        {/* Tabla INDEXADA: es una copia viva de generales/convenio. Editar un
+                            tramo acá no sirve — la próxima sincronización lo pisa. */}
+                        {indexadoDe(vet) && (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Badge variant="green">
+                              Indexada a {indexadoDe(vet) === 'general' ? 'precios generales' : 'precios convenio'}
+                            </Badge>
+                            <button onClick={() => quitarIndexado(vetId)}
+                              className="text-[11px] font-medium text-gray-500 hover:text-red-600 underline">quitar</button>
+                          </span>
+                        )}
+                      </div>
                       <button onClick={() => { setEditingEspecial(null); setEspecialForm({ veterinaria_id: vetId, peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' }); setShowEspecialModal(true) }}
                         className="text-brand hover:text-brand text-xs font-medium">+ Tramo</button>
                     </div>
+                    {indexadoDe(vet) && (
+                      <p className="px-6 py-2 text-[11px] text-amber-800 bg-amber-50 border-b border-amber-200">
+                        Estos tramos se copian solos desde los {indexadoDe(vet) === 'general' ? 'precios generales' : 'precios de convenio'}:
+                        si los editás acá, el próximo cambio de esa tabla los reemplaza. Para darle tarifa propia, quitá el indexado.
+                      </p>
+                    )}
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
@@ -1623,6 +1668,20 @@ export default function ConfiguracionPage() {
                 })}
             </select>
           </div>
+          {(duplicarForm.origen === 'general' || duplicarForm.origen === 'convenio') && (
+            <label className="flex items-start gap-2 text-sm text-gray-700 bg-cream border border-gold-soft/40 rounded-lg px-3 py-2 cursor-pointer">
+              <input type="checkbox" checked={duplicarForm.indexar}
+                onChange={e => setDuplicarForm(f => ({ ...f, indexar: e.target.checked }))}
+                className="w-4 h-4 mt-0.5" />
+              <span>
+                <strong>Mantener indexada a esta tabla</strong>
+                <span className="block text-xs text-gray-500 mt-0.5">
+                  Si más adelante cambian los {duplicarForm.origen === 'general' ? 'precios generales' : 'precios de convenio'},
+                  los de esta veterinaria se actualizan solos. Sin esto es una copia suelta que se edita a mano.
+                </span>
+              </span>
+            </label>
+          )}
           {duplicarForm.destino && preciosE.some(pe => pe.veterinaria_id === duplicarForm.destino) && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               Esta veterinaria ya tiene tramos especiales: se <strong>reemplazarán</strong> por la copia.

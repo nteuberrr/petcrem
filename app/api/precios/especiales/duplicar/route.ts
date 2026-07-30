@@ -1,24 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, appendRow, getNextId, deleteById, ensureSheet, ensureColumns, updateByIdIf } from '@/lib/datastore'
+import { esOrigenIndexable } from '@/lib/precios-indexados'
 
 const EXPECTED_COLS = ['id', 'veterinaria_id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd']
 
 /**
  * POST /api/precios/especiales/duplicar
- * body: { veterinaria_id, origen, reemplazar? }
+ * body: { veterinaria_id, origen, reemplazar?, indexar? }
  *
  * Copia TODOS los tramos de una tabla conocida a los precios ESPECIALES de una
- * veterinaria, como punto de partida (luego se editan). `origen`:
+ * veterinaria. `origen`:
  *   'general'  → precios_generales
  *   'convenio' → precios_convenio
  *   '<vetId>'  → precios_especiales de esa otra veterinaria
  * Si `reemplazar` es true, primero borra los tramos especiales actuales de la
  * veterinaria destino (para que su tabla quede igual a la de origen).
+ *
+ * `indexar` (solo con origen 'general' o 'convenio'): deja la copia VIVA — si esa
+ * tabla base cambia después, los tramos de esta veterinaria se re-copian solos
+ * (lib/precios-indexados.ts). Sin indexar, la copia es un punto de partida que se
+ * edita a mano. Copiar desde OTRA veterinaria nunca queda indexado.
  */
 export async function POST(req: NextRequest) {
   try {
-    const { veterinaria_id, origen, reemplazar } = await req.json() as {
-      veterinaria_id?: string; origen?: string; reemplazar?: boolean
+    const { veterinaria_id, origen, reemplazar, indexar } = await req.json() as {
+      veterinaria_id?: string; origen?: string; reemplazar?: boolean; indexar?: boolean
     }
     const destino = String(veterinaria_id ?? '').trim()
     const src = String(origen ?? '').trim()
@@ -64,12 +70,19 @@ export async function POST(req: NextRequest) {
     }
 
     // La vet destino ahora tiene precios especiales → reflejarlo en su tipo_precios.
+    // Y dejar (o limpiar) el INDEXADO a la tabla base según lo pedido: solo se puede
+    // indexar a 'general' o 'convenio', nunca a la tabla de otra veterinaria.
+    const indexado = indexar === true && esOrigenIndexable(src) ? src : ''
     if (copiados > 0) {
-      try { await updateByIdIf('veterinarios', destino, {}, { tipo_precios: 'precios_especiales' }) }
-      catch (e) { console.warn('[precios/especiales/duplicar] no se pudo sincronizar tipo_precios:', e) }
+      try {
+        await updateByIdIf('veterinarios', destino, {}, {
+          tipo_precios: 'precios_especiales',
+          precios_indexados: indexado,
+        })
+      } catch (e) { console.warn('[precios/especiales/duplicar] no se pudo sincronizar tipo_precios/indexado:', e) }
     }
 
-    return NextResponse.json({ ok: true, copiados, reemplazados })
+    return NextResponse.json({ ok: true, copiados, reemplazados, indexado })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 400 })
   }

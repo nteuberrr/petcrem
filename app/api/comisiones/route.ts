@@ -6,6 +6,7 @@ import {
   resumenComisiones, detalleVet, guardarRegla, eliminarRegla, ajustarSaldo,
   type TipoComision,
 } from '@/lib/comisiones'
+import { activarIndexado, desactivarIndexado } from '@/lib/precios-indexados'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
  * POST — dos acciones:
  *   { accion: 'regla',  veterinaria_id, tipo, valor, activo? }  → alta/edición de la regla
  *   { accion: 'ajuste', veterinaria_id, monto, detalle?, fecha? } → paga saldo → costo de venta
+ *   { accion: 'indexar' | 'desindexar', veterinaria_id }          → tarifa = precios generales
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -47,6 +49,20 @@ export async function POST(req: NextRequest) {
   try {
     const b = await req.json()
     const accion = String(b.accion || 'regla')
+
+    // Indexar: la tarifa del vet pasa a seguir a los PRECIOS GENERALES (se copian a
+    // sus tramos especiales y se re-sincronizan solas cada vez que cambian los generales).
+    if (accion === 'indexar' || accion === 'desindexar') {
+      const vid = String(b.veterinaria_id || '')
+      if (!vid) return NextResponse.json({ error: 'Falta la veterinaria.' }, { status: 400 })
+      if (accion === 'indexar') {
+        // Vet de comisión: al tutor se le cobra el precio de lista → GENERAL.
+        const r = await activarIndexado(vid, 'general')
+        return NextResponse.json({ ok: true, indexado: true, tramos: r.tramos })
+      }
+      await desactivarIndexado(vid)
+      return NextResponse.json({ ok: true, indexado: false })
+    }
 
     if (accion === 'ajuste') {
       const ajuste = await ajustarSaldo({

@@ -28,6 +28,8 @@ interface SaldoVet {
   veterinaria_id: string
   nombre: string
   regla: Regla | null
+  /** Su tarifa sigue a los precios generales (se re-copian solas al cambiarlos). */
+  indexado: boolean
   cantidad_devengos: number
   devengado: number
   ajustado: number
@@ -47,7 +49,7 @@ export default function DescuentosConvenios() {
   const [error, setError] = useState('')
 
   const [showRegla, setShowRegla] = useState(false)
-  const [reglaForm, setReglaForm] = useState({ veterinaria_id: '', tipo: 'fijo' as 'fijo' | 'variable', valor: '' })
+  const [reglaForm, setReglaForm] = useState({ veterinaria_id: '', tipo: 'fijo' as 'fijo' | 'variable', valor: '', indexar: true })
   const [reglaError, setReglaError] = useState('')
 
   const [ajuste, setAjuste] = useState<SaldoVet | null>(null)
@@ -97,12 +99,24 @@ export default function DescuentosConvenios() {
     if (reglaForm.tipo === 'variable' && valor > 100) { setReglaError('Un porcentaje no puede superar 100.'); return }
     const r = await fetch('/api/comisiones', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'regla', ...reglaForm, valor }),
+      body: JSON.stringify({ accion: 'regla', veterinaria_id: reglaForm.veterinaria_id, tipo: reglaForm.tipo, valor }),
     })
     const d = await r.json()
     if (!r.ok) { setReglaError(d.error || 'No se pudo guardar.'); return }
+    if (reglaForm.indexar) {
+      const ri = await fetch('/api/comisiones', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'indexar', veterinaria_id: reglaForm.veterinaria_id }),
+      })
+      if (!ri.ok) {
+        const di = await ri.json().catch(() => ({}))
+        setReglaError(`La comisión quedó guardada, pero no se pudieron indexar los precios: ${di.error || ri.status}`)
+        await cargar()
+        return
+      }
+    }
     setShowRegla(false)
-    setReglaForm({ veterinaria_id: '', tipo: 'fijo', valor: '' })
+    setReglaForm({ veterinaria_id: '', tipo: 'fijo', valor: '', indexar: true })
     await cargar()
   })
 
@@ -111,6 +125,18 @@ export default function DescuentosConvenios() {
     if (!confirm(`Quitar la comisión de ${s.nombre}?\n\nLas comisiones ya devengadas y su saldo se conservan; solo dejan de generarse nuevas.`)) return
     const r = await fetch(`/api/comisiones?id=${s.regla.id}`, { method: 'DELETE' })
     if (r.ok) await cargar()
+  })
+
+  const indexarPrecios = (s: SaldoVet) => ejecutar(async () => {
+    if (!confirm(`Indexar los precios de ${s.nombre} a los PRECIOS GENERALES?
+
+Se copian los tramos generales a su tabla de precios especiales y quedan siguiéndolos: si cambian los generales, cambian los suyos. Las fichas ya creadas no se modifican.`)) return
+    const r = await fetch('/api/comisiones', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'indexar', veterinaria_id: s.veterinaria_id }),
+    })
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'No se pudo indexar.'); return }
+    await cargar()
   })
 
   const guardarAjuste = () => ejecutar(async () => {
@@ -147,8 +173,8 @@ export default function DescuentosConvenios() {
               cuando lo ajustás.
             </p>
             <p className="text-xs text-gray-500 mt-2">
-              Para que el tutor pague el precio general, dejá la tabla de precios especiales del vet igual
-              a la general: Configuración → Precios → Especiales → Duplicar desde “Precios generales”.
+              Al tutor se le cobra el precio de lista: la tarifa de estos veterinarios queda
+              <strong> indexada a los precios generales</strong> y los sigue sola cuando cambian.
             </p>
           </div>
           <Button variant="primary" onClick={() => { setReglaError(''); setShowRegla(true) }}>+ Nueva comisión</Button>
@@ -182,7 +208,17 @@ export default function DescuentosConvenios() {
                           <button onClick={() => abrirDetalle(s.veterinaria_id)} className="text-left">
                             <span className="font-medium text-gray-900 hover:text-brand">{s.nombre}</span>
                           </button>
-                          {!s.regla && <div className="mt-0.5"><Badge variant="gray">Sin regla vigente</Badge></div>}
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                            {!s.regla && <Badge variant="gray">Sin regla vigente</Badge>}
+                            {s.indexado
+                              ? <Badge variant="green">Precios = generales</Badge>
+                              : (
+                                <button onClick={() => indexarPrecios(s)} disabled={procesando}
+                                  className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 hover:bg-amber-100 disabled:opacity-50">
+                                  Precios sin indexar — indexar a generales
+                                </button>
+                              )}
+                          </div>
                           <div className="md:hidden mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                             <span>{etiquetaRegla(s.regla)}</span>
                             <span>· {s.cantidad_devengos} derivación{s.cantidad_devengos === 1 ? '' : 'es'}</span>
@@ -202,7 +238,7 @@ export default function DescuentosConvenios() {
                               Ajustar saldo
                             </button>
                             {s.regla && (
-                              <button onClick={() => { setReglaError(''); setReglaForm({ veterinaria_id: s.veterinaria_id, tipo: s.regla!.tipo, valor: String(s.regla!.valor) }); setShowRegla(true) }}
+                              <button onClick={() => { setReglaError(''); setReglaForm({ veterinaria_id: s.veterinaria_id, tipo: s.regla!.tipo, valor: String(s.regla!.valor), indexar: !s.indexado }); setShowRegla(true) }}
                                 className="text-xs font-semibold text-brand border border-brand/40 rounded-lg px-2 py-1 hover:bg-brand/5">
                                 Editar
                               </button>
@@ -315,6 +351,18 @@ export default function DescuentosConvenios() {
             El porcentaje se calcula sobre el precio de la <strong>cremación</strong> (sin adicionales y
             ya con descuento aplicado). La comisión se devenga al emitirle la boleta al tutor.
           </p>
+          <label className="flex items-start gap-2 text-sm text-gray-700 bg-cream border border-gold-soft/40 rounded-lg px-3 py-2 cursor-pointer">
+            <input type="checkbox" checked={reglaForm.indexar}
+              onChange={e => setReglaForm(f => ({ ...f, indexar: e.target.checked }))}
+              className="w-4 h-4 mt-0.5" />
+            <span>
+              <strong>Indexar sus precios a los generales</strong>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                Al tutor se le cobra el precio de lista, así que la tarifa del vet pasa a ser la general
+                y queda siguiéndola: si mañana cambian los precios generales, los suyos cambian solos.
+              </span>
+            </span>
+          </label>
           {reglaError && <p className="text-xs text-red-600">{reglaError}</p>}
           <button type="submit" disabled={procesando}
             className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-50">

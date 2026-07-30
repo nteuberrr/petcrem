@@ -83,9 +83,11 @@ export async function GET(req: NextRequest) {
       else if (explicit === 'especial') tabla = preciosEByVet.get(c.veterinaria_id ?? '') ?? []
       else if (explicit === 'general') tabla = preciosG
       else if (c.veterinaria_id) {
-        const vet = vetById[c.veterinaria_id]
-        if (vet?.tipo_precios === 'precios_especiales') tabla = preciosEByVet.get(c.veterinaria_id) ?? []
-        else tabla = preciosC
+        // El tier lo decide la EXISTENCIA de filas especiales, no el string
+        // `tipo_precios` (un vet indexado a generales lo tiene en 'precios_generales'
+        // y sus tramos igual viven en precios_especiales).
+        const especialesDeVet = preciosEByVet.get(c.veterinaria_id) ?? []
+        tabla = especialesDeVet.length > 0 ? especialesDeVet : preciosC
       }
       const tramo = findTramo(tabla, peso)
       const servicio = precioDelTramo(tramo, codigo)
@@ -103,9 +105,7 @@ export async function GET(req: NextRequest) {
       if (explicit === 'especial') return 'Especial'
       if (explicit === 'general') return 'General'
       if (c.veterinaria_id) {
-        const vet = vetById[c.veterinaria_id]
-        if (vet?.tipo_precios === 'precios_especiales') return 'Especial'
-        return 'Convenio'
+        return (preciosEByVet.get(c.veterinaria_id) ?? []).length > 0 ? 'Especial' : 'Convenio'
       }
       return 'General'
     }

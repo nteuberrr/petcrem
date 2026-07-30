@@ -1198,3 +1198,7 @@ create table if not exists "comisiones_ajustes" (
 );
 create index if not exists "comisiones_ajustes_vet_idx" on "comisiones_ajustes" ("veterinaria_id");
 alter table "comisiones_ajustes" enable row level security;
+
+-- Precios especiales indexados a una tabla base ('' | 'general' | 'convenio').
+-- Ver supabase/precios-indexados.sql y lib/precios-indexados.ts.
+alter table "veterinarios" add column if not exists "precios_indexados" text not null default '';

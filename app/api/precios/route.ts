@@ -1,5 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, appendRow, updateRow, getNextId, deleteRow } from '@/lib/datastore'
+import { sincronizarPreciosIndexados } from '@/lib/precios-indexados'
+
+/**
+ * Todo cambio en una tabla base se propaga a las veterinarias con sus precios
+ * especiales INDEXADOS a ella (lib/precios-indexados.ts). Best-effort: si falla, el
+ * precio igual queda guardado.
+ */
+async function propagarIndexados(tipo: string) {
+  const origen = tipo === 'convenio' ? 'convenio' : 'general'
+  try {
+    const r = await sincronizarPreciosIndexados(origen)
+    if (r.actualizados > 0) console.log(`[precios] indexados a ${origen} sincronizados: ${r.actualizados}/${r.vets} veterinaria(s)`)
+  } catch (e) {
+    console.warn(`[precios] no se pudieron sincronizar los vets indexados a ${origen}:`, e)
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,6 +45,7 @@ export async function POST(req: NextRequest) {
       precio_sd: String(body.precio_sd),
     }
     await appendRow(hoja, row)
+    await propagarIndexados(tipo)
     return NextResponse.json(row, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })
@@ -46,6 +63,7 @@ export async function DELETE(req: NextRequest) {
     const idx = rows.findIndex(r => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     await deleteRow(hoja, idx)
+    await propagarIndexados(tipo)
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
@@ -64,6 +82,7 @@ export async function PATCH(req: NextRequest) {
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     const updated = { ...rows[idx], ...updates }
     await updateRow(hoja, idx, updated)
+    await propagarIndexados(tipo)
     return NextResponse.json(updated)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 })

@@ -1,6 +1,7 @@
 import { getSheetData, appendRow, getNextId, updateByIdIf, deleteById } from './datastore'
 import { todayISO } from './dates'
 import { parseMonto } from './numbers'
+import { origenDeVet } from './precios-indexados'
 
 /**
  * COMISIONES DE CONVENIO — Configuración → Descuentos Convenios.
@@ -61,6 +62,8 @@ export interface SaldoVet {
   veterinaria_id: string
   nombre: string
   regla: ComisionRegla | null
+  /** Su tabla de precios está indexada a los GENERALES (lib/precios-indexados.ts). */
+  indexado: boolean
   cantidad_devengos: number
   devengado: number
   ajustado: number
@@ -248,6 +251,7 @@ export async function resumenComisiones(): Promise<SaldoVet[]> {
     getSheetData('veterinarios').catch(() => [] as Record<string, string>[]),
   ])
   const nombrePorVet = new Map(vets.map(v => [String(v.id), String(v.nombre || '')]))
+  const indexadoPorVet = new Map(vets.map(v => [String(v.id), origenDeVet(v) === 'general']))
 
   const acc = new Map<string, SaldoVet>()
   const entrada = (vid: string): SaldoVet => {
@@ -257,6 +261,7 @@ export async function resumenComisiones(): Promise<SaldoVet[]> {
         veterinaria_id: vid,
         nombre: nombrePorVet.get(vid) || `Veterinaria #${vid}`,
         regla: null,
+        indexado: indexadoPorVet.get(vid) === true,
         cantidad_devengos: 0,
         devengado: 0,
         ajustado: 0,

@@ -111,9 +111,11 @@ export async function GET(req: NextRequest) {
       if (e === 'especial') return peByVet.get(c.veterinaria_id ?? '') ?? []
       if (e === 'general') return preciosG
       if (c.veterinaria_id) {
-        const vet = vetById[c.veterinaria_id]
-        if (vet?.tipo_precios === 'precios_especiales') return peByVet.get(c.veterinaria_id) ?? []
-        return preciosC
+        // El tier lo decide la EXISTENCIA de filas especiales, no el string
+        // `tipo_precios` (un vet indexado a generales lo tiene en 'precios_generales'
+        // y sus tramos igual viven en precios_especiales).
+        const especialesDeVet = peByVet.get(c.veterinaria_id) ?? []
+        return especialesDeVet.length > 0 ? especialesDeVet : preciosC
       }
       return preciosG
     }
