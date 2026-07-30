@@ -10,9 +10,10 @@ import { calcularPrecioFicha, type Tramo } from './ficha-precio'
  * el vet ve en su informe es exactamente lo que se le factura).
  *
  * Excluye: fichas 'borrador', fichas SIN veterinaria (son "General", no se
- * facturan a nadie), y fichas ya cubiertas por una factura anterior
- * (`clientes.factura_vet_id` no vacío — se libera automáticamente si esa
- * factura se anula, ver lib/facturacion.ts `anularDocumento`).
+ * facturan a nadie), fichas ya cubiertas por una factura anterior
+ * (`clientes.factura_vet_id` no vacío) y fichas ya BOLETEADAS al tutor
+ * (`clientes.boleta_id` — vets con comisión). Ambas marcas se liberan solas si el
+ * documento se anula, ver lib/facturacion.ts `anularDocumento`.
  */
 
 export interface FichaPropuesta {
@@ -74,6 +75,10 @@ export async function construirPropuestaMes(mes: string): Promise<PropuestaMes> 
     if (!c.veterinaria_id?.trim()) continue
     if (c.estado === 'borrador') continue
     if (c.factura_vet_id?.trim()) continue // ya facturada a su vet
+    // Boleteada al TUTOR (vet con comisión: le cobramos el precio completo al tutor
+    // en vez de facturarle al vet). Sin esta guarda, el lote del mes se la volvería
+    // a facturar al veterinario = doble cobro por el mismo servicio.
+    if (c.boleta_id?.trim()) continue
     const fISO = formatDateForSheet(c.fecha_retiro)
     if (!fISO || fISO < desde || fISO > hasta) continue
 

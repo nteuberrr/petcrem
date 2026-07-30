@@ -9,12 +9,13 @@ import AgentesPanel from '@/components/AgentesPanel'
 import CorreosConfig from '@/components/CorreosConfig'
 import ConsumoIA from '@/components/ConsumoIA'
 import AvisosConfig from '@/components/AvisosConfig'
+import DescuentosConvenios from '@/components/DescuentosConvenios'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 import { formatDate, formatHora } from '@/lib/dates'
 import { esAdmin, esAdminTotal, ROLES, ROL_LABEL } from '@/lib/roles'
 import { comunasDeServicio, etiquetaRegla } from '@/lib/adicionales-auto'
 
-const TABS = ['Precios', 'Artículos', 'Descuentos', 'Jornada', 'Configuración Avanzada'] as const
+const TABS = ['Precios', 'Artículos', 'Descuentos', 'Descuentos Convenios', 'Jornada', 'Configuración Avanzada'] as const
 type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
 type ArticuloTab = 'servicios' | 'bodega' | 'otros'
@@ -379,7 +380,7 @@ export default function ConfiguracionPage() {
 
       {/* Tabs principales */}
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl overflow-x-auto">
-        {TABS.filter(t => t !== 'Configuración Avanzada' || isAdminTotal).map(t => (
+        {TABS.filter(t => (t !== 'Configuración Avanzada' && t !== 'Descuentos Convenios') || isAdminTotal).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${tab === t ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
             {t}
@@ -1018,6 +1019,9 @@ export default function ConfiguracionPage() {
           </div>
         </div>
       )}
+
+      {/* Comisiones por derivación: SOLO el dueño (define pagos y escribe costo en el EERR). */}
+      {tab === 'Descuentos Convenios' && isAdminTotal && <DescuentosConvenios />}
 
       {tab === 'Jornada' && (
         <div className="space-y-6 max-w-3xl">

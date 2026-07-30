@@ -47,6 +47,8 @@ export interface VentaFactura {
   vet_correo: string
   monto: number
   factura: DocResumen | null
+  /** Boleta al TUTOR de una venta de convenio (vets con comisión). Excluyente con `factura`. */
+  boleta: DocResumen | null
 }
 
 export interface Documento {
@@ -143,6 +145,22 @@ function LinkDoc({ doc }: { doc: DocResumen }) {
   const href = doc.pdf_url || doc.openfactura_url
   if (!href) return <span className="text-xs text-gray-400">sin PDF</span>
   return <a href={href} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-brand-soft hover:underline">{doc.pdf_url ? 'Descargar' : 'Ver documento'}</a>
+}
+
+/**
+ * Documento de una venta de convenio: factura al vet (lo normal) o boleta al tutor
+ * (vets con comisión). Nunca las dos.
+ */
+function DocVenta({ factura, boleta }: { factura: DocResumen | null; boleta: DocResumen | null }) {
+  const doc = factura ?? boleta
+  if (!doc) return <span className="text-xs text-gray-400">Sin documento</span>
+  if (doc.estado === 'anulado') return <Badge variant="red">{factura ? 'Factura anulada' : 'Boleta anulada'}</Badge>
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Badge variant={factura ? 'blue' : 'green'}>{factura ? 'Factura' : 'Boleta'}</Badge>
+      <span className="text-xs font-mono font-bold text-brand">{doc.folio || 'emitida'}</span>
+    </span>
+  )
 }
 
 // ─── Boletas: ventas B2C ──────────────────────────────────────────────────────
@@ -313,11 +331,15 @@ function FacturasTab({ onAbrirLote }: { onAbrirLote: () => void }) {
 
   useEffect(() => { cargar() }, [cargar])
 
-  const visibles = useMemo(() => soloPendientes ? ventas.filter(v => !v.factura) : ventas, [ventas, soloPendientes])
+  // "Documentada" = tiene factura al vet O boleta al tutor (vets con comisión).
+  const visibles = useMemo(
+    () => soloPendientes ? ventas.filter(v => !v.factura && !v.boleta) : ventas,
+    [ventas, soloPendientes],
+  )
   const tot = useMemo(() => {
     const total = visibles.reduce((s, v) => s + v.monto, 0)
-    const facturadas = visibles.filter(v => v.factura).length
-    const sinFacturar = visibles.filter(v => !v.factura).length
+    const facturadas = visibles.filter(v => v.factura || v.boleta).length
+    const sinFacturar = visibles.filter(v => !v.factura && !v.boleta).length
     return { total, facturadas, sinFacturar }
   }, [visibles])
 
@@ -338,6 +360,28 @@ function FacturasTab({ onAbrirLote }: { onAbrirLote: () => void }) {
     setEmitiendo(null)
   }
 
+  /**
+   * Boleta al TUTOR de una venta de convenio (vets con comisión): en vez de
+   * facturarle el servicio al veterinario, se le cobra el precio completo al tutor
+   * y la boleta le llega a SU correo. Si el vet tiene regla en Descuentos Convenios,
+   * acá mismo se le devenga la comisión.
+   */
+  async function boletear(v: VentaFactura) {
+    if (!confirm(`Se emitirá una BOLETA electrónica real al SII por ${fmtPrecio(v.monto)} a nombre del tutor de ${v.nombre_mascota || 'la mascota'} (${v.codigo}) y se le enviará a su correo.\n\nEsta ficha ya NO se le facturará a ${v.vet_nombre}. ¿Continuar?`)) return
+    setEmitiendo(v.id)
+    setErrFila(prev => { const n = { ...prev }; delete n[v.id]; return n })
+    try {
+      const r = await fetch('/api/facturacion/boletear-ficha', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fichaId: v.id }),
+      })
+      const d = await r.json()
+      if (!r.ok) setErrFila(prev => ({ ...prev, [v.id]: d.error || 'No se pudo emitir la boleta.' }))
+      else await cargar()
+    } catch { setErrFila(prev => ({ ...prev, [v.id]: 'Error de red' })) }
+    setEmitiendo(null)
+  }
+
   return (
     <div className="space-y-5">
       <Card className="p-4">
@@ -353,7 +397,7 @@ function FacturasTab({ onAbrirLote }: { onAbrirLote: () => void }) {
           </div>
           <label className="flex items-center gap-2 text-xs font-semibold text-gray-600 pb-2 cursor-pointer">
             <input type="checkbox" checked={soloPendientes} onChange={e => setSoloPendientes(e.target.checked)} className="w-4 h-4" />
-            Solo sin facturar
+            Solo sin documento
           </label>
           {(mes || q) && <button onClick={() => { setMes(''); setQ('') }} className="text-xs text-brand-soft hover:underline pb-2">Limpiar</button>}
           <div className="flex-1" />
@@ -377,7 +421,7 @@ function FacturasTab({ onAbrirLote }: { onAbrirLote: () => void }) {
                     <th className="text-left px-4 py-2.5 hidden md:table-cell">Retiro</th>
                     <th className="text-left px-4 py-2.5 hidden md:table-cell">Serv.</th>
                     <th className="text-right px-2 md:px-4 py-2.5">Monto</th>
-                    <th className="text-left px-4 py-2.5 hidden md:table-cell">Factura</th>
+                    <th className="text-left px-4 py-2.5 hidden md:table-cell">Documento</th>
                     <th className="text-right px-2 md:px-4 py-2.5">Acciones</th>
                   </tr>
                 </thead>
@@ -393,11 +437,7 @@ function FacturasTab({ onAbrirLote }: { onAbrirLote: () => void }) {
                           <span className="text-xs text-gray-600">{v.vet_nombre}</span>
                           {!v.vet_rut && <span className="text-[10px] font-semibold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">sin RUT</span>}
                           <span className="text-xs text-gray-500">{v.fecha_retiro ? fmtFecha(v.fecha_retiro) : '—'} · {v.codigo_servicio}</span>
-                          {v.factura
-                            ? (v.factura.estado === 'anulado'
-                                ? <Badge variant="red">Anulada</Badge>
-                                : <span className="text-xs font-mono font-bold text-brand">{v.factura.folio || 'emitida'}</span>)
-                            : <span className="text-xs text-gray-400">Sin facturar</span>}
+                          <DocVenta factura={v.factura} boleta={v.boleta} />
                         </div>
                       </td>
                       <td className="px-4 py-2.5 hidden md:table-cell">
@@ -408,30 +448,40 @@ function FacturasTab({ onAbrirLote }: { onAbrirLote: () => void }) {
                       <td className="px-4 py-2.5 text-gray-600 hidden md:table-cell">{v.codigo_servicio}</td>
                       <td className="px-2 md:px-4 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(v.monto)}</td>
                       <td className="px-4 py-2.5 hidden md:table-cell">
-                        {v.factura
-                          ? (v.factura.estado === 'anulado'
-                              ? <Badge variant="red">Anulada</Badge>
-                              : <span className="text-xs"><span className="font-mono font-bold text-brand">{v.factura.folio || 'emitida'}</span></span>)
-                          : <span className="text-xs text-gray-400">Sin facturar</span>}
+                        <DocVenta factura={v.factura} boleta={v.boleta} />
                       </td>
                       <td className="px-2 md:px-4 py-2.5">
                         <div className="flex flex-col items-end gap-1">
                           <div className="flex items-center justify-end gap-2">
-                            {v.factura && <LinkDoc doc={v.factura} />}
-                            {v.factura && v.factura.estado !== 'anulado' && (
-                              <button onClick={() => setAnular({
-                                id: v.factura!.id, tipo_dte: '33', folio: v.factura!.folio, estado: v.factura!.estado,
-                                ambiente: v.factura!.ambiente, fecha_emision: v.factura!.fecha_emision,
-                                receptor_razon_social: v.vet_nombre, receptor_rut: v.vet_rut, monto_total: String(v.monto),
-                                resumen: '', mes_facturado: v.mes, pdf_url: v.factura!.pdf_url, openfactura_url: v.factura!.openfactura_url,
-                                documento_anulado_id: '', nc_id: '',
-                              })} className="text-xs font-semibold text-red-600 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50">Anular</button>
-                            )}
-                            {!v.factura && (
-                              <button onClick={() => facturar(v)} disabled={emitiendo === v.id}
-                                className="text-xs font-semibold text-white bg-brand rounded-lg px-3 py-1.5 hover:bg-brand-dark disabled:opacity-50">
-                                {emitiendo === v.id ? 'Facturando…' : 'Facturar'}
-                              </button>
+                            {(v.factura || v.boleta) && <LinkDoc doc={(v.factura ?? v.boleta)!} />}
+                            {(() => {
+                              const doc = v.factura ?? v.boleta
+                              if (!doc || doc.estado === 'anulado') return null
+                              const esFactura = !!v.factura
+                              return (
+                                <button onClick={() => setAnular({
+                                  id: doc.id, tipo_dte: esFactura ? '33' : '39', folio: doc.folio, estado: doc.estado,
+                                  ambiente: doc.ambiente, fecha_emision: doc.fecha_emision,
+                                  receptor_razon_social: esFactura ? v.vet_nombre : (v.nombre_mascota || v.codigo),
+                                  receptor_rut: esFactura ? v.vet_rut : '', monto_total: String(v.monto),
+                                  resumen: '', mes_facturado: v.mes, pdf_url: doc.pdf_url, openfactura_url: doc.openfactura_url,
+                                  documento_anulado_id: '', nc_id: '',
+                                })} className="text-xs font-semibold text-red-600 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50">Anular</button>
+                              )
+                            })()}
+                            {!v.factura && !v.boleta && (
+                              <>
+                                {/* Boleta al TUTOR: para los vets con comisión, a los que no se
+                                    les factura el servicio (Configuración → Descuentos Convenios). */}
+                                <button onClick={() => boletear(v)} disabled={emitiendo === v.id}
+                                  className="text-xs font-semibold text-brand border border-brand/40 rounded-lg px-3 py-1.5 hover:bg-brand/5 disabled:opacity-50">
+                                  {emitiendo === v.id ? 'Emitiendo…' : 'Boleta al tutor'}
+                                </button>
+                                <button onClick={() => facturar(v)} disabled={emitiendo === v.id}
+                                  className="text-xs font-semibold text-white bg-brand rounded-lg px-3 py-1.5 hover:bg-brand-dark disabled:opacity-50">
+                                  {emitiendo === v.id ? 'Facturando…' : 'Facturar'}
+                                </button>
+                              </>
                             )}
                           </div>
                           {errFila[v.id] && <span className="text-xs text-red-600 max-w-[220px] text-right">{errFila[v.id]}</span>}
@@ -443,7 +493,7 @@ function FacturasTab({ onAbrirLote }: { onAbrirLote: () => void }) {
               </table>
             </div>
             <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm text-gray-600 flex flex-wrap justify-between gap-2">
-              <span>{visibles.length} venta{visibles.length === 1 ? '' : 's'} · {tot.facturadas} facturada{tot.facturadas === 1 ? '' : 's'} · {tot.sinFacturar} sin facturar</span>
+              <span>{visibles.length} venta{visibles.length === 1 ? '' : 's'} · {tot.facturadas} documentada{tot.facturadas === 1 ? '' : 's'} · {tot.sinFacturar} sin documento</span>
               <span className="font-semibold text-gray-900">Total: {fmtPrecio(tot.total)}</span>
             </div>
           </>

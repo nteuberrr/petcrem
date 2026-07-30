@@ -127,6 +127,25 @@ export const SHEETS: Record<string, string[]> = {
   // cierra la ficha y su boleta va en clientes.boleta_id.
   cobros: ['id', 'cliente_id', 'tipo', 'detalle', 'monto', 'estado', 'message_id', 'fecha_creacion', 'fecha_cliente_confirmo', 'fecha_pagado', 'boleta_id'],
   descuentos: ['id', 'nombre', 'tipo', 'valor', 'activo', 'foto_url', 'mostrar_web', 'fecha_creacion'],
+  // ── Comisiones de convenio (Configuración → Descuentos Convenios) ──────────
+  // A estos vets NO se les factura: la boleta va al TUTOR por el precio completo
+  // (su tabla de precios especiales se deja igual a la general) y al vet le queda
+  // una comisión por la derivación. Ver lib/comisiones.ts.
+  // Regla vigente por veterinaria: 'fijo' (CLP) | 'variable' (% sobre la cremación).
+  comisiones_reglas: ['id', 'veterinaria_id', 'tipo', 'valor', 'activo', 'fecha_creacion'],
+  // Devengo: UNA por ficha (cliente_id único). Nace al emitirle la boleta al tutor
+  // y pasa a 'anulada' si esa boleta se anula con nota de crédito.
+  comisiones: [
+    'id', 'veterinaria_id', 'cliente_id', 'documento_id',
+    'base_monto', 'tipo', 'valor', 'monto',
+    'estado', 'fecha_devengo', 'fecha_creacion',
+  ],
+  // Ajustes de saldo (lo que se le paga al vet). Cada uno deja su contrapartida
+  // en eerr_gastos_manuales (partida de tipo 'costo') — único golpe al EERR.
+  comisiones_ajustes: [
+    'id', 'veterinaria_id', 'monto', 'detalle', 'fecha',
+    'gasto_manual_id', 'creado_por_id', 'creado_por_nombre', 'fecha_creacion',
+  ],
   usuarios: ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion', 'telefono', 'avisos_whatsapp'],
   asistencia: [
     'id', 'usuario_id', 'usuario_nombre', 'fecha', 'dia_semana', 'es_findesemana',

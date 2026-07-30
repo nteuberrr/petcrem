@@ -15,6 +15,8 @@ import { calcularPrecioFicha, type Tramo } from './ficha-precio'
  *
  * El estado del documento (boleta/factura) se resuelve cruzando
  * `clientes.boleta_id` / `clientes.factura_vet_id` contra `documentos_tributarios`.
+ * Una venta a veterinaria puede terminar en FACTURA al vet (lo normal) o en BOLETA
+ * al tutor (vets con comisión) — por eso la vista de Facturas resuelve las dos.
  */
 
 export interface DocResumen {
@@ -54,6 +56,12 @@ export interface VentaFactura {
   vet_correo: string
   monto: number
   factura: DocResumen | null
+  /**
+   * Boleta al TUTOR de una venta de convenio: es el caso de los vets con comisión
+   * (Configuración → Descuentos Convenios), a los que no se les factura el servicio.
+   * Una venta lleva `factura` O `boleta`, nunca las dos.
+   */
+  boleta: DocResumen | null
 }
 
 function normalizarEstadoPago(v: string): string {
@@ -168,6 +176,7 @@ export async function listarVentasFactura(f: FiltrosFactura = {}): Promise<Venta
     const especialesDeVet = tablas.e.filter(t => t.veterinaria_id === vetId)
     const precio = calcularPrecioFicha(c, vet?.tipo_precios, { generales: tablas.g, convenio: tablas.c, especialesDeVet })
     const facturaId = String(c.factura_vet_id || '').trim()
+    const boletaId = String(c.boleta_id || '').trim()
 
     const venta: VentaFactura = {
       id: String(c.id),
@@ -184,9 +193,10 @@ export async function listarVentasFactura(f: FiltrosFactura = {}): Promise<Venta
       vet_correo: vet?.correo || '',
       monto: precio.total,
       factura: facturaId ? (docs.get(facturaId) ?? null) : null,
+      boleta: boletaId ? (docs.get(boletaId) ?? null) : null,
     }
     if (q) {
-      const hay = `${venta.codigo} ${venta.nombre_mascota} ${venta.vet_nombre} ${venta.vet_rut} ${venta.factura?.folio || ''}`.toLowerCase()
+      const hay = `${venta.codigo} ${venta.nombre_mascota} ${venta.vet_nombre} ${venta.vet_rut} ${venta.factura?.folio || ''} ${venta.boleta?.folio || ''}`.toLowerCase()
       if (!hay.includes(q)) continue
     }
     out.push(venta)

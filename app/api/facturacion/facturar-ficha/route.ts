@@ -46,6 +46,11 @@ export async function POST(req: NextRequest) {
   if (String(c.factura_vet_id || '').trim()) {
     return NextResponse.json({ error: 'Esta ficha ya fue facturada.' }, { status: 409 })
   }
+  // Excluyente con la boleta al tutor (vets con comisión): una ficha lleva boleta
+  // O factura, nunca las dos.
+  if (String(c.boleta_id || '').trim()) {
+    return NextResponse.json({ error: 'Esta ficha ya tiene boleta al tutor. Anúlala antes de facturarla al veterinario.' }, { status: 409 })
+  }
 
   const vet = vets.find(v => String(v.id) === vetId)
   if (!vet) return NextResponse.json({ error: 'La veterinaria no existe.' }, { status: 400 })

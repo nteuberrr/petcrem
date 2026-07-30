@@ -3,6 +3,7 @@ import { todayISO } from './dates'
 import { uploadToR2 } from './cloudflare-r2'
 import { enviarBoletaCliente } from './cliente-mailer'
 import { marcarBoletaCobro } from './cobros'
+import { anularComisionPorFicha } from './comisiones'
 import { avisarAdminsWhatsapp } from './whatsapp'
 import { sendEmail } from './resend-mailer'
 import { renderEmailLayout, getContacto, escapeHtml } from './email-layout'
@@ -520,6 +521,22 @@ export async function anularDocumento(o: AnularOpts): Promise<EmitirDocResultado
     try { fichas = JSON.parse(doc.fichas_json) } catch { /* nada que liberar */ }
     for (const f of fichas) {
       await updateByIdIf('clientes', f.id, {}, { factura_vet_id: '' })
+    }
+  }
+
+  // Si lo anulado era la BOLETA de una ficha, liberarla también: si no, quedaría
+  // marcada como documentada para siempre (fuera de la propuesta mensual y sin
+  // poder re-emitirle nada). El `expected` es la guarda fina: solo limpia si esta
+  // era efectivamente SU boleta — las boletas de cobros posteriores (adicional /
+  // diferencia) apuntan al mismo tutor pero viven en `cobros.boleta_id`.
+  if (doc.receptor_tipo === 'tutor' && String(doc.receptor_id || '').trim()) {
+    const liberada = await updateByIdIf(
+      'clientes', String(doc.receptor_id), { boleta_id: String(doc.id) }, { boleta_id: '' },
+    )
+    // Esa boleta era la que devengaba la comisión del vet que derivó → se cae con ella.
+    if (liberada) {
+      try { await anularComisionPorFicha(String(doc.receptor_id)) }
+      catch (e) { console.warn('[facturacion] no se pudo anular la comisión de la ficha:', e) }
     }
   }
 
