@@ -430,4 +430,12 @@ export const SHEETS: Record<string, string[]> = {
   web_paginas: [
     'id', 'pagina', 'clave', 'titulo', 'contenido', 'foto_url', 'orden', 'fecha_creacion',
   ],
+  // ── Avisos automáticos (Configuración Avanzada → Avisos) ────────────────────
+  // Una fila por aviso del catálogo (lib/avisos): a quién se manda, a qué hora de
+  // Chile y si está activo. `ultimo_envio` (YYYY-MM-DD Chile) es la guarda de "ya
+  // salió hoy" — el cron corre cada hora y solo dispara el que toca.
+  avisos_config: [
+    'id', 'clave', 'activo', 'destinatarios', 'hora',
+    'omitir_vacio', 'ultimo_envio', 'fecha_actualizacion',
+  ],
 }

@@ -205,6 +205,18 @@ export function horaChile(d: Date = new Date()): string {
   }).format(d)
 }
 
+/**
+ * Fecha de HOY en Chile como "YYYY-MM-DD". Igual que `horaChile`, existe porque
+ * Vercel corre en UTC: entre las 20:00 y la medianoche de Chile, `todayISO()`
+ * ya devuelve el día siguiente. Úsala para guardas del tipo "ya se hizo hoy".
+ */
+export function fechaChileISO(d: Date = new Date()): string {
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(d)
+  return p // en-CA ya entrega YYYY-MM-DD
+}
+
 /** Convierte una hora (string "HH:MM" o serial Excel) a minutos desde medianoche. */
 export function horaToMinutos(raw: string | number | null | undefined): number | null {
   const s = formatHora(raw)

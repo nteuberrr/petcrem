@@ -4,6 +4,7 @@
   },
   "crons": [
     { "path": "/api/backup", "schedule": "0 7 * * *" },
-    { "path": "/api/mensajes/cron-archivar", "schedule": "0 15 * * *" }
+    { "path": "/api/mensajes/cron-archivar", "schedule": "0 15 * * *" },
+    { "path": "/api/cron/avisos", "schedule": "0 * * * *" }
   ]
 }

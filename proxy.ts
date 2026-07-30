@@ -92,6 +92,9 @@ export async function proxy(req: NextRequest) {
     // Seguimiento automático de leads tibios (se dispara desde el cron diario o
     // a mano para pruebas; auth Bearer CRON_SECRET o sesión admin dentro de la ruta).
     pathname === '/api/mensajes/cron-seguimiento' ||
+    // Avisos automáticos al equipo (Vercel Cron cada hora; auth Bearer CRON_SECRET
+    // o sesión admin dentro de la ruta).
+    pathname === '/api/cron/avisos' ||
     pathname.startsWith('/api/mailing/pixel/') ||
     pathname.startsWith('/api/mailing/click/') ||
     pathname === '/convenio-eutanasias' ||

@@ -8,6 +8,7 @@ import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import AgentesPanel from '@/components/AgentesPanel'
 import CorreosConfig from '@/components/CorreosConfig'
 import ConsumoIA from '@/components/ConsumoIA'
+import AvisosConfig from '@/components/AvisosConfig'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 import { formatDate, formatHora } from '@/lib/dates'
 import { esAdmin, esAdminTotal, ROLES, ROL_LABEL } from '@/lib/roles'
@@ -18,7 +19,7 @@ type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
 type ArticuloTab = 'servicios' | 'bodega' | 'otros'
 type ServiciosTab = 'tipos' | 'especies'
-type AvanzadaTab = 'datos' | 'usuarios' | 'agentes' | 'correos' | 'consumo'
+type AvanzadaTab = 'datos' | 'usuarios' | 'agentes' | 'correos' | 'avisos' | 'consumo'
 
 type Producto = { id: string; nombre: string; precio: string; foto_url: string; stock: string; categoria?: string; activo: string }
 type CategoriaProducto = { id: string; nombre: string; activo: string; fecha_creacion: string }
@@ -411,7 +412,7 @@ export default function ConfiguracionPage() {
       {/* Sub-pestañas de Configuración Avanzada */}
       {tab === 'Configuración Avanzada' && isAdminTotal && (
         <div className="flex gap-2 flex-wrap mb-4">
-          {([['datos', 'Datos Personales'], ['usuarios', 'Usuarios'], ['agentes', 'Agentes'], ['correos', 'Correos'], ['consumo', 'Consumo IA']] as const).map(([k, label]) => (
+          {([['datos', 'Datos Personales'], ['usuarios', 'Usuarios'], ['agentes', 'Agentes'], ['correos', 'Correos'], ['avisos', 'Avisos'], ['consumo', 'Consumo IA']] as const).map(([k, label]) => (
             <button key={k} onClick={() => setAvanzadaTab(k)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${avanzadaTab === k ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
               {label}
@@ -986,6 +987,7 @@ export default function ConfiguracionPage() {
       {/* ─── AGENTES ─── */}
       {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'agentes' && <AgentesPanel />}
       {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'consumo' && <ConsumoIA />}
+      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'avisos' && <AvisosConfig />}
       {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'correos' && (
         <div className="space-y-6">
           <CorreosConfig />
