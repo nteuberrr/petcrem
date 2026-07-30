@@ -550,6 +550,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         setDeleteError(data?.error ?? 'No se pudo eliminar la ficha')
         return
       }
+      // El backend cancela el retiro agendado (sale de la agenda). Si quedó algo
+      // que no puede cancelar solo —una eutanasia ya tomada por un veterinario—
+      // lo avisa acá para que el equipo la cierre desde Servicios.
+      if (data?.aviso) alert(data.aviso)
       router.push('/clientes')
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : 'Error al eliminar')
@@ -606,13 +610,27 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       // (no se persiste en la ficha; el pendiente vive como cobro 'saldo').
       ...(form.estado_pago === 'parcial' ? { monto_abonado: abono } : {}),
     }
+    // ¿Se movió el retiro? El tutor (o el veterinario de convenio) tiene que
+    // enterarse: hasta ahora un cambio de horario hecho acá no le llegaba a nadie
+    // y la persona se enteraba cuando llegaba el chofer. Se pregunta antes, para
+    // no mandar mensajes al corregir un dato cualquiera.
+    const retiroMovido = !!cliente && retiroPendiente({ fecha_retiro: form.fecha_retiro, hora_retiro: form.hora_retiro }, ahoraEnChile()) &&
+      ((form.fecha_retiro || '') !== (cliente.fecha_retiro || '') || (form.hora_retiro || '') !== (cliente.hora_retiro || '')) &&
+      !!(form.fecha_retiro || form.hora_retiro)
+    const avisarCambio = retiroMovido && !registrar && window.confirm(
+      `Cambiaste la fecha/hora del retiro de ${cliente?.nombre_mascota || 'la mascota'}.\n\n` +
+      'Aceptar: le avisamos del cambio.\nCancelar: solo guardo.',
+    )
     const res = await fetch(`/api/clientes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, ...(avisarCambio ? { avisar_cambio: true } : {}) }),
     })
     if (res.ok) {
       const updated = await res.json()
+      if (avisarCambio && updated?.aviso_cambio && !updated.aviso_cambio.enviado) {
+        alert(`Guardado, pero NO se pudo avisar del cambio: ${updated.aviso_cambio.motivo || 'error desconocido'}. Avísale tú.`)
+      }
       const norm = {
         ...updated,
         fecha_retiro: formatDateForSheet(updated.fecha_retiro) || updated.fecha_retiro || '',

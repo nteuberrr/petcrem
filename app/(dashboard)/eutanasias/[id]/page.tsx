@@ -90,15 +90,35 @@ export default function FichaEutanasiaPage({ params }: { params: Promise<{ id: s
   function confirmarResultado(resultado: 'realizada' | 'no_realizada') {
     const aviso = resultado === 'realizada'
       ? '¿Confirmar que la eutanasia SÍ se realizó?\n\nSe le envía al tutor el agradecimiento con la reseña y el pago al veterinario queda pendiente.'
-      : '¿Confirmar que la eutanasia NO se realizó?\n\nSe le paga la consulta al veterinario y se elimina el borrador de la ficha de cremación.'
+      : '¿Confirmar que la eutanasia NO se realizó?\n\nLa mascota sigue viva: se le paga la consulta al veterinario y se ELIMINA el borrador de la ficha de cremación.\n\n(Si la mascota falleció antes y la cremación sigue, usa el otro botón.)'
     if (!confirm(aviso)) return
+    enviarResultado({ resultado })
+  }
+
+  /**
+   * SERVICIO CANCELADO: la eutanasia no corre y no se le cobra a nadie, pero la
+   * ficha de cremación queda abierta (caso típico: la mascota falleció antes de
+   * la visita y la familia igual quiere la cremación).
+   */
+  function confirmarServicioCancelado() {
+    if (!confirm(
+      '¿Cancelar el servicio de eutanasia?\n\n' +
+      '· No se le paga nada a la veterinaria ni se le cobra al tutor por la eutanasia.\n' +
+      '· La ficha de cremación queda ABIERTA para seguir con ese servicio.\n' +
+      (ficha?.vet_nombre ? `· Le avisamos por correo a ${ficha.vet_nombre}.\n` : '') +
+      '\nSi la cremación tampoco se hace, elimina la ficha desde /clientes.',
+    )) return
+    enviarResultado({ resultado: 'cancelado' })
+  }
+
+  function enviarResultado(body: Record<string, unknown>) {
     ejecutar(async () => {
       setError('')
       try {
         const r = await fetch(`/api/eutanasias/ficha/${id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ resultado }),
+          body: JSON.stringify(body),
         })
         const d = await r.json().catch(() => ({}))
         if (!r.ok) { setError(d?.error || 'No se pudo guardar el resultado.'); return }
@@ -184,11 +204,13 @@ export default function FichaEutanasiaPage({ params }: { params: Promise<{ id: s
               className="px-4 py-2 text-sm bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white font-semibold rounded-xl">
               ✗ No se realizó
             </button>
+            <button
+              onClick={confirmarServicioCancelado}
+              disabled={procesando}
+              className="px-4 py-2 text-sm bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-xl">
+              🚫 Servicio cancelado
+            </button>
           </div>
-          <p className="text-[11px] text-gray-500 mt-2 leading-snug">
-            Realizada: se le envía el agradecimiento al tutor y el pago al veterinario queda pendiente.
-            No realizada: se le paga la consulta al veterinario y se elimina el borrador de la ficha de cremación.
-          </p>
         </Card>
       )}
 

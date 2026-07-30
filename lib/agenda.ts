@@ -28,7 +28,7 @@
  * viaje del chofer…). Dentro de un bloqueo el bot NO agenda ni ofrece horarios;
  * el rango es [inicio, fin) → se puede agendar justo A la hora de término.
  */
-import { getSheetData } from './datastore'
+import { getSheetData, getRowsByIds } from './datastore'
 import { formatDateForSheet, formatHora } from './dates'
 import { incluyeCremacion } from './eutanasia-cremacion'
 import { crearEstimadorFichas, valorFicha, type EstimacionFicha } from './precio-estimado'
@@ -46,6 +46,11 @@ const BUFFER_MIN = 60                   // no se agenda dentro de la próxima ho
 // domicilio, que las presta un vet de la red: ahí manda la hora que pidió el
 // cliente, no la ventana del chofer (dueño 2026-07-28, ver evaluarHoraEutanasia).
 const MIN_CIERRE_ATENCION = 22 * 60
+// Anticipación mínima de una EUTANASIA a domicilio. Antes no tenía ninguna (solo
+// se rechazaba una hora ya pasada), así que se podía agendar "en 10 minutos" —
+// irreal para un servicio donde un vet de la red tiene que leer el correo,
+// aceptar y viajar. Mismo criterio que el retiro del chofer: una hora.
+const BUFFER_EUTANASIA_MIN = BUFFER_MIN
 // Eutanasia: el vet informa la hora del PROCEDIMIENTO (la que acordó con la
 // familia) y nuestro chofer pasa a retirar 30 min después. Ese retiro se agenda
 // al informarse la hora (dueño 2026-07-28) y queda guardado en la cotización
@@ -211,11 +216,17 @@ export async function listarAgenda(
   toISO?: string,
   opts: { conValor?: boolean } = {},
 ): Promise<AgendaItem[]> {
-  const [retiros, cotis, clientes] = await Promise.all([
+  const [retiros, cotis] = await Promise.all([
     getSheetData('solicitudes_retiro').catch(() => [] as Record<string, string>[]),
     getSheetData('cotizaciones_eutanasia').catch(() => [] as Record<string, string>[]),
-    getSheetData('clientes').catch(() => [] as Record<string, string>[]),
   ])
+  // Solo las fichas REFERENCIADAS por lo agendado: `clientes` es la tabla más
+  // grande y se leía entera en cada evaluación de horario del bot.
+  const idsFicha = [
+    ...retiros.map(r => r.cliente_id),
+    ...cotis.map(c => c.cliente_id),
+  ].filter(Boolean) as string[]
+  const clientes = await getRowsByIds('clientes', idsFicha).catch(() => [] as Record<string, string>[])
   const clientePorId = new Map(clientes.map(c => [String(c.id), c]))
   const inRange = (iso: string) => (!fromISO || iso >= fromISO) && (!toISO || iso <= toISO)
   const out: AgendaItem[] = []
@@ -392,22 +403,68 @@ function choca(min: number, ocupados: number[]): boolean {
  * y los que caen dentro de un BLOQUEO MANUAL de la agenda (se ofrece, eso sí, la
  * hora justo en que el bloqueo termina).
  */
-function horasLibres(fechaISO: string, hoy: string, ahora: number, ocupados: number[], rangos: RangoBloqueado[] = []): string[] {
+function horasLibres(
+  fechaISO: string,
+  hoy: string,
+  ahora: number,
+  ocupados: number[],
+  rangos: RangoBloqueado[] = [],
+  // `tope` = última hora ofrecible. Para RETIROS es el corte del chofer (21:10);
+  // para EUTANASIAS, el cierre de atención (22:00) — sin esto, al cliente que
+  // pedía "en la tarde" nunca se le ofrecía la última hora que sí aceptamos.
+  opts: { tope?: number; buffer?: number } = {},
+): string[] {
   if (fechaISO < hoy) return []
+  const tope = opts.tope ?? MIN_ULTIMO
+  const buffer = opts.buffer ?? BUFFER_MIN
   const esHoy = fechaISO === hoy
-  const startMin = esHoy ? Math.max(MIN_APERTURA, ahora + BUFFER_MIN) : MIN_APERTURA
-  const candidatos = new Set<number>([startMin, MIN_ULTIMO])
+  const startMin = esHoy ? Math.max(MIN_APERTURA, ahora + buffer) : MIN_APERTURA
+  const candidatos = new Set<number>([startMin, tope])
   // Grilla cada 45 min desde la apertura; se omiten los puntos a menos de 45 min
   // del cierre para no encimar 21:00 con el corte 21:10 (que siempre se ofrece).
-  for (let m = MIN_APERTURA; m <= MIN_ULTIMO; m += SEPARACION_MIN) {
-    if (m === MIN_ULTIMO || MIN_ULTIMO - m >= SEPARACION_MIN) candidatos.add(m)
+  for (let m = MIN_APERTURA; m <= tope; m += SEPARACION_MIN) {
+    if (m === tope || tope - m >= SEPARACION_MIN) candidatos.add(m)
   }
   for (const o of ocupados) { candidatos.add(o + SEP_DESPUES); candidatos.add(o - SEP_ANTES) }
   for (const r of rangos) candidatos.add(r.fin)   // el hueco apenas se libera el bloqueo
   return [...candidatos]
-    .filter(min => min >= startMin && min <= MIN_ULTIMO && !choca(min, ocupados) && !bloqueadoEn(min, rangos))
+    .filter(min => min >= startMin && min <= tope && !choca(min, ocupados) && !bloqueadoEn(min, rangos))
     .sort((a, b) => a - b)
     .map(fmtMin)
+}
+
+/**
+ * Reservas de la agenda que CHOCAN con (fecha, hora) según la separación vigente
+ * (30 min antes / 45 después). Devuelve los items para poder nombrarlos en el
+ * aviso al equipo.
+ *
+ * Se usa donde una hora entra por un canal que NO puede rechazarse —la que el
+ * veterinario informa tras coordinar con la familia, o un cambio a mano del
+ * equipo—: ahí no se bloquea, se AVISA. Sin esto el choque era invisible (pasó
+ * el 28-07: dos eutanasias quedaron a 30 min de retiros ya agendados).
+ */
+export async function conflictosEnAgenda(
+  fechaRaw: string,
+  horaRaw: string,
+  excluirId?: string,
+): Promise<AgendaItem[]> {
+  const fecha = formatDateForSheet(fechaRaw) || String(fechaRaw || '').trim()
+  const min = horaMin(horaRaw)
+  if (!fecha || min == null) return []
+  const items = await listarAgenda(fecha, fecha)
+  return items.filter(it => {
+    if (excluirId && it.id === excluirId) return false
+    if (it.tipo === 'eutanasia' && it.sinCremacion) return false
+    const m = horaMin(it.hora)
+    return m != null && min > m - SEP_ANTES && min < m + SEP_DESPUES
+  })
+}
+
+/** Texto corto de un choque, para los avisos al equipo. */
+export function describirConflictos(items: AgendaItem[]): string {
+  return items
+    .map(it => `${it.tipo === 'eutanasia' ? 'eutanasia' : 'retiro'} de ${it.mascota || 'sin nombre'} a las ${it.hora}`)
+    .join(' · ')
 }
 
 export interface EvalSlot {
@@ -428,7 +485,8 @@ export async function horaLibreEnFranja(fechaRaw: string, franja: 'AM' | 'PM'): 
   const fecha = formatDateForSheet(fechaRaw) || String(fechaRaw || '').trim()
   const { iso: hoy, min: ahora } = ahoraChile()
   const [ocupados, bloqueos] = await Promise.all([ocupadosDe(fecha), listarBloqueos(fecha, fecha)])
-  const libres = horasLibres(fecha, hoy, ahora, ocupados, rangosDelDia(bloqueos, fecha))
+  const libres = horasLibres(fecha, hoy, ahora, ocupados, rangosDelDia(bloqueos, fecha),
+    { tope: MIN_CIERRE_ATENCION, buffer: BUFFER_EUTANASIA_MIN })
   const libresFranja = libres.filter(h => {
     const hh = parseInt(h, 10)
     return franja === 'AM' ? hh < 13 : hh >= 13
@@ -455,7 +513,8 @@ export async function evaluarHoraEutanasia(fechaRaw: string, horaRaw: string): P
   const { iso: hoy, min: ahora } = ahoraChile()
   const [ocupados, bloqueos] = await Promise.all([ocupadosDe(fecha), listarBloqueos(fecha, fecha)])
   const rangos = rangosDelDia(bloqueos, fecha)
-  const libres = horasLibres(fecha, hoy, ahora, ocupados, rangos)
+  const libres = horasLibres(fecha, hoy, ahora, ocupados, rangos,
+    { tope: MIN_CIERRE_ATENCION, buffer: BUFFER_EUTANASIA_MIN })
 
   if (!fecha) return { ok: false, motivo: 'No indicaste una fecha válida.', libres }
   if (fecha < hoy) return { ok: false, motivo: `La fecha ${fecha} ya pasó.`, libres }
@@ -464,8 +523,17 @@ export async function evaluarHoraEutanasia(fechaRaw: string, horaRaw: string): P
   if (min == null) return { ok: false, motivo: 'La hora no es válida (usa formato HH:MM).', libres }
   if (min < MIN_APERTURA || min > MIN_CIERRE_ATENCION)
     return { ok: false, motivo: `Atendemos de ${fmtMin(MIN_APERTURA)} a ${fmtMin(MIN_CIERRE_ATENCION)}: esa hora queda fuera del horario de atención.`, libres }
-  if (fecha === hoy && min < ahora)
-    return { ok: false, motivo: `Las ${fmtMin(min)} de hoy ya pasaron.`, libres }
+  // Anticipación mínima: el vet de la red tiene que aceptar y viajar.
+  if (fecha === hoy && min < ahora + BUFFER_EUTANASIA_MIN) {
+    const desde = Math.min(MIN_CIERRE_ATENCION, ahora + BUFFER_EUTANASIA_MIN)
+    return {
+      ok: false,
+      motivo: ahora + BUFFER_EUTANASIA_MIN > MIN_CIERRE_ATENCION
+        ? 'Para hoy ya no alcanzamos a coordinar un veterinario (atendemos hasta las 22:00). Ofrécele mañana.'
+        : `Necesitamos al menos una hora para coordinar al veterinario: para hoy, lo más pronto es a partir de las ${fmtMin(desde)}.`,
+      libres,
+    }
+  }
 
   const bloq = bloqueadoEn(min, rangos)
   if (bloq) {

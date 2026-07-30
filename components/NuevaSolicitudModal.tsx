@@ -55,6 +55,8 @@ export default function NuevaSolicitudModal({
   // Es solo una ADVERTENCIA: el equipo puede guardar igual.
   const [aviso, setAviso] = useState<{ motivo: string; libres: string[] } | null>(null)
   const [revisando, setRevisando] = useState(false)
+  // Choque devuelto por el SERVIDOR al guardar (409): hay que decidir explícitamente.
+  const [choque, setChoque] = useState<{ motivo: string; libres: string[] } | null>(null)
   const { fecha_retiro, hora_retiro } = form
 
   useEffect(() => {
@@ -77,19 +79,25 @@ export default function NuevaSolicitudModal({
     return () => { cancelado = true; clearTimeout(t) }
   }, [open, fecha_retiro, hora_retiro])
 
-  function cerrar() { setError(''); setAviso(null); onClose() }
+  function cerrar() { setError(''); setAviso(null); setChoque(null); onClose() }
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.SyntheticEvent, forzar = false) {
     e.preventDefault()
     if (guardandoRef.current) return
     guardandoRef.current = true
-    setGuardando(true); setError('')
+    setGuardando(true); setError(''); setChoque(null)
     try {
       const res = await fetch('/api/clientes/agendamiento-manual', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, forzar }),
       })
       const data = await res.json().catch(() => ({}))
+      // 409 = el servidor detectó el choque de horario (el aviso del formulario
+      // es solo informativo y puede fallar por red). Se muestra y se decide.
+      if (res.status === 409) {
+        setChoque({ motivo: data?.motivo || 'Ese horario choca con otra reserva.', libres: Array.isArray(data?.libres) ? data.libres : [] })
+        return
+      }
       if (!res.ok) { setError(data?.error || 'No se pudo registrar el agendamiento.'); return }
       const mascota = form.nombre_mascota
       onClose()
@@ -184,6 +192,28 @@ export default function NuevaSolicitudModal({
             {guardando ? 'Registrando…' : 'Registrar y avisar al tutor'}
           </button>
         </div>
+
+        {choque && (
+          <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
+            <p className="text-sm font-semibold text-amber-900">No se registró: ese horario choca</p>
+            <p className="text-xs text-amber-900">{choque.motivo}</p>
+            {choque.libres.length > 0 && (
+              <p className="text-xs text-amber-900">
+                <span className="font-semibold">Horas libres ese día:</span> {choque.libres.join(' · ')}
+              </p>
+            )}
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={() => setChoque(null)}
+                className="flex-1 border-2 border-amber-400 text-amber-900 rounded-lg py-2 text-xs font-semibold hover:bg-amber-100 transition-colors">
+                Cambiar la hora
+              </button>
+              <button type="button" disabled={guardando} onClick={e => submit(e, true)}
+                className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg py-2 text-xs font-semibold disabled:opacity-50 transition-colors">
+                Agendar igual
+              </button>
+            </div>
+          </div>
+        )}
       </form>
     </Modal>
   )

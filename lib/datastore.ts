@@ -95,6 +95,26 @@ export async function getSheetData(sheetName: string): Promise<Record<string, st
   return rows.map(rowToStringRecord)
 }
 
+/**
+ * Filas de una tabla acotadas a una lista de IDs. Existe para no bajar tablas
+ * completas cuando solo se necesitan unas pocas filas conocidas (la agenda
+ * resolvía las fichas leyendo `clientes` entero en CADA evaluación de horario).
+ * En Postgres es un `where id in (...)`; en Sheets filtra en memoria (no hay
+ * consulta por columna).
+ */
+export async function getRowsByIds(sheetName: string, ids: Array<string | number>): Promise<Record<string, string>[]> {
+  const unicos = [...new Set(ids.map(String).map(s => s.trim()).filter(Boolean))]
+  if (unicos.length === 0) return []
+  if (!usePg) {
+    const rows = await sheets.getSheetData(sheetName)
+    const set = new Set(unicos)
+    return rows.filter(r => set.has(String(r.id)))
+  }
+  const { data, error } = await getSupabase().from(sheetName).select('*').in('id', unicos)
+  if (error) throw new Error(`[datastore] getRowsByIds ${sheetName}: ${error.message}`)
+  return (data ?? []).map(rowToStringRecord)
+}
+
 export async function appendRow(sheetName: string, data: Record<string, unknown>): Promise<void> {
   if (!usePg) return sheets.appendRow(sheetName, data)
   const { error } = await getSupabase().from(sheetName).insert(rowForWrite(sheetName, data, { full: false }))

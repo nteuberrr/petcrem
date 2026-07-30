@@ -14,7 +14,7 @@ import { getSheetData } from '@/lib/datastore'
 import { sesionConAcceso } from '@/lib/permisos-server'
 import { getConfigCobroEutanasia, cobroClienteCon } from '@/lib/eutanasia-precios'
 import { incluyeCremacion } from '@/lib/eutanasia-cremacion'
-import { aplicarResultadoEutanasia, esResultado } from '@/lib/eutanasia-resultado'
+import { aplicarResultadoEutanasia, esResultado, cancelarEutanasiaConservandoFicha } from '@/lib/eutanasia-resultado'
 
 const SHEET = 'cotizaciones_eutanasia'
 const RUTA = '/api/eutanasias/ficha'
@@ -88,8 +88,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params
     const body = await req.json().catch(() => ({}))
     const resultado = body?.resultado
+    // Tercera salida: SERVICIO CANCELADO. La eutanasia no corre y no se le cobra
+    // a nadie, pero la ficha de cremación queda abierta — ver lib/eutanasia-resultado.
+    if (resultado === 'cancelado') {
+      const r = await cancelarEutanasiaConservandoFicha(String(id), {
+        motivo: typeof body?.motivo === 'string' ? body.motivo : undefined,
+      })
+      if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
+      return NextResponse.json(await armarFicha(r.cotizacion))
+    }
     if (!esResultado(resultado)) {
-      return NextResponse.json({ error: "Resultado inválido (usa 'realizada' o 'no_realizada')" }, { status: 400 })
+      return NextResponse.json({ error: "Resultado inválido (usa 'realizada', 'no_realizada' o 'cancelado')" }, { status: 400 })
     }
     const r = await aplicarResultadoEutanasia(String(id), resultado)
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })

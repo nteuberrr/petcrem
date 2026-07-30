@@ -175,8 +175,8 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
           </a>
         </div>` : ''
   const introFoto = esPremium
-    ? `Como elegiste el servicio Premium, puedes subir la foto para el <strong>cuadro conmemorativo</strong> de ${mascota}, sumar una foto a su certificado y solicitar el video de su proceso:`
-    : `Puedes sumar una foto al certificado de ${mascota} y solicitar el video de su proceso:`
+    ? `Como elegiste el servicio Premium, puedes subir la foto para el <strong>cuadro conmemorativo</strong> de ${mascota}, sumar una foto a su certificado y solicitar el video de su ingreso al horno:`
+    : `Puedes sumar una foto al certificado de ${mascota} y solicitar el video de su ingreso al horno:`
   const bloqueFoto = (linkFoto && linkVideo) ? `
       <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:12px;padding:20px;margin:20px 0">
         <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;color:${BRAND.navy};text-align:center">Dentro de las próximas 48 horas</p>
@@ -190,7 +190,7 @@ export function buildRegistro(args: RegistroArgs, contacto: Contacto): SendOpts 
         </div>${btnCuadro}
         <div style="text-align:center;margin-top:10px">
           <a href="${linkVideo}" style="display:inline-block;background:${BRAND.navy};color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">
-            🎥 Quiero el video del proceso
+            🎥 Quiero el video del ingreso
           </a>
         </div>
         <p style="margin:14px 0 0;font-size:12px;color:${BRAND.muted};text-align:center">Estos enlaces vencen en 48 horas.</p>
@@ -445,7 +445,7 @@ export interface CertificadoEmailArgs {
 export function buildCertificado(args: CertificadoEmailArgs, contacto: Contacto): SendOpts {
   const mascota = escapeHtml(args.nombreMascota)
   const adjuntos = args.conVideo
-    ? `el <strong>Certificado de Cremación</strong> y un <strong>video del servicio</strong> de ${mascota}`
+    ? `el <strong>Certificado de Cremación</strong> y el <strong>video del ingreso al horno</strong> de ${mascota}`
     : `el <strong>Certificado de Cremación</strong> de ${mascota}`
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">Estimado(a) ${args.nombreTutor ? `<strong>${escapeHtml(args.nombreTutor)}</strong>` : 'tutor(a)'},</p>

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { z } from 'zod'
 import { appendRow, getNextId } from '@/lib/datastore'
 import { resolverSolicitudRetiro } from '@/lib/solicitudes-retiro'
+import { evaluarSlotRetiro } from '@/lib/agenda'
 import { capitalizarNombre } from '@/lib/nombres'
 
 /**
@@ -25,6 +26,8 @@ const Schema = z.object({
   fecha_retiro: z.string().min(1, 'Fecha de retiro requerida'),
   hora_retiro: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/, 'Hora inválida (HH:MM)'),
   peso: z.union([z.string(), z.number()]).optional(),
+  /** El equipo vio el conflicto de horario y decidió agendar igual. */
+  forzar: z.boolean().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -36,6 +39,20 @@ export async function POST(req: NextRequest) {
     if (tel.length < 8) return NextResponse.json({ error: 'El WhatsApp no es válido.' }, { status: 400 })
     // Guardamos con código país (56) para que la confirmación por WhatsApp salga bien.
     const wa = tel.length === 9 ? `56${tel}` : tel
+
+    // Validación de horario EN EL SERVIDOR. Antes la única defensa era el aviso
+    // visual del modal, que además se traga los errores de red: si la consulta
+    // fallaba, el equipo guardaba creyendo que estaba libre. Ahora el choque
+    // vuelve como 409 y solo pasa con `forzar` explícito.
+    if (!d.forzar) {
+      const slot = await evaluarSlotRetiro(d.fecha_retiro, d.hora_retiro)
+      if (!slot.ok) {
+        return NextResponse.json(
+          { error: slot.motivo || 'Ese horario no está disponible.', conflicto: true, motivo: slot.motivo, libres: slot.libres },
+          { status: 409 },
+        )
+      }
+    }
 
     const id = await getNextId('solicitudes_retiro')
     await appendRow('solicitudes_retiro', {

@@ -5,6 +5,7 @@ import { enviarRetiroConfirmadoVet } from './vet-cremacion-mailer'
 import { enviarTextoWhatsapp, enviarPlantillaWhatsapp, renderPlantillaWa, plantillasAprobadas } from './whatsapp'
 import { upsertContacto, getOrCreateConversacion, insertarMensaje, marcarConversacionPorTelefono } from './mensajes'
 import { formatDate, todayISO, formatDateForSheet } from './dates'
+import { conflictosEnAgenda, describirConflictos } from './agenda'
 
 /**
  * Solicitudes de retiro del bot de WhatsApp (tabla `solicitudes_retiro`).
@@ -137,6 +138,26 @@ export async function resolverSolicitudRetiro(
   const base = (process.env.NEXTAUTH_URL || 'https://petcrem.vercel.app').replace(/\/$/, '')
   const esVet = sol.origen === 'bot_vet' || !!sol.veterinaria_id
 
+  // REVALIDACIÓN al confirmar. Entre que el bot registra la solicitud y el equipo
+  // toca ✅ pueden pasar horas: la hora pudo ocuparse (otro agendamiento, una
+  // eutanasia) o la fecha pudo quedar en el pasado. No se bloquea la confirmación
+  // —el compromiso con el cliente ya existe— pero el acuse lo dice con todas sus
+  // letras para que el equipo reordene la ruta o llame.
+  let alerta = ''
+  if (confirmado) {
+    try {
+      const fechaISO = formatDateForSheet(sol.fecha_retiro) || String(sol.fecha_retiro || '')
+      if (fechaISO && fechaISO < todayISO()) {
+        alerta = `\n⚠️ OJO: la fecha del retiro (${formatDate(sol.fecha_retiro)}) ya pasó. Coordínalo de nuevo con quien lo pidió.`
+      } else {
+        const choques = await conflictosEnAgenda(sol.fecha_retiro, sol.hora_retiro, `r${solicitudId}`)
+        if (choques.length > 0) {
+          alerta = `\n⚠️ OJO: choca con ${describirConflictos(choques)} (dejamos 30 min antes y 45 después). Revisa la ruta del chofer.`
+        }
+      }
+    } catch (e) { console.warn('[solicitudes-retiro] no se pudo revalidar el horario al confirmar:', e) }
+  }
+
   let msgCliente: string
   let acuseAdmin: string
   // Ficha borrador creada al confirmar; se linkea a la solicitud para que el
@@ -186,7 +207,7 @@ export async function resolverSolicitudRetiro(
 
     msgCliente = `Confirmado el retiro de ${sol.nombre_mascota} para el ${formatDate(sol.fecha_retiro)} a las ${sol.hora_retiro}. ` +
       `Te enviamos el detalle a tu correo. ¡Gracias por confiar en nosotros! 🐾`
-    acuseAdmin = `✅ Retiro N° ${solicitudId} (veterinario ${sol.vet_nombre || ''}) confirmado. Le avisamos por WhatsApp y le enviamos el correo de confirmación; queda como borrador "Por ingresar".`
+    acuseAdmin = `✅ Retiro N° ${solicitudId} (veterinario ${sol.vet_nombre || ''}) confirmado. Le avisamos por WhatsApp y le enviamos el correo de confirmación; queda como borrador "Por ingresar".${alerta}`
   } else if (confirmado) {
     // ── Retiro de TUTOR: confirmación SOLO por WhatsApp + link firmado para adelantar datos.
     let linkFicha = `${base}/registro-mascota`
@@ -210,7 +231,7 @@ export async function resolverSolicitudRetiro(
     msgCliente = `Tu retiro quedó confirmado para el ${formatDate(sol.fecha_retiro)} a las ${sol.hora_retiro}.\n\n` +
       `Si quieres, puedes adelantar los datos de tu mascota aquí:\n${linkFicha}\n\n` +
       `No es obligatorio: si no alcanzas, te los pedimos al momento del retiro. Gracias por confiar en nosotros 🐾`
-    acuseAdmin = `✅ Retiro N° ${solicitudId} confirmado. Le enviamos al cliente el link para completar su ficha (queda como borrador "Por ingresar"; el código se genera cuando registres la ficha).`
+    acuseAdmin = `✅ Retiro N° ${solicitudId} confirmado. Le enviamos al cliente el link para completar su ficha (queda como borrador "Por ingresar"; el código se genera cuando registres la ficha).${alerta}`
   } else {
     // ── Rechazo (tutor o vet).
     msgCliente = `Gracias por escribirnos. Un agente de nuestro equipo se pondrá en contacto contigo a la brevedad para coordinar. 🐾`
@@ -221,9 +242,10 @@ export async function resolverSolicitudRetiro(
   // dashboard oculte el cuadro verde cuando esa ficha se registre. Best-effort.
   if (confirmado && borradorId) {
     try {
-      await updateById('solicitudes_retiro', String(solicitudId), {
-        ...sol, estado: 'confirmada', fecha_resolucion: ahora, cliente_id: borradorId,
-      })
+      // Update PARCIAL: antes se reescribía la fila entera con el snapshot leído
+      // ANTES del cierre atómico, así que pisaba cualquier cambio hecho en el
+      // intertanto (p. ej. una reprogramación simultánea).
+      await updateByIdIf('solicitudes_retiro', String(solicitudId), {}, { cliente_id: borradorId })
     } catch (e) { console.warn('[solicitudes-retiro] no se pudo linkear cliente_id:', e) }
   }
 

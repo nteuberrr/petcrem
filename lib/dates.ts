@@ -133,6 +133,23 @@ export function formatDate(dateStr: string | Date | null | undefined): string {
   return `${dd}-${mm}-${yyyy}`
 }
 
+/**
+ * Para mostrar con el día de la semana: "jueves 30-07-2026".
+ *
+ * Existe por el agente de WhatsApp: cuando una herramienta le devolvía solo
+ * "30-07-2026", el modelo AGREGABA el día de la semana de memoria y se
+ * equivocaba (le dijimos "miércoles 30" a una clienta siendo jueves). Toda
+ * fecha que el agente vaya a repetirle al cliente debe salir de acá, con el día
+ * ya resuelto por código.
+ */
+export function formatDateConDia(dateStr: string | Date | null | undefined): string {
+  const base = formatDate(dateStr)
+  if (!base) return ''
+  const d = parse(dateStr)!
+  const dia = new Intl.DateTimeFormat('es-CL', { weekday: 'long' }).format(d)
+  return `${dia} ${base}`
+}
+
 /** Para mostrar: "15-01-2025 14:30" */
 export function formatDateTime(dateStr: string | Date | null | undefined): string {
   const d = parse(dateStr)

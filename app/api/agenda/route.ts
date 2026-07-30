@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { listarAgenda, listarBloqueos } from '@/lib/agenda'
+import { listarAgenda, listarBloqueos, conflictosEnAgenda, describirConflictos } from '@/lib/agenda'
 import { getSheetData, updateByIdIf } from '@/lib/datastore'
+import { sincronizarEutanasiaDeFicha } from '@/lib/eutanasia-sync'
+import { avisarCambioDeRetiro } from '@/lib/aviso-cambio-retiro'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,13 +61,48 @@ export async function PATCH(req: NextRequest) {
     const sol = rows.find(r => String(r.id) === solicitudId)
     if (!sol) return NextResponse.json({ error: 'No encontramos ese retiro en la agenda.' }, { status: 404 })
 
+    // Fecha de referencia: la de la ficha si la tiene (manda sobre la solicitud).
+    const ficha = sol.cliente_id
+      ? (await getSheetData('clientes')).find(c => String(c.id) === String(sol.cliente_id))
+      : undefined
+    const fechaRef = String(ficha?.fecha_retiro || sol.fecha_retiro || '')
+    const horaAntes = String(ficha?.hora_retiro || sol.hora_retiro || '')
+
+    // Mover la hora acá no validaba nada: se podía dejar un retiro pegado a otro
+    // y el chofer se enteraba en la ruta. Se avisa y se deja decidir (`forzar`).
+    if (!body.forzar) {
+      const choques = await conflictosEnAgenda(fechaRef, hora, rawId)
+      if (choques.length > 0) {
+        return NextResponse.json({
+          error: `Esa hora choca con ${describirConflictos(choques)} (dejamos 30 min antes y 45 después).`,
+          conflicto: true,
+        }, { status: 409 })
+      }
+    }
+
     // Update parcial (solo hora_retiro): sin efectos secundarios de la ficha.
     const okSol = await updateByIdIf('solicitudes_retiro', solicitudId, {}, { hora_retiro: hora })
     if (sol.cliente_id) {
       await updateByIdIf('clientes', String(sol.cliente_id), {}, { hora_retiro: hora }).catch(() => {})
+      // Si el retiro es de una eutanasia, su cotización tiene que seguir la hora
+      // (la agenda de eutanasias se lee desde ahí, no desde la ficha).
+      await sincronizarEutanasiaDeFicha(String(sol.cliente_id), { hora_retiro: hora }).catch(() => '')
     }
     if (!okSol) return NextResponse.json({ error: 'No se pudo actualizar la hora.' }, { status: 500 })
-    return NextResponse.json({ ok: true, hora })
+
+    // Aviso al tutor / veterinario, solo si quien mueve la hora lo pide.
+    let aviso: { enviado: boolean; via?: string; motivo?: string } | undefined
+    if (body.avisar) {
+      aviso = await avisarCambioDeRetiro(
+        { ...(ficha ?? {}), nombre_mascota: String(ficha?.nombre_mascota || sol.nombre_mascota || ''),
+          nombre_tutor: String(ficha?.nombre_tutor || sol.cliente_nombre || ''),
+          telefono: String(ficha?.telefono || sol.cliente_wa_id || ''),
+          veterinaria_id: String(ficha?.veterinaria_id || sol.veterinaria_id || ''),
+          fecha_retiro: fechaRef, hora_retiro: hora },
+        { fecha: fechaRef, hora: horaAntes },
+      )
+    }
+    return NextResponse.json({ ok: true, hora, ...(aviso ? { aviso } : {}) })
   } catch (e) {
     console.error('[agenda PATCH]', e)
     return NextResponse.json({ error: 'No se pudo actualizar la hora.' }, { status: 500 })

@@ -88,9 +88,11 @@ async function autoResponder(conv: Conversacion, contacto: Contacto, miMsgId?: n
         texto = `[el cliente envió ${NOMBRE_TIPO[m.tipo] || 'un archivo'} por el chat]`
       }
       if (!texto) return null
-      return { rol: (m.direccion === 'entrante' ? 'cliente' : 'nosotros') as 'cliente' | 'nosotros', texto }
+      // El ts viaja con el turno: el agendamiento necesita saber si el "hoy" /
+      // "mañana" que dijo el cliente es de HOY o quedó de un día anterior.
+      return { rol: (m.direccion === 'entrante' ? 'cliente' : 'nosotros') as 'cliente' | 'nosotros', texto, ts: m.ts }
     })
-    .filter((x): x is { rol: 'cliente' | 'nosotros'; texto: string } => x !== null)
+    .filter((x): x is { rol: 'cliente' | 'nosotros'; texto: string; ts: string } => x !== null)
   if (historial.length === 0) return
 
   let r

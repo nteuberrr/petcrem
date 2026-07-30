@@ -3,7 +3,7 @@ import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
 import { isWhatsappConfigured, avisarAdminsWhatsapp, enviarTextoWhatsapp } from '@/lib/whatsapp'
 import { formatDate, formatDateForSheet } from '@/lib/dates'
-import { horaRetiroDeEutanasia, fueraDeVentanaRetiro } from '@/lib/agenda'
+import { horaRetiroDeEutanasia, fueraDeVentanaRetiro, conflictosEnAgenda, describirConflictos } from '@/lib/agenda'
 import { esFueraDeHorario } from '@/lib/adicionales-auto'
 import { recargoEutanasiaPara, getRecargoFueraHorario } from '@/lib/eutanasia-precios'
 import { esFeriado, nombreFeriado } from '@/lib/feriados'
@@ -72,6 +72,20 @@ export async function POST(req: NextRequest) {
       } catch (e) { console.warn('[hora-retiro] no se pudo actualizar la ficha:', e) }
     }
 
+    // ¿El retiro que queda agendado CHOCA con otra reserva? Esta hora la fija el
+    // veterinario tras coordinar con la familia, así que NO se rechaza — pero
+    // hasta ahora el choque entraba mudo y la ruta del chofer quedaba imposible
+    // (28-07: dos eutanasias quedaron a 30 min de retiros ya agendados). Se
+    // guarda igual y se le avisa al equipo con nombre y hora del cruce.
+    let alertaChoque = ''
+    try {
+      const choques = await conflictosEnAgenda(c.fecha_servicio, horaRetiro, `e${c.id}`)
+      if (choques.length > 0) {
+        alertaChoque = `\n\n⚠️ *OJO: choca con la agenda* — ${describirConflictos(choques)}. ` +
+          `Dejamos menos de 45 min entre servicios: revisa la ruta del chofer y reordena o avisa.`
+      }
+    } catch (e) { console.warn('[hora-retiro] no se pudo revisar choques de agenda:', e) }
+
     if (isWhatsappConfigured()) {
       try {
         await avisarAdminsWhatsapp(
@@ -81,7 +95,8 @@ export async function POST(req: NextRequest) {
           `Eutanasia: ${formatDate(c.fecha_servicio)} *${hora}*` +
           (horaAnterior && horaAnterior !== hora ? ` (antes ${horaAnterior})` : '') + '\n' +
           `*Retiro agendado a las ${horaRetiro}* (30 min después) · ${c.direccion}, ${c.comuna}` +
-          (fueraDeVentanaRetiro(horaRetiro) ? '\n⚠ El retiro queda fuera de la ventana habitual (hasta las 21:10): coordínalo a mano.' : ''))
+          (fueraDeVentanaRetiro(horaRetiro) ? '\n⚠ El retiro queda fuera de la ventana habitual (hasta las 21:10): coordínalo a mano.' : '') +
+          alertaChoque)
       } catch (e) { console.warn('[hora-retiro] aviso admin falló:', e) }
     }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSheetData, updateById, ensureColumns, deleteRow } from '@/lib/datastore'
+import { getSheetData, updateById, updateByIdIf, ensureColumns, deleteRow } from '@/lib/datastore'
 import { ajustarStock, ajustarStockAdicionales } from '@/lib/stock'
 import { gredaEsperada, aplicarCambioGreda } from '@/lib/greda-stock'
 import { parseDecimal } from '@/lib/numbers'
@@ -18,6 +18,8 @@ import { dispararCobroAdicional, cobrosPendientesPorCliente, sincronizarSaldoPar
 import { excluirIncluidos } from '@/lib/anforas-premium'
 import { emitirBoletaSiCorresponde } from '@/lib/facturacion'
 import { desgloseValorCotizacion, valorEutanasiaPorCliente } from '@/lib/eutanasia-precios'
+import { sincronizarEutanasiaDeFicha } from '@/lib/eutanasia-sync'
+import { avisarCambioDeRetiro } from '@/lib/aviso-cambio-retiro'
 
 export async function GET(
   _req: NextRequest,
@@ -136,6 +138,8 @@ export async function PATCH(
       'boleta_id', 'factura_vet_id',
     ]
     for (const k of CAMPOS_SISTEMA) delete normalizedBody[k]
+    // Banderas de control del request (no son columnas de la ficha).
+    delete normalizedBody.avisar_cambio
     for (const k of ['peso_declarado', 'peso_ingreso']) {
       if (normalizedBody[k] !== undefined && normalizedBody[k] !== '') {
         const n = parseDecimal(normalizedBody[k])
@@ -258,6 +262,27 @@ export async function PATCH(
       }
     }
 
+    // ── El retiro se movió: propagar y avisar ───────────────────────────────
+    // La ficha es la fuente de verdad de la agenda para los RETIROS, pero no
+    // para las eutanasias (esas se leen de la cotización) — si no se propaga, el
+    // calendario se queda con el día viejo. Y hasta ahora un cambio de horario
+    // hecho acá no le llegaba a nadie: el tutor se enteraba cuando llegaba el
+    // chofer. El aviso se manda solo si el caller lo pide (`avisar_cambio`), así
+    // que corregir un dato no dispara mensajes por sorpresa.
+    const fechaAntes = formatDateForSheet(rows[idx].fecha_retiro) || ''
+    const horaAntes = String(rows[idx].hora_retiro || '').trim()
+    const fechaAhora = formatDateForSheet(updated.fecha_retiro as string) || ''
+    const horaAhora = String(updated.hora_retiro || '').trim()
+    const retiroMovido = !!(fechaAhora || horaAhora) && (fechaAhora !== fechaAntes || horaAhora !== horaAntes)
+    let avisoCambio: { enviado: boolean; motivo?: string } | undefined
+    if (retiroMovido) {
+      try { await sincronizarEutanasiaDeFicha(String(id), { fecha_retiro: fechaAhora, hora_retiro: horaAhora }) }
+      catch (e) { console.warn('[clientes PATCH] sync eutanasia:', e) }
+      if (body.avisar_cambio) {
+        avisoCambio = await avisarCambioDeRetiro(updated as Record<string, string>, { fecha: fechaAntes, hora: horaAntes })
+      }
+    }
+
     // Aplicar en Bodega el cambio de greda (devolver la previa / descontar la
     // nueva), recién DESPUÉS del write exitoso de la ficha (best-effort).
     if (gredaNueva !== null && gredaNueva !== gredaPrevia) {
@@ -340,7 +365,7 @@ export async function PATCH(
       if (boleta_id) updated.boleta_id = boleta_id
     }
 
-    return NextResponse.json(updated)
+    return NextResponse.json({ ...updated, ...(avisoCambio ? { aviso_cambio: avisoCambio } : {}) })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
@@ -441,12 +466,88 @@ export async function DELETE(
       }
     }
 
+    // 3b) Sacar el agendamiento de la AGENDA. La agenda (lib/agenda) NO se arma
+    // con las fichas sino con `solicitudes_retiro` + `cotizaciones_eutanasia`:
+    // al eliminar una ficha borrador, el cuadro seguía apareciendo en el
+    // calendario y bloqueando el slot (caso Dharma, 2026-07-29). Al borrar la
+    // ficha cancelamos su solicitud de retiro; la eutanasia ya tomada por un
+    // veterinario NO se toca (hay un tercero comprometido) y se avisa.
+    const aviso = await limpiarAgendaDeFicha(id, cliente)
+
     // 4) Borrar la fila del cliente
     await deleteRow('clientes', idx)
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, ...(aviso ? { aviso } : {}) })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
+}
+
+/**
+ * Deja la AGENDA sin rastro de una ficha que se elimina.
+ *
+ * La agenda del dashboard y el chequeo de slots del bot NO leen `clientes`: se
+ * arman con `solicitudes_retiro` (pendiente/confirmada) y `cotizaciones_eutanasia`.
+ * Por eso, al borrar una ficha borrador, el cuadro seguía en el calendario y el
+ * horario seguía ocupado (el bot no lo ofrecía a nadie más).
+ *
+ *  - Retiro de cremación: la solicitud ligada pasa a 'cancelada' → sale de la agenda.
+ *  - Eutanasia: se cancela solo si TODAVÍA nadie la tomó ('creada'/'enviada'). Si
+ *    ya hay un veterinario asignado, no la tocamos (es un compromiso con un
+ *    tercero) y devolvemos un aviso para que el equipo la cancele desde Servicios.
+ *
+ * Best-effort: si algo falla, la ficha igual se borra (se loguea).
+ */
+async function limpiarAgendaDeFicha(id: string, cliente: Record<string, string>): Promise<string> {
+  const avisos: string[] = []
+  const norm = (s: string) => (s || '').trim().toLowerCase()
+  const tel9 = (cliente.telefono || '').replace(/\D/g, '').slice(-9)
+  const ahora = new Date().toISOString()
+
+  // Retiros de cremación
+  try {
+    const sols = await getSheetData('solicitudes_retiro')
+    const ligadas = sols.filter(s => {
+      if (!['pendiente', 'confirmada'].includes(norm(s.estado))) return false
+      if (String(s.cliente_id || '').trim() === id) return true
+      // Respaldo para solicitudes viejas que quedaron sin `cliente_id`: mismo
+      // teléfono y misma mascota. Acotado a propósito para no cancelar la
+      // solicitud de otra persona.
+      return !String(s.cliente_id || '').trim() &&
+        !!tel9 && (s.cliente_wa_id || '').replace(/\D/g, '').slice(-9) === tel9 &&
+        !!norm(cliente.nombre_mascota) && norm(s.nombre_mascota) === norm(cliente.nombre_mascota)
+    })
+    for (const s of ligadas) {
+      // Condicional sobre el estado: si el equipo la está confirmando en este
+      // mismo momento desde el panel, gana esa operación y no la pisamos.
+      await updateByIdIf('solicitudes_retiro', s.id, { estado: s.estado },
+        { estado: 'cancelada', fecha_resolucion: ahora })
+    }
+  } catch (e) {
+    console.warn('[clientes/delete] no se pudo cancelar la solicitud de retiro:', e)
+  }
+
+  // Eutanasias a domicilio
+  try {
+    const cotis = await getSheetData('cotizaciones_eutanasia')
+    const ligadas = cotis.filter(c => String(c.cliente_id || '').trim() === id)
+    for (const c of ligadas) {
+      const estado = norm(c.estado)
+      if (['creada', 'enviada'].includes(estado)) {
+        await updateByIdIf('cotizaciones_eutanasia', c.id, { estado: c.estado },
+          { estado: 'cancelada', fecha_cancelacion: ahora })
+      } else if (['aceptada', 'confirmada'].includes(estado)) {
+        avisos.push(
+          `La eutanasia N° ${c.id}${c.mascota_nombre ? ` (${c.mascota_nombre})` : ''} sigue agendada` +
+          `${c.vet_nombre_asignado ? ` con ${c.vet_nombre_asignado}` : ''} y continúa en la agenda. ` +
+          `Si también hay que cancelarla, hazlo desde Servicios → Cotizaciones.`
+        )
+      }
+    }
+  } catch (e) {
+    console.warn('[clientes/delete] no se pudo cancelar la cotización de eutanasia:', e)
+  }
+
+  return avisos.join('\n')
 }
 
 type AdicionalItem = { tipo: string; id: string; qty?: number }

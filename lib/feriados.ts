@@ -46,6 +46,38 @@ const FERIADOS: Record<string, string> = {
   '2027-11-01': 'Día de Todos los Santos',
   '2027-12-08': 'Inmaculada Concepción',
   '2027-12-25': 'Navidad',
+  // ── 2028 ──
+  '2028-01-01': 'Año Nuevo',
+  '2028-04-14': 'Viernes Santo',
+  '2028-04-15': 'Sábado Santo',
+  '2028-05-01': 'Día del Trabajo',
+  '2028-05-21': 'Glorias Navales',
+  '2028-06-21': 'Día de los Pueblos Indígenas',
+  '2028-06-26': 'San Pedro y San Pablo',
+  '2028-07-16': 'Virgen del Carmen',
+  '2028-08-15': 'Asunción de la Virgen',
+  '2028-09-18': 'Independencia Nacional',
+  '2028-09-19': 'Glorias del Ejército',
+  '2028-10-09': 'Encuentro de Dos Mundos',
+  '2028-10-31': 'Día de las Iglesias Evangélicas',
+  '2028-11-01': 'Día de Todos los Santos',
+  '2028-12-08': 'Inmaculada Concepción',
+  '2028-12-25': 'Navidad',
+}
+
+/**
+ * Último año cargado en la tabla. Si el sistema pasa de acá, los feriados dejan
+ * de aplicarse en silencio (y con ellos el recargo de fuera de horario), así que
+ * `avisarSiFaltanFeriados` lo grita en los logs para que alguien los cargue.
+ */
+export const ULTIMO_ANIO_FERIADOS = 2028
+
+/** Loguea una advertencia si el año en curso ya no está cubierto por la tabla. */
+export function avisarSiFaltanFeriados(hoyISO: string): void {
+  const anio = parseInt(hoyISO.slice(0, 4), 10)
+  if (Number.isFinite(anio) && anio >= ULTIMO_ANIO_FERIADOS) {
+    console.warn(`[feriados] la tabla llega hasta ${ULTIMO_ANIO_FERIADOS}: carga los feriados de ${anio + 1} en lib/feriados.ts`)
+  }
 }
 
 /** Normaliza a YYYY-MM-DD (toma los primeros 10 chars). */

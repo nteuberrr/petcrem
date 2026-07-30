@@ -331,6 +331,119 @@ export async function enviarClienteVetAsignado(args: ClienteVetAsignadoArgs): Pr
   }
 }
 
+export interface VetCambioFechaArgs {
+  email: string
+  vetNombre: string
+  mascota: string
+  tutor: string
+  direccion: string
+  /** Fecha nueva ya formateada (DD-MM-YYYY). */
+  fecha: string
+  /** Hora nueva HH:MM. */
+  hora: string
+  /** Fecha/hora anterior, ya formateada. */
+  antes: string
+}
+
+/**
+ * Avisa al VETERINARIO asignado que la familia movió la visita. El vet coordinó
+ * la hora con ellos, así que un cambio hecho por el bot tiene que llegarle —
+ * antes solo se enteraba si alguien lo llamaba. Best-effort.
+ */
+export async function enviarVetCambioFechaEutanasia(args: VetCambioFechaArgs): Promise<BienvenidaResult> {
+  const to = args.email
+  if (!to) return { ok: false, estado: 'omitido_sin_resend', to }
+  if (!isResendConfigured()) {
+    console.warn('[eutanasia-mailer] Resend no configurado, salto aviso de cambio a', to)
+    return { ok: false, estado: 'omitido_sin_resend', to }
+  }
+  try {
+    const contacto = await getContacto()
+    const mascota = escapeHtml(args.mascota)
+    const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">Hola${args.vetNombre ? ` <strong>${escapeHtml(args.vetNombre)}</strong>` : ''},</p>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+        La familia de <strong>${mascota}</strong> nos pidió mover la visita que tenías coordinada.
+      </p>
+      <div style="background:${BRAND.cream};border-radius:12px;padding:16px;margin:0 0 16px">
+        <p style="margin:0 0 6px;font-size:14px"><strong>Nueva fecha:</strong> ${escapeHtml(args.fecha)} a las ${escapeHtml(args.hora)} hrs</p>
+        <p style="margin:0 0 6px;font-size:13px;color:#666">Antes: ${escapeHtml(args.antes)}</p>
+        <p style="margin:0;font-size:13px">${escapeHtml(args.tutor)} · ${escapeHtml(args.direccion)}</p>
+      </div>
+      <p style="margin:0;font-size:14px;line-height:1.6">
+        Si ese horario no te acomoda, respóndenos este correo y lo resolvemos con la familia.
+      </p>`
+    const res = await sendEmail({
+      to,
+      subject: `Cambio de horario — ${args.mascota}`,
+      html: renderEmailLayout({ titulo: 'La visita cambió de horario', contexto: CONTEXTO, bodyHtml: cuerpo, contacto }),
+      preview_text: `La visita de ${args.mascota} quedó para el ${args.fecha} a las ${args.hora}.`,
+      tags: [{ name: 'tipo', value: 'eutanasia_vet_cambio_fecha' }],
+      seguimiento: { tipo: 'eutanasia_vet_cambio_fecha', audiencia: 'Veterinario', nombre: args.mascota },
+    })
+    return res.ok
+      ? { ok: true, estado: 'enviado', message_id: res.message_id, to }
+      : { ok: false, estado: 'error', error: res.error, to }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[eutanasia-mailer] EXC aviso cambio de fecha al vet:', msg)
+    return { ok: false, estado: 'error', error: msg, to }
+  }
+}
+
+/**
+ * Le avisa al VETERINARIO que la visita que tenía tomada ya no se hará (la
+ * familia la canceló, la mascota falleció antes, etc.). Cierra el círculo: antes
+ * el vet se quedaba esperando una visita que nadie iba a necesitar. Best-effort.
+ */
+export async function enviarVetEutanasiaCancelada(args: {
+  email: string
+  vetNombre: string
+  mascota: string
+  motivo: string
+  /** true si ANTES le llegó por error el correo del pago de la consulta. */
+  correccion?: boolean
+}): Promise<BienvenidaResult> {
+  const to = args.email
+  if (!to) return { ok: false, estado: 'omitido_sin_resend', to }
+  if (!isResendConfigured()) return { ok: false, estado: 'omitido_sin_resend', to }
+  try {
+    const contacto = await getContacto()
+    const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">Hola${args.vetNombre ? ` <strong>${escapeHtml(args.vetNombre)}</strong>` : ''},</p>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+        Te avisamos que el servicio que habías tomado por <strong>${escapeHtml(args.mascota)}</strong> quedó <strong>cancelado</strong> y no se realizará.
+      </p>
+      <div style="background:${BRAND.cream};border-radius:12px;padding:16px;margin:0 0 16px;font-size:14px">
+        ${escapeHtml(args.motivo)}
+      </div>
+      ${args.correccion ? `
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+        Te habíamos enviado antes un correo sobre el pago de la consulta: <strong>por favor desestímalo</strong>, fue un error nuestro.
+        Como el servicio se canceló y no alcanzaste a asistir, no corresponde ese pago.
+      </p>` : ''}
+      <p style="margin:0;font-size:14px;line-height:1.6">
+        Gracias por tu disposición y por responder tan rápido. Esto no afecta en nada tu participación en la red:
+        <strong>seguiremos enviándote por correo las próximas solicitudes</strong> de tu zona.
+      </p>`
+    const res = await sendEmail({
+      to,
+      subject: `Servicio cancelado — ${args.mascota}`,
+      html: renderEmailLayout({ titulo: 'El servicio fue cancelado', contexto: CONTEXTO, bodyHtml: cuerpo, contacto }),
+      preview_text: `El servicio de ${args.mascota} quedó cancelado.`,
+      tags: [{ name: 'tipo', value: 'eutanasia_vet_cancelada' }],
+      seguimiento: { tipo: 'eutanasia_vet_cancelada', audiencia: 'Veterinario', nombre: args.mascota },
+    })
+    return res.ok
+      ? { ok: true, estado: 'enviado', message_id: res.message_id, to }
+      : { ok: false, estado: 'error', error: res.error, to }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[eutanasia-mailer] EXC aviso cancelación al vet:', msg)
+    return { ok: false, estado: 'error', error: msg, to }
+  }
+}
+
 export function renderClienteVetAsignado(args: ClienteVetAsignadoArgs, contacto: Contacto): string {
   const mascota = escapeHtml(args.mascotaNombre)
   const telLimpio = (args.vetTelefono || '').replace(/\D/g, '').slice(-9)

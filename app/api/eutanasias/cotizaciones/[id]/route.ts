@@ -3,10 +3,11 @@ import { getSheetData, updateById, deleteRow } from '@/lib/datastore'
 import { sesionConAcceso } from '@/lib/permisos-server'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { parsePeso } from '@/lib/numbers'
-import { enviarCoordinarConFamilia, enviarClienteVetAsignado } from '@/lib/eutanasia-mailer'
+import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarVetEutanasiaCancelada } from '@/lib/eutanasia-mailer'
 import { formatDate } from '@/lib/dates'
 import { crearClienteBorrador } from '@/lib/cliente-borrador'
 import { camposResultado, efectosResultado, esResultado } from '@/lib/eutanasia-resultado'
+import { sincronizarFichaDeEutanasia, horaRetiroDeEutanasia } from '@/lib/eutanasia-sync'
 
 const SHEET = 'cotizaciones_eutanasia'
 
@@ -110,6 +111,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     if (partial.estado === 'cancelada' && !rows[idx].fecha_cancelacion) {
       partial.fecha_cancelacion = new Date().toISOString()
+      // Cancelar NO genera pago al veterinario ni cobro al tutor: si la
+      // cotización venía de un cierre con resultado, se limpian esos campos para
+      // que no quede un pago fantasma en la lista de pendientes.
+      partial.estado_pago = ''
+      partial.fecha_realizacion = ''
+      partial.consulta_vet_snapshot = ''
     }
     // Al marcar pago_confirmado sellamos fecha_pago si no estaba.
     if (partial.estado_pago === 'pago_confirmado' && !rows[idx].fecha_pago) {
@@ -175,8 +182,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
+    // Si cambió la HORA del procedimiento, la hora del retiro del crematorio la
+    // sigue (procedimiento + 30 min) — pero solo si el vet ya la había informado:
+    // mientras esté en blanco, la agenda muestra la hora del servicio a propósito.
+    if (partial.hora_servicio && partial.hora_servicio !== rows[idx].hora_servicio && rows[idx].hora_retiro_crematorio) {
+      partial.hora_retiro_crematorio = horaRetiroDeEutanasia(partial.hora_servicio) || partial.hora_servicio
+    }
+
     const updated = { ...rows[idx], ...partial }
     await updateById(SHEET, id, updated)
+
+    // La ficha de cremación de esta eutanasia tiene que quedar el MISMO día/hora:
+    // la agenda lee la cotización y el resto del sistema lee la ficha, así que si
+    // se separan el calendario muestra una cosa y el chofer otra (caso Mila, 30-07).
+    if (partial.fecha_servicio || partial.hora_servicio || partial.hora_retiro_crematorio) {
+      await sincronizarFichaDeEutanasia(updated)
+    }
 
     // ── Efectos de correo (best-effort, tras persistir) ──────────────────────
     const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
@@ -204,6 +225,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // guardado contra reenvíos (solo si el estado cambió).
     if (esResultado(partial.estado)) {
       await efectosResultado(updated, rows[idx].estado || '')
+    }
+
+    // Cancelar desde el panel tampoco le avisaba al veterinario que tenía la
+    // visita tomada: se quedaba esperando. Se manda el correo de servicio
+    // cancelado (y si venía de un cierre con resultado, se aclara que el correo
+    // del pago de la consulta queda sin efecto).
+    if (partial.estado === 'cancelada' && rows[idx].estado !== 'cancelada' && updated.vet_email_asignado) {
+      try {
+        await enviarVetEutanasiaCancelada({
+          email: updated.vet_email_asignado,
+          vetNombre: updated.vet_nombre_asignado || '',
+          mascota: updated.mascota_nombre || '',
+          motivo: 'El servicio fue cancelado y no se realizará.',
+          correccion: rows[idx].estado === 'no_realizada',
+        })
+      } catch (e) { console.warn('[cotizaciones PATCH] aviso de cancelación al vet falló:', e) }
     }
 
     return NextResponse.json({ ...updated, aviso: avisoToggle })

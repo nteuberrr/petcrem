@@ -35,6 +35,9 @@ export interface VetCorreoArgs {
   fecha?: string
   /** Hora HH:MM (confirmación de retiro). */
   hora?: string
+  /** Si el retiro se MOVIÓ: fecha/hora anterior ya formateada ("30-07-2026 a las 18:00").
+   *  Cambia el correo de "agendamos" a "reprogramamos". */
+  reprogramado?: string
 }
 
 /** Saludo B2B: "Hola Dra. X," / "Hola equipo de Clínica," / "Hola,". */
@@ -145,20 +148,23 @@ export async function enviarBienvenidaConvenioVet(args: BienvenidaConvenioArgs):
 export function buildRetiroConfirmadoVet(args: VetCorreoArgs, contacto: Contacto): SendOpts {
   const mascota = escapeHtml(args.nombreMascota)
   const cuando = args.fecha ? ` para el <strong>${escapeHtml(args.fecha)}</strong>${args.hora ? ` a las <strong>${escapeHtml(args.hora)}</strong>` : ''}` : ''
+  const movido = (args.reprogramado || '').trim()
   const cuerpo = `
       <p style="margin:0 0 14px;font-size:15px">${saludoVet(args)}</p>
       <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
-        Confirmamos que agendamos el retiro de <strong>${mascota}</strong>${cuando}.
+        ${movido
+          ? `Reprogramamos el retiro de <strong>${mascota}</strong>${cuando}. Antes estaba agendado para el ${escapeHtml(movido)}.`
+          : `Confirmamos que agendamos el retiro de <strong>${mascota}</strong>${cuando}.`}
         Pasaremos a retirarla en nuestro vehículo habilitado y la cuidaremos con el respeto que corresponde.
       </p>
       <p style="margin:0;font-size:14px;line-height:1.6">
-        Te mantendremos al tanto en cada etapa del proceso. Gracias por tu preferencia y por confiar en nosotros.
+        ${movido ? 'Si ese horario no les acomoda, respondan este correo y lo coordinamos. ' : ''}Te mantendremos al tanto en cada etapa del proceso. Gracias por tu preferencia y por confiar en nosotros.
       </p>`
   return {
     to: args.email,
-    subject: `Retiro agendado — ${args.nombreMascota}`,
-    html: renderEmailLayout({ titulo: 'Retiro agendado', bodyHtml: cuerpo, contacto, contexto: 'Convenio veterinarios' }),
-    preview_text: `Agendamos el retiro de ${args.nombreMascota}.`,
+    subject: movido ? `Retiro reprogramado — ${args.nombreMascota}` : `Retiro agendado — ${args.nombreMascota}`,
+    html: renderEmailLayout({ titulo: movido ? 'Retiro reprogramado' : 'Retiro agendado', bodyHtml: cuerpo, contacto, contexto: 'Convenio veterinarios' }),
+    preview_text: movido ? `Movimos el retiro de ${args.nombreMascota}.` : `Agendamos el retiro de ${args.nombreMascota}.`,
     tags: [{ name: 'tipo', value: 'vet_cremacion_retiro' }],
     seguimiento: { tipo: 'vet_cremacion_retiro', audiencia: 'Veterinario', nombre: args.nombreMascota },
   }

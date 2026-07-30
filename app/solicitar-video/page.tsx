@@ -70,9 +70,9 @@ export default function SolicitarVideoPage() {
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
           <div>
             <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>🐾 Crematorio Alma Animal</p>
-            <h1 className="text-2xl sm:text-3xl font-bold mt-2">Video del proceso</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold mt-2">Video del ingreso</h1>
             <p className="text-base mt-3 opacity-95">
-              Solicita el video del proceso de cremación de tu mascota.
+              Solicita el video del momento en que tu mascota ingresa al horno, con su etiqueta identificadora a la vista.
             </p>
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -103,7 +103,7 @@ export default function SolicitarVideoPage() {
           <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center">
             <div className="text-5xl mb-3">🎥</div>
             <p className="text-base text-gray-800">
-              Registramos que quieres el video del proceso de <strong>{mascota}</strong>. Te lo haremos llegar como parte del servicio.
+              Registramos que quieres el video del ingreso de <strong>{mascota}</strong>. Te lo haremos llegar como parte del servicio.
             </p>
             <p className="text-sm text-gray-500 mt-3">Gracias por confiar en nosotros.</p>
           </div>
@@ -112,10 +112,10 @@ export default function SolicitarVideoPage() {
         {estado === 'ok' && !confirmado && (
           <div className="bg-white rounded-xl shadow-md border border-gray-300 p-5 sm:p-6 space-y-5 text-center">
             <p className="text-base text-gray-800">
-              ¿Quieres recibir el <strong>video del proceso</strong> de <strong>{mascota}</strong>?
+              ¿Quieres recibir el <strong>video del ingreso</strong> de <strong>{mascota}</strong>?
             </p>
             <p className="text-sm text-gray-500">
-              Confírmalo aquí y lo prepararemos como parte de su servicio.
+              Es la grabación del momento en que ingresa al horno, junto a la etiqueta identificadora que llenamos al retirarla. Confírmalo aquí y lo prepararemos como parte de su servicio.
             </p>
 
             {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">{error}</p>}

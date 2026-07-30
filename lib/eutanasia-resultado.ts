@@ -10,9 +10,12 @@
  *    seguido que el veterinario no marca su enlace del correo y el caso queda
  *    trabado: nadie puede cerrar la ficha ni el pago).
  */
-import { getSheetData, updateById, deleteRow } from './datastore'
+import { getSheetData, updateById, deleteRow, appendRow, getNextId } from './datastore'
 import { getConsultaEutanasia } from './eutanasia-precios'
-import { enviarClienteAgradecimientoEutanasia, enviarMailNoRealizada } from './eutanasia-mailer'
+import { enviarClienteAgradecimientoEutanasia, enviarMailNoRealizada, enviarVetEutanasiaCancelada } from './eutanasia-mailer'
+import { formatDateForSheet, formatHora, fechaChileISO, formatDate } from './dates'
+import { retiroPendiente, ahoraEnChile } from './ficha-retiro'
+import { avisarAdminsWhatsapp } from './whatsapp'
 
 const SHEET = 'cotizaciones_eutanasia'
 
@@ -83,6 +86,116 @@ export async function efectosResultado(updated: Record<string, string>, estadoAn
       } catch (e) { console.warn('[eutanasia-resultado] correo no-realizada al vet falló:', e) }
     }
   }
+}
+
+/**
+ * SERVICIO CANCELADO: la eutanasia no se hace y NO se cobra a nadie, pero la
+ * FICHA de cremación sigue viva.
+ *
+ * Caso real (Mila, 30-07-2026): estaba todo coordinado con la veterinaria y la
+ * mascota falleció antes de la visita. La familia igual necesita la cremación
+ * —de hecho el chofer ya la retiró y la ficha quedó ingresada con un pago
+ * parcial por ese servicio—, pero la eutanasia no corre.
+ *
+ * Con las dos salidas que existían no se podía cerrar bien:
+ *  · "No realizada" BORRA la ficha de cremación (asume que la mascota sigue
+ *    viva) y además le genera el pago fijo de la consulta a la veterinaria;
+ *  · "Cancelada" desde el panel conserva la ficha, pero saca el bloque de la
+ *    agenda — y la ficha sola no aparece en el calendario (la agenda lee
+ *    `solicitudes_retiro`), así que un retiro AÚN PENDIENTE se volvía invisible.
+ *
+ * Esto cierra la eutanasia como 'cancelada' (sin pago al vet ni cobro al tutor,
+ * ver cobroClienteCon), deja la ficha intacta y —solo si el retiro todavía NO se
+ * ha hecho— crea su solicitud de retiro CONFIRMADA ligada a la misma ficha, para
+ * que el chofer lo siga viendo en la agenda. Si la cremación también se cae, la
+ * ficha se elimina desde /clientes como cualquier otra (y eso ya cancela su
+ * solicitud, ver el DELETE de clientes).
+ */
+export async function cancelarEutanasiaConservandoFicha(
+  id: string,
+  opts: { motivo?: string } = {},
+): Promise<{ ok: true; cotizacion: Record<string, string>; solicitudId: string } | { ok: false; error: string; status: number }> {
+  const rows = await getSheetData(SHEET)
+  const row = rows.find(r => String(r.id) === String(id))
+  if (!row) return { ok: false, error: 'No encontrado', status: 404 }
+  if (['realizada', 'no_realizada', 'cancelada'].includes(row.estado || '')) {
+    return { ok: false, error: `Esta eutanasia ya está cerrada (${row.estado}).`, status: 400 }
+  }
+
+  const ahora = new Date().toISOString()
+  const motivo = (opts.motivo || 'Servicio cancelado: la eutanasia no se realizó.').trim()
+  const partial: Record<string, string> = {
+    estado: 'cancelada',
+    fecha_cancelacion: ahora,
+    notas: `${row.notas ? `${row.notas} · ` : ''}${motivo}`,
+  }
+  const updated = { ...row, ...partial }
+  await updateById(SHEET, String(id), updated)
+
+  // ¿Queda un retiro por hacer? Si la mascota todavía no se retira, el bloque
+  // tiene que seguir en la agenda: se convierte en un retiro de cremación normal
+  // ligado a la MISMA ficha (nunca una segunda). Si el retiro ya se hizo, no hay
+  // nada que agendar.
+  let solicitudId = ''
+  const clienteId = String(row.cliente_id || '').trim()
+  if (clienteId) {
+    const [clientes, solicitudes] = await Promise.all([
+      getSheetData('clientes').catch(() => [] as Record<string, string>[]),
+      getSheetData('solicitudes_retiro').catch(() => [] as Record<string, string>[]),
+    ])
+    const ficha = clientes.find(c => String(c.id) === clienteId)
+    const yaTiene = solicitudes.find(s =>
+      String(s.cliente_id || '') === clienteId && ['pendiente', 'confirmada'].includes(s.estado || ''))
+    const pendiente = !!ficha && retiroPendiente(ficha, ahoraEnChile())
+    if (ficha && !yaTiene && pendiente) {
+      const fecha = formatDateForSheet(ficha.fecha_retiro) || formatDateForSheet(row.fecha_servicio) || ''
+      const hora = formatHora(ficha.hora_retiro) || formatHora(row.hora_retiro_crematorio) || ''
+      solicitudId = String(await getNextId('solicitudes_retiro'))
+      await appendRow('solicitudes_retiro', {
+        id: solicitudId,
+        cliente_wa_id: (row.cliente_wa_id || row.cliente_telefono || '').replace(/\D/g, ''),
+        cliente_nombre: row.cliente_nombre || '',
+        nombre_mascota: row.mascota_nombre || '',
+        peso: row.peso || '',
+        direccion: row.direccion || '',
+        comuna: row.comuna || '',
+        fecha_retiro: fecha,
+        hora_retiro: hora,
+        tipo_servicio: row.tipo_servicio_cremacion || '',
+        estado: 'confirmada',
+        fecha_creacion: fechaChileISO(),
+        fecha_resolucion: ahora,
+        origen: 'eutanasia_cancelada',
+        cliente_id: clienteId,
+      })
+    }
+  }
+
+  // Cerrar el círculo con la veterinaria que tenía la visita tomada: se quedaba
+  // esperando una visita que ya no era.
+  if (row.vet_email_asignado) {
+    try {
+      await enviarVetEutanasiaCancelada({
+        email: row.vet_email_asignado,
+        vetNombre: row.vet_nombre_asignado || '',
+        mascota: row.mascota_nombre || '',
+        motivo,
+      })
+    } catch (e) { console.warn('[eutanasia-resultado] aviso de cancelación al vet falló:', e) }
+  }
+
+  try {
+    await avisarAdminsWhatsapp(
+      `🚫 *Eutanasia cancelada* (N° ${id})\n\n` +
+      `Mascota: ${row.mascota_nombre}\nTutor: ${row.cliente_nombre}\n` +
+      `${motivo}\n` +
+      `Sin cobro de eutanasia${row.vet_nombre_asignado ? ` (le avisamos a ${row.vet_nombre_asignado})` : ''}.\n` +
+      (solicitudId
+        ? `La ficha sigue abierta y el retiro quedó agendado (N° ${solicitudId}, ${formatDate(row.fecha_servicio)}).`
+        : 'La ficha de cremación sigue abierta.'))
+  } catch (e) { console.warn('[eutanasia-resultado] aviso al equipo falló:', e) }
+
+  return { ok: true, cotizacion: updated, solicitudId }
 }
 
 /**

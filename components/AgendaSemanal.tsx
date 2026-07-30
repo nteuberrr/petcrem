@@ -235,18 +235,34 @@ export default function AgendaSemanal() {
     }
   }
 
-  async function guardarHora() {
+  async function guardarHora(forzar = false) {
     if (!editando) return
     const hora = nuevaHora.trim()
     if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(hora)) { setErrorEdit('Indica una hora válida (HH:MM).'); return }
     setErrorEdit('')
     try {
+      // Mover la hora es un cambio que el cliente tiene que saber: se pregunta
+      // antes de mandarle nada (nunca se avisa por sorpresa al corregir un dato).
+      const avisar = window.confirm(
+        `¿Le avisamos del cambio de horario a ${editando.mascota || 'la mascota'}?\n\n` +
+        'Aceptar: le mandamos el mensaje con la hora nueva.\nCancelar: solo cambio la hora.',
+      )
       const r = await fetch('/api/agenda', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editando.id, hora }),
+        body: JSON.stringify({ id: editando.id, hora, avisar, forzar }),
       })
       const d = await r.json().catch(() => ({}))
+      // 409 = choca con otra reserva; se muestra y se deja decidir.
+      if (r.status === 409) {
+        if (window.confirm(`${d?.error || 'Esa hora choca con otra reserva.'}\n\n¿La dejamos igual?`)) {
+          await guardarHora(true)
+        }
+        return
+      }
       if (!r.ok) { setErrorEdit(d?.error || 'No se pudo actualizar la hora.'); return }
+      if (avisar && d?.aviso && !d.aviso.enviado) {
+        alert(`La hora quedó cambiada, pero NO se pudo avisar: ${d.aviso.motivo || 'error desconocido'}. Avísale tú.`)
+      }
       setEditando(null)
       await cargar()
     } catch { setErrorEdit('Error de red. Intenta de nuevo.') }
@@ -557,7 +573,7 @@ export default function AgendaSemanal() {
               <div className="flex gap-2">
                 <button onClick={() => setEditando(null)}
                   className="px-4 py-2 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
-                <button onClick={() => ejecutar(guardarHora)} disabled={procesando}
+                <button onClick={() => ejecutar(() => guardarHora())} disabled={procesando}
                   className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold disabled:opacity-50">
                   {procesando ? 'Guardando…' : 'Guardar hora'}
                 </button>

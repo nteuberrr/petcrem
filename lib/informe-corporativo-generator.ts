@@ -270,7 +270,7 @@ export async function generarInformeCorporativoPdf(): Promise<Buffer> {
   defItem('2. Retiro', 'Retiramos a la mascota a domicilio o desde la clínica veterinaria en un vehículo habilitado, habitualmente en menos de 3 horas.')
   defItem('3. Refrigeración', 'La mascota ingresa a nuestra cámara de refrigeración hasta el momento de la cremación, preservando las condiciones sanitarias.')
   defItem('4. Cremación trazable', 'Se realiza en horno certificado, con un código de seguimiento único asignado a cada caso.')
-  defItem('5. Entrega', 'Entregamos las cenizas junto al certificado digital de cremación en un máximo de 4 días hábiles. Disponemos de video del proceso para quien lo solicite.')
+  defItem('5. Entrega', 'Entregamos las cenizas junto al certificado digital de cremación en un máximo de 4 días hábiles. Disponemos de video del ingreso de la mascota al horno para quien lo solicite.')
 
   h1('Trazabilidad, certificación y control')
   p('La trazabilidad es uno de los pilares de nuestro servicio y un diferenciador clave frente a alternativas que externalizan la operación.')

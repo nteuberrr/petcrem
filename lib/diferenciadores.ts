@@ -16,6 +16,7 @@ export const DIFERENCIADORES = `VALOR AGREGADO Y DIFERENCIADORES (oficiales — 
 - Abiertos de lunes a domingo, de 09:00 a 22:00 h.
 - Instalaciones propias y certificadas, con horno certificado; no externalizamos ninguna etapa.
 - Trazabilidad total durante todo el proceso, con código de seguimiento y certificado de cremación.
+- Video del INGRESO de la mascota al horno (a solicitud del tutor): se ve a la mascota junto a la etiqueta identificadora que llenamos al retirarla, para que tenga la certeza de que es la suya.
 - Entrega de cenizas y certificado en 4 días hábiles.
 - Servicio Express (OPCIONAL, con un adicional): entrega en **48 horas hábiles** (= 2 días hábiles) en lugar de 4 días, para quien necesita las cenizas antes. Comunícalo con esas palabras: "te entregamos las cenizas de tu mascota en 48 horas hábiles". Es un extra que se ofrece SI AMERITA (cliente con apuro / que pregunta por una entrega más rápida), no el plazo por defecto.
 - Retiro directo a domicilio o desde la clínica, habitualmente en menos de 3 horas.
@@ -31,6 +32,7 @@ PARA CLÍNICAS / VETERINARIOS (B2B) — cuando la pieza o el mensaje es para cl�
 PRECISIONES (para no cometer errores de marca):
 - Lo CERTIFICADO es el HORNO. La cámara es de REFRIGERACIÓN: NO la llames "cámara certificada" ni "sala certificada".
 - NO digas "cada cremación es individual": "Cremación Individual" es solo el nombre de una de las modalidades.
+- El VIDEO es del INGRESO de la mascota al horno (con su etiqueta identificadora a la vista), NO una grabación de la cremación completa ni "del proceso" entero. Llamalo "video del ingreso" y nunca niegues que grabamos el ingreso: es precisamente lo que grabamos.
 - Plazos oficiales que SÍ se pueden afirmar: entrega en 4 días hábiles (o 48 horas hábiles con el Servicio Express opcional); retiro habitualmente en menos de 3 horas. No afirmes otros plazos.`
 
 /**

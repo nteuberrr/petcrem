@@ -2,6 +2,7 @@ import { getSheetData, appendRow, updateByIdIf, getNextId } from './datastore'
 import { fechaChileISO, horaChile } from './dates'
 import { sendEmail, isResendConfigured } from './resend-mailer'
 import { construirAvisoPagosPendientes, type AvisoRenderizado } from './aviso-pagos-pendientes'
+import { construirAvisoAgendamientos } from './aviso-agendamientos'
 
 /**
  * AVISOS AUTOMÁTICOS (Configuración Avanzada → Avisos).
@@ -35,6 +36,12 @@ export const AVISOS: AvisoMeta[] = [
     titulo: 'Pagos pendientes',
     descripcion: 'Fichas con pago pendiente o parcial, separadas en tutores y convenio. Muestra el día, los datos del tutor, el detalle del cobro y la nota de la ficha.',
     construir: construirAvisoPagosPendientes,
+  },
+  {
+    clave: 'agendamientos_sin_resolver',
+    titulo: 'Agendamientos sin resolver',
+    descripcion: 'Solicitudes de retiro que nadie confirmó ni rechazó (bloquean el horario y dejan al cliente esperando), eutanasias que ningún veterinario tomó todavía, y el listado de lo confirmado para hoy y mañana.',
+    construir: construirAvisoAgendamientos,
   },
 ]
 

@@ -1,12 +1,14 @@
-import { ensureSheet, ensureColumns, appendRow, getNextId, getSheetData, updateById, updateByIdIf } from './datastore'
+import { ensureSheet, ensureColumns, appendRow, getNextId, getSheetData, updateById, updateByIdIf, deleteById } from './datastore'
 import { enviarBotonesWhatsapp, destinatariosRetiros, avisarAdminsWhatsapp, enviarMediaWhatsapp, type BotonWa, type EnvioResult } from './whatsapp'
 import { crearRelayPendiente } from './relay-retiro'
 import { geocodeAddress, coordEnChile } from './google-maps'
-import { formatDate, formatDateForSheet, todayISO } from './dates'
+import { formatDate, formatDateConDia, formatDateForSheet, fechaChileISO } from './dates'
 import { agregarDiasHabiles, isoFecha, tieneExpress, EXPRESS_DIAS } from './dias-habiles'
 import { fmtPrecio } from './format'
 import { precioClienteEutanasia, getConsultaEutanasia, getRecargoFueraHorario, recargoEutanasiaPara } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
+import { sincronizarFichaDeEutanasia, horaRetiroDeEutanasia } from './eutanasia-sync'
+import { enviarVetCambioFechaEutanasia } from './eutanasia-mailer'
 import { evaluarSlotRetiro, evaluarHoraEutanasia, horaLibreEnFranja, ahoraChile } from './agenda'
 import { yaFueRetirada } from './ficha-retiro'
 import { capitalizarNombre } from './nombres'
@@ -20,7 +22,7 @@ import { ajustarStockAdicionales } from './stock'
 import { generarCatalogoPdf } from './catalogo-generator'
 import { uploadToR2 } from './cloudflare-r2'
 import { upsertContacto, getOrCreateConversacion, insertarMensaje } from './mensajes'
-import type { HandlersAgente, AccionRetiro, AccionReprogramar, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionCotizarCremacion, AccionConsultaEta, AccionConsultaEstado, AccionAgregarAdicional, CtxAgente } from './agente-mensajes'
+import type { HandlersAgente, AccionRetiro, AccionReprogramar, AccionRetiroVet, AccionEutanasia, AccionCotizarEutanasia, AccionCotizarCremacion, AccionConsultaEta, AccionConsultaEstado, AccionAgregarAdicional, AccionCancelar, CtxAgente } from './agente-mensajes'
 
 /**
  * Valida que una dirección + comuna exista y caiga dentro de Chile (geocoding).
@@ -101,6 +103,48 @@ async function anularSiDuplicada(
 /** Últimos 9 dígitos de un número, para comparar teléfonos con formatos distintos. */
 const tel9de = (n: string) => (n || '').replace(/\D/g, '').slice(-9)
 
+/** Suma días a una fecha ISO (YYYY-MM-DD) sin salirse por la zona horaria. */
+function sumarDiasISO(iso: string, dias: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + dias, 12, 0, 0))
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${dt.getUTCFullYear()}-${p(dt.getUTCMonth() + 1)}-${p(dt.getUTCDate())}`
+}
+
+/**
+ * Freno de mano de la FECHA antes de escribir un agendamiento.
+ *
+ * Caso real (Paulina/Mila, 2026-07-30): la clienta escribió "Hoy, 9:00", el
+ * agente le ofreció por chat "las 09:41 de hoy" y al llamar la herramienta pasó
+ * el 31 — arrastró el "mañana" que ella había escrito la noche anterior. Quedó
+ * agendada para el día siguiente y así se lo confirmó.
+ *
+ * Acá cruzamos la fecha del modelo contra lo que el cliente pidió POR ESCRITO
+ * HOY (ctx.diaPedido). Si no coinciden NO se agenda: se le devuelve la
+ * contradicción al modelo para que la resuelva (y si su fecha era la correcta,
+ * repita la llamada con confirmar_fecha=true). Nunca se corrige en silencio.
+ *
+ * Devuelve el texto a devolverle al modelo, o null si puede seguir.
+ */
+function chequearDiaPedido(fechaRaw: string, ctx: CtxAgente, confirmada?: boolean): string | null {
+  const fecha = formatDateForSheet(fechaRaw)
+  const hoy = fechaChileISO()
+  // Una fecha pasada nunca es válida, la haya confirmado el modelo o no.
+  if (fecha && fecha < hoy) {
+    return `NO agendes: ${formatDateConDia(fecha)} ya pasó (hoy es ${formatDateConDia(hoy)}). ` +
+      `Revisa el CALENDARIO, acuerda la fecha con el cliente y vuelve a llamar la herramienta con la fecha correcta.`
+  }
+  if (confirmada || !ctx.diaPedido || !fecha) return null
+  const esperada = ctx.diaPedido === 'hoy' ? hoy : sumarDiasISO(hoy, 1)
+  if (fecha === esperada) return null
+  const palabra = ctx.diaPedido === 'hoy' ? 'hoy' : 'mañana'
+  return `ALTO — la FECHA no cuadra, no agendé nada. En sus mensajes de hoy el cliente pidió "${palabra}", que es ${formatDateConDia(esperada)}, ` +
+    `pero pasaste ${formatDateConDia(fecha)}. Relee el último mensaje del cliente y resuelve: ` +
+    `si se refería a ${palabra}, vuelve a llamar la herramienta con fecha=${esperada}; ` +
+    `si de verdad acordaron ${formatDateConDia(fecha)}, vuelve a llamarla igual agregando confirmar_fecha=true. ` +
+    `NO le confirmes ninguna fecha al cliente hasta que la herramienta te devuelva el registro hecho.`
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Handlers de las herramientas del agente de WhatsApp (tool-use). El webhook los
 // inyecta en generarRespuesta(); solo se le ofrecen al modelo las acciones que
@@ -123,6 +167,8 @@ const COLS_RETIRO = [
 async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string> {
   a.nombre_tutor = capitalizarNombre(a.nombre_tutor)
   a.nombre_mascota = capitalizarNombre(a.nombre_mascota)
+  const dudaFecha = chequearDiaPedido(a.fecha, ctx, a.confirmar_fecha)
+  if (dudaFecha) return dudaFecha
   if (esComunaNoCubierta(a.comuna)) {
     return `NO registres este retiro: ${a.comuna} está FUERA de nuestra cobertura de retiro a domicilio. Explícaselo al cliente con amabilidad —lamentablemente no llegamos con retiro hasta esa comuna— y ofrécele las alternativas: puede acercar a su mascota a nuestras instalaciones en Recoleta, o lo derivamos al equipo para ver si hay alguna opción. NO agendes.`
   }
@@ -149,8 +195,18 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
   // en proceso. La fuente de verdad es lo VISIBLE en /clientes (ficha "borrador"/
   // por ingresar), no el log interno: así, cuando el equipo la registra o la
   // elimina, el cliente puede volver a pedir.
+  //
+  // El candado compara TAMBIÉN el nombre de la mascota: era solo por teléfono, así
+  // que un tutor con una ficha en proceso no podía agendar el retiro de OTRA
+  // mascota (le respondíamos "ya tienes una solicitud en proceso" y quedaba sin
+  // poder coordinar). Lo que se busca evitar es el duplicado de la MISMA mascota.
+  const mismaMascota = (a: string, b: string) =>
+    normalizaNombre(a) === normalizaNombre(b) || !normalizaNombre(b)
   const clientes = await getSheetData('clientes')
-  const enProceso = clientes.find(c => c.estado === 'borrador' && (c.telefono || '').replace(/\D/g, '').slice(-9) === tel9)
+  const enProceso = clientes.find(c =>
+    c.estado === 'borrador' &&
+    (c.telefono || '').replace(/\D/g, '').slice(-9) === tel9 &&
+    mismaMascota(a.nombre_mascota, c.nombre_mascota || ''))
   if (enProceso) {
     return `Este cliente YA tiene una solicitud de retiro EN PROCESO${enProceso.nombre_mascota ? ` (${enProceso.nombre_mascota})` : ''}, que el equipo está terminando de ingresar. NO registres otra. Dile, cálido y breve, que su solicitud ya está en proceso y que la estamos gestionando; si necesita cambiar algún dato, que nos lo indique.`
   }
@@ -160,7 +216,9 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
   // también bloqueamos si ya hay una solicitud PENDIENTE de este mismo cliente.
   const solicitudesPrevias = await getSheetData(SHEET_RETIRO)
   const pendientePrevia = solicitudesPrevias.find(
-    s => s.estado === 'pendiente' && (s.cliente_wa_id || '').replace(/\D/g, '').slice(-9) === tel9
+    s => s.estado === 'pendiente' &&
+      (s.cliente_wa_id || '').replace(/\D/g, '').slice(-9) === tel9 &&
+      mismaMascota(a.nombre_mascota, s.nombre_mascota || '')
   )
   if (pendientePrevia) {
     return `Este cliente YA tiene una solicitud de retiro PENDIENTE de confirmación${pendientePrevia.nombre_mascota ? ` (${pendientePrevia.nombre_mascota})` : ''}. NO registres otra. Dile, cálido y breve, que ya recibimos su solicitud y la estamos confirmando; si necesita cambiar algún dato, que nos lo indique.`
@@ -185,7 +243,7 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
     hora_retiro: a.hora,
     tipo_servicio: a.tipo_servicio ?? '',
     estado: 'pendiente',
-    fecha_creacion: todayISO(),
+    fecha_creacion: fechaChileISO(),
     fecha_resolucion: '',
   })
 
@@ -220,7 +278,7 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
   }
 
   return `Solicitud de retiro registrada (N° ${id}) y enviada al equipo para confirmación. ` +
-    `Confirma al cliente que RECIBIMOS su solicitud para el ${formatDate(a.fecha)} a las ${a.hora} y que le avisaremos por este mismo medio apenas la validemos. ` +
+    `Confirma al cliente que RECIBIMOS su solicitud para el ${formatDateConDia(a.fecha)} a las ${a.hora} y que le avisaremos por este mismo medio apenas la validemos. ` +
     `NO le digas que ya está confirmada.`
 }
 
@@ -239,6 +297,8 @@ async function reprogramarRetiro(a: AccionReprogramar, ctx: CtxAgente): Promise<
   if (!tel9) {
     return 'No pude identificar el WhatsApp del cliente para reprogramar el retiro. Escala a un humano.'
   }
+  const dudaFecha = chequearDiaPedido(a.fecha, ctx, a.confirmar_fecha)
+  if (dudaFecha) return dudaFecha
 
   // Primero se busca el retiro del cliente y RECIÉN DESPUÉS se evalúa la hora
   // nueva, excluyéndolo del cálculo: una reserva no puede bloquearse a sí misma.
@@ -253,6 +313,11 @@ async function reprogramarRetiro(a: AccionReprogramar, ctx: CtxAgente): Promise<
     .sort((x, y) => (parseInt(y.id, 10) || 0) - (parseInt(x.id, 10) || 0))
   const sol = propias[0]
   if (!sol) {
+    // Sin retiro propio: puede ser un cliente de EUTANASIA queriendo mover su
+    // visita. Antes el bot le respondía "no tienes ningún retiro" y el cambio
+    // había que hacerlo a mano.
+    const movida = await reprogramarEutanasia(a, tel9)
+    if (movida) return movida
     return 'Este cliente no tiene ningún retiro pendiente ni confirmado a su nombre para reprogramar. Si quiere agendar uno nuevo, usa la herramienta solicitar_retiro_cremacion en vez de esta.'
   }
 
@@ -282,7 +347,141 @@ async function reprogramarRetiro(a: AccionReprogramar, ctx: CtxAgente): Promise<
     `\nActualiza la ruta/turno del chofer.`
   try { await avisarAdminsWhatsapp(aviso) } catch (e) { console.warn('[agente-acciones] reprogramarRetiro: no se pudo avisar al admin:', e) }
 
-  return `Listo, retiro reprogramado para el ${formatDate(a.fecha)} a las ${a.hora}. Confírmaselo al cliente con calidez y dile que el equipo ya quedó al tanto del cambio.`
+  return `Listo, retiro reprogramado para el ${formatDateConDia(a.fecha)} a las ${a.hora}. Confírmaselo al cliente con calidez y dile que el equipo ya quedó al tanto del cambio.`
+}
+
+/**
+ * Reprograma la EUTANASIA a domicilio del cliente (si tiene una viva). Devuelve
+ * el texto para el modelo, o null si no hay ninguna (para que el caller siga con
+ * su propio mensaje).
+ *
+ * Mueve la cotización —que es lo que lee la agenda— y arrastra la ficha de
+ * cremación. Si ya hay un veterinario asignado, se le avisa por correo: él
+ * coordinó la visita con la familia y no puede enterarse en la puerta.
+ */
+async function reprogramarEutanasia(a: AccionReprogramar, tel9: string): Promise<string | null> {
+  const cotis = await getSheetData('cotizaciones_eutanasia').catch(() => [] as Record<string, string>[])
+  const propia = cotis
+    .filter(c => ['creada', 'enviada', 'aceptada'].includes((c.estado || '').toLowerCase()) &&
+      (c.cliente_wa_id || c.cliente_telefono || '').replace(/\D/g, '').slice(-9) === tel9)
+    .sort((x, y) => (parseInt(y.id, 10) || 0) - (parseInt(x.id, 10) || 0))[0]
+  if (!propia) return null
+
+  const ev = await evaluarHoraEutanasia(a.fecha, a.hora)
+  if (!ev.ok) {
+    const libres = ev.libres.length ? ` Horas libres ese día: ${ev.libres.join(', ')}.` : ''
+    return `NO reprogrames la eutanasia: ${ev.motivo}${libres} Explícaselo al cliente y vuelve a llamar la herramienta con la hora que ELIJA.`
+  }
+
+  const fechaAntes = formatDate(propia.fecha_servicio)
+  const horaAntes = propia.hora_servicio || ''
+  const patch: Record<string, string> = { fecha_servicio: a.fecha, hora_servicio: a.hora }
+  // La hora del retiro del crematorio sigue a la del procedimiento, pero solo si
+  // el vet ya la había informado (si está en blanco, se define cuando coordine).
+  if (propia.hora_retiro_crematorio) patch.hora_retiro_crematorio = horaRetiroDeEutanasia(a.hora) || a.hora
+  await updateByIdIf('cotizaciones_eutanasia', propia.id, {}, patch)
+  await sincronizarFichaDeEutanasia({ ...propia, ...patch })
+
+  // Avisar al vet asignado (correo) y al equipo (WhatsApp).
+  if (propia.vet_email_asignado) {
+    try {
+      await enviarVetCambioFechaEutanasia({
+        email: propia.vet_email_asignado,
+        vetNombre: propia.vet_nombre_asignado || '',
+        mascota: propia.mascota_nombre || '',
+        tutor: propia.cliente_nombre || '',
+        direccion: `${propia.direccion || ''}, ${propia.comuna || ''}`,
+        fecha: formatDate(a.fecha),
+        hora: a.hora,
+        antes: `${fechaAntes}${horaAntes ? ` a las ${horaAntes}` : ''}`,
+      })
+    } catch (e) { console.warn('[agente-acciones] aviso de cambio al vet falló:', e) }
+  }
+  try {
+    await avisarAdminsWhatsapp(
+      `🔁 *Eutanasia reprogramada por el cliente* (N° ${propia.id})\n\n` +
+      `Mascota: ${propia.mascota_nombre}\nTutor: ${propia.cliente_nombre}\n` +
+      `Antes: ${fechaAntes}${horaAntes ? ` a las ${horaAntes}` : ''}\n` +
+      `AHORA: ${formatDate(a.fecha)} a las ${a.hora}\n` +
+      (propia.vet_nombre_asignado ? `Vet asignado: ${propia.vet_nombre_asignado} (le avisamos por correo)` : '⚠ Sin vet asignado todavía'))
+  } catch (e) { console.warn('[agente-acciones] aviso admin eutanasia reprogramada falló:', e) }
+
+  return `Listo, la eutanasia quedó reprogramada para el ${formatDateConDia(a.fecha)} a las ${a.hora}. ` +
+    `Confírmaselo al cliente con calidez${propia.vet_nombre_asignado ? ' y dile que ya le avisamos al veterinario asignado' : ' y dile que el equipo está coordinando al veterinario'}.`
+}
+
+/**
+ * Cancela lo que el cliente tenga agendado: su retiro de cremación o su
+ * eutanasia. Libera el horario de la agenda y avisa al equipo.
+ *
+ * El bot no tenía forma de cancelar: escalaba, y el bloque quedaba tomado hasta
+ * que alguien lo borrara a mano. La ficha BORRADOR ligada se elimina (nació de
+ * ese agendamiento); una ficha ya REGISTRADA no se toca nunca — ahí ya hay una
+ * mascota con nosotros y lo resuelve el equipo.
+ */
+async function cancelarAgendamiento(a: AccionCancelar, ctx: CtxAgente): Promise<string> {
+  const tel9 = (ctx.waId || '').replace(/\D/g, '').slice(-9)
+  if (!tel9) return 'No pude identificar el WhatsApp del cliente para cancelar. Escala a un humano.'
+  const motivo = (a.motivo || '').trim()
+  const ahora = new Date().toISOString()
+
+  const [solicitudes, cotis, clientes] = await Promise.all([
+    getSheetData(SHEET_RETIRO).catch(() => [] as Record<string, string>[]),
+    getSheetData('cotizaciones_eutanasia').catch(() => [] as Record<string, string>[]),
+    getSheetData('clientes').catch(() => [] as Record<string, string>[]),
+  ])
+
+  const sol = solicitudes
+    .filter(s => ['pendiente', 'confirmada'].includes(s.estado || '') && tel9de(s.cliente_wa_id) === tel9)
+    .sort((x, y) => (parseInt(y.id, 10) || 0) - (parseInt(x.id, 10) || 0))[0]
+  const cot = cotis
+    .filter(c => ['creada', 'enviada', 'aceptada'].includes((c.estado || '').toLowerCase()) &&
+      (c.cliente_wa_id || c.cliente_telefono || '').replace(/\D/g, '').slice(-9) === tel9)
+    .sort((x, y) => (parseInt(y.id, 10) || 0) - (parseInt(x.id, 10) || 0))[0]
+
+  if (!sol && !cot) {
+    return 'Este cliente no tiene ningún servicio agendado a su nombre (ni retiro ni eutanasia), así que no hay nada que cancelar. Si insiste en que sí, escala a un humano en vez de inventar.'
+  }
+
+  // Ficha borrador ligada: se elimina, igual que cuando el equipo borra la ficha
+  // desde el panel. Una ficha con código NO se toca.
+  const borrarFichaSiBorrador = async (clienteId: string) => {
+    const cid = String(clienteId || '').trim()
+    if (!cid) return false
+    const ficha = clientes.find(c => String(c.id) === cid)
+    if (!ficha || (ficha.estado || '') !== 'borrador') return false
+    // Por ID, no por índice: entre la lectura y el borrado puede entrar otra ficha.
+    try { await deleteById('clientes', cid); return true } catch (e) {
+      console.warn('[agente-acciones] no se pudo borrar la ficha borrador al cancelar:', e); return false
+    }
+  }
+
+  const detalle: string[] = []
+  let quedaFicha = false
+  if (sol) {
+    await updateByIdIf(SHEET_RETIRO, sol.id, { estado: sol.estado }, { estado: 'cancelada', fecha_resolucion: ahora })
+    const borrada = await borrarFichaSiBorrador(sol.cliente_id)
+    if (sol.cliente_id && !borrada) quedaFicha = true
+    detalle.push(`retiro de ${sol.nombre_mascota || 'la mascota'} (${formatDate(sol.fecha_retiro)} ${sol.hora_retiro})`)
+  }
+  if (cot) {
+    await updateByIdIf('cotizaciones_eutanasia', cot.id, { estado: cot.estado }, { estado: 'cancelada', fecha_cancelacion: ahora })
+    const borrada = await borrarFichaSiBorrador(cot.cliente_id)
+    if (cot.cliente_id && !borrada) quedaFicha = true
+    detalle.push(`eutanasia de ${cot.mascota_nombre || 'la mascota'} (${formatDate(cot.fecha_servicio)} ${cot.hora_servicio})`)
+  }
+
+  try {
+    await avisarAdminsWhatsapp(
+      `🚫 *Cancelación pedida por el cliente*\n\n` +
+      `${detalle.join('\n')}\n` +
+      (motivo ? `Motivo: ${motivo}\n` : '') +
+      `Cliente: +${(ctx.waId || '').replace(/\D/g, '')}\n` +
+      (cot?.vet_nombre_asignado ? `\n⚠ La eutanasia tenía asignado a ${cot.vet_nombre_asignado}: hay que avisarle.` : '') +
+      (quedaFicha ? '\n⚠ La ficha ya estaba registrada: revísala en /clientes.' : ''))
+  } catch (e) { console.warn('[agente-acciones] aviso de cancelación falló:', e) }
+
+  return `Listo, cancelé ${detalle.join(' y ')} y avisé al equipo. Dile al cliente, breve y cálido, que quedó cancelado y que si más adelante nos necesita estamos disponibles. NO le pidas explicaciones ni intentes retenerlo.`
 }
 
 // ─── Flujo A-vet: retiro originado por un veterinario de convenio ─────────────
@@ -338,6 +537,13 @@ async function buscarVetConvenio(nombre: string, comuna?: string): Promise<{ uni
  */
 async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<string> {
   a.nombre_mascota = capitalizarNombre(a.nombre_mascota)
+  const dudaFecha = chequearDiaPedido(a.fecha, ctx, a.confirmar_fecha)
+  if (dudaFecha) return dudaFecha
+  // Cobertura: el flujo del tutor la chequeaba y este no, así que una clínica de
+  // una comuna donde NO llegamos quedaba agendada sin que nadie lo notara.
+  if (esComunaNoCubierta(a.comuna)) {
+    return `NO registres este retiro: ${a.comuna} está FUERA de nuestra cobertura de retiro. Explícaselo al veterinario con amabilidad y ofrécele las alternativas: pueden acercar a la mascota a nuestras instalaciones en Recoleta, o lo derivamos al equipo para ver si hay alguna opción. NO agendes.`
+  }
   const { unico, varios } = await buscarVetConvenio(a.veterinaria_nombre, a.comuna)
   if (varios && varios.length > 1) {
     const nombres = varios.slice(0, 4).map(v => v.nombre).filter(Boolean).join(', ')
@@ -374,7 +580,7 @@ async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<s
     hora_retiro: a.hora,
     tipo_servicio: a.tipo_servicio ?? '',
     estado: 'pendiente',
-    fecha_creacion: todayISO(),
+    fecha_creacion: fechaChileISO(),
     fecha_resolucion: '',
     origen: 'bot_vet',
     veterinaria_id: unico.id || '',
@@ -414,7 +620,7 @@ async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<s
   }
 
   return `Solicitud de retiro registrada (N° ${id}) para el veterinario ${unico.nombre || a.veterinaria_nombre} y enviada al equipo para confirmación. ` +
-    `Confirma al veterinario que RECIBIMOS la solicitud de retiro de ${a.nombre_mascota} para el ${formatDate(a.fecha)} a las ${a.hora} y que le avisaremos apenas la validemos. ` +
+    `Confirma al veterinario que RECIBIMOS la solicitud de retiro de ${a.nombre_mascota} para el ${formatDateConDia(a.fecha)} a las ${a.hora} y que le avisaremos apenas la validemos. ` +
     `NO le digas que ya está confirmada.`
 }
 
@@ -530,6 +736,8 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
   if (!Number.isFinite(peso) || peso <= 0) {
     return 'Falta el peso de la mascota para agendar la eutanasia. Pídeselo al cliente.'
   }
+  const dudaFecha = chequearDiaPedido(a.fecha, ctx, a.confirmar_fecha)
+  if (dudaFecha) return dudaFecha
   if (esComunaNoCubierta(a.comuna)) {
     return `NO agendes esta eutanasia: ${a.comuna} está FUERA de nuestra cobertura de atención a domicilio. Explícaselo al cliente con amabilidad —lamentablemente no llegamos hasta esa comuna— y ofrécele derivarlo al equipo por si hay alguna alternativa. NO agendes.`
   }
@@ -546,9 +754,13 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
   if (tel9) {
     try {
       const cotis = await getSheetData('cotizaciones_eutanasia')
+      // Igual que en los retiros, el candado mira también la MASCOTA: el duplicado
+      // que hay que evitar es el de la misma solicitud, no el de una familia con
+      // dos mascotas.
       const activa = cotis.find(c =>
         ['creada', 'enviada', 'aceptada'].includes(c.estado || '') &&
-        (c.cliente_wa_id || c.cliente_telefono || '').replace(/\D/g, '').slice(-9) === tel9
+        (c.cliente_wa_id || c.cliente_telefono || '').replace(/\D/g, '').slice(-9) === tel9 &&
+        (normalizaNombre(c.mascota_nombre || '') === normalizaNombre(a.nombre_mascota) || !normalizaNombre(c.mascota_nombre || ''))
       )
       if (activa) {
         return `Este cliente YA tiene una solicitud de eutanasia ACTIVA (N° ${activa.id}${activa.mascota_nombre ? `, ${activa.mascota_nombre}` : ''}). NO agendes otra. Dile, cálido y breve, que su solicitud ya quedó ingresada y que estamos coordinando con la red de veterinarios; si quiere corregir algún dato, tómalo por mensaje y responde que el equipo lo ajustará.`
@@ -582,7 +794,7 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
       const libres = ev.libres.length
         ? ` Horas libres ese día: ${ev.libres.join(', ')}.`
         : ' Ese día ya no quedan horas libres.'
-      return `NO agendes: no podemos tomar las ${horaPedida} del ${formatDate(a.fecha)}. Motivo: ${ev.motivo || 'esa hora no está disponible.'}${libres} ` +
+      return `NO agendes: no podemos tomar las ${horaPedida} del ${formatDateConDia(a.fecha)}. Motivo: ${ev.motivo || 'esa hora no está disponible.'}${libres} ` +
         `Explícaselo al cliente con calidez, ofrécele esas horas (o el día siguiente) y vuelve a llamar la herramienta con la hora que ELIJA. ` +
         `NUNCA agendes una hora distinta de la que acordaste con el cliente: si no se puede, se conversa, no se cambia por dentro.`
     }
@@ -593,7 +805,7 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
     const { hora: h } = await horaLibreEnFranja(a.fecha, franja)
     if (!h) {
       const otra = franja === 'PM' ? 'la mañana' : 'la tarde'
-      return `NO agendes: la franja de ${franja === 'PM' ? 'la tarde' : 'la mañana'} del ${formatDate(a.fecha)} ya está completa (dejamos al menos 1 hora entre cada servicio agendado). Ofrécele al cliente ${otra} de ese día u otro día, y vuelve a llamar la herramienta cuando elija.`
+      return `NO agendes: la franja de ${franja === 'PM' ? 'la tarde' : 'la mañana'} del ${formatDateConDia(a.fecha)} ya está completa (dejamos al menos 1 hora entre cada servicio agendado). Ofrécele al cliente ${otra} de ese día u otro día, y vuelve a llamar la herramienta cuando elija.`
     }
     hora = h
   }
@@ -651,7 +863,7 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
 
   // La HORA queda explícita en el resultado: el modelo debe confirmarle al cliente
   // exactamente la que se registró (nunca otra).
-  const horaTxt = ` Quedó registrada para el ${formatDate(a.fecha)} a las ${hora} hrs: confírmale esa MISMA hora al cliente.`
+  const horaTxt = ` Quedó registrada para el ${formatDateConDia(a.fecha)} a las ${hora} hrs: confírmale esa MISMA fecha y hora al cliente (el día de la semana ya viene resuelto acá, no lo cambies).`
 
   if (res.matched === 0) {
     return `Registré la solicitud de eutanasia (N° ${res.id}) pero ahora mismo no hay veterinarios disponibles para ${res.comunaCanon} en esa fecha/franja. ` +
@@ -753,7 +965,7 @@ async function consultarEstadoMascota(a: AccionConsultaEstado): Promise<string> 
         const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
         if (!isNaN(fechaRetiro.getTime())) {
           const obj = agregarDiasHabiles(fechaRetiro, plazo)
-          entregaTxt = ` Fecha de entrega MÁXIMA: ${formatDate(isoFecha(obj))} (hasta ${plazo} días HÁBILES desde el retiro${express ? ', con Servicio Express' : ''}; puede ser antes).`
+          entregaTxt = ` Fecha de entrega MÁXIMA: ${formatDateConDia(isoFecha(obj))} (hasta ${plazo} días HÁBILES desde el retiro${express ? ', con Servicio Express' : ''}; puede ser antes). El día de la semana de esa fecha es el que va acá: repítelo TAL CUAL, no lo calcules tú.`
         }
       }
     } catch { /* sin fecha disponible */ }
@@ -923,5 +1135,5 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
 
 /** Handlers disponibles para el agente (Flujo A: retiro · Flujo B: eutanasia). */
 export function handlersAgente(): HandlersAgente {
-  return { solicitarRetiro, reprogramarRetiro, solicitarRetiroVet, cotizarCremacion, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro, consultarEstadoMascota, enviarCatalogo, agregarAdicional }
+  return { solicitarRetiro, reprogramarRetiro, solicitarRetiroVet, cotizarCremacion, cotizarEutanasia, agendarEutanasia, consultarEtaRetiro, consultarEstadoMascota, enviarCatalogo, agregarAdicional, cancelarAgendamiento }
 }
