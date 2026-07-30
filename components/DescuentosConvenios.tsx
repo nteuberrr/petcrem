@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, Fragment } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Card, Button } from '@/components/ui/kit'
-import { fmtPrecio, fmtFecha } from '@/lib/format'
+import { fmtPrecio, fmtFecha, fmtKg } from '@/lib/format'
 import { todayISO } from '@/lib/dates'
 import { useAccionUnica } from '@/lib/use-accion-unica'
 
@@ -37,6 +37,7 @@ interface SaldoVet {
 }
 interface Devengo {
   id: string; cliente_id: string; codigo: string; nombre_mascota: string
+  peso: number; codigo_servicio: string
   base_monto: number; tipo: string; valor: number; monto: number
   estado: string; fecha_devengo: string
 }
@@ -156,27 +157,14 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
     await cargar()
   })
 
-  const totalSaldo = saldos.reduce((s, v) => s + v.saldo, 0)
   const etiquetaRegla = (r: Regla | null) =>
     !r ? '—' : r.tipo === 'variable' ? `${r.valor}% de la cremación` : fmtPrecio(r.valor)
 
   return (
     <div className="space-y-5">
       <Card className="p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="max-w-2xl">
-            <h2 className="text-base font-bold text-brand">Comisiones por derivación</h2>
-            <p className="text-sm text-gray-600 mt-1">
-              A estos veterinarios no se les factura el servicio: la boleta se le emite al tutor por el
-              precio completo (desde Facturación → Facturas → <strong>Boleta al tutor</strong>) y acá se
-              les acumula la comisión. El saldo se convierte en <strong>costo de venta</strong> recién
-              cuando lo ajustás.
-            </p>
-            <p className="text-xs text-gray-500 mt-2">
-              Al tutor se le cobra el precio de lista: la tarifa de estos veterinarios queda
-              <strong> indexada a los precios generales</strong> y los sigue sola cuando cambian.
-            </p>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-bold text-brand">Comisiones por derivación</h2>
           <Button variant="primary" onClick={() => { setReglaError(''); setShowRegla(true) }}>+ Nueva comisión</Button>
         </div>
       </Card>
@@ -192,7 +180,7 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                   <tr>
                     <th className="text-left px-2 md:px-4 py-2.5">Veterinaria</th>
-                    <th className="text-left px-4 py-2.5 hidden md:table-cell">Comisión</th>
+                    <th className="text-right px-4 py-2.5 hidden md:table-cell">Comisión</th>
                     <th className="text-right px-4 py-2.5 hidden md:table-cell">Derivaciones</th>
                     <th className="text-right px-2 md:px-4 py-2.5">Acumulado</th>
                     <th className="text-right px-4 py-2.5 hidden md:table-cell">Pagado</th>
@@ -203,32 +191,39 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
                 <tbody className="divide-y divide-gray-100">
                   {saldos.map(s => (
                     <Fragment key={s.veterinaria_id}>
-                      <tr className="hover:bg-gray-50">
+                      <tr className="hover:bg-gray-50 align-middle">
                         <td className="px-2 md:px-4 py-2.5">
-                          <button onClick={() => abrirDetalle(s.veterinaria_id)} className="text-left">
-                            <span className="font-medium text-gray-900 hover:text-brand">{s.nombre}</span>
+                          {/* La flecha gira al abrir: deja claro que la fila despliega
+                              el detalle de la cuenta hacia abajo. */}
+                          <button onClick={() => abrirDetalle(s.veterinaria_id)}
+                            className="flex items-center gap-1.5 text-left group">
+                            <span className={`text-gray-400 group-hover:text-brand transition-transform ${expandido === s.veterinaria_id ? 'rotate-90' : ''}`}>▸</span>
+                            <span className="font-medium text-gray-900 group-hover:text-brand">{s.nombre}</span>
                           </button>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                            {!s.regla && <Badge variant="gray">Sin regla vigente</Badge>}
-                            {s.indexado
-                              ? <Badge variant="green">Precios = generales</Badge>
-                              : (
+                          {/* Solo las EXCEPCIONES bajo el nombre: que los precios estén
+                              indexados es lo normal y no necesita confirmarse acá (se ve
+                              en Configuración → Precios). Así la fila queda en una línea. */}
+                          {(!s.regla || !s.indexado) && (
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                              {!s.regla && <Badge variant="gray">Sin regla vigente</Badge>}
+                              {!s.indexado && (
                                 <button onClick={() => indexarPrecios(s)} disabled={procesando}
                                   className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 hover:bg-amber-100 disabled:opacity-50">
                                   Precios sin indexar — indexar a generales
                                 </button>
                               )}
-                          </div>
+                            </div>
+                          )}
                           <div className="md:hidden mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                             <span>{etiquetaRegla(s.regla)}</span>
                             <span>· {s.cantidad_devengos} derivación{s.cantidad_devengos === 1 ? '' : 'es'}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-2.5 text-gray-700 hidden md:table-cell">{etiquetaRegla(s.regla)}</td>
-                        <td className="px-4 py-2.5 text-right text-gray-600 hidden md:table-cell">{s.cantidad_devengos}</td>
-                        <td className="px-2 md:px-4 py-2.5 text-right text-gray-700 whitespace-nowrap">{fmtPrecio(s.devengado)}</td>
-                        <td className="px-4 py-2.5 text-right text-gray-500 hidden md:table-cell whitespace-nowrap">{fmtPrecio(s.ajustado)}</td>
-                        <td className={`px-2 md:px-4 py-2.5 text-right font-bold whitespace-nowrap ${s.saldo < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                        <td className="px-4 py-2.5 text-right text-gray-700 hidden md:table-cell whitespace-nowrap tabular-nums">{etiquetaRegla(s.regla)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-600 hidden md:table-cell tabular-nums">{s.cantidad_devengos}</td>
+                        <td className="px-2 md:px-4 py-2.5 text-right text-emerald-700 whitespace-nowrap tabular-nums">{fmtPrecio(s.devengado)}</td>
+                        <td className="px-4 py-2.5 text-right text-red-600 hidden md:table-cell whitespace-nowrap tabular-nums">{fmtPrecio(s.ajustado)}</td>
+                        <td className={`px-2 md:px-4 py-2.5 text-right font-bold whitespace-nowrap tabular-nums ${s.saldo < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                           {fmtPrecio(s.saldo)}
                         </td>
                         <td className="px-2 md:px-4 py-2.5">
@@ -258,48 +253,7 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
                             {cargandoDetalle ? <p className="text-xs text-gray-400">Cargando detalle…</p>
                             : !detalle ? <p className="text-xs text-gray-400">Sin detalle.</p>
                             : (
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                <div>
-                                  <h4 className="text-xs font-bold uppercase text-gray-500 mb-1.5">Comisiones devengadas</h4>
-                                  {detalle.devengos.length === 0 ? <p className="text-xs text-gray-400">Todavía no hay derivaciones boleteadas.</p> : (
-                                    <div className="overflow-x-auto">
-                                      <table className="w-full text-xs">
-                                        <tbody className="divide-y divide-gray-200">
-                                          {detalle.devengos.map(d => (
-                                            <tr key={d.id} className={d.estado !== 'devengada' ? 'opacity-50' : ''}>
-                                              <td className="py-1.5 pr-2 font-mono font-bold text-brand">{d.codigo || `#${d.cliente_id}`}</td>
-                                              <td className="py-1.5 pr-2 text-gray-700">{d.nombre_mascota}</td>
-                                              <td className="py-1.5 pr-2 text-gray-500 whitespace-nowrap">{d.fecha_devengo ? fmtFecha(d.fecha_devengo) : '—'}</td>
-                                              <td className="py-1.5 text-right font-semibold text-gray-900 whitespace-nowrap">
-                                                {fmtPrecio(d.monto)}
-                                                {d.estado !== 'devengada' && <span className="ml-1 text-red-600">(anulada)</span>}
-                                              </td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  )}
-                                </div>
-                                <div>
-                                  <h4 className="text-xs font-bold uppercase text-gray-500 mb-1.5">Ajustes de saldo (costo de venta)</h4>
-                                  {detalle.ajustes.length === 0 ? <p className="text-xs text-gray-400">Todavía no se le pagó nada.</p> : (
-                                    <div className="overflow-x-auto">
-                                      <table className="w-full text-xs">
-                                        <tbody className="divide-y divide-gray-200">
-                                          {detalle.ajustes.map(a => (
-                                            <tr key={a.id}>
-                                              <td className="py-1.5 pr-2 text-gray-500 whitespace-nowrap">{a.fecha ? fmtFecha(a.fecha) : '—'}</td>
-                                              <td className="py-1.5 pr-2 text-gray-700">{a.detalle || '—'}</td>
-                                              <td className="py-1.5 text-right font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(a.monto)}</td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+                              <LibroMayor detalle={detalle} />
                             )}
                           </td>
                         </tr>
@@ -308,10 +262,6 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
                   ))}
                 </tbody>
               </table>
-            </div>
-            <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border-t border-gray-200 text-sm">
-              <span className="text-gray-500 text-xs">{saldos.length} veterinaria{saldos.length === 1 ? '' : 's'}</span>
-              <span className="font-bold text-gray-900">Saldo total por pagar: {fmtPrecio(totalSaldo)}</span>
             </div>
           </>
         )}
@@ -410,6 +360,101 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
           </button>
         </form>
       </Modal>
+    </div>
+  )
+}
+
+/**
+ * Libro mayor de la cuenta del veterinario: comisiones y abonos en UNA sola tabla,
+ * fila por fila y en orden de fecha, con el monto en la columna que corresponde
+ * (comisión suma al saldo, abono lo baja). Arriba, los dos totales con el saldo
+ * en el medio. Las comisiones anuladas se muestran tachadas y no suman.
+ */
+function LibroMayor({ detalle }: { detalle: { devengos: Devengo[]; ajustes: Ajuste[] } }) {
+  const filas = [
+    ...detalle.devengos.map(d => ({
+      key: `c${d.id}`,
+      fecha: d.fecha_devengo,
+      codigo: d.codigo || `#${d.cliente_id}`,
+      detalle: [d.nombre_mascota, d.peso > 0 ? fmtKg(d.peso) : ''].filter(Boolean).join(' · '),
+      comision: d.monto,
+      abono: 0,
+      anulada: d.estado !== 'devengada',
+    })),
+    ...detalle.ajustes.map(a => ({
+      key: `a${a.id}`,
+      fecha: a.fecha,
+      codigo: 'ABONO',
+      detalle: a.detalle || 'Pago al veterinario',
+      comision: 0,
+      abono: a.monto,
+      anulada: false,
+    })),
+  ].sort((x, y) => (x.fecha || '').localeCompare(y.fecha || '') || x.key.localeCompare(y.key))
+
+  const totalComisiones = filas.filter(f => !f.anulada).reduce((s, f) => s + f.comision, 0)
+  const totalAbonos = filas.reduce((s, f) => s + f.abono, 0)
+  const saldo = totalComisiones - totalAbonos
+
+  if (filas.length === 0) return <p className="text-xs text-gray-400">Todavía no hay movimientos.</p>
+
+  return (
+    <div className="space-y-3">
+      {/* Comisiones (suman) en verde · abonos (restan) en rojo · saldo a la derecha,
+          con el color del lado al que se inclina. */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-center">
+          <div className="text-[10px] uppercase text-gray-400 font-semibold">Comisiones</div>
+          <div className="text-sm font-bold text-emerald-700">{fmtPrecio(totalComisiones)}</div>
+        </div>
+        <div className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-center">
+          <div className="text-[10px] uppercase text-gray-400 font-semibold">Abonos</div>
+          <div className="text-sm font-bold text-red-600">{fmtPrecio(totalAbonos)}</div>
+        </div>
+        <div className={`border rounded-lg px-3 py-2 text-center ${saldo < 0 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+          <div className="text-[10px] uppercase text-gray-500 font-semibold">Saldo</div>
+          <div className={`text-sm font-bold ${saldo < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmtPrecio(saldo)}</div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto bg-white border border-gray-300 rounded-lg">
+        <table className="w-full text-xs min-w-[460px]">
+          <thead>
+            <tr className="text-[10px] uppercase text-gray-400 border-b border-gray-300 bg-gray-50">
+              <th className="text-left px-3 py-1.5 font-semibold">Fecha</th>
+              <th className="text-left px-3 py-1.5 font-semibold">Código</th>
+              <th className="text-left px-3 py-1.5 font-semibold">Detalle</th>
+              <th className="text-right px-3 py-1.5 font-semibold">Comisión</th>
+              <th className="text-right px-3 py-1.5 font-semibold">Abono</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {filas.map(f => (
+              <tr key={f.key} className={f.abono > 0 ? 'bg-red-50/60' : ''}>
+                <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{f.fecha ? fmtFecha(f.fecha) : '—'}</td>
+                <td className={`px-3 py-1.5 font-mono font-bold whitespace-nowrap ${f.abono > 0 ? 'text-red-600' : 'text-brand'}`}>{f.codigo}</td>
+                <td className={`px-3 py-1.5 text-gray-700 ${f.anulada ? 'line-through text-gray-400' : ''}`}>
+                  {f.detalle || '—'}
+                  {f.anulada && <span className="ml-1 text-red-600 no-underline">(anulada)</span>}
+                </td>
+                <td className={`px-3 py-1.5 text-right whitespace-nowrap ${f.anulada ? 'line-through text-gray-400' : 'font-semibold text-emerald-700'}`}>
+                  {f.comision > 0 ? fmtPrecio(f.comision) : ''}
+                </td>
+                <td className="px-3 py-1.5 text-right font-semibold text-red-600 whitespace-nowrap">
+                  {f.abono > 0 ? fmtPrecio(f.abono) : ''}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-300 bg-gray-50">
+              <td colSpan={3} className="px-3 py-1.5 text-right font-semibold text-gray-600">Totales</td>
+              <td className="px-3 py-1.5 text-right font-bold text-emerald-700 whitespace-nowrap">{fmtPrecio(totalComisiones)}</td>
+              <td className="px-3 py-1.5 text-right font-bold text-red-600 whitespace-nowrap">{fmtPrecio(totalAbonos)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   )
 }

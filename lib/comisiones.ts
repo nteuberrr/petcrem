@@ -1,6 +1,6 @@
 import { getSheetData, appendRow, getNextId, updateByIdIf, deleteById } from './datastore'
 import { todayISO } from './dates'
-import { parseMonto } from './numbers'
+import { parseMonto, parsePeso } from './numbers'
 import { origenDeVet } from './precios-indexados'
 
 /**
@@ -289,7 +289,7 @@ export async function resumenComisiones(): Promise<SaldoVet[]> {
 
 /** Devengos + ajustes de una veterinaria, para el detalle expandible. */
 export async function detalleVet(veterinariaId: string): Promise<{
-  devengos: Array<ComisionDevengo & { codigo: string; nombre_mascota: string }>
+  devengos: Array<ComisionDevengo & { codigo: string; nombre_mascota: string; peso: number; codigo_servicio: string }>
   ajustes: ComisionAjuste[]
 }> {
   const vid = String(veterinariaId || '').trim()
@@ -305,7 +305,14 @@ export async function detalleVet(veterinariaId: string): Promise<{
     .filter(c => c.veterinaria_id === vid)
     .map(c => {
       const f = fichaPorId.get(c.cliente_id)
-      return { ...c, codigo: String(f?.codigo || ''), nombre_mascota: String(f?.nombre_mascota || '') }
+      return {
+        ...c,
+        codigo: String(f?.codigo || ''),
+        nombre_mascota: String(f?.nombre_mascota || ''),
+        // El peso real manda sobre el declarado (misma regla que el precio).
+        peso: parsePeso(f?.peso_ingreso) || parsePeso(f?.peso_declarado),
+        codigo_servicio: String(f?.codigo_servicio || '').toUpperCase(),
+      }
     })
     .sort((a, b) => (b.fecha_devengo || '').localeCompare(a.fecha_devengo || ''))
 
