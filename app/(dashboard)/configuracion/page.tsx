@@ -211,6 +211,14 @@ export default function ConfiguracionPage() {
   const [tramoForm, setTramoForm] = useState({ peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' })
   const [especialForm, setEspecialForm] = useState({ veterinaria_id: '', peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' })
   const [especialVetFiltro, setEspecialVetFiltro] = useState('')
+  // Acordeón de precios especiales: la lista completa era enorme, así que cada
+  // veterinaria arranca plegada y se abre al pincharla.
+  const [especialesAbiertos, setEspecialesAbiertos] = useState<Set<string>>(new Set())
+  const toggleEspecial = (vetId: string) => setEspecialesAbiertos(prev => {
+    const n = new Set(prev)
+    if (n.has(vetId)) n.delete(vetId); else n.add(vetId)
+    return n
+  })
   const [showDuplicarModal, setShowDuplicarModal] = useState(false)
   // indexar: deja la copia VIVA (sigue a la tabla base cuando cambie). Solo aplica
   // si el origen es 'general' o 'convenio' — ver lib/precios-indexados.ts.
@@ -344,6 +352,10 @@ export default function ConfiguracionPage() {
       ? `Listo: ${data.copiados} tramo(s) copiados y la tabla quedó INDEXADA a los ${data.indexado === 'general' ? 'precios generales' : 'precios de convenio'}. Cuando esos precios cambien, los de esta veterinaria se actualizan solos.`
       : `Listo: ${data.copiados} tramo(s) copiados${data.reemplazados ? ` (se reemplazaron ${data.reemplazados})` : ''}. Ajústalos si hace falta.`)
   })
+
+  useEffect(() => {
+    if (especialVetFiltro) setEspecialesAbiertos(new Set([especialVetFiltro]))
+  }, [especialVetFiltro])
 
   /** Origen al que está indexada la tabla de una veterinaria ('' = tarifa propia). */
   const indexadoDe = (v: Vet | undefined) => {
@@ -514,7 +526,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="font-semibold text-gray-900">Convenios especiales por veterinaria</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Tarifas personalizadas asignadas a una veterinaria</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Tarifas por veterinaria — pinchá una para ver sus tramos</p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => { setDuplicarForm({ destino: especialVetFiltro || '', origen: '', indexar: true }); setShowDuplicarModal(true) }}
@@ -549,29 +561,46 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
               ).map(([vetId, tramos]) => {
                 const vet = vets.find(v => v.id === vetId)
                 const maxPesoMin = tramos.length ? Math.max(...tramos.map(t => parseFloat(t.peso_min) || 0)) : 0
+                const abierto = especialesAbiertos.has(vetId)
+                const indexado = indexadoDe(vet)
+                const ciDesde = Math.min(...tramos.map(t => parseFloat(t.precio_ci) || Infinity))
                 return (
                   <div key={vetId} className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
-                    <div className="px-6 py-3 border-b border-gray-300 bg-gray-50 flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
+                    {/* Cabecera plegable: toda la fila abre/cierra; los botones de acción
+                        cortan la propagación para no plegar al usarlos. */}
+                    <div onClick={() => toggleEspecial(vetId)}
+                      className={`px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2 cursor-pointer select-none transition-colors ${abierto ? 'bg-gray-50 border-b border-gray-300' : 'hover:bg-gray-50'}`}>
+                      <div className="flex flex-wrap items-center gap-2 min-w-0">
+                        <span className={`text-gray-400 transition-transform ${abierto ? 'rotate-90' : ''}`}>▸</span>
                         <p className="font-semibold text-gray-900 text-sm">{vet?.nombre ?? `Veterinaria #${vetId}`}</p>
                         {/* Tabla INDEXADA: es una copia viva de generales/convenio. Editar un
                             tramo acá no sirve — la próxima sincronización lo pisa. */}
-                        {indexadoDe(vet) && (
-                          <span className="inline-flex items-center gap-1.5">
-                            <Badge variant="green">
-                              Indexada a {indexadoDe(vet) === 'general' ? 'precios generales' : 'precios convenio'}
-                            </Badge>
-                            <button onClick={() => quitarIndexado(vetId)}
-                              className="text-[11px] font-medium text-gray-500 hover:text-red-600 underline">quitar</button>
-                          </span>
+                        {indexado
+                          ? <Badge variant="green">Indexada a {indexado === 'general' ? 'precios generales' : 'precios convenio'}</Badge>
+                          : <Badge variant="gray">Tarifa propia</Badge>}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400 whitespace-nowrap">
+                          {tramos.length} tramo{tramos.length === 1 ? '' : 's'}
+                          {Number.isFinite(ciDesde) && ` · CI desde ${fmtPrecio(ciDesde)}`}
+                        </span>
+                        {abierto && (
+                          <>
+                            {indexado && (
+                              <button onClick={e => { e.stopPropagation(); quitarIndexado(vetId) }}
+                                className="text-[11px] font-medium text-gray-500 hover:text-red-600 underline">quitar indexado</button>
+                            )}
+                            <button onClick={e => { e.stopPropagation(); setEditingEspecial(null); setEspecialForm({ veterinaria_id: vetId, peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' }); setShowEspecialModal(true) }}
+                              className="text-brand hover:text-brand text-xs font-medium whitespace-nowrap">+ Tramo</button>
+                          </>
                         )}
                       </div>
-                      <button onClick={() => { setEditingEspecial(null); setEspecialForm({ veterinaria_id: vetId, peso_min: '', peso_max: '', precio_ci: '', precio_cp: '', precio_sd: '' }); setShowEspecialModal(true) }}
-                        className="text-brand hover:text-brand text-xs font-medium">+ Tramo</button>
                     </div>
-                    {indexadoDe(vet) && (
-                      <p className="px-6 py-2 text-[11px] text-amber-800 bg-amber-50 border-b border-amber-200">
-                        Estos tramos se copian solos desde los {indexadoDe(vet) === 'general' ? 'precios generales' : 'precios de convenio'}:
+                    {abierto && (
+                    <>
+                    {indexado && (
+                      <p className="px-4 sm:px-6 py-2 text-[11px] text-amber-800 bg-amber-50 border-b border-amber-200">
+                        Estos tramos se copian solos desde los {indexado === 'general' ? 'precios generales' : 'precios de convenio'}:
                         si los editás acá, el próximo cambio de esa tabla los reemplaza. Para darle tarifa propia, quitá el indexado.
                       </p>
                     )}
@@ -597,6 +626,8 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                         ))}
                       </tbody>
                     </table>
+                    </>
+                    )}
                   </div>
                 )
               })}
