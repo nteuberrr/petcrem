@@ -172,81 +172,112 @@ export async function construirInformePagosPendientes(): Promise<InformePagosPen
 }
 
 // ─── Render ──────────────────────────────────────────────────────────────────
+//
+// Tabla mínima para leer en el TELÉFONO, metida dentro de una TARJETA por bloque
+// (pedido del dueño: sin caja se ven "en el aire"). Cuatro columnas —fecha, quién
+// debe, qué debe y la nota—, total grande al pie de cada tarjeta y un tono suelto:
+// es un correo interno para el equipo, no una carta al cliente.
 
-const ETIQUETA_ESTADO: Record<string, string> = { pendiente: 'Pendiente', parcial: 'Pago parcial' }
+const TH = `padding:8px;font-size:11px;font-weight:700;color:#8a8a8a;text-align:left;text-transform:uppercase;letter-spacing:.03em`
+const TD = `padding:10px 8px;font-size:13px;color:#333;vertical-align:top;border-top:1px solid #eee;line-height:1.4`
 
-function dato(label: string, valor: string): string {
-  if (!valor) return ''
-  return `<span style="white-space:nowrap"><span style="color:#8a8a8a">${escapeHtml(label)}</span> ${escapeHtml(valor)}</span>`
+/** Acorta un nombre de servicio para el móvil: "Retiro fuera de horario (después
+ *  de las 18:00 y fines de semana)" → "Retiro fuera de horario". */
+function nombreCorto(n: string): string {
+  return n.split(' (')[0].trim() || n
 }
 
-function renderFicha(f: FichaPendiente): string {
-  const antiguedad = f.dias === null ? '' : f.dias <= 0 ? 'hoy' : f.dias === 1 ? 'hace 1 día' : `hace ${f.dias} días`
-  const contacto = [
-    dato('Tel.', f.telefono),
-    dato('', f.email),
-    dato('', f.comuna),
-    f.formaPago ? dato('Pago:', f.formaPago) : '',
-    f.vetNombre ? dato('Vet:', f.vetNombre) : '',
-  ].filter(Boolean).join('<span style="color:#ccc"> · </span>')
+/** "28-07" si es de este año; "16-12-2025" si es de otro (para no confundir). */
+function fechaCorta(iso: string): string {
+  const completa = formatDate(iso)
+  if (!completa) return ''
+  return completa.endsWith(String(new Date().getFullYear())) ? completa.slice(0, 5) : completa
+}
 
-  const filasDetalle = f.lineas.map(l => `
-    <tr>
-      <td style="padding:2px 0;font-size:13px;color:#555">${escapeHtml(l.nombre)}</td>
-      <td style="padding:2px 0;font-size:13px;color:#333;text-align:right;white-space:nowrap">${fmtPrecio(l.monto)}</td>
-    </tr>`).join('')
+function renderFila(f: FichaPendiente): string {
+  const quien = f.vetNombre || f.tutor || '(sin nombre)'
 
-  const filaEutanasia = f.eutanasia > 0 ? `
-    <tr>
-      <td style="padding:2px 0;font-size:13px;color:#555">Eutanasia a domicilio <span style="color:#999">(fuera de boleta)</span></td>
-      <td style="padding:2px 0;font-size:13px;color:#333;text-align:right;white-space:nowrap">${fmtPrecio(f.eutanasia)}</td>
-    </tr>` : ''
+  // Servicio: la modalidad y sus adicionales en una sola línea legible.
+  const servicios = f.lineas.filter(l => l.monto >= 0).map(l => nombreCorto(l.nombre))
+  if (f.eutanasia > 0) servicios.push('Eutanasia a domicilio')
+  const descuento = f.lineas.find(l => l.monto < 0)
 
-  const filasCobros = f.cobros.map(c => `
-    <tr>
-      <td style="padding:2px 0;font-size:13px;color:#B45309">Por cobrar: ${escapeHtml(c.detalle)}${c.estado === 'cliente_confirmo' ? ' <span style="color:#999">(el tutor dice que ya transfirió)</span>' : ''}</td>
-      <td style="padding:2px 0;font-size:13px;color:#B45309;text-align:right;white-space:nowrap">${fmtPrecio(c.monto)}</td>
-    </tr>`).join('')
-
-  const nota = f.nota
-    ? `<div style="margin:10px 0 0;padding:8px 10px;background:#FFF8E7;border-left:3px solid ${BRAND.amber};font-size:13px;color:#5a4a25;white-space:pre-wrap">${escapeHtml(f.nota)}</div>`
-    : `<div style="margin:10px 0 0;font-size:12px;color:#aaa;font-style:italic">Sin nota — anota en la ficha por qué está pendiente.</div>`
+  const saldo = f.estadoPago === 'parcial' ? 'le falta este saldo' : 'debe todo'
+  const cobros = f.cobros.map(c => (
+    `<div style="color:#B45309;font-size:12px;margin-top:3px">+ ${escapeHtml(c.detalle)} ${fmtPrecio(c.monto)}</div>`
+  )).join('')
 
   return `
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px;border:1px solid #e3e3e3;border-radius:10px">
-    <tr><td style="padding:14px 16px">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-        <tr>
-          <td style="font-size:15px;font-weight:700;color:${BRAND.navy}">${escapeHtml(f.codigo)}${f.mascota ? ` · ${escapeHtml(f.mascota)}` : ''}</td>
-          <td style="text-align:right;font-size:15px;font-weight:700;color:${BRAND.navy};white-space:nowrap">${fmtPrecio(f.porCobrar)}</td>
-        </tr>
-        <tr>
-          <td style="font-size:13px;color:#777;padding-top:2px">${escapeHtml(formatDate(f.fecha))}${antiguedad ? ` · ${escapeHtml(antiguedad)}` : ''}</td>
-          <td style="text-align:right;font-size:12px;color:#B45309;padding-top:2px;white-space:nowrap">${escapeHtml(ETIQUETA_ESTADO[f.estadoPago] || f.estadoPago)}</td>
-        </tr>
-      </table>
-      <div style="margin:8px 0 0;font-size:14px;font-weight:600;color:#333">${escapeHtml(f.tutor || '(sin nombre)')}</div>
-      ${contacto ? `<div style="margin:2px 0 0;font-size:13px;color:#666">${contacto}</div>` : ''}
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 0;border-top:1px solid #eee;padding-top:6px">
-        ${filasDetalle}${filaEutanasia}${filasCobros}
-        <tr>
-          <td style="padding:6px 0 0;font-size:13px;font-weight:700;color:#333;border-top:1px solid #eee">Total del servicio</td>
-          <td style="padding:6px 0 0;font-size:13px;font-weight:700;color:#333;text-align:right;white-space:nowrap;border-top:1px solid #eee">${fmtPrecio(f.totalServicio)}</td>
-        </tr>
-      </table>
-      ${nota}
-    </td></tr>
+    <tr>
+      <td style="${TD};white-space:nowrap;color:#777">${escapeHtml(fechaCorta(f.fecha))}</td>
+      <td style="${TD}">
+        <strong>${escapeHtml(quien)}</strong>
+        <div style="font-size:11px;color:#aaa">${escapeHtml(f.codigo)}${f.mascota ? ` · ${escapeHtml(f.mascota)}` : ''}</div>
+      </td>
+      <td style="${TD}">
+        ${escapeHtml(servicios.join(' + '))}
+        ${descuento ? `<div style="font-size:11px;color:#999">${escapeHtml(nombreCorto(descuento.nombre))} ${fmtPrecio(descuento.monto)}</div>` : ''}
+        <div style="margin-top:3px"><strong style="color:${BRAND.navy};font-size:15px">${fmtPrecio(f.porCobrar)}</strong> <span style="font-size:11px;color:#aaa">${saldo}</span></div>
+        ${cobros}
+      </td>
+      <td style="${TD};font-size:12px;color:#6b5a30">${f.nota ? escapeHtml(f.nota) : '<span style="color:#ccc">sin nota</span>'}</td>
+    </tr>`
+}
+
+/** Una tarjeta por bloque: encabezado, tabla y el total grande al pie. */
+function renderBloque(titulo: string, emoji: string, fichas: FichaPendiente[], total: number): string {
+  if (fichas.length === 0) return ''
+  const cuantas = `${fichas.length} ${fichas.length === 1 ? 'ficha' : 'fichas'}`
+  return `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 18px;background:#fff;border:1px solid #e6e6e6;border-radius:14px;overflow:hidden">
+    <tr>
+      <td style="padding:14px 14px 8px">
+        <span style="font-size:15px;font-weight:700;color:${BRAND.navy}">${emoji} ${escapeHtml(titulo)}</span>
+        <span style="font-size:12px;color:#aaa"> · ${cuantas}</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 6px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse">
+          <tr>
+            <th style="${TH}">Fecha</th>
+            <th style="${TH}">${escapeHtml(titulo === 'Convenio' ? 'Veterinaria' : 'Tutor')}</th>
+            <th style="${TH}">Servicio</th>
+            <th style="${TH}">¿Por qué debe?</th>
+          </tr>
+          ${fichas.map(renderFila).join('')}
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:12px 16px;background:#f6f8fa;border-top:1px solid #ececec">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="font-size:12px;color:#999;text-transform:uppercase;letter-spacing:.04em">Total ${escapeHtml(titulo.toLowerCase())}</td>
+            <td style="text-align:right;font-size:22px;font-weight:800;color:${BRAND.navy};white-space:nowrap">${fmtPrecio(total)}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
   </table>`
 }
 
-function renderBloque(titulo: string, subtitulo: string, fichas: FichaPendiente[], total: number): string {
-  if (fichas.length === 0) return ''
+/** El número grande de arriba: lo primero que se ve al abrir el correo. */
+function renderHero(n: number, total: number, masAntigua: number | null): string {
+  const detalle = [
+    `${n} ${n === 1 ? 'ficha' : 'fichas'}`,
+    masAntigua && masAntigua > 1 ? `la más antigua lleva ${masAntigua} días` : '',
+  ].filter(Boolean).join(' · ')
   return `
-  <div style="margin:0 0 8px">
-    <div style="font-size:16px;font-weight:700;color:${BRAND.navy}">${escapeHtml(titulo)} <span style="color:#999;font-weight:400">(${fichas.length})</span></div>
-    <div style="font-size:12px;color:#999;margin:2px 0 12px">${escapeHtml(subtitulo)} · Total por cobrar ${fmtPrecio(total)}</div>
-  </div>
-  ${fichas.map(renderFicha).join('')}`
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 18px;background:${BRAND.cream};border-left:4px solid ${BRAND.amber};border-radius:12px">
+    <tr>
+      <td style="padding:16px 18px">
+        <div style="font-size:12px;color:#9a8a63;text-transform:uppercase;letter-spacing:.05em;font-weight:700">Por cobrar</div>
+        <div style="font-size:34px;font-weight:800;color:${BRAND.navy};line-height:1.15;margin:2px 0">${fmtPrecio(total)}</div>
+        <div style="font-size:13px;color:#9a8a63">${escapeHtml(detalle)}</div>
+      </td>
+    </tr>
+  </table>`
 }
 
 export interface AvisoRenderizado {
@@ -267,24 +298,33 @@ export async function renderAvisoPagosPendientes(informe: InformePagosPendientes
 
   if (n === 0) {
     const bodyHtml = `
-      <p style="margin:0 0 8px;font-size:15px;color:#222">Al ${escapeHtml(fechaLegible)} no hay pagos pendientes.</p>
-      <p style="margin:0;font-size:14px;color:#666">Todas las fichas registradas figuran pagadas y no hay cobros abiertos.</p>`
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;background:${BRAND.cream};border-left:4px solid ${BRAND.amber};border-radius:12px">
+        <tr><td style="padding:20px">
+          <div style="font-size:22px;font-weight:800;color:${BRAND.navy};margin-bottom:4px">Todo cobrado 🎉</div>
+          <div style="font-size:14px;color:#9a8a63">Al ${escapeHtml(fechaLegible)} no queda ni un peso pendiente. Buen trabajo.</div>
+        </td></tr>
+      </table>`
     return {
-      subject: `Pagos pendientes — todo al día (${fechaLegible})`,
-      html: renderEmailLayout({ titulo: 'Pagos pendientes', bodyHtml, contacto, contexto: 'Informe diario' }),
+      subject: `Pagos pendientes: ninguno — todo cobrado (${fechaLegible})`,
+      html: renderEmailLayout({ titulo: 'Pagos pendientes', bodyHtml, contacto, contexto: 'Cobranza del día' }),
       vacio: true,
       resumen: 'Sin pagos pendientes.',
     }
   }
 
+  // Antigüedad de la más vieja: le pone urgencia al número grande.
+  const masAntigua = [...informe.tutores, ...informe.convenio]
+    .map(f => f.dias ?? 0)
+    .reduce((max, d) => Math.max(max, d), 0)
+
   const bodyHtml = `
-    <p style="margin:0 0 4px;font-size:15px;color:#222">
-      Al ${escapeHtml(fechaLegible)} hay <strong>${n} ${n === 1 ? 'ficha' : 'fichas'}</strong> con pago pendiente por un total de <strong>${fmtPrecio(total)}</strong>.
-    </p>
-    <p style="margin:0 0 20px;font-size:13px;color:#888">Ordenadas de la más antigua a la más reciente.</p>
-    ${renderBloque('Tutores', 'Cobro directo al tutor', informe.tutores, informe.totalTutores)}
-    ${informe.tutores.length && informe.convenio.length ? '<div style="height:14px"></div>' : ''}
-    ${renderBloque('Convenio', 'Fichas de veterinaria — se facturan a la clínica', informe.convenio, informe.totalConvenio)}`
+    <p style="margin:0 0 14px;font-size:15px;color:#444">Esto es lo que quedó por cobrar 🐾</p>
+    ${renderHero(n, total, masAntigua)}
+    ${renderBloque('Tutores', '🏠', informe.tutores, informe.totalTutores)}
+    ${renderBloque('Convenio', '🏥', informe.convenio, informe.totalConvenio)}
+    <p style="margin:4px 0 0;font-size:13px;color:#999">
+      Apenas cobres una, márcala como pagada en su ficha y desaparece sola de esta lista.
+    </p>`
 
   const partes = [
     informe.tutores.length ? `${informe.tutores.length} de tutores` : '',
@@ -292,8 +332,8 @@ export async function renderAvisoPagosPendientes(informe: InformePagosPendientes
   ].filter(Boolean).join(' y ')
 
   return {
-    subject: `Pagos pendientes — ${n} ${n === 1 ? 'ficha' : 'fichas'} · ${fmtPrecio(total)} (${fechaLegible})`,
-    html: renderEmailLayout({ titulo: 'Pagos pendientes', bodyHtml, contacto, contexto: 'Informe diario' }),
+    subject: `${fmtPrecio(total)} por cobrar — ${n} ${n === 1 ? 'ficha' : 'fichas'} (${fechaLegible})`,
+    html: renderEmailLayout({ titulo: 'Pagos pendientes', bodyHtml, contacto, contexto: 'Cobranza del día' }),
     vacio: false,
     resumen: `${n} ${n === 1 ? 'ficha' : 'fichas'} (${partes}) por ${fmtPrecio(total)}.`,
   }
