@@ -974,6 +974,8 @@ async function consultarEstadoMascota(a: AccionConsultaEstado): Promise<string> 
   return `Datos REALES de la mascota (código ${c.codigo}): nombre "${nombre}", estado: ${estadoLegible}.${entregaTxt} ` +
     `Respóndele al cliente de forma cálida y clara contándole en qué parte del proceso está ${nombre}. ` +
     `Si preguntó por la fecha de entrega, dásela ACLARANDO que es en días hábiles. ` +
+    `Si pregunta a qué HORA se hace la entrega, dile que no podemos confirmar una hora específica porque las rutas son largas, ` +
+    `pero que le llegará un CORREO cuando vayamos en camino y le avisaremos cuando estemos próximos a llegar. NO escales por esto. ` +
     `Usá SOLO estos datos; no inventes fechas ni estados.`
 }
 
