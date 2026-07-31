@@ -5,7 +5,7 @@ import {
   buildCobroDiferencia, buildCobroAdicional, buildBoleta,
 } from './cliente-mailer'
 import {
-  renderBienvenida, renderCotizacionEmail, renderCoordinarEmail,
+  renderBienvenida, renderEditarDatos, renderCotizacionEmail, renderCoordinarEmail,
   renderAgradecimiento, renderClienteVetAsignado,
   renderClienteAgradecimientoEutanasia, renderClienteCotizacionEutanasia, renderNoRealizada,
 } from './eutanasia-mailer'
@@ -172,6 +172,28 @@ export const CORREOS: CorreoDef[] = [
     build: (m, c) => ({
       subject: 'Bienvenido al convenio de eutanasias - Alma Animal',
       html: renderBienvenida({ nombreCompleto: VET_MUESTRA, baseUrl: baseUrl(), linkDatosPago: '#', contacto: c }),
+    }),
+  },
+  {
+    key: 'eutanasia_editar_datos_vet',
+    titulo: 'Revisa y actualiza tus datos (vet del convenio)',
+    modulo: 'Eutanasias',
+    audiencia: 'Veterinario',
+    cuando: 'Al presionar "Enviar datos a Vet" en Servicios → Veterinarios.',
+    build: (m, c) => ({
+      subject: 'Revisa y actualiza tus datos del convenio - Alma Animal',
+      html: renderEditarDatos({
+        vetId: '0',
+        nombre: VET_MUESTRA,
+        apellido: '',
+        email: m.email,
+        nombreCompleto: VET_MUESTRA,
+        comunas: ['Recoleta', 'Independencia', 'Providencia'],
+        horarios: { lun: { am: true, pm: true }, mie: { pm: true }, vie: { am: true, pm: true } },
+        datosPagoCompletos: true,
+        link: '#',
+        contacto: c,
+      }),
     }),
   },
   {

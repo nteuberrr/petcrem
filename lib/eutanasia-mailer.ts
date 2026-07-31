@@ -223,6 +223,111 @@ export function renderBienvenida({ nombreCompleto, baseUrl, linkDatosPago, conta
   return renderEmailLayout({ titulo: '¡Bienvenido al convenio!', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
 }
 
+// ─── Mail "revisa y actualiza tus datos" ─────────────────────────────────────
+
+export interface EditarDatosArgs {
+  vetId: string
+  nombre: string
+  apellido: string
+  email: string
+  /** Resumen de lo que hoy tenemos registrado, para que el vet vea qué va a revisar. */
+  comunas?: string[]
+  horarios?: Record<string, { am?: boolean; pm?: boolean }>
+  datosPagoCompletos?: boolean
+}
+
+/**
+ * Invita al veterinario a revisar y ACTUALIZAR su ficha del convenio (datos de
+ * contacto, comunas, días/horarios y datos de transferencia) desde un link
+ * firmado, sin sesión. Lo dispara el botón "Enviar datos a Vet" de
+ * Servicios → Veterinarios.
+ *
+ * A diferencia del link de `datos_pago` —de consumo único—, éste es de EDICIÓN:
+ * sigue sirviendo mientras no expire (30 días), porque su propósito es
+ * justamente que el vet mantenga su ficha al día. Cada cambio de datos
+ * bancarios le llega al admin por WhatsApp (ver el endpoint mis-datos).
+ */
+export async function enviarInvitacionEditarDatos(args: EditarDatosArgs): Promise<BienvenidaResult> {
+  const to = args.email
+  if (!to) return { ok: false, estado: 'error', error: 'El veterinario no tiene correo registrado.', to }
+  if (!isResendConfigured()) {
+    console.warn('[eutanasia-mailer] Resend no configurado, salto invitación editar datos a', to)
+    return { ok: false, estado: 'omitido_sin_resend', to }
+  }
+  const fromUsed = (() => { try { return getFromAddress() } catch { return '(no resolvable)' } })()
+  const baseUrl = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
+  const nombreCompleto = nombreCompletoVet(args.nombre, args.apellido)
+
+  let link = ''
+  try {
+    if (baseUrl && args.vetId) link = `${baseUrl}/eutanasia/mis-datos/${createVetToken(args.vetId, 'editar_datos')}`
+  } catch (e) {
+    console.warn('[eutanasia-mailer] no se pudo crear token editar_datos:', e)
+  }
+  if (!link) return { ok: false, estado: 'error', error: 'No se pudo generar el enlace (falta PUBLIC_APP_URL/NEXTAUTH_URL).', to }
+
+  try {
+    const contacto = await getContacto()
+    const res = await sendEmail({
+      to,
+      subject: 'Revisa y actualiza tus datos del convenio - Alma Animal',
+      html: renderEditarDatos({ ...args, nombreCompleto, link, contacto }),
+      preview_text: 'Confirma tus comunas, horarios y datos de transferencia.',
+      tags: [{ name: 'tipo', value: 'eutanasia_editar_datos_vet' }],
+      seguimiento: { tipo: 'eutanasia_editar_datos_vet', audiencia: 'Veterinario', nombre: nombreCompleto },
+    })
+    if (res.ok) return { ok: true, estado: 'enviado', message_id: res.message_id, from_used: fromUsed, to }
+    console.error(`[eutanasia-mailer] FAIL editar-datos a ${to}: ${res.error}`)
+    return { ok: false, estado: 'error', error: res.error, from_used: fromUsed, to }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`[eutanasia-mailer] EXC editar-datos a ${to}:`, msg)
+    return { ok: false, estado: 'error', error: msg, from_used: fromUsed, to }
+  }
+}
+
+export function renderEditarDatos(
+  args: EditarDatosArgs & { nombreCompleto: string; link: string; contacto: Contacto },
+): string {
+  const { nombreCompleto, link, contacto } = args
+  const comunas = (args.comunas || []).filter(Boolean)
+  const fila = (etq: string, valor: string) => `
+      <tr>
+        <td style="padding:8px 0;font-size:13px;color:${BRAND.muted};width:38%;vertical-align:top">${etq}</td>
+        <td style="padding:8px 0;font-size:13px;color:${BRAND.ink};font-weight:600">${valor}</td>
+      </tr>`
+  const cuerpo = `
+      <p style="margin:0 0 14px;font-size:15px">Hola <strong>${escapeHtml(nombreCompleto)}</strong>,</p>
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.6">
+        Queremos asegurarnos de que tus datos del convenio de eutanasias a domicilio estén al día:
+        de ellos dependen las solicitudes que te llegan (comunas y horarios) y el pago de cada servicio.
+      </p>
+      <div style="background:${BRAND.cream};border:1px solid ${BRAND.hairline};border-radius:10px;padding:16px;margin-bottom:18px">
+        <p style="margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:${BRAND.muted}">Esto es lo que tenemos registrado hoy</p>
+        <table style="width:100%;border-collapse:collapse">
+          ${fila('Correo', escapeHtml(args.email || '—'))}
+          ${fila('Comunas donde atiendes', comunas.length ? escapeHtml(comunas.join(', ')) : '—')}
+          ${fila('Días y horarios', escapeHtml(resumenHorarios(args.horarios)))}
+          ${fila('Datos de transferencia', args.datosPagoCompletos ? 'Registrados' : 'Pendientes')}
+        </table>
+      </div>
+      <div style="background:#fff;border:2px solid ${BRAND.navy};border-radius:10px;padding:18px;margin:18px 0;text-align:center">
+        <p style="margin:0 0 12px;font-size:14px;color:${BRAND.ink};line-height:1.5">
+          Entra, revisa todo y corrige lo que haga falta. Al presionar <strong>Guardar</strong> queda actualizado al instante en nuestro sistema.
+        </p>
+        <a href="${link}" style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:8px">
+          Revisar y actualizar mis datos
+        </a>
+        <p style="margin:10px 0 0;font-size:11px;color:${BRAND.muted}">Este enlace es personal y válido por 30 días. No lo reenvíes.</p>
+      </div>
+      <p style="margin:0;font-size:14px;line-height:1.55">
+        Si prefieres que lo hagamos nosotros, respóndenos este correo o escríbenos a
+        <a href="mailto:${escapeHtml(contacto.correo)}" style="color:${BRAND.navy}">${escapeHtml(contacto.correo)}</a>
+        y lo actualizamos por ti.
+      </p>`
+  return renderEmailLayout({ titulo: 'Revisa tus datos del convenio', contexto: CONTEXTO, bodyHtml: cuerpo, contacto })
+}
+
 // ─── Mail de agradecimiento + datos de pago ──────────────────────────────────
 
 export interface AgradecimientoArgs {

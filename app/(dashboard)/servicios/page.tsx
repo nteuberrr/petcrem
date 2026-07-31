@@ -10,6 +10,7 @@ import { incluyeCremacion } from '@/lib/eutanasia-cremacion'
 import { formatDate, formatHoraDia, todayISO } from '@/lib/dates'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { COMUNAS } from '@/lib/comunas'
+import { useAccionUnica } from '@/lib/use-accion-unica'
 
 const TABS = ['Cotizaciones', 'Veterinarios', 'Precios'] as const
 type Tab = typeof TABS[number]
@@ -266,6 +267,9 @@ function ServiciosEutanasiasContenido() {
   const [vetForm, setVetForm] = useState(vetFormDefault())
   const [savingVet, setSavingVet] = useState(false)
   const [vetError, setVetError] = useState('')
+  // Envío del enlace de autoservicio al vet: guard anti doble-click + fila en curso.
+  const { ejecutar: ejecutarEnvioDatos, procesando: enviandoDatos } = useAccionUnica()
+  const [enviandoDatosId, setEnviandoDatosId] = useState<string | null>(null)
 
   const cargarVets = useCallback(async () => {
     setLoadingVets(true)
@@ -770,6 +774,32 @@ function ServiciosEutanasiasContenido() {
     await cargarVets()
   }
 
+  /**
+   * Le envía al vet el correo con el botón para revisar/actualizar su ficha del
+   * convenio (contacto, comunas, horarios y datos de transferencia) desde un
+   * link firmado, sin que tenga que pasar por el equipo.
+   */
+  async function enviarDatosAVet(v: Vet) {
+    const nombre = `${v.nombre || ''} ${v.apellido || ''}`.trim() || 'este veterinario'
+    if (!confirm(`Enviar a ${nombre} (${v.email || 'sin correo'}) el enlace para revisar y actualizar sus datos?`)) return
+    await ejecutarEnvioDatos(async () => {
+      setEnviandoDatosId(v.id)
+      try {
+        const r = await fetch('/api/eutanasias/vets/enviar-datos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vet_id: v.id }),
+        })
+        const j = await r.json().catch(() => ({}))
+        alert(r.ok && j.ok ? (j.mensaje || 'Correo enviado.') : (j.error || 'No se pudo enviar el correo.'))
+      } catch {
+        alert('Error de red. Intenta de nuevo.')
+      } finally {
+        setEnviandoDatosId(null)
+      }
+    })
+  }
+
   async function toggleActivoVet(v: Vet, val: boolean) {
     await fetch('/api/eutanasias/vets', {
       method: 'PATCH',
@@ -1016,6 +1046,16 @@ function ServiciosEutanasiasContenido() {
                             <Toggle checked={v.activo !== 'FALSE'} onChange={val => toggleActivoVet(v, val)} />
                           </td>
                           <td className="px-3 py-2 text-right whitespace-nowrap">
+                            <button
+                              onClick={() => enviarDatosAVet(v)}
+                              disabled={enviandoDatos || !v.email}
+                              title={v.email
+                                ? 'Le envía un correo con un enlace para que revise y actualice sus datos, comunas, horarios y cuenta bancaria'
+                                : 'Este veterinario no tiene correo registrado'}
+                              className="text-emerald-700 hover:text-emerald-900 disabled:text-gray-400 disabled:cursor-not-allowed text-xs font-medium mr-2"
+                            >
+                              {enviandoDatosId === v.id ? 'Enviando…' : 'Enviar datos a Vet'}
+                            </button>
                             <button
                               onClick={() => abrirEditarVet(v)}
                               className="text-brand hover:text-brand text-xs font-medium mr-2"

@@ -130,6 +130,10 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith('/eutanasia/realizado/') ||
     pathname.startsWith('/eutanasia/no-realizado/') ||
     pathname.startsWith('/eutanasia/datos-pago/') ||
+    // Autoservicio del vet: revisa y actualiza su ficha del convenio desde el
+    // link firmado que le envía el equipo ("Enviar datos a Vet"). Sin sesión:
+    // el token HMAC 'editar_datos' es la autenticación.
+    pathname.startsWith('/eutanasia/mis-datos/') ||
     pathname.startsWith('/eutanasia/cliente-confirma/') ||
     pathname.startsWith('/eutanasia/hora-retiro/') ||
     pathname === '/api/eutanasias/cotizaciones/hora-retiro' ||
@@ -137,7 +141,8 @@ export async function proxy(req: NextRequest) {
     pathname === '/api/eutanasias/cotizaciones/realizado' ||
     pathname === '/api/eutanasias/cotizaciones/no-realizado' ||
     pathname === '/api/eutanasias/cotizaciones/cliente-confirmar' ||
-    pathname === '/api/eutanasias/vets/datos-pago'
+    pathname === '/api/eutanasias/vets/datos-pago' ||
+    pathname === '/api/eutanasias/vets/mis-datos'
   ) {
     return NextResponse.next()
   }

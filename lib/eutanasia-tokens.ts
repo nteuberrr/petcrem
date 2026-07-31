@@ -20,7 +20,7 @@ const DEFAULT_TTL_SECONDS = 72 * 3600 // 72h
 
 // Única fuente de verdad de las acciones válidas: el type se deriva de la
 // const, así verifyToken y el type nunca se desincronizan.
-export const ACCIONES_TOKEN = ['aceptar', 'realizado', 'no_realizado', 'datos_pago', 'cliente_confirmar', 'informar_hora_retiro'] as const
+export const ACCIONES_TOKEN = ['aceptar', 'realizado', 'no_realizado', 'datos_pago', 'editar_datos', 'cliente_confirmar', 'informar_hora_retiro'] as const
 export type AccionToken = typeof ACCIONES_TOKEN[number]
 
 export interface TokenPayload {
@@ -117,9 +117,11 @@ export function verifyToken(token: string): VerifyResult {
   if (!payload.vet_id || !(ACCIONES_TOKEN as readonly string[]).includes(payload.accion)) {
     return { ok: false, error: 'bad_payload' }
   }
-  // cotizacion_id es opcional para 'datos_pago' (no aplica a una cotización
-  // específica). Para las otras acciones sigue siendo obligatorio.
-  if (payload.accion !== 'datos_pago' && !payload.cotizacion_id) {
+  // cotizacion_id es opcional para las acciones a nivel VET ('datos_pago',
+  // 'editar_datos'): no aplican a una cotización específica. Para las otras
+  // sigue siendo obligatorio.
+  const SIN_COTIZACION: readonly AccionToken[] = ['datos_pago', 'editar_datos']
+  if (!SIN_COTIZACION.includes(payload.accion) && !payload.cotizacion_id) {
     return { ok: false, error: 'bad_payload' }
   }
   return { ok: true, payload }
