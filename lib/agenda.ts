@@ -433,6 +433,55 @@ function horasLibres(
     .map(fmtMin)
 }
 
+export interface DisponibilidadDia {
+  /** ISO YYYY-MM-DD */
+  fecha: string
+  /** Horas libres (HH:MM), de la más pronta a la más tarde. */
+  libres: string[]
+}
+
+/** Fechas ISO consecutivas desde `desdeISO` (anclado a las 12:00 UTC: inmune al horario de verano). */
+function fechasDesde(desdeISO: string, dias: number): string[] {
+  const [Y, M, D] = desdeISO.split('-').map(Number)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return Array.from({ length: Math.max(1, dias) }, (_, i) => {
+    const d = new Date(Date.UTC(Y, M - 1, D + i, 12, 0, 0))
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
+  })
+}
+
+/**
+ * Horas realmente libres de los próximos `dias` días (empezando HOY en Chile),
+ * con UNA sola lectura de la agenda para todo el rango.
+ *
+ * La consume el prompt del bot. Sin esto el modelo solo conocía la ventana
+ * TEÓRICA (09:00–21:10) y no la ocupación real, así que terminaba presentando la
+ * hora de CIERRE como si fuera "la última disponible" con el día entero libre
+ * (caso Anita, 31-07-2026: a las 11:56, con solo dos retiros a las 09:45, le
+ * ofreció las 21:10 como único horario y la clienta se fue).
+ */
+export async function disponibilidadProximosDias(dias = 2): Promise<DisponibilidadDia[]> {
+  const { iso: hoy, min: ahora } = ahoraChile()
+  const fechas = fechasDesde(hoy, dias)
+  const desde = fechas[0], hasta = fechas[fechas.length - 1]
+  const [items, bloqueos] = await Promise.all([
+    listarAgenda(desde, hasta).catch(() => [] as AgendaItem[]),
+    listarBloqueos(desde, hasta).catch(() => [] as BloqueoAgenda[]),
+  ])
+  const ocupados = new Map<string, number[]>()
+  for (const it of items) {
+    // Mismo criterio que ocupadosDe: la eutanasia sin cremación no ocupa slot.
+    if (it.tipo === 'eutanasia' && it.sinCremacion) continue
+    const min = horaMin(it.hora)
+    if (min == null) continue
+    ocupados.set(it.fecha, [...(ocupados.get(it.fecha) || []), min])
+  }
+  return fechas.map(fecha => ({
+    fecha,
+    libres: horasLibres(fecha, hoy, ahora, ocupados.get(fecha) || [], rangosDelDia(bloqueos, fecha)),
+  }))
+}
+
 /**
  * Reservas de la agenda que CHOCAN con (fecha, hora) según la separación vigente
  * (30 min antes / 45 después). Devuelve los items para poder nombrarlos en el

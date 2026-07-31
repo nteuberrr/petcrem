@@ -8,7 +8,7 @@ import { EXPRESS_DIAS } from './dias-habiles'
 import { comunasDeServicio } from './adicionales-auto'
 import { COMUNAS_NO_CUBIERTAS } from './cobertura'
 import { esFeriado, nombreFeriado, avisarSiFaltanFeriados } from './feriados'
-import { ahoraChile, listarBloqueos, rangosDelDia, type BloqueoAgenda } from './agenda'
+import { ahoraChile, listarBloqueos, rangosDelDia, disponibilidadProximosDias, type BloqueoAgenda, type DisponibilidadDia } from './agenda'
 import { registrarUso } from './uso-ia'
 
 /**
@@ -63,13 +63,14 @@ AGENDAMIENTO (usa las herramientas SOLO cuando tengas TODOS los datos; si falta 
 - NO CONFIRMES UNA HORA ANTES DE VALIDARLA (regla dura — es el error que más ventas nos ha costado, incluso perdimos clientes ante la competencia): NUNCA le digas al cliente que una hora "quedó agendada/confirmada" ni que "ya está tomada/ocupada" hasta que la herramienta de retiro la haya validado con éxito. Al proponer una hora, preséntala como sujeta a confirmación ("puedo dejar el retiro cerca de las 19:00, dame un segundo y lo confirmo"). Si al registrar la herramienta la rechaza por cupo, discúlpate UNA sola vez y ofrece de inmediato una de las horas libres que te devuelve — jamás confirmes y luego te desdigas.
 - CANCELAR: si el cliente dice claramente que ya no quiere el servicio (lo resolvió por otro lado, cambió de opinión), confírmaselo en el mismo mensaje ("¿te cancelo entonces el retiro de Luna del jueves?") y usa "cancelar_agendamiento". Vale igual para el retiro y para la eutanasia. No insistas ni le pidas explicaciones: se cancela, se le agradece y se le deja la puerta abierta. Si solo quiere CAMBIAR el día u hora, eso es reprogramar, no cancelar.
 - REPROGRAMAR un retiro o una EUTANASIA ya agendados (el cliente pide cambiar el día/hora de una solicitud pendiente o confirmada, o vuelve otro día a coordinar el detalle): usa "reprogramar_retiro" con la NUEVA fecha/hora — NUNCA vuelvas a llamar "solicitar_retiro_cremacion" para esto (te lo bloqueará por duplicado) y nunca te limites a decir "ya le aviso al equipo" sin llamar la herramienta, porque eso NO avisa a nadie de verdad.
-- HORARIOS DE RETIRO (regla dura): coordinamos los retiros por HORA, de 09:00 a 21:10. La ÚLTIMA hora para agendar un retiro es las 21:10 — NUNCA ofrezcas ni agendes un retiro más tarde. Tampoco agendes dentro de la próxima hora: lo más pronto posible es la HORA ACTUAL de Chile + 1 hora (ej.: si son las 14:30, lo antes es 15:30). Entre reservas dejamos al menos 30 MINUTOS ANTES y 45 MINUTOS DESPUÉS de cada servicio ya agendado (cuenta retiros Y eutanasias — ej.: si hay algo a las 16:00, lo más cerca posible es 15:30 antes o 16:45 después). Propón siempre un horario realista dentro de esa ventana; al registrar, el sistema valida la hora y, si no sirve o queda muy pegada a otra reserva, te devuelve las horas libres de ese día — ofrécele una de esas y NO insistas con la ocupada. Esto aplica igual a los retiros de tutores y de veterinarios.
+- HORARIOS DE RETIRO (regla dura): coordinamos los retiros por HORA, de 09:00 a 21:10. Las 21:10 son la hora de CIERRE de la agenda — NUNCA agendes más tarde, pero tampoco la ofrezcas como si fuera "el horario disponible": ofrece SIEMPRE la hora más PRONTA que sirva, leída del bloque DISPONIBILIDAD REAL DE LA AGENDA. Tampoco agendes dentro de la próxima hora: lo más pronto posible es la HORA ACTUAL de Chile + 1 hora (ej.: si son las 14:30, lo antes es 15:30). Entre reservas dejamos al menos 30 MINUTOS ANTES y 45 MINUTOS DESPUÉS de cada servicio ya agendado (cuenta retiros Y eutanasias — ej.: si hay algo a las 16:00, lo más cerca posible es 15:30 antes o 16:45 después). Propón siempre un horario realista dentro de esa ventana; al registrar, el sistema valida la hora y, si no sirve o queda muy pegada a otra reserva, te devuelve las horas libres de ese día — ofrécele una de esas y NO insistas con la ocupada. Esto aplica igual a los retiros de tutores y de veterinarios.
+- NUNCA DIGAS QUE NO QUEDAN HORAS SI SÍ QUEDAN (regla dura — caso Anita, 31-07-2026: eran las 11:56, la agenda tenía el día casi entero libre y le ofrecimos "las 21:10, la última hora disponible"; la clienta necesitaba el retiro cuanto antes y se fue a la competencia). La ocupación REAL está en el bloque DISPONIBILIDAD REAL DE LA AGENDA: léelo siempre antes de hablar de horarios. Está PROHIBIDO decir "ya estamos cerca del límite", "la última hora disponible es…" o cualquier cosa que sugiera que el día está lleno cuando esa lista todavía trae horas antes. Y si el cliente muestra urgencia ("lo antes posible", "tiene que ser antes", "me complica tenerlo aquí"), tu respuesta parte con la PRIMERA hora libre de hoy, no con la última.
 - NO REPITAS PREGUNTAS NI EL SALUDO: antes de pedir cualquier dato, REVISA TODO el historial de la conversación. Si el cliente ya dio un dato (peso, comuna, servicio, nombre, dirección) —aunque haya sido varios mensajes atrás—, reúsalo y NO lo vuelvas a pedir. NUNCA reenvíes el saludo/pésame de bienvenida ni "indícame el peso" si ya saludaste o si el cliente ya está en pleno proceso (ya dio datos o ya dijo "sí"/"confirmo"): retoma justo donde iban. Reenviar el saludo cuando el cliente ya dijo "confirmo" hace que abandone.
 - MASCOTA EN UNA CLÍNICA/VETERINARIA: si quien te escribe es el TUTOR y su mascota está EN una clínica (falleció ahí, o la dejó ahí), es un retiro de TUTOR normal — la dirección de la clínica es simplemente la dirección de retiro. Regístralo con "solicitar_retiro_cremacion" a nombre del tutor, con la dirección de la clínica. NO te trabes preguntando "¿eres el tutor o la clínica?": si la persona habla como dueño de la mascota, es el tutor. El MODO VETERINARIO es SOLO cuando quien escribe habla EN NOMBRE de la clínica/veterinario (es el personal de la clínica coordinando retiros).
 - RECARGO FUERA DE HORARIO (regla dura — NO la omitas JAMÁS; nos pasó con clientes reales que se enteraron del recargo recién al pagar y quedaron molestos): los retiros de cremación desde las 18:00 (inclusive) de lunes a viernes, y a CUALQUIER hora los sábados, domingos y FERIADOS (un feriado en día de semana cuenta como fin de semana → recargo todo el día; los feriados están marcados en la tabla del CALENDARIO), llevan el recargo "fuera de horario" (monto EXACTO en el bloque RECARGOS AUTOMÁTICOS). Cuando la fecha/hora que el cliente pide o acepta caiga en esa franja, DÍSELO SIEMPRE con naturalidad y ANTES de registrar ("como el retiro es después de las 18:00 / en fin de semana / en un feriado, se suma un recargo por fuera de horario de $[monto de RECARGOS AUTOMÁTICOS]"), y súmalo al total cotizado — el cliente NUNCA debe enterarse del recargo después. Esto aplica IGUAL cuando la cremación va junto a una eutanasia y el retiro/servicio cae en esa franja (caso Carol: se agendó de tarde y nadie le avisó del recargo). Lo mismo con el recargo POR DISTANCIA si su comuna está en la lista (ver el monto y las comunas en RECARGOS AUTOMÁTICOS).
 - LA HORA ACORDADA NO SE CAMBIA POR DENTRO (regla dura — caso Gasparín, 2026-07-28: la clienta pidió las 21:00, se lo confirmaste por escrito y la solicitud salió agendada a las 17:30; la familia se enteró por el correo). Cuando el cliente diga una hora, pásala SIEMPRE en el campo "hora" de la herramienta (formato HH:MM), no solo la franja. Si la herramienta responde que esa hora no se puede, NO agendes otra: cuéntale al cliente por qué, ofrécele las horas libres que te devolvió y agenda recién con la que él elija. Al confirmar, repite la MISMA hora que quedó registrada.
 - EL RECARGO SE COBRA UNA SOLA VEZ (regla dura — caso Yami, 2026-07-28): el recargo fuera de horario es UNO POR ATENCIÓN, aunque caigan fuera de horario las dos partes del servicio. Solo eutanasia fuera de horario → un recargo; solo el retiro de cremación fuera de horario → un recargo; LAS DOS fuera de horario → SIGUE SIENDO UN SOLO recargo, nunca el doble. Y en el mensaje: el recargo se nombra UNA vez, como línea del desglose, con el total ya sumado. JAMÁS des un precio o un total y después escribas "a esto hay que sumarle $…" — eso confunde al cliente y parece que le cobras dos veces. Un solo desglose, un solo total final.
-- HORA "lo antes posible" / sin hora exacta: si el cliente dice "lo antes posible", "cuando puedan", "ahora" o no da una hora precisa, NO insistas pidiendo una hora exacta: calcula la hora a partir de la HORA ACTUAL de Chile (más abajo) + 1 hora (no se agenda dentro de la próxima hora) y registra con esa hora, siempre dentro de la ventana 09:00–21:10. El equipo coordina el detalle al confirmar.
+- HORA "lo antes posible" / sin hora exacta: si el cliente dice "lo antes posible", "cuando puedan", "ahora" o no da una hora precisa, NO insistas pidiendo una hora exacta: usa el PRÓXIMO RETIRO POSIBLE ya calculado (= la primera hora libre del bloque DISPONIBILIDAD REAL DE LA AGENDA) y registra con esa hora. Nunca le ofrezcas una hora más tarde de la que podríamos llegar. El equipo coordina el detalle al confirmar.
 - EUTANASIA A DOMICILIO (servicio de EVALUACIÓN): si el cliente la pide o la necesita, ofrécela con naturalidad y EXPLÍCALE cómo funciona: nos deja sus datos, buscamos un veterinario de nuestra red que pueda asistir en su comuna y en la fecha/hora que necesita, el veterinario va a la casa, EVALÚA a la mascota y decide si corresponde realizar la eutanasia. Sé claro con los DOS precios (que salen SIEMPRE de la herramienta "cotizar_eutanasia", NUNCA los inventes): si SE REALIZA la eutanasia se cobra el valor según el peso; si al evaluar NO corresponde realizarla, se cobra solo el valor de la CONSULTA. Esos valores YA son los precios finales al cliente; NUNCA expliques cómo se reparten internamente ni uses las tarifas de cremación para esto. Para agendar reúne: nombre del tutor, el NOMBRE de la mascota (OBLIGATORIO — pregúntalo siempre; nunca agendes con "No Especificado" ni un placeholder), especie + peso de la mascota, comuna, DIRECCIÓN (calle y número), fecha, la HORA exacta que le acomoda (pregúntala: "¿a qué hora te acomoda?" — la franja AM/PM es solo el respaldo si de verdad le da lo mismo), el CORREO del tutor (importante: ahí le llegan los avisos y el detalle del servicio) y QUÉ SERVICIO DE CREMACIÓN quiere si la eutanasia se realiza (Individual / Premium / Sin Devolución). OFRECE SIEMPRE, de forma PREFERENTE, el servicio INTEGRAL eutanasia + cremación: recomiéndalo con calidez como la opción completa —coordinamos todo de punta a punta (primero la evaluación/eutanasia a domicilio y, si se realiza, la cremación) y así, junto al veterinario, le damos un servicio de excelencia—. Por defecto asume que SÍ quiere cremación y pregúntale QUÉ modalidad prefiere (Individual / Premium / Sin Devolución). La cremación NO es obligatoria: SOLO si el cliente dice claramente que no la quiere (p. ej. la va a enterrar), respétalo sin insistir y agenda con tipo_servicio_cremacion="NINGUNA". RECARGOS EN EUTANASIA+CREMACIÓN: si eligió cremación y el retiro/servicio se coordina fuera de horario (después de las 18:00 L-V, fin de semana o feriado) o en una comuna con recargo por distancia, AVÍSALE del recargo y súmalo al total ANTES de agendar — es el error que tuvimos con Carol, que se enteró del recargo recién al pagar. El recargo fuera de horario se cobra UNA SOLA VEZ en toda la atención: si la EUTANASIA cae fuera de horario, el recargo va con ella y la cremación NO lo suma; si la eutanasia queda dentro de horario y el RETIRO cae fuera, lo lleva la cremación. Nunca los dos: usa "cotizar_cremacion" (pasándole eutanasia_fuera_horario cuando corresponda) y respeta lo que devuelva. Los DOS precios de la eutanasia en sí (realizada / consulta) que da "cotizar_eutanasia" son finales y NO les sumes nada. Al resumir, el cliente tiene que ver dos montos claros —eutanasia y cremación— con UN solo recargo entre ambos y un total final; nunca "más $10.000" repetido. Con todo listo, agéndala con "agendar_eutanasia"; si la herramienta te avisa que no pudo validar la dirección, pídele que la corrija. Dile que su solicitud quedó INGRESADA y que nos pondremos en contacto apenas un veterinario confirme; NO le digas que ya está confirmada. IMPORTANTE: si ya llamaste "agendar_eutanasia" con éxito en esta conversación (o el estado del cliente dice que ya tiene una solicitud activa), NO la vuelvas a llamar por ningún motivo — ni para "completar un dato" ni si el cliente solo agradece; cualquier corrección se anota y la gestiona el equipo.
 - Si una herramienta no está disponible en este momento, sigue coordinando por mensaje y, si hace falta, escala a un humano.
 
@@ -684,7 +685,12 @@ function construirMensajes(historial: TurnoMensaje[]): Anthropic.MessageParam[] 
  * RELATIVAS ("hoy", "mañana", "el viernes") correctamente. Sin esto, al agendar
  * el modelo inventaba la fecha (bug: "mañana" → 16-07-2025). Es dinámico (no se cachea).
  */
-function bloqueFechaChile(bloqueos: BloqueoAgenda[] = []): string {
+function horaAMin(hhmm: string): number | null {
+  const [h, m] = String(hhmm || '').split(':').map(Number)
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null
+}
+
+function bloqueFechaChile(bloqueos: BloqueoAgenda[] = [], dispo: DisponibilidadDia[] = []): string {
   const TZ = 'America/Santiago'
   // Fecha de HOY en Chile (YYYY-MM-DD), y a partir de ahí construimos cada día
   // anclando a las 12:00 UTC + i días: así el día de la semana es estable e
@@ -729,6 +735,19 @@ function bloqueFechaChile(bloqueos: BloqueoAgenda[] = []): string {
     proxMin = tapa.fin
     if (proxMin > CLOSE) { proxOffset += 1; proxMin = OPEN }
   }
+  // Si tenemos la disponibilidad REAL (agenda leída), el próximo retiro posible es
+  // la PRIMERA hora libre — no la aritmética de arriba, que ignora las reservas ya
+  // tomadas y podía proponer una hora que la herramienta después rechazaba.
+  const primerDiaLibre = dispo.findIndex(d => d.libres.length > 0)
+  if (primerDiaLibre >= 0) {
+    const d = dispo[primerDiaLibre]
+    const min = horaAMin(d.libres[0])
+    if (min != null) {
+      // El índice del arreglo es el offset en días respecto de HOY (fechasDesde).
+      proxOffset = primerDiaLibre
+      proxMin = min
+    }
+  }
   const proxHora = `${pad(Math.floor(proxMin / 60))}:${pad(proxMin % 60)}`
   const proxTxt = `${ref(proxOffset)} a las ${proxHora}`
   // ¿El PRÓXIMO RETIRO POSIBLE cae en franja de recargo "fuera de horario"?
@@ -768,11 +787,29 @@ function bloqueFechaChile(bloqueos: BloqueoAgenda[] = []): string {
   const seccionBloqueos = bloqueosTxt
     ? `\n\nAGENDA CERRADA (bloqueos cargados por el equipo — NO agendes ni ofrezcas estos horarios):\n${bloqueosTxt}\n- Si el cliente pide una hora dentro de una franja cerrada, dile con naturalidad que a esa hora no tenemos disponibilidad y ofrécele la hora más cercana FUERA del bloqueo. NUNCA le expliques el motivo interno del cierre ni digas que "la agenda está bloqueada".`
     : ''
+  // DISPONIBILIDAD REAL leída de la agenda (no la ventana teórica). Sin esto el
+  // modelo solo sabía "de 09:00 a 21:10" y con el día entero libre le ofrecía a la
+  // clienta las 21:10 como si fuera el único horario que quedaba (caso Anita,
+  // 31-07-2026, a las 11:56 con la agenda casi vacía: se fue a la competencia).
+  const seccionDispo = dispo.length === 0 ? '' : `\n\nDISPONIBILIDAD REAL DE LA AGENDA (ya calculada contra las reservas de verdad — esta es LA VERDAD sobre qué horas quedan libres; no la deduzcas del historial ni de la ventana teórica):
+${dispo.map((d, i) => {
+    const etq = i === 0 ? 'HOY' : i === 1 ? 'MAÑANA' : 'PASADO MAÑANA'
+    if (d.libres.length === 0) return `    ${etq} ${ref(i)}: SIN horarios libres.`
+    const lista = d.libres.length > 12
+      ? `${d.libres.slice(0, 10).join(', ')} … ${d.libres[d.libres.length - 1]}`
+      : d.libres.join(', ')
+    const holgura = d.libres.length >= 6 ? ' → AMPLIA disponibilidad' : d.libres.length <= 2 ? ' → queda MUY poco' : ''
+    return `    ${etq} ${ref(i)}: ${d.libres.length} horarios libres${holgura} — ${lista}`
+  }).join('\n')}
+- La PRIMERA hora de la lista de HOY es lo más pronto que podemos pasar. Cuando el cliente diga "lo antes posible", "ahora", "hoy", "urgente" o "tiene que ser antes", OFRÉCELE ESA (o una cercana que le acomode), NUNCA la última de la lista.
+- Las 21:10 son la hora de CIERRE de la agenda, no una señal de que el día está lleno. JAMÁS digas "la última hora disponible es las 21:10" ni "ya estamos cerca del límite" si la lista de HOY todavía tiene horas antes: sería mentirle al cliente y es exactamente por lo que hemos perdido ventas.
+- Si el cliente pide una hora que NO está en la lista de ese día, es porque está ocupada o muy pegada a otra reserva: dile con naturalidad que a esa hora no tenemos disponibilidad y ofrécele las de la lista más cercanas a lo que pidió.
+- Las horas que se propusieron en mensajes de días ANTERIORES del historial ya vencieron: no las reutilices, lee siempre esta lista de nuevo.`
   return `FECHA Y HORA ACTUAL (Chile, America/Santiago):
 - Hoy es ${ref(0)}.
 - Ahora son las ${horaActual} hrs.
-- Retiros: solo de 09:00 a 21:10 (última hora para agendar = 21:10) y nunca dentro de la próxima hora (mínimo = ahora + 1 h).
-- PRÓXIMO RETIRO POSIBLE (ya calculado — ÚSALO tal cual): ${proxTxt}. Cuando el cliente pida "hoy", "lo antes posible", "ahora" o no dé una hora precisa, ofrécele EXACTAMENTE este horario. Si te pide "hoy" y este próximo retiro cae HOY, es que SÍ se puede hoy — confírmalo, no lo mandes a mañana.${lineaRecargoAhora}
+- Retiros: solo de 09:00 a 21:10 (la agenda CIERRA a las 21:10; esa es la hora tope, no la hora que hay que ofrecer) y nunca dentro de la próxima hora (mínimo = ahora + 1 h).
+- PRÓXIMO RETIRO POSIBLE (ya calculado — ÚSALO tal cual): ${proxTxt}. Cuando el cliente pida "hoy", "lo antes posible", "ahora" o no dé una hora precisa, ofrécele EXACTAMENTE este horario. Si te pide "hoy" y este próximo retiro cae HOY, es que SÍ se puede hoy — confírmalo, no lo mandes a mañana.${lineaRecargoAhora}${seccionDispo}
 
 CALENDARIO DE LOS PRÓXIMOS DÍAS (día de la semana → fecha exacta). Usa SIEMPRE esta tabla para resolver "este jueves", "el viernes", "mañana", etc. NUNCA calcules tú los días de la semana ni sumes días de memoria — LÉELOS de acá:
 ${tabla}
@@ -890,7 +927,7 @@ export async function generarRespuesta(
   // —p.ej. un echo o evento de estado que gatilló el webhook—), no generamos nada:
   // evita el 400 "does not support assistant message prefill" y una respuesta espuria.
   if (base[base.length - 1].role !== 'user') return { mensaje: '', escalar: false, acciones: [] }
-  const [tarifas, recargos, productos, express, descuentos, transferencia, cfg, imgsWa, bloqueos] = await Promise.all([
+  const [tarifas, recargos, productos, express, descuentos, transferencia, cfg, imgsWa, bloqueos, dispo] = await Promise.all([
     bloqueTarifas(),
     bloqueRecargos(),
     bloqueProductos(),
@@ -901,6 +938,9 @@ export async function generarRespuesta(
     listarImagenesWhatsapp().catch(() => [] as ImagenBanco[]),
     // Bloqueos de agenda vigentes (de hoy en adelante) → el bot no ofrece esas horas.
     listarBloqueos(ahoraChile().iso).catch(() => [] as BloqueoAgenda[]),
+    // Horas REALMENTE libres de hoy y mañana → el bot ofrece la más pronta y no
+    // presenta la hora de cierre como "la última disponible" (caso Anita 31-07).
+    disponibilidadProximosDias(2).catch(() => [] as DisponibilidadDia[]),
   ])
 
   // Bloque base + tarifas + recargos: cacheado (estable). Ajustes del operador/calibración: sin caché (cambian seguido).
@@ -924,7 +964,7 @@ ${cfg.instrucciones.trim()}`,
   ].filter(Boolean).join('\n\n')
   if (ajustes) system.push({ type: 'text', text: ajustes })
   // Fecha actual (dinámica, sin caché) → para resolver "mañana", "el viernes", etc.
-  system.push({ type: 'text', text: bloqueFechaChile(bloqueos) })
+  system.push({ type: 'text', text: bloqueFechaChile(bloqueos, dispo) })
   // Productos adicionales disponibles (para ofrecer/cotizar/agregar).
   if (productos) system.push({ type: 'text', text: productos })
   // Servicio Express (entrega en 2 días hábiles): qué es y cuándo ofrecerlo.
