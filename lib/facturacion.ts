@@ -299,6 +299,15 @@ export async function emitirBoletaSiCorresponde(
  *
  * Los cobros tipo 'saldo' NO pasan por acá: esos cierran el pago de la ficha
  * completa y su boleta es la de la ficha (clientes.boleta_id).
+ *
+ * ⚠️ Solo aplica si la ficha YA tiene su boleta emitida ("cobro POSTERIOR"). Si
+ * todavía no la tiene, el adicional ya está dentro de `precio_total` (tanto la
+ * ficha como el bot recalculan el snapshot al agregarlo) y lo va a cubrir la
+ * boleta de la ficha cuando se emita → emitir acá lo cobraría DOS VECES.
+ * Caso real (Simón P183-CP, 2026-07-30): se agregaron dos ánforas premium a una
+ * Cremación Premium, se pagó el cobro de la segunda (boleta 10228 por $30.000) y
+ * 23 segundos después la ficha se marcó pagada → boleta 10229 por $215.000, que
+ * ya incluía esos $30.000. Se declararon $245.000 por una venta de $215.000.
  */
 export async function emitirBoletaCobroSiCorresponde(
   cobro: { id: string; cliente_id: string; tipo: string; detalle: string; monto: string; boleta_id?: string },
@@ -316,6 +325,9 @@ export async function emitirBoletaCobroSiCorresponde(
   // facturan al vet, mensual y manual) y solo fichas ya registradas.
   if (String(ficha.veterinaria_id || '').trim()) return { emitida: false }
   if (String(ficha.estado || '') === 'borrador' || !String(ficha.codigo || '').trim()) return { emitida: false }
+  // La ficha todavía no tiene boleta → el adicional viaja dentro de precio_total
+  // y lo documenta la boleta de la ficha. Emitir acá sería facturarlo dos veces.
+  if (!String(ficha.boleta_id || '').trim()) return { emitida: false }
 
   const mascota = (ficha.nombre_mascota || 'mascota').trim()
   const tutor = (ficha.nombre_tutor || mascota).trim()

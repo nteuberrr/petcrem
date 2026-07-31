@@ -33,6 +33,8 @@ export interface VentaBoleta {
   monto: number
   estado_pago: string
   boleta: DocResumen | null
+  /** Boletas de cobros posteriores (adicional / diferencia de peso) de esta ficha. */
+  boletas_cobro: DocResumen[]
 }
 
 export interface VentaFactura {
@@ -181,6 +183,38 @@ function DocBoleta({ boleta }: { boleta: DocResumen | null }) {
   )
 }
 
+/**
+ * Boletas de COBROS POSTERIORES de la ficha (adicional pedido después, diferencia
+ * de peso). No son parte del monto de la venta: son plata cobrada aparte. Antes no
+ * se veían en ninguna vista del módulo porque cuelgan de `cobros`, no de la ficha.
+ */
+function BoletasCobro({ boletas }: { boletas: DocResumen[] }) {
+  if (boletas.length === 0) return null
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      {boletas.map(b => (
+        <span key={b.id} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-gray-50 px-1.5 py-0.5">
+          <span className="text-[10px] uppercase tracking-wide text-gray-500">Cobro</span>
+          <span className={`text-xs font-mono font-bold ${b.estado === 'anulado' ? 'text-gray-400 line-through' : 'text-brand'}`}>{b.folio || '—'}</span>
+          <span className="text-xs text-gray-600">{fmtPrecio(b.monto_total)}</span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/** Adapta un DocResumen (boleta) al shape que espera el modal de nota de crédito. */
+function docParaAnular(doc: DocResumen, razonSocial: string): Documento {
+  return {
+    id: doc.id, tipo_dte: '39', folio: doc.folio, estado: doc.estado,
+    ambiente: doc.ambiente, fecha_emision: doc.fecha_emision,
+    receptor_razon_social: razonSocial, receptor_rut: '',
+    monto_total: String(doc.monto_total), resumen: '', mes_facturado: '',
+    pdf_url: doc.pdf_url, openfactura_url: doc.openfactura_url,
+    documento_anulado_id: '', nc_id: '', abonado: doc.abonado,
+  }
+}
+
 // ─── Boletas: ventas B2C ──────────────────────────────────────────────────────
 function BoletasTab() {
   const [ventas, setVentas] = useState<VentaBoleta[]>([])
@@ -213,7 +247,10 @@ function BoletasTab() {
     const total = ventas.reduce((s, v) => s + v.monto, 0)
     const emitidas = ventas.filter(v => v.boleta).length
     const pagadasSinBoleta = ventas.filter(v => v.estado_pago === 'pagado' && !v.boleta).length
-    return { total, emitidas, pagadasSinBoleta }
+    // Cobros posteriores boleteados aparte: no suman al total de ventas (esa plata
+    // se cobró después de congelado el monto de la ficha), pero sí hay que verlos.
+    const cobros = ventas.reduce((s, v) => s + v.boletas_cobro.filter(b => b.estado !== 'anulado').length, 0)
+    return { total, emitidas, pagadasSinBoleta, cobros }
   }, [ventas])
 
   async function emitir(v: VentaBoleta) {
@@ -263,27 +300,26 @@ function BoletasTab() {
                           <span className="text-xs text-gray-500">{v.fecha ? fmtFecha(v.fecha) : '—'}</span>
                           <BadgePago estado={v.estado_pago} />
                           <DocBoleta boleta={v.boleta} />
+                          <BoletasCobro boletas={v.boletas_cobro} />
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-gray-700 hidden md:table-cell">{v.fecha ? fmtFecha(v.fecha) : '—'}</td>
                       <td className="px-2 md:px-4 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(v.monto)}</td>
                       <td className="px-4 py-2.5 hidden md:table-cell"><BadgePago estado={v.estado_pago} /></td>
                       <td className="px-4 py-2.5 hidden md:table-cell">
-                        <DocBoleta boleta={v.boleta} />
+                        <div className="flex flex-col gap-1 items-start">
+                          <DocBoleta boleta={v.boleta} />
+                          <BoletasCobro boletas={v.boletas_cobro} />
+                        </div>
                       </td>
                       <td className="px-2 md:px-4 py-2.5">
                         <div className="flex flex-col items-end gap-1">
                           <div className="flex items-center justify-end gap-2">
                             {v.boleta && <LinkDoc doc={v.boleta} />}
                             {v.boleta && v.boleta.estado !== 'anulado' && (
-                              <button onClick={() => setAnular({
-                                id: v.boleta!.id, tipo_dte: '39', folio: v.boleta!.folio, estado: v.boleta!.estado,
-                                ambiente: v.boleta!.ambiente, fecha_emision: v.boleta!.fecha_emision,
-                                receptor_razon_social: v.nombre_tutor, receptor_rut: '',
-                                monto_total: String(v.boleta!.monto_total || v.monto),
-                                resumen: '', mes_facturado: '', pdf_url: v.boleta!.pdf_url, openfactura_url: v.boleta!.openfactura_url,
-                                documento_anulado_id: '', nc_id: '', abonado: v.boleta!.abonado,
-                              })} className="text-xs font-semibold text-red-600 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50">Nota de crédito</button>
+                              <button onClick={() => setAnular(docParaAnular(
+                                { ...v.boleta!, monto_total: v.boleta!.monto_total || v.monto }, v.nombre_tutor,
+                              ))} className="text-xs font-semibold text-red-600 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50">Nota de crédito</button>
                             )}
                             {!v.boleta && v.estado_pago === 'pagado' && (
                               <button onClick={() => emitir(v)} disabled={emitiendo === v.id}
@@ -295,6 +331,15 @@ function BoletasTab() {
                               <span className="text-xs text-gray-400">Pendiente de pago</span>
                             )}
                           </div>
+                          {/* Boletas de cobros posteriores: link al PDF + su propia NC. */}
+                          {v.boletas_cobro.filter(b => b.estado !== 'anulado').map(b => (
+                            <div key={b.id} className="flex items-center justify-end gap-2">
+                              <span className="text-[10px] uppercase tracking-wide text-gray-400">Cobro {b.folio}</span>
+                              <LinkDoc doc={b} />
+                              <button onClick={() => setAnular(docParaAnular(b, v.nombre_tutor))}
+                                className="text-xs font-semibold text-red-600 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50">Nota de crédito</button>
+                            </div>
+                          ))}
                           {errFila[v.id] && <span className="text-xs text-red-600 max-w-[220px] text-right">{errFila[v.id]}</span>}
                         </div>
                       </td>
@@ -304,7 +349,10 @@ function BoletasTab() {
               </table>
             </div>
             <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm text-gray-600 flex flex-wrap justify-between gap-2">
-              <span>{ventas.length} venta{ventas.length === 1 ? '' : 's'} · {tot.emitidas} con boleta · {tot.pagadasSinBoleta} pagada{tot.pagadasSinBoleta === 1 ? '' : 's'} sin boleta</span>
+              <span>
+                {ventas.length} venta{ventas.length === 1 ? '' : 's'} · {tot.emitidas} con boleta · {tot.pagadasSinBoleta} pagada{tot.pagadasSinBoleta === 1 ? '' : 's'} sin boleta
+                {tot.cobros > 0 && ` · ${tot.cobros} boleta${tot.cobros === 1 ? '' : 's'} de cobros posteriores`}
+              </span>
               <span className="font-semibold text-gray-900">Total: {fmtPrecio(tot.total)}</span>
             </div>
           </>

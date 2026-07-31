@@ -44,6 +44,14 @@ export interface VentaBoleta {
   monto: number
   estado_pago: string    // pagado | parcial | pendiente
   boleta: DocResumen | null
+  /**
+   * Boletas de COBROS POSTERIORES de esta ficha (adicional pedido después de la
+   * boleta original, diferencia de peso). Cuelgan de `cobros.boleta_id`, no de la
+   * ficha, así que sin esto quedaban invisibles en el módulo (se emitían y no
+   * aparecían en ninguna vista). Su monto NO está en `monto`: es plata cobrada
+   * aparte, después de congelado el total de la venta.
+   */
+  boletas_cobro: DocResumen[]
 }
 
 export interface VentaFactura {
@@ -117,12 +125,24 @@ export interface FiltrosBoleta { desde?: string; hasta?: string; q?: string }
 
 /** Todas las ventas a tutor (B2C) con su monto y el estado de su boleta. */
 export async function listarVentasBoleta(f: FiltrosBoleta = {}): Promise<VentaBoleta[]> {
-  const [clientes, tablas, docs] = await Promise.all([
+  const [clientes, tablas, docs, cobros] = await Promise.all([
     getSheetData('clientes'),
     cargarTablas(),
     mapaDocumentos(),
+    getSheetData('cobros').catch(() => [] as Record<string, string>[]),
   ])
   const q = (f.q || '').trim().toLowerCase()
+
+  // Boletas de cobros posteriores, agrupadas por ficha.
+  const boletasCobroPorFicha = new Map<string, DocResumen[]>()
+  for (const c of cobros) {
+    const docId = String(c.boleta_id || '').trim()
+    const fichaId = String(c.cliente_id || '').trim()
+    const doc = docId ? docs.get(docId) : undefined
+    if (!doc || !fichaId) continue
+    const arr = boletasCobroPorFicha.get(fichaId)
+    if (arr) arr.push(doc); else boletasCobroPorFicha.set(fichaId, [doc])
+  }
 
   const out: VentaBoleta[] = []
   for (const c of clientes) {
@@ -145,9 +165,11 @@ export async function listarVentasBoleta(f: FiltrosBoleta = {}): Promise<VentaBo
       monto: precio.total,
       estado_pago: normalizarEstadoPago(c.estado_pago),
       boleta: boletaId ? (docs.get(boletaId) ?? null) : null,
+      boletas_cobro: boletasCobroPorFicha.get(String(c.id)) ?? [],
     }
     if (q) {
-      const hay = `${venta.codigo} ${venta.nombre_mascota} ${venta.nombre_tutor} ${venta.email} ${venta.boleta?.folio || ''}`.toLowerCase()
+      const folios = [venta.boleta?.folio || '', ...venta.boletas_cobro.map(b => b.folio)].join(' ')
+      const hay = `${venta.codigo} ${venta.nombre_mascota} ${venta.nombre_tutor} ${venta.email} ${folios}`.toLowerCase()
       if (!hay.includes(q)) continue
     }
     out.push(venta)
