@@ -1053,19 +1053,87 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
     return 'No reconocí esos productos en el catálogo. Revisa los IDs de la lista PRODUCTOS ADICIONALES DISPONIBLES y vuelve a intentarlo, o escala al equipo.'
   }
 
-  // Agregar a los adicionales existentes de la ficha + recalcular snapshot.
+  // Adicionales que YA tiene la ficha. Se CONSOLIDA por (tipo,id) en vez de
+  // apilar líneas: el modelo re-ejecuta esta herramienta con facilidad (basta un
+  // "gracias" del cliente) y cada repetición dejaba una línea nueva del mismo
+  // producto. Caso Max (P174-CP, 29-07-2026): pidió UNA ánfora "Madera Patitas",
+  // el bot ejecutó la venta 3 veces en 80 segundos (13:17, 13:18, 13:19) y la
+  // ficha terminó con 3 líneas iguales → se le entregaron las cenizas en 3
+  // ánforas y Bodega descontó 3 unidades.
+  //
+  // Regla: la llamada es IDEMPOTENTE. Si el producto ya está con esa cantidad (o
+  // más), no se agrega nada. Solo si el modelo pide MÁS unidades de las que hay
+  // se sube la cantidad, y únicamente esa diferencia se cobra y se descuenta de
+  // stock. Así "quiero 2 ánforas" sigue funcionando, pero repetir la herramienta
+  // no duplica nada.
   let adicionales: Array<{ tipo: string; id: string; nombre: string; precio: number; qty: number }> = []
   try { const x = JSON.parse(ficha.adicionales || '[]'); if (Array.isArray(x)) adicionales = x } catch { /* */ }
-  for (const r of resueltos) adicionales.push({ tipo: r.tipo, id: r.id, nombre: r.nombre, precio: r.precio, qty: r.qty })
+  const previos = adicionales.map(a => ({ ...a }))
+
+  type ItemResuelto = typeof resueltos[number]
+  const agregados: ItemResuelto[] = []   // el DELTA real (lo que se sumó ahora)
+  const yaEstaban: string[] = []
+  for (const r of resueltos) {
+    const i = adicionales.findIndex(a => a.tipo === r.tipo && String(a.id) === String(r.id))
+    if (i === -1) {
+      adicionales.push({ tipo: r.tipo, id: r.id, nombre: r.nombre, precio: r.precio, qty: r.qty })
+      agregados.push(r)
+      continue
+    }
+    const actual = Math.max(1, Number(adicionales[i].qty) || 1)
+    if (r.qty > actual) {
+      adicionales[i] = { ...adicionales[i], nombre: r.nombre, precio: r.precio, qty: r.qty }
+      agregados.push({ ...r, qty: r.qty - actual })
+    } else {
+      // Repetición: ya está agregado. No se toca la ficha ni se cobra de nuevo.
+      yaEstaban.push(r.nombre)
+    }
+  }
+
+  if (agregados.length === 0) {
+    return `Esos productos YA ESTÁN agregados al servicio de ${ficha.nombre_mascota || 'la mascota'} (${yaEstaban.join(', ')}): no los agregué de nuevo ni se cobró nada extra. ` +
+      `NO vuelvas a llamar esta herramienta para lo mismo. Respóndele al cliente de forma cálida y breve confirmando que ya quedó agregado. ` +
+      `Solo si el cliente pide EXPRESAMENTE unidades ADICIONALES, vuelve a llamarla indicando la cantidad TOTAL que quiere.`
+  }
+
+  /**
+   * Unidades COBRABLES por producto de una lista de adicionales, con la ánfora
+   * premium incluida del CP ya descontada. Se evalúa sobre la lista COMPLETA de
+   * la ficha (antes vs. después): si se evaluaba solo lo que entraba en la
+   * llamada, cada ánfora nueva volvía a "consumir" la incluida y salía gratis.
+   */
+  const catMap = new Map<string, string>([
+    ...prods.map(p => [String(p.id), String(p.categoria ?? '')] as [string, string]),
+  ])
+  const cobrablesDe = (lista: Array<{ tipo: string; id: string; precio: number; qty: number }>) => {
+    const m = new Map<string, number>()
+    for (const r of repartirAnforasPremium(ficha.codigo_servicio, lista, catMap)) {
+      const k = `${r.item.tipo}:${r.item.id}`
+      m.set(k, (m.get(k) ?? 0) + r.qtyCobrable)
+    }
+    return m
+  }
+  const cobrableAntes = cobrablesDe(previos)
+  const cobrableDespues = cobrablesDe(adicionales)
+
+  const snapInput = {
+    peso: parseFloat(ficha.peso_ingreso || ficha.peso_declarado || '0') || 0,
+    codigo_servicio: ficha.codigo_servicio || 'CI',
+    veterinaria_id: ficha.veterinaria_id || undefined,
+    tipo_precios: ficha.tipo_precios || undefined,
+    descuento_tipo: ficha.descuento_tipo || undefined,
+    descuento_valor: ficha.descuento_valor || undefined,
+  }
+  // ⚠️ El snapshot valoriza con `item.precio`: hay que pasarle el PRECIO de cada
+  // adicional. Antes se mandaba solo {tipo,id,qty} → todo valía 0, así que cada
+  // vez que el bot agregaba algo dejaba `precio_adicionales` en $0 y BORRABA lo
+  // que la ficha ya tenía cobrado (a Max le borró el recargo de fuera de horario:
+  // la ficha quedó en $175.000 cuando su boleta ya decía $185.000).
+  const paraSnapshot = (lista: typeof adicionales) =>
+    lista.map(x => ({ tipo: x.tipo as 'producto' | 'servicio', id: x.id, precio: x.precio, qty: x.qty }))
 
   try {
-    const snapshot = await calcularSnapshotFicha({
-      peso: parseFloat(ficha.peso_ingreso || ficha.peso_declarado || '0') || 0,
-      codigo_servicio: ficha.codigo_servicio || 'CI',
-      veterinaria_id: ficha.veterinaria_id || undefined,
-      tipo_precios: ficha.tipo_precios || undefined,
-      adicionales: adicionales.map(x => ({ tipo: x.tipo as 'producto' | 'servicio', id: x.id, qty: x.qty })),
-    })
+    const snapshot = await calcularSnapshotFicha({ ...snapInput, adicionales: paraSnapshot(adicionales) })
     await updateById('clientes', String(ficha.id), {
       ...ficha,
       adicionales: JSON.stringify(adicionales),
@@ -1078,19 +1146,21 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
     return 'No pude agregar el producto a la ficha en este momento. Discúlpate brevemente y dile al cliente que el equipo lo coordina en seguida (escala a un humano).'
   }
 
-  // Descontar stock de los productos agregados (los 'servicio' no llevan stock).
-  // Antes el bot escribía la ficha directo (sin pasar por el PATCH) y la venta
-  // nunca descontaba de Bodega. Best-effort: no bloquea la venta.
-  try { await ajustarStockAdicionales([], resueltos.filter(r => r.tipo === 'producto')) }
+  // Descontar stock SOLO del delta (los 'servicio' no llevan stock).
+  // Best-effort: no bloquea la venta.
+  try { await ajustarStockAdicionales([], agregados.filter(r => r.tipo === 'producto')) }
   catch (e) { console.warn('[agente-acciones] agregarAdicional: stock no ajustado:', e) }
 
   // Cobro: correo (con datos de transferencia + botón confirmar) + WhatsApp.
-  // En Cremación Premium va incluida UNA ánfora premium; las adicionales SÍ se
-  // cobran (fuente única: repartirAnforasPremium — misma regla que el snapshot).
-  const catMap = new Map(resueltos.filter(r => r.id).map(r => [String(r.id), String(r.categoria || '')]))
-  const cobrables = repartirAnforasPremium(ficha.codigo_servicio, resueltos, catMap)
-    .filter(r => r.qtyCobrable > 0)
-    .map(r => ({ ...r.item, qty: r.qtyCobrable }))
+  // Se cobra solo lo que pasó a ser cobrable con este delta — en Cremación
+  // Premium la PRIMERA ánfora premium de la ficha va incluida, las siguientes no.
+  const cobrables = agregados
+    .map(r => {
+      const k = `${r.tipo}:${r.id}`
+      const delta = (cobrableDespues.get(k) ?? 0) - (cobrableAntes.get(k) ?? 0)
+      return { ...r, qty: Math.min(r.qty, Math.max(0, delta)) }
+    })
+    .filter(r => r.qty > 0)
   const monto = cobrables.reduce((s, r) => s + r.precio * r.qty, 0)
 
   // ¿La ficha ya está REGISTRADA (tiene código = la mascota ya fue retirada/
@@ -1115,20 +1185,25 @@ async function agregarAdicional(a: AccionAgregarAdicional, ctx: CtxAgente): Prom
     } catch (e) { console.warn('[agente-acciones] agregarAdicional: cobro falló:', e) }
   }
 
-  const detalle = resueltos.map(r => `${r.qty > 1 ? `${r.qty}× ` : ''}${r.nombre}`).join(', ')
+  // El detalle describe el DELTA (lo que realmente se sumó), no lo pedido: si
+  // parte ya estaba, decir que se agregó todo de nuevo sería mentirle al cliente.
+  const detalle = agregados.map(r => `${r.qty > 1 ? `${r.qty}× ` : ''}${r.nombre}`).join(', ')
+  const nota = yaEstaban.length > 0
+    ? ` (${yaEstaban.join(', ')} ya estaba agregado de antes, no se duplicó ni se volvió a cobrar)`
+    : ''
   if (cobrables.length === 0) {
     // Todo lo agregado venía incluido gratis (ej. ánfora premium de una Cremación
     // Premium): no se cobró nada, así que NO se envió correo de pago.
-    return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'}, sin costo adicional (viene incluido en el servicio). ` +
+    return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'}, sin costo adicional (viene incluido en el servicio)${nota}. ` +
       `Confírmale de forma cálida y breve que quedó agregado, sin necesidad de pago adicional.`
   }
   if (!fichaRegistrada) {
     // Mascota todavía NO retirada: se anotó en la ficha, se cobra al retirar.
-    return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'} (${fmtPrecio(monto)}). ` +
+    return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'} (${fmtPrecio(monto)})${nota}. ` +
       `Como la mascota TODAVÍA NO ha sido retirada, quedó anotado en su ficha y NO enviamos ningún cobro por ahora: el pago se coordina al momento del retiro. ` +
       `Confírmale de forma cálida y breve que quedó agregado y que se cobra al momento del retiro (NO le digas que le llegará un correo con datos de pago).`
   }
-  return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'} (total a pagar ${fmtPrecio(monto)}). ` +
+  return `Listo: agregué ${detalle} al servicio de ${ficha.nombre_mascota || 'la mascota'} (total a pagar ${fmtPrecio(monto)})${nota}. ` +
     `Le enviamos al cliente un correo con el detalle y los datos de transferencia (y un aviso por WhatsApp). ` +
     `Confírmale de forma cálida y breve que quedó agregado y que le llegó el correo con los datos para pagar.`
 }

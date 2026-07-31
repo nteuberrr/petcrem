@@ -117,6 +117,15 @@ async function mapaDocumentos(): Promise<Map<string, DocResumen>> {
   return m
 }
 
+/**
+ * Monto a mostrar para una venta: si YA hay documento emitido manda su
+ * `monto_total` (el hecho tributario, inmutable); si no, el precio de la ficha.
+ * Un documento sin monto (dato viejo) cae al precio de la ficha.
+ */
+function montoDeVenta(doc: DocResumen | null, montoFicha: number): number {
+  return doc && doc.monto_total > 0 ? doc.monto_total : montoFicha
+}
+
 function esFichaRegistrada(c: Record<string, string>): boolean {
   return String(c.estado || '') !== 'borrador' && !!String(c.codigo || '').trim()
 }
@@ -154,6 +163,7 @@ export async function listarVentasBoleta(f: FiltrosBoleta = {}): Promise<VentaBo
 
     const precio = calcularPrecioFicha(c, undefined, { generales: tablas.g, convenio: tablas.c, especialesDeVet: [] })
     const boletaId = String(c.boleta_id || '').trim()
+    const boletaDoc = boletaId ? (docs.get(boletaId) ?? null) : null
 
     const venta: VentaBoleta = {
       id: String(c.id),
@@ -162,9 +172,16 @@ export async function listarVentasBoleta(f: FiltrosBoleta = {}): Promise<VentaBo
       nombre_tutor: c.nombre_tutor || '',
       email: c.email || '',
       fecha: fISO,
-      monto: precio.total,
+      // Con boleta EMITIDA manda el monto del DTE, no el snapshot de la ficha: el
+      // documento ante el SII es el hecho tributario y ya no cambia, mientras que
+      // la ficha se puede seguir editando después de emitir. Si divergen, mostrar
+      // la ficha hacía parecer que la boleta estaba mal (caso Max P174-CP: el DTE
+      // decía $185.000 —igual que el PDF y el correo al tutor— pero la vista
+      // mostraba $175.000 porque un adicional agregado 3 días después pisó el
+      // snapshot de la ficha).
+      monto: montoDeVenta(boletaDoc, precio.total),
       estado_pago: normalizarEstadoPago(c.estado_pago),
-      boleta: boletaId ? (docs.get(boletaId) ?? null) : null,
+      boleta: boletaDoc,
       boletas_cobro: boletasCobroPorFicha.get(String(c.id)) ?? [],
     }
     if (q) {
@@ -206,6 +223,7 @@ export async function listarVentasFactura(f: FiltrosFactura = {}): Promise<Venta
     const precio = calcularPrecioFicha(c, vet?.tipo_precios, { generales: tablas.g, convenio: tablas.c, especialesDeVet })
     const facturaId = String(c.factura_vet_id || '').trim()
     const boletaId = String(c.boleta_id || '').trim()
+    const boletaDoc = boletaId ? (docs.get(boletaId) ?? null) : null
 
     const venta: VentaFactura = {
       id: String(c.id),
@@ -220,9 +238,13 @@ export async function listarVentasFactura(f: FiltrosFactura = {}): Promise<Venta
       vet_nombre: vet?.nombre || '(veterinaria eliminada)',
       vet_rut: vet?.rut || '',
       vet_correo: vet?.correo || '',
-      monto: precio.total,
+      // Con BOLETA emitida (vet con comisión: se le boletea al tutor por esa
+      // ficha) manda el monto del DTE. Con FACTURA no: la factura del vet agrupa
+      // TODAS sus fichas del mes, así que su monto_total no es el de esta ficha
+      // — ahí el precio de la ficha sigue siendo el dato correcto.
+      monto: montoDeVenta(boletaDoc, precio.total),
       factura: facturaId ? (docs.get(facturaId) ?? null) : null,
-      boleta: boletaId ? (docs.get(boletaId) ?? null) : null,
+      boleta: boletaDoc,
     }
     if (q) {
       const hay = `${venta.codigo} ${venta.nombre_mascota} ${venta.vet_nombre} ${venta.vet_rut} ${venta.factura?.folio || ''} ${venta.boleta?.folio || ''}`.toLowerCase()
