@@ -1,26 +1,44 @@
 /**
  * Verifica el motor de remuneraciones contra los números REALES de la planilla
- * de junio 2026 (la que se calculaba a mano con el Solver de Excel).
+ * de julio 2026 (la que se calculaba a mano con el Solver de Excel).
  *
  *   npx tsx scripts/verificar-remuneraciones.ts
  *
  * No toca la base de datos: el motor es puro. Si algún número se corre un peso,
  * el script falla con código 1 y muestra qué línea cambió.
+ *
+ * ⚠️ La planilla venía de copiar la del mes anterior, así que varias celdas
+ * quedaron sin actualizar: traía la UF y la UTM de JUNIO y un calendario de
+ * 21 días hábiles / 5 de descanso que no es el de julio (22/5). Precisamente por
+ * eso el módulo trae los indicadores solo y calcula los días del almanaque.
+ *
+ * Acá se reproduce la planilla TAL COMO ESTABA — es lo único contra lo que se
+ * puede contrastar el motor — pero se corre dos veces: con los indicadores que
+ * traía y con los verdaderos de julio. Si el líquido cambiara entre una y otra,
+ * el error de la planilla habría costado plata.
  */
 
 import { liquidar, metaLiquido } from '../lib/remuneraciones/solver'
 import { parametrosPorDefecto } from '../lib/remuneraciones/tablas'
 import type { EmpleadoCalculo, Novedades, Parametros } from '../lib/remuneraciones/tipos'
 
-const PERIODO = '2026-06'
+const PERIODO = '2026-07'
 
+/** Los indicadores que traía la planilla: son los de junio, quedaron sin actualizar. */
 const parametros: Parametros = {
   ...parametrosPorDefecto(PERIODO),
   valor_uf: 40820.31,
   valor_utm: 71506,
 }
 
-// Junio 2026: 21 días hábiles trabajados, 5 de descanso (3 domingos + 2 feriados).
+/** Los que de verdad corresponden a julio 2026 (UF del 31, UTM del mes). */
+const parametrosReales: Parametros = {
+  ...parametrosPorDefecto(PERIODO),
+  valor_uf: 40844.79,
+  valor_utm: 71649,
+}
+
+// Los días que traía la planilla, también heredados: julio 2026 tiene 22 hábiles.
 const novedades: Novedades = {
   cremaciones: 44,
   dias_trabajados: 30,
@@ -149,9 +167,26 @@ for (const empleado of [oscar, juan]) {
   }
 }
 
+// ── ¿La UF vieja de la planilla cambiaba algún número? ──────────────────────
+// A estos sueldos los topes imponibles no muerden (el imponible está muy por
+// debajo de las 90 UF) y la renta queda bajo el tramo exento, así que no
+// debería. Se comprueba en vez de suponerlo.
+console.log('\n═══ Contraste: indicadores de la planilla vs. los reales de julio ═══')
+for (const empleado of [oscar, juan]) {
+  const conPlanilla = liquidar({ empleado, novedades, parametros }).liquidacion.totales
+  const conReales = liquidar({ empleado, novedades, parametros: parametrosReales }).liquidacion.totales
+  const delta = conReales.liquido - conPlanilla.liquido
+  const nombre = empleado.nombre_completo.split(' ').slice(-2).join(' ')
+  console.log(
+    `  ${nombre.padEnd(22)} líquido $${conPlanilla.liquido.toLocaleString('es-CL')} → ` +
+    `$${conReales.liquido.toLocaleString('es-CL')}  ${delta === 0 ? '(sin diferencia ✅)' : `(⚠️ ${delta > 0 ? '+' : ''}${delta})`}`,
+  )
+  if (delta !== 0) fallas++
+}
+
 console.log('')
 if (fallas) {
-  console.error(`❌ ${fallas} diferencia(s) contra la planilla de junio.`)
+  console.error(`❌ ${fallas} diferencia(s) contra la planilla de julio.`)
   process.exit(1)
 }
-console.log('✅ El motor reproduce la planilla de junio 2026.')
+console.log('✅ El motor reproduce la planilla de julio 2026, y la UF desactualizada no alteraba el líquido.')
