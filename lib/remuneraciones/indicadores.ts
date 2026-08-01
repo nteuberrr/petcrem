@@ -39,12 +39,19 @@ export interface Indicadores {
 
 interface PuntoSerie { fecha: string; valor: number }
 
+const FECHA_CHILE = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Santiago',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+})
+
 function isoDe(fechaApi: string): string {
-  // La API entrega "2026-07-31T04:00:00.000Z" (medianoche de Chile en UTC): se
-  // toma la parte de fecha ya corrida a hora local para no restar un día.
+  // La API entrega la medianoche de Chile expresada en UTC, y el desfase CAMBIA
+  // con el horario de verano: 03:00Z entre octubre y abril, 04:00Z el resto del
+  // año. Restar un offset fijo corría un mes entero los valores de enero a
+  // abril, así que la conversión va por zona horaria, que sí conoce el cambio.
   const d = new Date(fechaApi)
-  const chile = new Date(d.getTime() - 4 * 60 * 60 * 1000)
-  return chile.toISOString().slice(0, 10)
+  if (isNaN(d.getTime())) return ''
+  return FECHA_CHILE.format(d)
 }
 
 async function serieDelAnio(codigo: 'uf' | 'utm', anio: number): Promise<PuntoSerie[]> {
@@ -96,6 +103,13 @@ export async function obtenerIndicadores(periodo: string): Promise<Indicadores> 
 
   if (!out.uf) avisos.push(`Todavía no hay UF publicada para ${periodo}.`)
   if (!out.utm) avisos.push(`Todavía no hay UTM publicada para ${periodo}.`)
+  // La UTM es mensual: siempre viene fechada el día 1. Si cae otro día, la
+  // conversión de zona horaria se corrió y el valor puede ser de otro mes — que
+  // es justo el error que el chequeo de variación NO detecta, porque de un mes
+  // al otro la UTM se mueve mucho menos del 3%.
+  if (out.utm && !out.utm.fecha.endsWith('-01')) {
+    avisos.push(`La UTM quedó fechada el ${out.utm.fecha} y debería ser el día 1: revisá la conversión de fechas antes de usarla.`)
+  }
   if (out.uf?.provisional) {
     avisos.push(`La UF es la del ${out.uf.fecha}, no la del cierre del mes: el mes aún no termina. Volvé a traerla cuando cierre.`)
   }
