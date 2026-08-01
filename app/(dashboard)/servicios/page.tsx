@@ -601,15 +601,36 @@ function ServiciosEutanasiasContenido() {
   async function marcarResultado(id: string, estado: 'realizada' | 'no_realizada') {
     const aviso = estado === 'realizada'
       ? '¿Confirmar que la eutanasia SÍ se realizó?\n\nSe le envía al tutor el agradecimiento con la reseña y el pago al veterinario queda pendiente.'
-      : '¿Confirmar que la eutanasia NO se realizó?\n\nSe le paga la consulta al veterinario y se elimina el borrador de la ficha de cremación.'
+      : '¿Confirmar que la eutanasia NO se realizó?\n\nSe le paga la consulta al veterinario y se elimina el borrador de la ficha de cremación.\n\n(Si la mascota falleció antes y la cremación sigue, usa "Servicio cancelado".)'
     if (!confirm(aviso)) return
+    guardarResultado(id, { estado })
+  }
+
+  /**
+   * SERVICIO CANCELADO — la misma tercera salida que la ficha del dashboard: la
+   * eutanasia no corre y no se le cobra a nadie, pero la ficha de cremación
+   * queda abierta (caso típico: la mascota falleció antes de la visita).
+   * No confundir con "Cancelar", que solo cierra la cotización.
+   */
+  async function cancelarServicio(id: string, vetNombre?: string) {
+    if (!confirm(
+      '¿Cancelar el servicio de eutanasia?\n\n' +
+      '· No se le paga nada a la veterinaria ni se le cobra al tutor por la eutanasia.\n' +
+      '· La ficha de cremación queda ABIERTA para seguir con ese servicio.\n' +
+      (vetNombre ? `· Le avisamos por correo a ${vetNombre}.\n` : '') +
+      '\nSi la cremación tampoco se hace, elimina la ficha desde /clientes.',
+    )) return
+    guardarResultado(id, { accion: 'cancelar_servicio' })
+  }
+
+  async function guardarResultado(id: string, body: Record<string, unknown>) {
     setGuardandoResultado(true)
     setResultadoMsg('')
     try {
       const r = await fetch(`/api/eutanasias/cotizaciones/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estado }),
+        body: JSON.stringify(body),
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { setResultadoMsg(j?.error || 'No se pudo guardar el resultado.'); return }
@@ -1544,10 +1565,17 @@ function ServiciosEutanasiasContenido() {
                     className="px-4 py-2 text-sm bg-slate-600 hover:bg-slate-700 disabled:bg-slate-600/40 text-white font-semibold rounded-lg">
                     ✗ No se realizó
                   </button>
+                  <button
+                    onClick={() => cancelarServicio(detalleCoti.id, detalleCoti.vet_nombre_asignado)}
+                    disabled={guardandoResultado}
+                    className="px-4 py-2 text-sm bg-amber-600 hover:bg-amber-700 disabled:bg-amber-600/40 text-white font-semibold rounded-lg">
+                    🚫 Servicio cancelado
+                  </button>
                 </div>
                 <p className="text-[11px] text-gray-500 mt-2 leading-snug">
                   Realizada: se le envía el agradecimiento al tutor y el pago al vet queda pendiente.
                   No realizada: se le paga la consulta al vet y se elimina el borrador de la ficha de cremación.
+                  Servicio cancelado: no se le paga al vet ni se le cobra al tutor, y la ficha de cremación queda abierta.
                 </p>
                 {resultadoMsg && (
                   <p className="text-xs text-red-600 mt-2">{resultadoMsg}</p>

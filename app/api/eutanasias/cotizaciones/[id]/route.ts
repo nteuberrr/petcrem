@@ -6,7 +6,7 @@ import { parsePeso } from '@/lib/numbers'
 import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarVetEutanasiaCancelada } from '@/lib/eutanasia-mailer'
 import { formatDate } from '@/lib/dates'
 import { crearClienteBorrador } from '@/lib/cliente-borrador'
-import { camposResultado, efectosResultado, esResultado } from '@/lib/eutanasia-resultado'
+import { camposResultado, efectosResultado, esResultado, cancelarEutanasiaConservandoFicha } from '@/lib/eutanasia-resultado'
 import { sincronizarFichaDeEutanasia, horaRetiroDeEutanasia } from '@/lib/eutanasia-sync'
 
 const SHEET = 'cotizaciones_eutanasia'
@@ -52,6 +52,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const rows = await getSheetData(SHEET)
     const idx = rows.findIndex(r => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+
+    // SERVICIO CANCELADO: la tercera salida del bloque de resultado, la misma
+    // que la ficha del dashboard (sin pago al vet ni cobro al tutor, la ficha de
+    // cremación sigue viva y el retiro pendiente vuelve a la agenda). No es lo
+    // mismo que el "Cancelar" de la cotización, que solo la cierra.
+    if (body?.accion === 'cancelar_servicio') {
+      const r = await cancelarEutanasiaConservandoFicha(String(id), {
+        motivo: typeof body?.motivo === 'string' ? body.motivo : undefined,
+      })
+      if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
+      return NextResponse.json(r.cotizacion)
+    }
 
     const partial: Record<string, string> = {}
     for (const campo of CAMPOS_EDITABLES) {
