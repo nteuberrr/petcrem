@@ -19,9 +19,20 @@ const TABLE = 'correos_cliente'
 /** Estados "malos" que disparan la alerta de rebote en la ficha. */
 export const ESTADOS_PROBLEMA = ['rebotado', 'spam', 'fallido'] as const
 
+/** Estados que confirman que el correo SÍ llegó. */
+export const ESTADOS_OK = ['entregado', 'abierto', 'clic'] as const
+
+/**
+ * Estado final que deja el equipo cuando verificó que el tutor sí recibe en esa
+ * dirección (ej. el proveedor reportó un rebote genérico pero la persona
+ * confirmó por WhatsApp). Apaga la alerta sin perder el registro: el estado
+ * original queda al principio de `motivo`.
+ */
+export const ESTADO_RESUELTO = 'resuelto'
+
 /** Rango de avance para no "degradar" el estado ante eventos fuera de orden. */
 const RANK: Record<string, number> = {
-  enviado: 1, entregado: 2, abierto: 3, clic: 4, fallido: 5, rebotado: 5, spam: 6,
+  enviado: 1, entregado: 2, abierto: 3, clic: 4, fallido: 5, rebotado: 5, spam: 6, resuelto: 7,
 }
 
 export interface CorreoClienteRow {
@@ -146,17 +157,71 @@ export async function listarPorCliente(clienteId: string): Promise<CorreoCliente
 export async function problemasGlobal(limit = 300): Promise<CorreoClienteRow[]> {
   if (!isSupabaseConfigured()) return []
   try {
-    const { data, error } = await getSupabase()
+    const sb = getSupabase()
+    const { data, error } = await sb
       .from(TABLE)
       .select('*')
       .in('estado', ESTADOS_PROBLEMA as unknown as string[])
       .order('id', { ascending: false })
       .limit(limit)
     if (error) { console.warn('[correos-log] problemasGlobal:', error.message); return [] }
-    return (data ?? []) as CorreoClienteRow[]
+    const problemas = (data ?? []) as CorreoClienteRow[]
+    if (problemas.length === 0) return []
+
+    // Si DESPUÉS del rebote llegó bien un correo a la misma dirección, el
+    // problema quedó atrás: se reintentó y la dirección funciona. Sin esto la
+    // alerta solo se apagaba cambiando el email de la ficha.
+    const emails = Array.from(new Set(problemas.map(p => p.email).filter(Boolean)))
+    const { data: ok } = await sb
+      .from(TABLE)
+      .select('id, email')
+      .in('email', emails)
+      .in('estado', ESTADOS_OK as unknown as string[])
+    const ultimoOk = new Map<string, number>()
+    for (const r of (ok ?? []) as { id: string; email: string }[]) {
+      const k = (r.email || '').trim().toLowerCase()
+      const n = Number(r.id)
+      if (!ultimoOk.has(k) || n > ultimoOk.get(k)!) ultimoOk.set(k, n)
+    }
+    return problemas.filter(p => Number(p.id) > (ultimoOk.get((p.email || '').trim().toLowerCase()) ?? -1))
   } catch (e) {
     console.warn('[correos-log] problemasGlobal:', e instanceof Error ? e.message : String(e))
     return []
+  }
+}
+
+/**
+ * Marca como resueltos los rebotes/fallos pendientes de una dirección: el
+ * equipo verificó que el tutor sí recibe ahí. Apaga la alerta en la lista de
+ * clientes y en la ficha (afecta a todas las fichas que usen ese correo,
+ * porque el rebote es propiedad del email). Devuelve cuántos registros cerró.
+ */
+export async function resolverProblemasEmail(email: string): Promise<number> {
+  const e = (email || '').trim()
+  if (!e || !isSupabaseConfigured()) return 0
+  try {
+    const sb = getSupabase()
+    const { data, error } = await sb
+      .from(TABLE)
+      .select('id, estado, motivo')
+      .ilike('email', e)
+      .in('estado', ESTADOS_PROBLEMA as unknown as string[])
+    if (error) { console.warn('[correos-log] resolverProblemasEmail:', error.message); return 0 }
+    const filas = (data ?? []) as { id: string; estado: string; motivo: string }[]
+    const ts = nowISO()
+    let n = 0
+    for (const f of filas) {
+      const motivo = `[${f.estado}] ${f.motivo || ''}`.trim().slice(0, 300)
+      const { error: upErr } = await sb.from(TABLE)
+        .update({ estado: ESTADO_RESUELTO, motivo, fecha_actualizacion: ts })
+        .eq('id', f.id)
+      if (upErr) console.warn('[correos-log] resolver update:', upErr.message)
+      else n++
+    }
+    return n
+  } catch (e2) {
+    console.warn('[correos-log] resolverProblemasEmail:', e2 instanceof Error ? e2.message : String(e2))
+    return 0
   }
 }
 

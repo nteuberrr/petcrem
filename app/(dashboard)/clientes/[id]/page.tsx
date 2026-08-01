@@ -210,6 +210,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [reenviandoIngreso, setReenviandoIngreso] = useState(false)
   const [feedbackIngreso, setFeedbackIngreso] = useState<{ kind: 'ok' | 'error'; msg: string } | null>(null)
 
+  // Cierre manual de la alerta de rebote (cuando el tutor confirmó que sí recibe).
+  const [resolviendoCorreo, setResolviendoCorreo] = useState(false)
+
   // Eliminar ficha (admin only)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
@@ -427,6 +430,24 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       setFeedbackIngreso({ kind: 'error', msg: e instanceof Error ? e.message : 'Error al reenviar' })
     } finally {
       setReenviandoIngreso(false)
+    }
+  }
+
+  // Cierra la alerta de rebote de la dirección que hoy tiene la ficha: el
+  // proveedor puede reportar un rebote genérico aunque el correo sí llegue, y
+  // sin esto la alerta solo se apagaba cambiando el email.
+  async function resolverAlertaCorreo() {
+    if (resolviendoCorreo) return
+    if (!window.confirm(`Se marcará como resuelta la alerta de rebote de ${cliente?.email}. Hazlo solo si confirmaste con el tutor que sí recibe en esa dirección. ¿Continuar?`)) return
+    setResolviendoCorreo(true)
+    try {
+      const res = await fetch(`/api/clientes/${id}/correos`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'resolver' }),
+      })
+      if (res.ok) await fetchCorreos()
+    } finally {
+      setResolviendoCorreo(false)
     }
   }
 
@@ -852,15 +873,21 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const puedeGenerarCert = cliente.estado === 'cremado' || cliente.estado === 'despachado'
 
   // Correos al tutor: último registro por etapa + detección de rebote del email.
-  const CORREO_RANK: Record<string, number> = { fallido: 1, enviado: 1, entregado: 2, abierto: 3, clic: 4, rebotado: 5, spam: 6 }
+  const CORREO_RANK: Record<string, number> = { fallido: 1, enviado: 1, entregado: 2, abierto: 3, clic: 4, rebotado: 5, spam: 6, resuelto: 7 }
   const correosPorTipo: Record<string, CorreoCliente> = {}
   for (const c of correos) {
     const prev = correosPorTipo[c.tipo]
     if (!prev || (CORREO_RANK[c.estado] ?? 0) >= (CORREO_RANK[prev.estado] ?? 0)) correosPorTipo[c.tipo] = c
   }
   const emailActual = (cliente.email || '').trim().toLowerCase()
-  const correoProblema = emailActual
-    ? [...correos].reverse().find(c => (c.email || '').trim().toLowerCase() === emailActual && (c.estado === 'rebotado' || c.estado === 'spam' || c.estado === 'fallido')) || null
+  // Alerta de rebote: solo si el ÚLTIMO correo a la dirección vigente quedó mal.
+  // Si después de rebotar se reenvió y llegó (entregado/abierto/clic) o el
+  // equipo lo marcó como resuelto, no hay nada que corregir.
+  const ultimoCorreoEmail = emailActual
+    ? [...correos].reverse().find(c => (c.email || '').trim().toLowerCase() === emailActual) || null
+    : null
+  const correoProblema = ultimoCorreoEmail && ['rebotado', 'spam', 'fallido'].includes(ultimoCorreoEmail.estado)
+    ? ultimoCorreoEmail
     : null
   const videosServicio: string[] = (() => {
     try { const x = JSON.parse(cliente.videos_servicio || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
@@ -1200,6 +1227,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 <span>
                   El correo <b>{cliente.email}</b> {correoProblema.estado === 'rebotado' ? 'rebotó' : correoProblema.estado === 'spam' ? 'fue marcado como spam' : 'falló al enviarse'} — el tutor podría no estar recibiendo los avisos. Revisa que la dirección sea correcta.
                   {correoProblema.motivo ? <span className="block text-[11px] text-red-600 mt-0.5">Motivo: {correoProblema.motivo}</span> : null}
+                  <button
+                    onClick={resolverAlertaCorreo}
+                    disabled={resolviendoCorreo}
+                    title="Úsalo si el tutor confirmó que sí recibe en esta dirección"
+                    className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-red-300 bg-white hover:bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-800 transition-colors disabled:opacity-40"
+                  >
+                    {resolviendoCorreo ? '⌛ Marcando…' : '✓ El tutor sí lo recibió — marcar como resuelto'}
+                  </button>
                 </span>
               </div>
             )}
@@ -2334,6 +2369,7 @@ function CorreoEstadoBadge({ estado }: { estado?: string }) {
     rebotado: { cls: 'bg-red-100 text-red-800', label: 'Rebotó' },
     spam: { cls: 'bg-orange-100 text-orange-800', label: 'Spam' },
     fallido: { cls: 'bg-red-100 text-red-800', label: 'Falló' },
+    resuelto: { cls: 'bg-gray-100 text-gray-700', label: 'Resuelto' },
   }
   const s = map[estado] || { cls: 'bg-gray-100 text-gray-700', label: estado }
   return <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 ${s.cls}`}>{s.label}</span>
