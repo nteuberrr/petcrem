@@ -137,10 +137,18 @@ export default function DetalleLiquidacion({
         <Bloque titulo="Costo para la empresa">
           <Linea etiqueta="Total haberes" monto={l.totales.total_haberes} />
           {l.aportes_empleador.map((li, i) => <Linea key={`a${i}`} {...li} />)}
-          {l.totales.reembolso_salud > 0 && (
-            <Linea etiqueta="Reembolso de salud" monto={l.totales.reembolso_salud} formula="se le entrega directo al trabajador" />
-          )}
           <Total label="Costo total del mes" monto={l.totales.costo_empresa} fuerte />
+          <p className="mt-3 mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Cómo entra al Estado de Resultados</p>
+          <Linea
+            etiqueta="Personal"
+            monto={l.totales.total_a_transferir}
+            formula={l.totales.reembolso_salud > 0 ? 'líquido + reembolso de salud: lo que se le deposita' : 'el líquido a pagar'}
+          />
+          <Linea
+            etiqueta="Imposiciones"
+            monto={l.totales.costo_empresa - l.totales.total_a_transferir}
+            formula="cotizaciones retenidas que se remesan + aportes del empleador"
+          />
         </Bloque>
       </div>
     </Modal>

@@ -8,7 +8,7 @@ import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { getConfigCobroEutanasia, margenEutanasiaCon } from '@/lib/eutanasia-precios'
 import { CLAVE_RETIROS, getPagosRetirosEerr } from '@/lib/eerr-retiros'
-import { CLAVE_REMUNERACIONES, getCostoRemuneracionesEerr } from '@/lib/remuneraciones/eerr'
+import { CLAVE_IMPOSICIONES, CLAVE_REMUNERACIONES, getCostoRemuneracionesEerr } from '@/lib/remuneraciones/eerr'
 
 export const dynamic = 'force-dynamic'
 
@@ -142,14 +142,22 @@ export async function GET(req: NextRequest) {
           })
         }
       }
-      // Remuneraciones: una fila por liquidación pagada, al mes devengado.
-      if ((partida.clave || '') === CLAVE_REMUNERACIONES) {
+      // Remuneraciones: una fila por liquidación pagada, al mes devengado. La
+      // partida «Personal» muestra lo transferido; «Imposiciones», el resto.
+      const claveP = partida.clave || ''
+      if (claveP === CLAVE_REMUNERACIONES || claveP === CLAVE_IMPOSICIONES) {
+        const esImposiciones = claveP === CLAVE_IMPOSICIONES
         for (const c of await getCostoRemuneracionesEerr()) {
           if (!enPeriodo(c.fecha)) continue
+          const monto = esImposiciones ? c.imposiciones : c.transferido
+          if (monto <= 0) continue
           movimientos.push({
-            fecha: c.fecha, fuente: 'Remuneraciones',
-            descripcion: `Sueldo ${c.periodo} (costo empresa)`,
-            proveedor: c.empleado, documento: `Liquidación N° ${c.id}`, monto: c.monto,
+            fecha: c.fecha,
+            fuente: esImposiciones ? 'Imposiciones' : 'Remuneraciones',
+            descripcion: esImposiciones
+              ? `Cotizaciones y aportes ${c.periodo}`
+              : `Líquido pagado ${c.periodo}`,
+            proveedor: c.empleado, documento: `Liquidación N° ${c.id}`, monto,
           })
         }
       }

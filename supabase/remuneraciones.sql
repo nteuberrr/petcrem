@@ -158,9 +158,17 @@ create unique index if not exists "rrhh_pagos_periodo_uniq" on "rrhh_pagos" ("pe
 -- adicionales (lib/eerr-retiros.ts). Basta con marcar la partida 'Personal' con
 -- una clave; de ahí en adelante lib/remuneraciones/eerr.ts la alimenta sola. Así
 -- una liquidación corregida se refleja al instante y no hay doble conteo.
+-- El costo se parte en las dos partidas que ya existen dentro del subgrupo
+-- «Personal»: lo que se le TRANSFIERE al trabajador (líquido + reembolso de
+-- salud) y las IMPOSICIONES (cotizaciones retenidas que se remesan + aportes de
+-- cargo del empleador).
 update "eerr_partidas"
    set "clave" = 'remuneraciones'
  where "tipo" = 'gasto' and "nombre" = 'Personal' and coalesce("clave", '') = '';
+
+update "eerr_partidas"
+   set "clave" = 'imposiciones'
+ where "tipo" = 'gasto' and "nombre" = 'Imposiciones' and coalesce("clave", '') = '';
 
 -- ⚠️ Si hasta ahora los sueldos se cargaban a mano en Compras / Gastos manuales
 -- bajo la partida Personal, hay que BORRAR esas filas o quedarán duplicadas:

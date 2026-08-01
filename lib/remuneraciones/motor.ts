@@ -263,8 +263,10 @@ export function calcularLiquidacion({ empleado: e, novedades: n, parametros: p, 
       reembolso_salud: reembolsoSalud,
       total_a_transferir: liquido + reembolsoSalud,
       aportes_empleador: totalAportes,
-      // El reembolso también es plata que sale de la empresa.
-      costo_empresa: totalHaberes + totalAportes + reembolsoSalud,
+      // Haberes brutos + aportes patronales. El reembolso de salud NO se suma:
+      // ese 7% ya está dentro de los haberes (se descuenta y se le devuelve al
+      // trabajador), así que sumarlo otra vez sería contarlo dos veces.
+      costo_empresa: totalHaberes + totalAportes,
     },
   }
 }

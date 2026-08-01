@@ -148,9 +148,22 @@ export default function LiquidacionesTab() {
           {listo && (
             <Card className="p-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <Dato titulo="Total a transferir" valor={fmtPrecio(data.totales.transferido)} pie={<>líquidos {fmtPrecio(data.totales.liquidos)}{data.totales.reembolsos > 0 && <> + reembolsos {fmtPrecio(data.totales.reembolsos)}</>}</>} />
-                <Dato titulo="Aportes del empleador" valor={fmtPrecio(data.totales.aportes)} pie={<>cesantía, mutual y previsional</>} />
-                <Dato titulo="Costo empresa del mes" valor={fmtPrecio(data.totales.costo_empresa)} destacado pie={<>es lo que va al Estado de Resultados</>} />
+                <Dato
+                  titulo="Personal (se transfiere)"
+                  valor={fmtPrecio(data.totales.transferido)}
+                  pie={<>líquidos {fmtPrecio(data.totales.liquidos)}{data.totales.reembolsos > 0 && <> + reembolsos {fmtPrecio(data.totales.reembolsos)}</>}</>}
+                />
+                <Dato
+                  titulo="Imposiciones"
+                  valor={fmtPrecio(data.totales.costo_empresa - data.totales.transferido)}
+                  pie={<>cotizaciones retenidas + aportes del empleador</>}
+                />
+                <Dato
+                  titulo="Costo empresa del mes"
+                  valor={fmtPrecio(data.totales.costo_empresa)}
+                  destacado
+                  pie={<>va al EERR partido en esas dos partidas</>}
+                />
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-200 pt-4">

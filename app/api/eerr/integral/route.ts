@@ -8,7 +8,7 @@ import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { getConfigCobroEutanasia, margenEutanasiaCon } from '@/lib/eutanasia-precios'
 import { getPagosRetirosEerr, partidaRetiros } from '@/lib/eerr-retiros'
-import { getCostoRemuneracionesEerr, partidaRemuneraciones } from '@/lib/remuneraciones/eerr'
+import { getCostoRemuneracionesEerr, partidaImposiciones, partidaRemuneraciones } from '@/lib/remuneraciones/eerr'
 
 export const dynamic = 'force-dynamic'
 
@@ -187,12 +187,18 @@ export async function GET(req: NextRequest) {
     // del pago, en la partida marcada con la clave `retiros_adicionales`.
     const pRetiros = partidaRetiros(partidas as Cli[])
     if (pRetiros) for (const p of pagosRetiros) add(pRetiros.id, p.fecha, p.monto)
-    // Remuneraciones: costo empresa de las liquidaciones PAGADAS, imputado al mes
-    // DEVENGADO (el sueldo de julio es costo de julio aunque se pague en agosto),
-    // en la partida marcada con la clave `remuneraciones`. Fuente automática: no
-    // hay que cargar los sueldos a mano en Compras ni en Gastos manuales.
+    // Remuneraciones: liquidaciones PAGADAS imputadas al mes DEVENGADO (el sueldo
+    // de julio es costo de julio aunque se pague en agosto), partidas en dos:
+    // «Personal» lo que se le transfiere al trabajador e «Imposiciones» las
+    // cotizaciones y los aportes patronales. Fuente automática: no hay que
+    // cargar los sueldos a mano en Compras ni en Gastos manuales.
     const pRemun = partidaRemuneraciones(partidas as Cli[])
-    if (pRemun) for (const c of costoRemuneraciones) add(pRemun.id, c.fecha, c.monto)
+    const pImpos = partidaImposiciones(partidas as Cli[])
+    for (const c of costoRemuneraciones) {
+      if (pRemun) add(pRemun.id, c.fecha, c.transferido)
+      // Sin partida de Imposiciones, todo cae en Personal para no perder costo.
+      add(pImpos?.id ?? pRemun?.id ?? '', c.fecha, c.imposiciones)
+    }
 
     const sgById = new Map<string, { nombre: string; orden: number }>()
     for (const s of subgrupos as Cli[]) sgById.set(s.id, { nombre: s.nombre, orden: parseInt(s.orden) || 0 })
