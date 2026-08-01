@@ -51,6 +51,43 @@ const MIN_CIERRE_ATENCION = 22 * 60
 // irreal para un servicio donde un vet de la red tiene que leer el correo,
 // aceptar y viajar. Mismo criterio que el retiro del chofer: una hora.
 const BUFFER_EUTANASIA_MIN = BUFFER_MIN
+/**
+ * COLCHÓN DE CONVERSACIÓN. Entre que el bot ofrece una hora y el cliente la
+ * confirma pasan minutos, y con el mínimo justo (ahora + 1 h) la hora ofrecida
+ * ya no servía al momento de registrarla: el bot confirmaba y se retractaba,
+ * corriendo la hora de a un minuto (caso real 01-08-2026: 12:18 → 12:20 → 12:24
+ * → 12:25 → 12:26, con el cliente respondiendo "sí" cada vez).
+ *
+ * Se ataca por los dos lados, con el mismo margen:
+ *  1. toda hora que se OFRECE sale al menos 5 min más allá del mínimo, y
+ *     redondeada hacia arriba a múltiplos de 5 (de paso las horas quedan
+ *     redondas: 12:25 en vez de 12:18);
+ *  2. al VALIDAR se acepta ese mismo margen de gracia, así la hora que acabamos
+ *     de ofrecer sigue siendo válida mientras el cliente responde (~10 a 14
+ *     minutos de ventana). El mínimo efectivo de anticipación pasa de 60 a 55
+ *     minutos, solo en ese borde.
+ */
+const MARGEN_OFERTA_MIN = 5
+
+/**
+ * Primera hora OFRECIBLE de hoy (minutos desde medianoche): mínimo + colchón,
+ * redondeada a múltiplos de 5. Exportada para que el prompt del bot calcule el
+ * "próximo retiro posible" con el MISMO criterio que la agenda.
+ */
+export function proximoInicioOfrecible(ahora: number, buffer = BUFFER_MIN): number {
+  return desdeOfrecible(ahora, buffer)
+}
+
+/** Primera hora OFRECIBLE de hoy: mínimo + colchón, redondeada a múltiplos de 5. */
+function desdeOfrecible(ahora: number, buffer: number): number {
+  const m = ahora + buffer + MARGEN_OFERTA_MIN
+  return Math.ceil(m / MARGEN_OFERTA_MIN) * MARGEN_OFERTA_MIN
+}
+
+/** Mínimo EXIGIBLE: el buffer con el margen de gracia de la oferta. */
+function minimoExigible(ahora: number, buffer: number): number {
+  return ahora + buffer - MARGEN_OFERTA_MIN
+}
 // Eutanasia: el vet informa la hora del PROCEDIMIENTO (la que acordó con la
 // familia) y nuestro chofer pasa a retirar 30 min después. Ese retiro se agenda
 // al informarse la hora (dueño 2026-07-28) y queda guardado en la cotización
@@ -418,7 +455,7 @@ function horasLibres(
   const tope = opts.tope ?? MIN_ULTIMO
   const buffer = opts.buffer ?? BUFFER_MIN
   const esHoy = fechaISO === hoy
-  const startMin = esHoy ? Math.max(MIN_APERTURA, ahora + buffer) : MIN_APERTURA
+  const startMin = esHoy ? Math.max(MIN_APERTURA, desdeOfrecible(ahora, buffer)) : MIN_APERTURA
   const candidatos = new Set<number>([startMin, tope])
   // Grilla cada 45 min desde la apertura; se omiten los puntos a menos de 45 min
   // del cierre para no encimar 21:00 con el corte 21:10 (que siempre se ofrece).
@@ -573,11 +610,11 @@ export async function evaluarHoraEutanasia(fechaRaw: string, horaRaw: string): P
   if (min < MIN_APERTURA || min > MIN_CIERRE_ATENCION)
     return { ok: false, motivo: `Atendemos de ${fmtMin(MIN_APERTURA)} a ${fmtMin(MIN_CIERRE_ATENCION)}: esa hora queda fuera del horario de atención.`, libres }
   // Anticipación mínima: el vet de la red tiene que aceptar y viajar.
-  if (fecha === hoy && min < ahora + BUFFER_EUTANASIA_MIN) {
-    const desde = Math.min(MIN_CIERRE_ATENCION, ahora + BUFFER_EUTANASIA_MIN)
+  if (fecha === hoy && min < minimoExigible(ahora, BUFFER_EUTANASIA_MIN)) {
+    const desde = Math.min(MIN_CIERRE_ATENCION, desdeOfrecible(ahora, BUFFER_EUTANASIA_MIN))
     return {
       ok: false,
-      motivo: ahora + BUFFER_EUTANASIA_MIN > MIN_CIERRE_ATENCION
+      motivo: minimoExigible(ahora, BUFFER_EUTANASIA_MIN) > MIN_CIERRE_ATENCION
         ? 'Para hoy ya no alcanzamos a coordinar un veterinario (atendemos hasta las 22:00). Ofrécele mañana.'
         : `Necesitamos al menos una hora para coordinar al veterinario: para hoy, lo más pronto es a partir de las ${fmtMin(desde)}.`,
       libres,
@@ -624,9 +661,11 @@ export async function evaluarSlotRetiro(
   if (min < MIN_APERTURA || min > MIN_ULTIMO)
     return { ok: false, motivo: 'Los retiros se agendan entre las 09:00 y las 21:10 (la última hora para agendar es 21:10).', libres }
 
-  if (fecha === hoy && min < ahora + BUFFER_MIN) {
-    const desde = Math.min(MIN_ULTIMO, ahora + BUFFER_MIN)
-    const msg = ahora + BUFFER_MIN > MIN_ULTIMO
+  if (fecha === hoy && min < minimoExigible(ahora, BUFFER_MIN)) {
+    // La hora que se sugiere es la OFRECIBLE (con colchón): si el cliente tarda
+    // un par de minutos en confirmarla, sigue siendo válida.
+    const desde = Math.min(MIN_ULTIMO, desdeOfrecible(ahora, BUFFER_MIN))
+    const msg = minimoExigible(ahora, BUFFER_MIN) > MIN_ULTIMO
       ? 'Ya no quedan horarios para hoy (no se agenda dentro de la próxima hora y la última hora es 21:10).'
       : `No podemos agendar dentro de la próxima hora. Para hoy, lo más pronto es a partir de las ${fmtMin(desde)}.`
     return { ok: false, motivo: msg, libres }

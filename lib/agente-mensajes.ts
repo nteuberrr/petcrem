@@ -8,7 +8,7 @@ import { EXPRESS_DIAS } from './dias-habiles'
 import { comunasDeServicio } from './adicionales-auto'
 import { COMUNAS_NO_CUBIERTAS } from './cobertura'
 import { esFeriado, nombreFeriado, avisarSiFaltanFeriados } from './feriados'
-import { ahoraChile, listarBloqueos, rangosDelDia, disponibilidadProximosDias, type BloqueoAgenda, type DisponibilidadDia } from './agenda'
+import { ahoraChile, listarBloqueos, rangosDelDia, disponibilidadProximosDias, proximoInicioOfrecible, type BloqueoAgenda, type DisponibilidadDia } from './agenda'
 import { registrarUso } from './uso-ia'
 
 /**
@@ -723,10 +723,13 @@ function bloqueFechaChile(bloqueos: BloqueoAgenda[] = [], dispo: DisponibilidadD
   //     "mañana" cuando el retiro de HOY 09:00 estaba disponible — caso Jean.)
   //  - Si ahora+1h cae DENTRO de 09:00–21:10 → HOY a esa hora.
   //  - Si ahora+1h pasa de las 21:10 (ya cerró hoy) → MAÑANA a las 09:00.
+  // La hora sale con el COLCHÓN de la agenda (mínimo + 5 min, redondeado a
+  // múltiplos de 5): si se ofrece el mínimo exacto, para cuando el cliente
+  // responde ya venció y el bot se retracta corriendo la hora de a un minuto.
   const [hN, mN] = horaActual.split(':').map(Number)
   const OPEN = 9 * 60, CLOSE = 21 * 60 + 10
   let proxOffset = 0
-  let proxMin = (hN * 60 + mN) + 60
+  let proxMin = proximoInicioOfrecible(hN * 60 + mN)
   if (proxMin < OPEN) proxMin = OPEN
   else if (proxMin > CLOSE) { proxOffset = 1; proxMin = OPEN }
   // Si el equipo BLOQUEÓ la agenda en ese momento, corre el próximo retiro hasta
