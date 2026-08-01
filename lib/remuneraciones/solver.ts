@@ -67,7 +67,11 @@ export function liquidar(ctx: ContextoSolver) {
   let solver: ResultadoSolver | null = null
   let variableImponible = 0
 
-  if (empleado.modalidad_variable === 'meta_liquido') {
+  if (novedades.sin_variable) {
+    // Mes sin variable por cremación (ej. anterior al acuerdo): no hay meta que
+    // perseguir ni bono que resolver.
+    variableImponible = 0
+  } else if (empleado.modalidad_variable === 'meta_liquido') {
     solver = resolverVariable(ctx, metaLiquido(empleado, novedades))
     variableImponible = solver.variable_imponible
   } else if (empleado.modalidad_variable === 'monto_directo') {

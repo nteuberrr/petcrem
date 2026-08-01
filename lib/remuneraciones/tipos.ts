@@ -108,6 +108,14 @@ export interface Novedades {
    * de 2026, y sin esto los meses anteriores saldrían con el sueldo de hoy.
    */
   sueldo_base?: number
+  /**
+   * Gratificación fijada a mano para este mes. Sirve para el histórico: hasta
+   * diciembre de 2025 se calculaba solo sobre el sueldo base, no sobre todo lo
+   * imponible.
+   */
+  gratificacion?: number
+  /** Este mes no corresponde el variable por cremación (ej. antes del acuerdo). */
+  sin_variable?: boolean
   /** Días del mes trabajados sobre 30 (proporcionalidad del sueldo base). */
   dias_trabajados: number
   /** Días efectivamente trabajados: denominador de la semana corrida. */

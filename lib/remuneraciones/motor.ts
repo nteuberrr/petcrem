@@ -132,13 +132,16 @@ export function calcularLiquidacion({ empleado: e, novedades: n, parametros: p, 
   const baseGratificacion = sueldoBase + B + semanaCorrida + horasExtra + suma(otrosImp)
   const tope = topeGratificacion(p)
   const gratificacionPlena = Math.round(baseGratificacion * p.factor_gratificacion)
-  const gratificacion = Math.min(gratificacionPlena, tope)
+  const manual = n.gratificacion && n.gratificacion > 0 ? Math.round(n.gratificacion) : 0
+  const gratificacion = manual || Math.min(gratificacionPlena, tope)
   imponibles.push({
     etiqueta: 'GRATIFICACIÓN LEGAL',
     monto: gratificacion,
-    formula: gratificacion === tope
-      ? `${pct(p.factor_gratificacion * 100)} × ${clp(baseGratificacion)} = ${clp(gratificacionPlena)}, topado en ${clp(tope)}`
-      : `${pct(p.factor_gratificacion * 100)} × ${clp(baseGratificacion)} (tope ${clp(tope)})`,
+    formula: manual
+      ? `fijada a mano para este mes (el cálculo daría ${clp(Math.min(gratificacionPlena, tope))})`
+      : gratificacion === tope
+        ? `${pct(p.factor_gratificacion * 100)} × ${clp(baseGratificacion)} = ${clp(gratificacionPlena)}, topado en ${clp(tope)}`
+        : `${pct(p.factor_gratificacion * 100)} × ${clp(baseGratificacion)} (tope ${clp(tope)})`,
   })
 
   const totalImponible = suma(imponibles)

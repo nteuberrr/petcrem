@@ -80,6 +80,8 @@ export function mezclarNovedades(base: Novedades, parcial?: Partial<Novedades> |
   return {
     cremaciones: parcial.cremaciones ?? base.cremaciones,
     sueldo_base: parcial.sueldo_base ?? base.sueldo_base,
+    gratificacion: parcial.gratificacion ?? base.gratificacion,
+    sin_variable: parcial.sin_variable ?? base.sin_variable,
     dias_trabajados: parcial.dias_trabajados ?? base.dias_trabajados,
     dias_efectivos: parcial.dias_efectivos ?? base.dias_efectivos,
     dias_descanso: parcial.dias_descanso ?? base.dias_descanso,
