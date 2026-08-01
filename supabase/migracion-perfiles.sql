@@ -133,3 +133,16 @@ notify pgrst, 'reload schema';
 -- select p.nombre as perfil, pp.modulo, pp.nivel
 --   from perfil_permisos pp join perfiles p on p.id = pp.perfil_id
 --  order by p.id, pp.modulo;
+
+-- ── 9. Módulos agregados DESPUÉS de la primera corrida ──────────────────────
+--  Re-ejecutable: siembra en los perfiles semilla los módulos que se sumaron al
+--  registro `MODULOS` más tarde. `do nothing` no pisa lo que ya editaste.
+--  remuneraciones (sueldos): cerrado por defecto para todos menos el dueño.
+insert into "perfil_permisos" ("perfil_id", "modulo", "nivel", "updated_at")
+select p.id, 'remuneraciones',
+       case when p.slug = 'administrador' then 'editar' else 'none' end,
+       to_char(now(), 'YYYY-MM-DD')
+from perfiles p
+on conflict ("perfil_id", "modulo") do nothing;
+
+notify pgrst, 'reload schema';

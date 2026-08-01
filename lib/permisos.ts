@@ -208,18 +208,19 @@ export const MODULOS: Modulo[] = [
     def: { general: 'none', 'operario-n1': 'none', 'operario-n2': 'none' },
   },
   {
-    key: 'remuneraciones', label: 'Remuneraciones', grupo: 'administracion',
-    descripcion: 'Sueldos del equipo: liquidaciones, parámetros legales y pagos.',
-    pages: ['/remuneraciones'], apis: ['/api/remuneraciones'],
-    // Arranca cerrado para todos: los sueldos son del dueño (las rutas además
-    // exigen esAdminTotal por dentro).
-    def: { general: 'none', 'operario-n1': 'none', 'operario-n2': 'none' },
-  },
-  {
     key: 'eerr', label: 'Estado de Resultados', grupo: 'administracion',
     descripcion: 'EERR integral, compras del SII, partidas y proveedores.',
     pages: ['/estado-resultados'], apis: ['/api/eerr'],
     def: { general: 'editar', 'operario-n1': 'none', 'operario-n2': 'none' },
+  },
+  // Sueldos del equipo: dato sensible. Arranca cerrado para todos los perfiles
+  // semilla (solo el dueño) y se abre desde el editor a quien corresponda.
+  // Sus rutas no traen gate propio: dependen enteramente de este módulo.
+  {
+    key: 'remuneraciones', label: 'Remuneraciones', grupo: 'administracion',
+    descripcion: 'Empleados, liquidaciones de sueldo, parámetros previsionales e histórico.',
+    pages: ['/remuneraciones'], apis: ['/api/remuneraciones'],
+    def: { general: 'none', 'operario-n1': 'none', 'operario-n2': 'none' },
   },
   {
     key: 'reportes', label: 'Reportes', grupo: 'administracion',
@@ -471,7 +472,7 @@ export function nivelesDeActor(actor: Actor, snap: PermisosSnapshot): Record<str
  * (`/api/veterinarios/[id]/informe/*` todavía gatea con `esAdmin`). Se destraba
  * migrando esos dos handlers.
  */
-const MODULOS_ADMINISTRATIVOS = ['rendiciones', 'eerr', 'facturacion', 'mailing', 'web', 'reportes', 'configuracion']
+const MODULOS_ADMINISTRATIVOS = ['rendiciones', 'eerr', 'facturacion', 'mailing', 'web', 'reportes', 'configuracion', 'remuneraciones']
 
 export function rolBaseDePerfil(permisos: Record<string, Nivel>, slug?: string): string {
   if (slug === PERFIL_ADMIN) return 'admin'
