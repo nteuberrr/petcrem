@@ -5,7 +5,7 @@ import { signOut, useSession } from 'next-auth/react'
 import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, PawPrint, MessageCircle, Flame, Clock, Receipt, Stethoscope,
-  HeartHandshake, Megaphone, FileText, Globe, Wallet, Settings, LineChart,
+  HeartHandshake, Megaphone, FileText, HandCoins, Globe, Wallet, Settings, LineChart,
   Menu, X, LogOut, type LucideIcon,
 } from 'lucide-react'
 
@@ -24,6 +24,7 @@ const nav: { href: string; label: string; icon: LucideIcon; modulo: string; colo
   { href: '/servicios', label: 'Eutanasias', icon: HeartHandshake, modulo: 'servicios', color: 'text-rose-400' },
   { href: '/mailing', label: 'Marketing', icon: Megaphone, modulo: 'mailing', color: 'text-fuchsia-400' },
   { href: '/facturacion', label: 'Facturación', icon: FileText, modulo: 'facturacion', color: 'text-blue-400' },
+  { href: '/remuneraciones', label: 'Remuneraciones', icon: HandCoins, modulo: 'remuneraciones', color: 'text-lime-400' },
   { href: '/web', label: 'Web', icon: Globe, modulo: 'web', color: 'text-violet-400' },
   { href: '/estado-resultados', label: 'Estado de Resultados', icon: Wallet, modulo: 'eerr', color: 'text-green-400' },
   { href: '/configuracion', label: 'Configuración', icon: Settings, modulo: 'configuracion', color: 'text-slate-300' },

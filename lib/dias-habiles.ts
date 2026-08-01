@@ -57,6 +57,48 @@ export function esDiaHabil(d: Date): boolean {
   return !FERIADOS_CL.has(isoOf(d))
 }
 
+/** True si la fecha es feriado nacional. */
+export function esFeriado(d: Date): boolean {
+  return FERIADOS_CL.has(isoOf(d))
+}
+
+export interface DiasDelMes {
+  /** Días del mes. */
+  total: number
+  /** Lunes a viernes que no son feriado: los efectivamente trabajados. */
+  habiles: number
+  /** Feriados nacionales que caen en el mes. */
+  feriados: number
+  /** Domingos que no son además feriado (para no contarlos dos veces). */
+  domingos: number
+  /** Sábados que no son feriado. */
+  sabados: number
+  /** Domingos + feriados: el multiplicador de la semana corrida (art. 45). */
+  descanso: number
+}
+
+/**
+ * Composición de un mes según el calendario chileno. La usa Remuneraciones para
+ * la semana corrida: el promedio diario de lo variable se multiplica por los
+ * días de descanso (domingos y festivos) y se divide por los efectivamente
+ * trabajados.
+ *
+ * `mes` es 1-12.
+ */
+export function diasDelMes(anio: number, mes: number): DiasDelMes {
+  const total = new Date(anio, mes, 0).getDate()
+  let habiles = 0, feriados = 0, domingos = 0, sabados = 0
+  for (let dia = 1; dia <= total; dia++) {
+    const d = new Date(anio, mes - 1, dia, 12, 0, 0)
+    if (esFeriado(d)) { feriados++; continue }
+    const dow = d.getDay()
+    if (dow === 0) domingos++
+    else if (dow === 6) sabados++
+    else habiles++
+  }
+  return { total, habiles, feriados, domingos, sabados, descanso: feriados + domingos }
+}
+
 /**
  * Devuelve los próximos N días hábiles a partir de una fecha (incluye la fecha
  * inicial si es hábil). Cada elemento es un Date a las 12:00 local.

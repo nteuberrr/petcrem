@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData } from '@/lib/datastore'
-import { formatDateForSheet } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
+import { crearResolverCremacion, parseFechaSegura } from '@/lib/cremaciones-mes'
 
 type Tramo = {
   id: string; peso_min: string; peso_max: string
@@ -10,13 +10,7 @@ type Tramo = {
   veterinaria_id?: string
 }
 
-function parseFecha(raw: string): Date | null {
-  if (!raw) return null
-  const iso = formatDateForSheet(raw)
-  if (!iso) return null
-  const d = new Date(`${iso}T12:00:00`)
-  return isNaN(d.getTime()) ? null : d
-}
+const parseFecha = parseFechaSegura
 
 export async function GET(req: NextRequest) {
   try {
@@ -84,18 +78,10 @@ export async function GET(req: NextRequest) {
       return d.getMonth() + 1 === mes && d.getFullYear() === anio
     }
 
-    const cicloById = new Map(ciclos.map(c => [c.id, c]))
-    const fechaCliente = (c: Record<string, string>): Date | null => {
-      // Cualquier mascota con ciclo_id válido (cremada o despachada) usa fecha del ciclo
-      if (c.ciclo_id) {
-        const ciclo = cicloById.get(c.ciclo_id)
-        if (ciclo?.fecha) {
-          const d = parseFecha(ciclo.fecha)
-          if (d) return d
-        }
-      }
-      return parseFecha(c.fecha_retiro || c.fecha_creacion)
-    }
+    // "Cuándo se cremó" vive en lib/cremaciones-mes: la misma definición la usan
+    // el dashboard y Remuneraciones (donde el número de cremaciones del mes
+    // define cuánto cobra cada operario).
+    const fechaCliente = crearResolverCremacion(ciclos)
 
     const delMes = clientes.filter(c => {
       const d = fechaCliente(c)

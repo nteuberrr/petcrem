@@ -150,7 +150,9 @@ export const SHEETS: Record<string, string[]> = {
     'id', 'veterinaria_id', 'monto', 'detalle', 'fecha',
     'gasto_manual_id', 'creado_por_id', 'creado_por_nombre', 'fecha_creacion',
   ],
-  usuarios: ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion', 'telefono', 'avisos_whatsapp'],
+  // perfil_id → tabla `perfiles`: define qué módulos ve/edita la persona
+  // (lib/permisos). El `rol` quedó solo para distinguir al dueño ('admin').
+  usuarios: ['id', 'nombre', 'email', 'password', 'rol', 'activo', 'fecha_creacion', 'telefono', 'avisos_whatsapp', 'perfil_id'],
   asistencia: [
     'id', 'usuario_id', 'usuario_nombre', 'fecha', 'dia_semana', 'es_findesemana',
     'hora_entrada', 'hora_salida', 'minutos_trabajados', 'minutos_normales', 'minutos_extra',
@@ -460,5 +462,51 @@ export const SHEETS: Record<string, string[]> = {
   avisos_config: [
     'id', 'clave', 'activo', 'destinatarios', 'hora',
     'omitir_vacio', 'ultimo_envio', 'fecha_actualizacion',
+  ],
+  // ── Módulo Remuneraciones (RRHH) ────────────────────────────────────────────
+  // Reemplaza el Excel con Solver que se corría a mano cada mes. DDL completo
+  // (con índices y el enganche al EERR) en supabase/remuneraciones.sql.
+  //
+  // El trabajador nunca se borra (rompería el histórico): se desactiva.
+  // `modalidad_variable`: meta_liquido = el solver ajusta el bono hasta que el
+  // líquido dé sueldo_base + valor_por_cremacion × cremaciones del mes.
+  rrhh_empleados: [
+    'id', 'usuario_id', 'nombre_completo', 'rut', 'fecha_nacimiento', 'nacionalidad',
+    'direccion', 'comuna', 'email', 'telefono',
+    'cargo', 'unidad_negocio', 'tipo_contrato', 'fecha_ingreso', 'fecha_termino',
+    'jornada_semanal_horas',
+    'sueldo_base', 'modalidad_variable', 'valor_por_cremacion', 'haberes_no_imponibles',
+    'afp', 'prevision_salud', 'isapre_codigo', 'plan_salud_uf', 'apv_monto', 'apv_institucion',
+    'banco', 'tipo_cuenta', 'numero_cuenta',
+    'activo', 'notas', 'fecha_creacion',
+  ],
+  // Valores legales POR PERÍODO (YYYY-MM). Es lo que impide que el módulo
+  // envejezca: los topes imponibles se reajustan cada año y el aporte
+  // previsional del empleador (Ley 21.735) sube todos los años hasta 2033.
+  rrhh_parametros: [
+    'id', 'periodo', 'valor_uf', 'valor_utm', 'imm',
+    'tope_afp_uf', 'tope_afc_uf', 'tasas_afp', 'tramos_impuesto',
+    'tasa_afc_trabajador', 'tasa_afc_empleador_indefinido', 'tasa_afc_empleador_plazo_fijo',
+    'tasa_mutual', 'tasa_sis', 'tasa_cuenta_individual', 'tasa_fapp', 'tasa_seguro_social',
+    'factor_gratificacion', 'tope_gratificacion_imm',
+    'dias_habiles', 'dias_descanso', 'notas', 'fecha_creacion',
+  ],
+  // Una por empleado y período. `detalle_json` guarda cada línea con su fórmula;
+  // `parametros_json` congela los parámetros usados, para que reimprimir enero
+  // en diciembre dé exactamente el mismo PDF.
+  rrhh_liquidaciones: [
+    'id', 'periodo', 'empleado_id', 'empleado_nombre', 'estado',
+    'cremaciones', 'meta_liquido', 'variable_imponible',
+    'total_imponible', 'total_no_imponible', 'total_haberes', 'total_descuentos',
+    'impuesto_unico', 'liquido', 'reembolso_salud', 'total_a_transferir',
+    'aportes_empleador', 'costo_empresa', 'exacto', 'diferencia_meta',
+    'detalle_json', 'parametros_json', 'novedades_json',
+    'pdf_key', 'pdf_url', 'fecha_pago', 'cerrada_por', 'fecha_creacion',
+  ],
+  // La orden de pago del mes (lo que efectivamente se transfiere).
+  rrhh_pagos: [
+    'id', 'periodo', 'liquidacion_ids', 'total_liquidos', 'total_reembolsos',
+    'total_transferido', 'costo_empresa', 'fecha_pago', 'comentarios',
+    'creado_por', 'fecha_creacion',
   ],
 }

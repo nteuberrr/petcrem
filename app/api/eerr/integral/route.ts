@@ -8,6 +8,7 @@ import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { getConfigCobroEutanasia, margenEutanasiaCon } from '@/lib/eutanasia-precios'
 import { getPagosRetirosEerr, partidaRetiros } from '@/lib/eerr-retiros'
+import { getCostoRemuneracionesEerr, partidaRemuneraciones } from '@/lib/remuneraciones/eerr'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest) {
     const N = periodos.length
     const zeros = () => new Array(N).fill(0)
 
-    const [clientes, partidas, subgrupos, gastosSii, gastosMan, rendiciones, pagosRetiros, pg, pc, pe, vets, eutanasias, cfgEut] = await Promise.all([
+    const [clientes, partidas, subgrupos, gastosSii, gastosMan, rendiciones, pagosRetiros, costoRemuneraciones, pg, pc, pe, vets, eutanasias, cfgEut] = await Promise.all([
       getSheetData('clientes'),
       getSheetData('eerr_partidas'),
       getSheetData('eerr_subgrupos'),
@@ -87,6 +88,7 @@ export async function GET(req: NextRequest) {
       getSheetData('eerr_gastos_manuales'),
       getSheetData('rendiciones'),
       getPagosRetirosEerr(),
+      getCostoRemuneracionesEerr(),
       getSheetData('precios_generales'),
       getSheetData('precios_convenio'),
       getSheetData('precios_especiales'),
@@ -185,6 +187,12 @@ export async function GET(req: NextRequest) {
     // del pago, en la partida marcada con la clave `retiros_adicionales`.
     const pRetiros = partidaRetiros(partidas as Cli[])
     if (pRetiros) for (const p of pagosRetiros) add(pRetiros.id, p.fecha, p.monto)
+    // Remuneraciones: costo empresa de las liquidaciones PAGADAS, imputado al mes
+    // DEVENGADO (el sueldo de julio es costo de julio aunque se pague en agosto),
+    // en la partida marcada con la clave `remuneraciones`. Fuente automática: no
+    // hay que cargar los sueldos a mano en Compras ni en Gastos manuales.
+    const pRemun = partidaRemuneraciones(partidas as Cli[])
+    if (pRemun) for (const c of costoRemuneraciones) add(pRemun.id, c.fecha, c.monto)
 
     const sgById = new Map<string, { nombre: string; orden: number }>()
     for (const s of subgrupos as Cli[]) sgById.set(s.id, { nombre: s.nombre, orden: parseInt(s.orden) || 0 })

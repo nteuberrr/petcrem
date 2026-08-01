@@ -8,6 +8,7 @@ import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { getConfigCobroEutanasia, margenEutanasiaCon } from '@/lib/eutanasia-precios'
 import { CLAVE_RETIROS, getPagosRetirosEerr } from '@/lib/eerr-retiros'
+import { CLAVE_REMUNERACIONES, getCostoRemuneracionesEerr } from '@/lib/remuneraciones/eerr'
 
 export const dynamic = 'force-dynamic'
 
@@ -138,6 +139,17 @@ export async function GET(req: NextRequest) {
             fecha: p.fecha, fuente: 'Retiros adicionales',
             descripcion: `${p.cantidad} retiro${p.cantidad === 1 ? '' : 's'} fuera de jornada`,
             proveedor: p.usuario, documento: `Pago N° ${p.id}`, monto: p.monto,
+          })
+        }
+      }
+      // Remuneraciones: una fila por liquidación pagada, al mes devengado.
+      if ((partida.clave || '') === CLAVE_REMUNERACIONES) {
+        for (const c of await getCostoRemuneracionesEerr()) {
+          if (!enPeriodo(c.fecha)) continue
+          movimientos.push({
+            fecha: c.fecha, fuente: 'Remuneraciones',
+            descripcion: `Sueldo ${c.periodo} (costo empresa)`,
+            proveedor: c.empleado, documento: `Liquidación N° ${c.id}`, monto: c.monto,
           })
         }
       }

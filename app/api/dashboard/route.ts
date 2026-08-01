@@ -3,6 +3,7 @@ import { getSheetData } from '@/lib/datastore'
 import { formatDateForSheet, horaToMinutos } from '@/lib/dates'
 import { parseDecimalOr0, parsePeso, parseMonto } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
+import { crearResolverCremacion, parseFechaSegura } from '@/lib/cremaciones-mes'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,38 +62,19 @@ export async function GET() {
     //                   → ingresos, mascotas del mes, costo vehículo / mascota
     // - fechaCremacion: fecha del ciclo asociado (cuando se ejecutó la cremación)
     //                   → mascotas cremadas por mes, litros / mascota
-    const cicloById = new Map(ciclos.map(c => [c.id, c]))
     const fechaVentaCache = new Map<string, Date | null>()
-    const fechaCremacionCache = new Map<string, Date | null>()
 
-    function parseDateSafe(raw: string): Date | null {
-      if (!raw) return null
-      const iso = formatDateForSheet(raw) // maneja serial Excel + ISO + DD/MM/YYYY
-      if (!iso) return null
-      const d = new Date(`${iso}T12:00:00`) // mediodía local para evitar UTC shift
-      return isNaN(d.getTime()) ? null : d
-    }
+    // parseo de fechas y "cuándo se cremó" viven en lib/cremaciones-mes: la misma
+    // definición la usan los reportes y Remuneraciones (donde el número de
+    // cremaciones del mes define cuánto cobra cada operario).
+    const parseDateSafe = parseFechaSegura
+    const fechaCremacion = crearResolverCremacion(ciclos)
 
     function fechaVenta(c: Record<string, string>): Date | null {
       const cached = fechaVentaCache.get(c.id)
       if (cached !== undefined) return cached
       const d = parseDateSafe(c.fecha_retiro || c.fecha_creacion)
       fechaVentaCache.set(c.id, d)
-      return d
-    }
-
-    function fechaCremacion(c: Record<string, string>): Date | null {
-      const cached = fechaCremacionCache.get(c.id)
-      if (cached !== undefined) return cached
-      let d: Date | null = null
-      // Cualquier mascota que pasó por un ciclo (cremado o despachado) debe usar
-      // la fecha de ese ciclo. Solo si no tiene ciclo_id válido cae al fallback.
-      if (c.ciclo_id) {
-        const ciclo = cicloById.get(c.ciclo_id)
-        if (ciclo?.fecha) d = parseDateSafe(ciclo.fecha)
-      }
-      if (!d) d = parseDateSafe(c.fecha_retiro || c.fecha_creacion)
-      fechaCremacionCache.set(c.id, d)
       return d
     }
 
