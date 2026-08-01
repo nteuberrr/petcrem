@@ -251,9 +251,13 @@ function TarjetaEmpleado({ r, onAbrir }: { r: ResultadoUI; onAbrir: () => void }
               <span>+ Reembolso de salud</span>
               <span className="font-semibold">{fmtPrecio(t.reembolso_salud)}</span>
             </div>
+            {/* Es el monto que de verdad se transfiere: va en navy como el
+                resto de las cifras fuertes. El dorado del sistema es un tono
+                claro pensado para FONDOS — como color de texto sobre blanco
+                quedaba ilegible. */}
             <div className="mt-1 flex items-baseline justify-between border-t border-dashed border-gray-300 pt-1">
               <span className="text-sm font-medium text-gray-700">Total a transferir</span>
-              <span className="text-lg font-extrabold text-gold-soft">{fmtPrecio(t.total_a_transferir)}</span>
+              <span className="text-lg font-extrabold text-brand">{fmtPrecio(t.total_a_transferir)}</span>
             </div>
           </>
         )}
