@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
 import { getSheetData } from '@/lib/datastore'
+import { puedeNivel } from '@/lib/permisos-server'
 
 /**
  * GET /api/facturacion/pendientes
@@ -14,7 +14,7 @@ import { getSheetData } from '@/lib/datastore'
  */
 export async function GET() {
   const session = await getServerSession(authOptions)
-  if (!esAdminTotal((session?.user as { role?: string })?.role)) {
+  if (!(await puedeNivel('facturacion', 'ver'))) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
 

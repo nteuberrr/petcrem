@@ -15,7 +15,7 @@ import { sesionConAcceso } from '@/lib/permisos-server'
  * permitir disparar el envío.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { ok } = await sesionConAcceso('/api/eutanasias')
+  const { ok } = await sesionConAcceso('/api/eutanasias', 'POST')
   if (!ok) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   void req
   try {

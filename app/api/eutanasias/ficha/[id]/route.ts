@@ -19,8 +19,8 @@ import { aplicarResultadoEutanasia, esResultado, cancelarEutanasiaConservandoFic
 const SHEET = 'cotizaciones_eutanasia'
 const RUTA = '/api/eutanasias/ficha'
 
-async function gate() {
-  const { ok } = await sesionConAcceso(RUTA)
+async function gate(metodo: string) {
+  const { ok } = await sesionConAcceso(RUTA, metodo)
   return ok ? null : NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 }
 
@@ -67,7 +67,7 @@ async function armarFicha(c: Record<string, string>) {
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await gate()
+  const denied = await gate('GET')
   if (denied) return denied
   void req
   try {
@@ -82,7 +82,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await gate()
+  const denied = await gate('POST')
   if (denied) return denied
   try {
     const { id } = await params

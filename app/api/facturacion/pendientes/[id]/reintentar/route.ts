@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
 import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { emitirBoletaFicha } from '@/lib/facturacion'
+import { puedeNivel } from '@/lib/permisos-server'
 
 /**
  * POST /api/facturacion/pendientes/[id]/reintentar
@@ -17,7 +17,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions)
-  if (!esAdminTotal((session?.user as { role?: string })?.role)) {
+  if (!(await puedeNivel('facturacion', 'editar'))) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
 

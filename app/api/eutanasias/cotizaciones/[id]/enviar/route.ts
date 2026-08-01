@@ -10,7 +10,7 @@ import { sesionConAcceso } from '@/lib/permisos-server'
  * caso). La lógica vive en lib/eutanasia-cotizaciones (compartida con el bot).
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { ok } = await sesionConAcceso('/api/eutanasias')
+  const { ok } = await sesionConAcceso('/api/eutanasias', 'POST')
   if (!ok) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   try {
     const { id } = await params

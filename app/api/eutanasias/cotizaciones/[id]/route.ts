@@ -11,14 +11,14 @@ import { sincronizarFichaDeEutanasia, horaRetiroDeEutanasia } from '@/lib/eutana
 
 const SHEET = 'cotizaciones_eutanasia'
 
-async function requireAdmin() {
-  const { ok } = await sesionConAcceso('/api/eutanasias')
+async function requireAdmin(metodo: string) {
+  const { ok } = await sesionConAcceso('/api/eutanasias', metodo)
   if (!ok) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   return null
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAdmin()
+  const denied = await requireAdmin('GET')
   if (denied) return denied
   void req
   try {
@@ -44,7 +44,7 @@ const CAMPOS_EDITABLES = [
 ] as const
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAdmin()
+  const denied = await requireAdmin('PATCH')
   if (denied) return denied
   try {
     const { id } = await params
@@ -250,7 +250,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAdmin()
+  const denied = await requireAdmin('DELETE')
   if (denied) return denied
   void req
   try {

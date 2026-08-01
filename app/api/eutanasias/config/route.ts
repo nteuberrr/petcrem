@@ -7,14 +7,14 @@ import { getFijoEutanasia, setFijoEutanasia, getConsultaEutanasia, setConsultaEu
 //  - consulta_vet + consulta_alma: consulta cobrada cuando NO se realiza.
 //  - recargo_fuera_horario: recargo al cliente si el servicio es fuera de horario.
 
-async function requireAdmin() {
-  const { ok } = await sesionConAcceso('/api/eutanasias')
+async function requireAdmin(metodo: string) {
+  const { ok } = await sesionConAcceso('/api/eutanasias', metodo)
   if (!ok) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   return null
 }
 
 export async function GET() {
-  const denied = await requireAdmin()
+  const denied = await requireAdmin('GET')
   if (denied) return denied
   try {
     const [fijo, consulta, recargoFueraHorario] = await Promise.all([getFijoEutanasia(), getConsultaEutanasia(), getRecargoFueraHorario()])
@@ -25,7 +25,7 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
-  const denied = await requireAdmin()
+  const denied = await requireAdmin('PUT')
   if (denied) return denied
   try {
     const body = await req.json()

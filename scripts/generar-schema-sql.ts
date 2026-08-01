@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SHEETS } from '../lib/sheets-schema'
 
@@ -15,6 +15,12 @@ import { SHEETS } from '../lib/sheets-schema'
  *    para una fase de hardening posterior, ya sobre Postgres.
  *  - RLS on, sin policies (igual que hoy: solo service_role server-side).
  *  - Función next_id(text) → nextval del sequence de identity (getNextId).
+ *
+ * Al final se APENDEA `supabase/tablas-extra.sql`: las tablas que NO salen del
+ * mapa SHEETS porque no se acceden por datastore (logs y tablas de sistema que
+ * usan getSupabase() directo: perfiles, permisos, login_intentos, uso_ia,
+ * web_vitals, marketing_decisiones). Antes vivían pegadas a mano en el .sql
+ * generado y se PERDÍAN en cada regeneración.
  *
  * Uso:  npx tsx scripts/generar-schema-sql.ts
  */
@@ -36,6 +42,9 @@ const INDICES: Record<string, string[]> = {
   mailing_veterinarios: ['email'],
   asistencia: ['fecha'],
   geocoding_cache: ['direccion'],
+  rrhh_liquidaciones: ['periodo', 'empleado_id'],
+  rrhh_parametros: ['periodo'],
+  rrhh_pagos: ['periodo'],
 }
 
 function q(id: string): string { return `"${id.replace(/"/g, '""')}"` }
@@ -104,13 +113,22 @@ function main() {
     incluidas.push(`${name}${tieneId ? '' : ' (+id surrogate)'}`)
   }
 
+  // Tablas que no van por datastore (ver supabase/tablas-extra.sql).
+  let extras = ''
+  try {
+    extras = readFileSync(join(process.cwd(), 'supabase', 'tablas-extra.sql'), 'utf8')
+    out.push(extras.trimEnd(), '')
+  } catch {
+    console.warn('⚠️  No se encontró supabase/tablas-extra.sql — el esquema sale SIN las tablas de sistema.')
+  }
+
   const sqlPath = join(process.cwd(), 'supabase', 'schema-principal.sql')
   writeFileSync(sqlPath, out.join('\n'), 'utf8')
 
   console.log(`✅ Esquema generado: supabase/schema-principal.sql`)
   console.log(`   Tablas (${incluidas.length}): ${incluidas.join(', ')}`)
   console.log(`   Excluidas: ${excluidas.join(', ')}`)
-  console.log(`   Fuente: lib/sheets-schema.ts`)
+  console.log(`   Fuente: lib/sheets-schema.ts${extras ? ' + supabase/tablas-extra.sql' : ''}`)
 }
 
 main()

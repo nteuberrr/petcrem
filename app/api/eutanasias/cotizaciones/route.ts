@@ -28,8 +28,8 @@ const COLS = [
   'creado_por',
 ]
 
-async function requireAdmin() {
-  const { ok, session } = await sesionConAcceso('/api/eutanasias')
+async function requireAdmin(metodo: string) {
+  const { ok, session } = await sesionConAcceso('/api/eutanasias', metodo)
   if (!ok) return { denied: NextResponse.json({ error: 'No autorizado' }, { status: 403 }), session: null }
   return { denied: null, session }
 }
@@ -43,7 +43,7 @@ function validarEmail(s: string): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  const { denied } = await requireAdmin()
+  const { denied } = await requireAdmin('GET')
   if (denied) return denied
   try {
     await ensureSheet(SHEET)
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { denied, session } = await requireAdmin()
+  const { denied, session } = await requireAdmin('POST')
   if (denied) return denied
   try {
     const body = await req.json()

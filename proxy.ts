@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import { normalizarRol } from '@/lib/roles'
-import { esRutaAvanzada, getPermisosConfig, puedeAcceder } from '@/lib/permisos'
+import { esRutaAvanzada, getPermisosSnapshot, puedeAcceder } from '@/lib/permisos'
 
 // ── Sitio público (crematorioalmaanimal.cl) ─────────────────────────────────
 // Rutas de marketing que, en el dominio del sitio, se reescriben a /sitio/*.
@@ -184,21 +184,22 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', req.url))
   }
 
-  // admin2 ("General"), operador (Nivel 1) y operador2 (Nivel 2): gateo DINÁMICO
-  // por módulo (editable, ~instantáneo).
-  if (role === 'admin2' || role === 'operador' || role === 'operador2') {
-    if ((role === 'operador' || role === 'operador2') && pathname === '/') {
-      return NextResponse.redirect(new URL('/dashboard', req.url))
-    }
-    const config = await getPermisosConfig()
-    if (puedeAcceder(role, pathname, config)) return NextResponse.next()
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
-    }
+  // Resto de los usuarios: gateo DINÁMICO por módulo × perfil, con el nivel
+  // exigido según el método (GET → visualizador; escribir → editor).
+  if (pathname === '/') {
     return NextResponse.redirect(new URL('/dashboard', req.url))
   }
-
-  return NextResponse.next()
+  const snap = await getPermisosSnapshot()
+  const actor = {
+    rol: role,
+    usuarioId: typeof token.id === 'string' ? token.id : '',
+    perfilId: typeof token.perfilId === 'string' ? token.perfilId : '',
+  }
+  if (puedeAcceder(actor, pathname, req.method, snap)) return NextResponse.next()
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+  }
+  return NextResponse.redirect(new URL('/dashboard', req.url))
 }
 
 export const config = {

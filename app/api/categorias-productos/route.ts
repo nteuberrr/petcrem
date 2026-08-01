@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, appendRow, updateRow, getNextId, deleteRow, ensureSheet, ensureColumns } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
+import { exigirNivel } from '@/lib/permisos-server'
 
 const HOJA = 'categorias_productos'
 const COLS = ['id', 'nombre', 'activo', 'fecha_creacion']
@@ -43,6 +44,12 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+
+  // Editar el catálogo exige nivel EDITOR sobre el módulo: la ficha del cliente lo
+  // LEE (por eso el prefijo está como soloLectura en lib/permisos), pero nadie con
+  // acceso de lectura puede modificarlo pegándole a la API directo.
+  const g = await exigirNivel('configuracion', 'editar')
+  if (g.denegado) return g.denegado
   try {
     await ensure()
     const body = await req.json()
@@ -64,6 +71,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+
+  // Editar el catálogo exige nivel EDITOR sobre el módulo: la ficha del cliente lo
+  // LEE (por eso el prefijo está como soloLectura en lib/permisos), pero nadie con
+  // acceso de lectura puede modificarlo pegándole a la API directo.
+  const g = await exigirNivel('configuracion', 'editar')
+  if (g.denegado) return g.denegado
   try {
     await ensure()
     const body = await req.json()
@@ -102,6 +115,12 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+
+  // Editar el catálogo exige nivel EDITOR sobre el módulo: la ficha del cliente lo
+  // LEE (por eso el prefijo está como soloLectura en lib/permisos), pero nadie con
+  // acceso de lectura puede modificarlo pegándole a la API directo.
+  const g = await exigirNivel('configuracion', 'editar')
+  if (g.denegado) return g.denegado
   try {
     await ensure()
     const { searchParams } = new URL(req.url)

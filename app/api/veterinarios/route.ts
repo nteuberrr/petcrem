@@ -5,6 +5,7 @@ import { todayISO } from '@/lib/dates'
 import { capitalizarNombre } from '@/lib/nombres'
 import { enviarBienvenidaConvenioVet } from '@/lib/vet-cremacion-mailer'
 import { sincronizarMailingCliente } from '@/lib/mailing-vet-sync'
+import { exigirNivel } from '@/lib/permisos-server'
 
 const VetSchema = z.object({
   nombre: z.string().min(1),
@@ -35,6 +36,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+
+  // Editar el catálogo exige nivel EDITOR sobre el módulo: la ficha del cliente lo
+  // LEE (por eso el prefijo está como soloLectura en lib/permisos), pero nadie con
+  // acceso de lectura puede modificarlo pegándole a la API directo.
+  const g = await exigirNivel('bases', 'editar')
+  if (g.denegado) return g.denegado
   try {
     const body = await req.json()
     const data = VetSchema.parse(body)
@@ -79,6 +86,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+
+  // Editar el catálogo exige nivel EDITOR sobre el módulo: la ficha del cliente lo
+  // LEE (por eso el prefijo está como soloLectura en lib/permisos), pero nadie con
+  // acceso de lectura puede modificarlo pegándole a la API directo.
+  const g = await exigirNivel('bases', 'editar')
+  if (g.denegado) return g.denegado
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
@@ -94,6 +107,12 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+
+  // Editar el catálogo exige nivel EDITOR sobre el módulo: la ficha del cliente lo
+  // LEE (por eso el prefijo está como soloLectura en lib/permisos), pero nadie con
+  // acceso de lectura puede modificarlo pegándole a la API directo.
+  const g = await exigirNivel('bases', 'editar')
+  if (g.denegado) return g.denegado
   try {
     const body = await req.json()
     const { id, ...updates } = body

@@ -6,8 +6,8 @@ import { getConsultaEutanasia } from '@/lib/eutanasia-precios'
 const SHEET = 'precios_eutanasia'
 const COLS = ['id', 'peso_min', 'peso_max', 'precio']
 
-async function requireAdmin() {
-  const { ok } = await sesionConAcceso('/api/eutanasias')
+async function requireAdmin(metodo: string) {
+  const { ok } = await sesionConAcceso('/api/eutanasias', metodo)
   if (!ok) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   return null
 }
@@ -31,7 +31,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = await requireAdmin()
+  const denied = await requireAdmin('POST')
   if (denied) return denied
   try {
     const body = await req.json()
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const denied = await requireAdmin()
+  const denied = await requireAdmin('PATCH')
   if (denied) return denied
   try {
     const body = await req.json()
@@ -68,7 +68,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const denied = await requireAdmin()
+  const denied = await requireAdmin('DELETE')
   if (denied) return denied
   try {
     const { searchParams } = new URL(req.url)

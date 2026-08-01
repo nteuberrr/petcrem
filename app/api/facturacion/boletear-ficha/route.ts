@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
 import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { emitirBoletaFicha } from '@/lib/facturacion'
 import { calcularPrecioFicha, type Tramo } from '@/lib/ficha-precio'
 import { devengarComision } from '@/lib/comisiones'
+import { puedeNivel } from '@/lib/permisos-server'
 
 /**
  * POST /api/facturacion/boletear-ficha  { fichaId, dev? }
@@ -22,7 +22,7 @@ import { devengarComision } from '@/lib/comisiones'
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   const user = session?.user as { role?: string; id?: string; name?: string } | undefined
-  if (!esAdminTotal(user?.role)) {
+  if (!(await puedeNivel('facturacion', 'editar'))) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
 

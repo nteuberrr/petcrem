@@ -66,7 +66,9 @@ export const authOptions: NextAuthOptions = {
               await limpiarIntentosFallidos(email, ip)
               // normalizarRol: una celda 'rol' vacía/desconocida cae a 'operador'
               // (no a '' que el proxy dejaría pasar). Las celdas vacías llegan como ''.
-              return { id: u.id, name: u.nombre, email: u.email, role: normalizarRol(u.rol) }
+              // perfilId gobierna los permisos por módulo (lib/permisos); el rol
+              // solo distingue al dueño (admin) del resto.
+              return { id: u.id, name: u.nombre, email: u.email, role: normalizarRol(u.rol), perfilId: u.perfil_id || '' }
             }
           }
         } catch (e) {
@@ -82,13 +84,15 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.role = (user as { role?: string }).role ?? 'operador'
         token.id = (user as { id?: string }).id ?? ''
+        token.perfilId = (user as { perfilId?: string }).perfilId ?? ''
         token.rolRefrescado = Date.now()
         return token
       }
-      // Refresh del rol cada 10 min: un cambio de rol o la desactivación en
-      // `usuarios` aplica sin esperar a que la persona cierre sesión. Corre
-      // cuando el cliente consulta /api/auth/session (el cookie se re-firma y
-      // el proxy ve el rol nuevo). El admin por env (id '0') no está en la tabla.
+      // Refresh del rol + perfil cada 10 min: un cambio de perfil o la
+      // desactivación en `usuarios` aplica sin esperar a que la persona cierre
+      // sesión. Corre cuando el cliente consulta /api/auth/session (el cookie se
+      // re-firma y el proxy ve el perfil nuevo). El admin por env (id '0') no
+      // está en la tabla.
       const REFRESH_MS = 10 * 60_000
       const last = typeof token.rolRefrescado === 'number' ? token.rolRefrescado : 0
       if (token.id && token.id !== '0' && Date.now() - last > REFRESH_MS) {
@@ -96,6 +100,7 @@ export const authOptions: NextAuthOptions = {
           const usuarios = await getSheetData('usuarios')
           const u = usuarios.find(x => x.id === token.id)
           token.role = (u && u.activo === 'TRUE') ? normalizarRol(u.rol) : 'desactivado'
+          token.perfilId = (u && u.activo === 'TRUE') ? (u.perfil_id || '') : ''
           token.rolRefrescado = Date.now()
         } catch (e) {
           // Si la lectura falla mantenemos el rol vigente y reintentamos después.
@@ -108,6 +113,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.role = token.role as string
         ;(session.user as { id?: string }).id = (token.id as string) ?? ''
+        ;(session.user as { perfilId?: string }).perfilId = (token.perfilId as string) ?? ''
       }
       return session
     },

@@ -21,7 +21,7 @@ function parseObj(s: string | undefined): Record<string, { am?: boolean; pm?: bo
  * Servicios → Veterinarios.
  */
 export async function POST(req: NextRequest) {
-  const { ok } = await sesionConAcceso('/api/eutanasias')
+  const { ok } = await sesionConAcceso('/api/eutanasias', 'POST')
   if (!ok) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 
   try {

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { esAdminTotal } from '@/lib/roles'
 import { construirPropuestaMes } from '@/lib/facturacion-vets'
+import { puedeNivel } from '@/lib/permisos-server'
 
 /** GET /api/facturacion/propuesta-vets?mes=YYYY-MM — propuesta de facturación mensual por veterinaria. Solo admin. */
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!esAdminTotal((session?.user as { role?: string })?.role)) {
+  if (!(await puedeNivel('facturacion', 'ver'))) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
   const mes = req.nextUrl.searchParams.get('mes') || ''

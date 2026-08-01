@@ -44,39 +44,16 @@ export function puedeConfigAvanzada(r?: string | null): boolean {
 }
 
 /** Prefijos de API que SOLO el admin (1) puede tocar (backend de Configuración Avanzada). */
-export const APIS_AVANZADAS = ['/api/empresa-config', '/api/mensajes/agente', '/api/correos', '/api/avisos', '/api/usuarios', '/api/permisos', '/api/uso-ia']
+export const APIS_AVANZADAS = ['/api/empresa-config', '/api/mensajes/agente', '/api/correos', '/api/avisos', '/api/usuarios', '/api/permisos', '/api/perfiles', '/api/uso-ia']
 
 export function esApiAvanzada(pathname: string): boolean {
   return APIS_AVANZADAS.some(p => pathname.startsWith(p))
 }
 
 /**
- * Matriz de accesos por módulo → roles permitidos. Es la fuente del "informe de
- * accesos" (Usuarios, solo admin). Mantener actualizada al sumar módulos nuevos.
+ * ⚠️ La matriz de accesos por módulo ya NO vive acá: la fuente única es el
+ * registro `MODULOS` de lib/permisos.ts y los PERFILES guardados en la base
+ * (editables en Configuración Avanzada → Usuarios → Perfiles). La constante
+ * `MATRIZ_ACCESOS` se eliminó porque se mantenía a mano y quedó desactualizada
+ * respecto del gateo real.
  */
-export interface ModuloAcceso { modulo: string; roles: Rol[]; nota?: string }
-export const MATRIZ_ACCESOS: ModuloAcceso[] = [
-  { modulo: 'Dashboard', roles: ['admin', 'admin2', 'operador', 'operador2'] },
-  { modulo: 'Clientes', roles: ['admin', 'admin2', 'operador', 'operador2'] },
-  { modulo: 'Operaciones (ciclos, petróleo, vehículo, despachos)', roles: ['admin', 'admin2', 'operador', 'operador2'] },
-  { modulo: 'Asistencia', roles: ['admin', 'admin2', 'operador', 'operador2'] },
-  { modulo: 'Mensajes (inbox WhatsApp)', roles: ['admin', 'admin2'] },
-  { modulo: 'Rendiciones', roles: ['admin', 'admin2'], nota: 'admin2 ve, crea y paga; editar/eliminar solo admin principal.' },
-  { modulo: 'Veterinarios (Bases)', roles: ['admin', 'admin2'] },
-  { modulo: 'Servicios (Eutanasias a domicilio)', roles: ['admin', 'admin2'] },
-  { modulo: 'Campañas (FB/IG/TikTok/Mail)', roles: ['admin'], nota: 'Solo el administrador principal.' },
-  { modulo: 'Facturación (Boletas, Facturas, NC)', roles: ['admin'], nota: 'Por defecto solo el administrador principal; puede habilitarse a otros roles.' },
-  { modulo: 'Web (panel del sitio público)', roles: ['admin'], nota: 'Por defecto solo el administrador principal; puede habilitarse a otros roles.' },
-  { modulo: 'Estado de Resultados (EERR)', roles: ['admin', 'admin2'] },
-  { modulo: 'Reportes', roles: ['admin', 'admin2'] },
-  { modulo: 'Configuración · Precios', roles: ['admin', 'admin2'] },
-  { modulo: 'Configuración · Artículos (Servicios, Bodega, Otros Productos)', roles: ['admin', 'admin2'] },
-  { modulo: 'Configuración · Descuentos', roles: ['admin', 'admin2'] },
-  { modulo: 'Configuración · Jornada', roles: ['admin', 'admin2'] },
-  { modulo: 'Configuración Avanzada · Datos Personales', roles: ['admin'] },
-  { modulo: 'Configuración Avanzada · Usuarios', roles: ['admin'], nota: 'Solo el administrador principal.' },
-  { modulo: 'Configuración Avanzada · Agentes (IA)', roles: ['admin'] },
-  { modulo: 'Configuración Avanzada · Correos', roles: ['admin'] },
-  { modulo: 'Configuración Avanzada · Mantenimiento', roles: ['admin'] },
-  { modulo: 'Informe de accesos', roles: ['admin'] },
-]

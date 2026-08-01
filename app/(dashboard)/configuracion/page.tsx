@@ -10,9 +10,10 @@ import CorreosConfig from '@/components/CorreosConfig'
 import ConsumoIA from '@/components/ConsumoIA'
 import AvisosConfig from '@/components/AvisosConfig'
 import DescuentosConvenios from '@/components/DescuentosConvenios'
+import PerfilesEditor from '@/components/PerfilesEditor'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 import { formatDate, formatHora } from '@/lib/dates'
-import { esAdmin, esAdminTotal, ROLES, ROL_LABEL } from '@/lib/roles'
+import { esAdmin, esAdminTotal, ROL_LABEL } from '@/lib/roles'
 import { comunasDeServicio, etiquetaRegla } from '@/lib/adicionales-auto'
 
 const TABS = ['Precios', 'Artículos', 'Descuentos', 'Descuentos Convenios', 'Jornada', 'Configuración Avanzada'] as const
@@ -30,7 +31,8 @@ type TipoServicio = { id: string; nombre: string; codigo: string; plazo_entrega_
 type OtroServicio = { id: string; nombre: string; precio: string; activo: string; auto_regla?: string; comunas?: string }
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string; foto_url?: string }
 type Vet = { id: string; nombre: string; activo: string; tipo_precios: string; precios_indexados?: string }
-type Usuario = { id: string; nombre: string; email: string; rol: string; activo: string; telefono?: string; avisos_whatsapp?: string }
+type Usuario = { id: string; nombre: string; email: string; rol: string; activo: string; telefono?: string; avisos_whatsapp?: string; perfil_id?: string }
+type PerfilLite = { id: string; nombre: string; descripcion: string; editable: boolean; activo: boolean }
 
 export default function ConfiguracionPage() {
   const { data: session, status } = useSession()
@@ -180,6 +182,7 @@ export default function ConfiguracionPage() {
   const [descuentos, setDescuentos] = useState<Descuento[]>([])
   const [vets, setVets] = useState<Vet[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [perfiles, setPerfiles] = useState<PerfilLite[]>([])
 
   // Modals
   const [showProdModal, setShowProdModal] = useState(false)
@@ -223,7 +226,7 @@ export default function ConfiguracionPage() {
   // indexar: deja la copia VIVA (sigue a la tabla base cuando cambie). Solo aplica
   // si el origen es 'general' o 'convenio' — ver lib/precios-indexados.ts.
   const [duplicarForm, setDuplicarForm] = useState({ destino: '', origen: '', indexar: true })
-  const [usuarioForm, setUsuarioForm] = useState({ nombre: '', email: '', password: '', rol: 'operador', telefono: '', avisos_whatsapp: 'FALSE' })
+  const [usuarioForm, setUsuarioForm] = useState({ nombre: '', email: '', password: '', rol: 'operador', perfil_id: '', telefono: '', avisos_whatsapp: 'FALSE' })
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -272,6 +275,9 @@ export default function ConfiguracionPage() {
     if (key === 'usuarios' || key === 'all') {
       const u = await fetch('/api/usuarios').then(r => r.json())
       setUsuarios(Array.isArray(u) ? u : [])
+      // Perfiles de acceso: para mostrar el de cada usuario y poder asignarlo.
+      const p = await fetch('/api/perfiles').then(r => (r.ok ? r.json() : null)).catch(() => null)
+      setPerfiles(Array.isArray(p?.perfiles) ? p.perfiles : [])
     }
   }, [])
 
@@ -978,14 +984,14 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
         <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Usuarios del sistema</h2>
-            <button onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: '', email: '', password: '', rol: 'operador', telefono: '', avisos_whatsapp: 'FALSE' }); setShowUsuarioModal(true) }}
+            <button onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: '', email: '', password: '', rol: 'operador', perfil_id: '', telefono: '', avisos_whatsapp: 'FALSE' }); setShowUsuarioModal(true) }}
               className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
               + Agregar usuario
             </button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
-              <tr>{['Nombre', 'Email', 'Celular (WhatsApp)', 'Rol', 'Estado', ''].map(h => (
+              <tr>{['Nombre', 'Email', 'Celular (WhatsApp)', 'Perfil', 'Estado', ''].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
               ))}</tr>
             </thead>
@@ -1004,7 +1010,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                       <td className="px-4 py-3"><Badge variant="green">activo</Badge></td>
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: 'Administrador', email: adminEmail, password: '', rol: 'admin', telefono: '', avisos_whatsapp: 'FALSE' }); setShowUsuarioModal(true) }}
+                          onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: 'Administrador', email: adminEmail, password: '', rol: 'admin', perfil_id: '', telefono: '', avisos_whatsapp: 'FALSE' }); setShowUsuarioModal(true) }}
                           className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
                           Editar
                         </button>
@@ -1024,7 +1030,11 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                       : <span className="text-gray-400">—</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant={u.rol === 'operador' ? 'blue' : u.rol === 'operador2' ? 'green' : 'purple'}>{ROL_LABEL[u.rol] || u.rol}</Badge>
+                    {(() => {
+                      const p = perfiles.find(x => x.id === (u.perfil_id || ''))
+                      if (p) return <Badge variant={p.editable ? 'blue' : 'purple'}>{p.nombre}</Badge>
+                      return <Badge variant="yellow">Sin perfil{u.rol ? ` (${ROL_LABEL[u.rol] || u.rol})` : ''}</Badge>
+                    })()}
                   </td>
                   <td className="px-4 py-3">
                     {(isAdminTotal || u.rol === 'operador' || u.rol === 'operador2')
@@ -1035,7 +1045,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                     {(isAdminTotal || u.rol === 'operador' || u.rol === 'operador2') ? (
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => { setEditingUsuario(u); setUsuarioForm({ nombre: u.nombre, email: u.email, password: '', rol: u.rol, telefono: u.telefono || '', avisos_whatsapp: u.avisos_whatsapp || 'FALSE' }); setShowUsuarioModal(true) }}
+                          onClick={() => { setEditingUsuario(u); setUsuarioForm({ nombre: u.nombre, email: u.email, password: '', rol: u.rol, perfil_id: u.perfil_id || '', telefono: u.telefono || '', avisos_whatsapp: u.avisos_whatsapp || 'FALSE' }); setShowUsuarioModal(true) }}
                           className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
                           Editar
                         </button>
@@ -1056,8 +1066,8 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
           </table>
         </div>
 
-        {/* Editor de permisos por rol — solo Admin (1) */}
-        {isAdminTotal && <PermisosEditor usuarios={usuarios} />}
+        {/* Editor de PERFILES de acceso — solo Admin (dueño) */}
+        {isAdminTotal && <PerfilesEditor />}
         </div>
       )}
 
@@ -1730,7 +1740,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
         <form onSubmit={async e => {
           e.preventDefault()
           if (editingUsuario) {
-            const updates: Record<string, string> = { id: editingUsuario.id, nombre: usuarioForm.nombre, email: usuarioForm.email, rol: usuarioForm.rol, telefono: usuarioForm.telefono, avisos_whatsapp: usuarioForm.avisos_whatsapp }
+            const updates: Record<string, string> = { id: editingUsuario.id, nombre: usuarioForm.nombre, email: usuarioForm.email, perfil_id: usuarioForm.perfil_id, telefono: usuarioForm.telefono, avisos_whatsapp: usuarioForm.avisos_whatsapp }
             if (usuarioForm.password) updates.password = usuarioForm.password
             await patch('/api/usuarios', updates)
           } else {
@@ -1738,7 +1748,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
           }
           setShowUsuarioModal(false)
           setEditingUsuario(null)
-          setUsuarioForm({ nombre: '', email: '', password: '', rol: 'operador', telefono: '', avisos_whatsapp: 'FALSE' })
+          setUsuarioForm({ nombre: '', email: '', password: '', rol: 'operador', perfil_id: '', telefono: '', avisos_whatsapp: 'FALSE' })
         }} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-gray-700">Nombre</label>
@@ -1766,13 +1776,18 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-700">Rol</label>
-            <select value={usuarioForm.rol} onChange={e => setUsuarioForm(f => ({ ...f, rol: e.target.value }))}
+            <label className="text-xs font-medium text-gray-700">Perfil de acceso</label>
+            <select value={usuarioForm.perfil_id} onChange={e => setUsuarioForm(f => ({ ...f, perfil_id: e.target.value }))}
               className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
-              {ROLES.filter(r => isAdminTotal || r.value === 'operador').map(r => (
-                <option key={r.value} value={r.value}>{r.label}</option>
+              <option value="">— Elegí un perfil —</option>
+              {perfiles.filter(p => p.activo).map(p => (
+                <option key={p.id} value={p.id}>{p.nombre}</option>
               ))}
             </select>
+            <p className="mt-1 text-[11px] text-gray-500">
+              {perfiles.find(p => p.id === usuarioForm.perfil_id)?.descripcion
+                || 'El perfil define qué módulos puede ver y cuáles editar. Se administran en «Perfiles de acceso», más abajo.'}
+            </p>
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700">Celular (WhatsApp) <span className="text-gray-400 font-normal">(opcional)</span></label>
@@ -1784,7 +1799,8 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
             </div>
           </div>
           {(() => {
-            const esAdminRol = usuarioForm.rol === 'admin' || usuarioForm.rol === 'admin2'
+            const perfilSel = perfiles.find(p => p.id === usuarioForm.perfil_id)
+            const esAdminRol = !perfilSel?.editable || usuarioForm.rol === 'admin' || usuarioForm.rol === 'admin2'
             const habilitado = usuarioForm.telefono.length === 9
             return (
               <label className={`flex items-start gap-2 text-xs ${habilitado ? 'text-gray-700' : 'text-gray-400'}`}>
@@ -2063,86 +2079,6 @@ function Field({ label, value, onChange, type = 'text', placeholder }: {
       <input type={type} value={value} placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
         className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-    </div>
-  )
-}
-
-// ─── Editor de permisos por rol (Configuración Avanzada → Usuarios, solo Admin) ──
-type PermisoModulo = { key: string; label: string; def: { admin2: boolean; operador: boolean; operador2: boolean } }
-type PermisosData = { modulos: PermisoModulo[]; config: Record<string, { admin2: boolean; operador: boolean; operador2: boolean }> }
-
-function PermisosEditor({ usuarios }: { usuarios: Usuario[] }) {
-  const [data, setData] = useState<PermisosData | null>(null)
-  const [saving, setSaving] = useState('')
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    fetch('/api/permisos').then(r => (r.ok ? r.json() : null)).then(d => { if (d) setData(d) }).catch(() => {})
-  }, [])
-
-  async function toggle(modulo: string, rol: 'admin2' | 'operador' | 'operador2', permitido: boolean) {
-    setSaving(`${modulo}:${rol}`); setError('')
-    try {
-      const r = await fetch('/api/permisos', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modulo, rol, permitido }) })
-      const d = await r.json()
-      if (r.ok && d.config) setData(prev => (prev ? { ...prev, config: d.config } : prev))
-      else setError(d.error || 'No se pudo guardar')
-    } catch { setError('Error de conexión') }
-    finally { setSaving('') }
-  }
-
-  return (
-    <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-300">
-        <h2 className="font-semibold text-gray-900">Permisos por rol</h2>
-        <p className="text-xs text-gray-400 mt-0.5">Marcá qué puede ver y usar cada rol. Los cambios se aplican casi al instante (la persona los ve en su próxima navegación). El <b>Admin</b> (vos) siempre tiene todo.</p>
-      </div>
-      {!data ? (
-        <div className="px-6 py-8 text-center text-gray-400 text-sm">Cargando…</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[560px]">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Módulo</th>
-                {['Admin', 'General', 'Operario N1', 'Operario N2'].map(h => (
-                  <th key={h} className="text-center px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {data.modulos.map(m => {
-                const c = data.config[m.key] || m.def
-                return (
-                  <tr key={m.key} className="hover:bg-gray-50">
-                    <td className="px-4 py-2.5 text-gray-800">{m.label}</td>
-                    <td className="px-4 py-2.5 text-center"><span className="text-emerald-600 font-bold">✓</span></td>
-                    {(['admin2', 'operador', 'operador2'] as const).map(rol => (
-                      <td key={rol} className="px-4 py-2.5 text-center">
-                        <input type="checkbox" checked={!!c[rol]} disabled={saving === `${m.key}:${rol}`}
-                          onChange={e => toggle(m.key, rol, e.target.checked)}
-                          className="w-4 h-4 accent-brand cursor-pointer disabled:opacity-40" />
-                      </td>
-                    ))}
-                  </tr>
-                )
-              })}
-              <tr className="bg-amber-50/40">
-                <td className="px-4 py-2.5 text-gray-800">Configuración Avanzada
-                  <span className="block text-[10px] text-amber-600">Solo el administrador principal (acá se editan estos permisos).</span></td>
-                <td className="px-4 py-2.5 text-center"><span className="text-emerald-600 font-bold">✓</span></td>
-                <td className="px-4 py-2.5 text-center"><span className="text-gray-300">✗</span></td>
-                <td className="px-4 py-2.5 text-center"><span className="text-gray-300">✗</span></td>
-                <td className="px-4 py-2.5 text-center"><span className="text-gray-300">✗</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-      {error && <div className="px-6 py-2 text-xs text-red-600">{error}</div>}
-      <div className="px-6 py-3 border-t border-gray-300 text-xs text-gray-500">
-        Usuarios: {usuarios.length} · {usuarios.filter(u => u.rol === 'admin').length} Admin · {usuarios.filter(u => u.rol === 'admin2').length} General · {usuarios.filter(u => u.rol === 'operador').length} Operario N1 · {usuarios.filter(u => u.rol === 'operador2').length} Operario N2
-      </div>
     </div>
   )
 }
