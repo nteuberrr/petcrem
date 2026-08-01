@@ -4,7 +4,7 @@
  * la liquidación completa con cada línea acompañada de su fórmula, para que la
  * UI y el PDF puedan mostrar de dónde salió cada peso.
  *
- * Verificado contra la planilla real de junio 2026 (ver
+ * Verificado contra la planilla real de julio 2026 (ver
  * scripts/verificar-remuneraciones.ts): reproduce el líquido al peso.
  */
 
@@ -82,11 +82,15 @@ export function calcularLiquidacion({ empleado: e, novedades: n, parametros: p, 
   // ── Haberes imponibles ────────────────────────────────────────────────────
   const imponibles: Linea[] = []
 
-  const sueldoBase = Math.round((e.sueldo_base * diasTrabajados) / 30)
+  // El sueldo base del mes puede venir de las novedades (histórico con otro sueldo).
+  const baseContrato = n.sueldo_base && n.sueldo_base > 0 ? n.sueldo_base : e.sueldo_base
+  const sueldoBase = Math.round((baseContrato * diasTrabajados) / 30)
   imponibles.push({
     etiqueta: `SUELDO BASE ${diasTrabajados} DÍAS`,
     monto: sueldoBase,
-    formula: diasTrabajados === 30 ? 'sueldo base del contrato' : `${clp(e.sueldo_base)} × ${diasTrabajados}/30`,
+    formula: diasTrabajados === 30
+      ? (baseContrato === e.sueldo_base ? 'sueldo base del contrato' : `sueldo base de este mes (${clp(baseContrato)})`)
+      : `${clp(baseContrato)} × ${diasTrabajados}/30`,
   })
 
   if (B > 0) {
@@ -94,7 +98,7 @@ export function calcularLiquidacion({ empleado: e, novedades: n, parametros: p, 
       etiqueta: 'Variable por cremación',
       monto: B,
       formula: e.modalidad_variable === 'meta_liquido'
-        ? `resuelto para que el líquido dé ${clp(e.sueldo_base + e.valor_por_cremacion * n.cremaciones)} (${n.cremaciones} cremaciones)`
+        ? `resuelto para que el líquido dé ${clp(baseContrato + e.valor_por_cremacion * n.cremaciones)} (${n.cremaciones} cremaciones)`
         : `${clp(e.valor_por_cremacion)} × ${n.cremaciones} cremaciones`,
     })
   }

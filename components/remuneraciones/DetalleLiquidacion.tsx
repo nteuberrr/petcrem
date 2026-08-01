@@ -12,18 +12,22 @@ import { nombrePeriodo } from './tipos-ui'
  * haya un número del que no se pueda decir de dónde salió.
  */
 export default function DetalleLiquidacion({
-  periodo, resultado, editable, onGuardarNovedades, onCerrar,
+  periodo, resultado, editable, sueldoBaseVigente, onGuardarNovedades, onCerrar,
 }: {
   periodo: string
   resultado: ResultadoUI
   editable: boolean
+  /** El de la ficha del empleado, para saber si el del mes es un override. */
+  sueldoBaseVigente?: number
   onGuardarNovedades: (empleadoId: string, novedades: Partial<Novedades>) => Promise<void>
   onCerrar: () => void
 }) {
   const { liquidacion: l, novedades: n, solver } = resultado
+  const baseVigente = sueldoBaseVigente ?? 0
   const [horasExtra, setHorasExtra] = useState(String(n.horas_extra || 0))
   const [anticipos, setAnticipos] = useState(String(n.anticipos || 0))
   const [diasTrabajados, setDiasTrabajados] = useState(String(n.dias_trabajados || 30))
+  const [sueldoBase, setSueldoBase] = useState(String(n.sueldo_base || baseVigente))
   const [guardando, setGuardando] = useState(false)
 
   async function aplicar() {
@@ -33,6 +37,9 @@ export default function DetalleLiquidacion({
         horas_extra: Number(horasExtra) || 0,
         anticipos: Number(anticipos) || 0,
         dias_trabajados: Number(diasTrabajados) || 30,
+        // Solo se manda si difiere del vigente: así el mes sigue el sueldo de la
+        // ficha salvo que se lo pise a propósito (útil al cargar el histórico).
+        sueldo_base: Number(sueldoBase) === baseVigente ? 0 : Number(sueldoBase) || 0,
       })
     } finally {
       setGuardando(false)
@@ -42,7 +49,8 @@ export default function DetalleLiquidacion({
   const hayCambios =
     Number(horasExtra) !== (n.horas_extra || 0) ||
     Number(anticipos) !== (n.anticipos || 0) ||
-    Number(diasTrabajados) !== (n.dias_trabajados || 30)
+    Number(diasTrabajados) !== (n.dias_trabajados || 30) ||
+    Number(sueldoBase) !== (n.sueldo_base || baseVigente)
 
   return (
     <Modal open onClose={onCerrar} title={`${resultado.empleado_nombre} — ${nombrePeriodo(periodo)}`} size="3xl">
@@ -50,7 +58,14 @@ export default function DetalleLiquidacion({
         {/* ── Novedades del mes ───────────────────────────────────────────── */}
         <section className="rounded-2xl border border-gray-300 bg-cream p-4">
           <h3 className="mb-3 text-sm font-bold text-brand">Novedades del mes</h3>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Campo
+              label="Sueldo base del mes"
+              value={sueldoBase}
+              onChange={setSueldoBase}
+              disabled={!editable}
+              pie={Number(sueldoBase) !== baseVigente ? `distinto del vigente (${fmtPrecio(baseVigente)})` : undefined}
+            />
             <Campo label="Días trabajados (de 30)" value={diasTrabajados} onChange={setDiasTrabajados} disabled={!editable} />
             <Campo label="Horas extra" value={horasExtra} onChange={setHorasExtra} disabled={!editable} />
             <Campo label="Anticipos ($)" value={anticipos} onChange={setAnticipos} disabled={!editable} />
@@ -132,7 +147,9 @@ export default function DetalleLiquidacion({
   )
 }
 
-function Campo({ label, value, onChange, disabled }: { label: string; value: string; onChange: (v: string) => void; disabled?: boolean }) {
+function Campo({ label, value, onChange, disabled, pie }: {
+  label: string; value: string; onChange: (v: string) => void; disabled?: boolean; pie?: string
+}) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
@@ -143,6 +160,7 @@ function Campo({ label, value, onChange, disabled }: { label: string; value: str
         onChange={e => onChange(e.target.value)}
         className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
       />
+      {pie && <span className="mt-0.5 block text-xs text-amber-700">{pie}</span>}
     </label>
   )
 }

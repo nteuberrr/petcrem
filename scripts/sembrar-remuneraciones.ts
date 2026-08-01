@@ -9,15 +9,14 @@
  * Es idempotente: no duplica un empleado que ya exista con el mismo RUT ni un
  * período de parámetros ya cargado.
  *
- * ⚠️ La UF y la UTM de cada mes las publican el Banco Central y el SII: acá solo
- * van las de junio 2026 (las que traía la planilla). El resto quedan en 0 y hay
- * que completarlas en la pestaña «Parámetros legales» antes de liquidar ese mes.
+ * La UF y la UTM de cada mes se traen solas de la fuente (Banco Central + SII);
+ * si algún mes todavía no está publicado, el script lo avisa y queda para cargar
+ * a mano en la pestaña «Parámetros legales».
  */
 import './_env-preload'
 import { getSheetData } from '../lib/datastore'
 import { crearEmpleado, listarEmpleados } from '../lib/remuneraciones/datos'
-import { guardarParametros } from '../lib/remuneraciones/parametros'
-import { parametrosPorDefecto } from '../lib/remuneraciones/tablas'
+import { autocompletarPeriodo } from '../lib/remuneraciones/parametros'
 import { limpiarRut } from '../lib/rut'
 import type { Empleado } from '../lib/remuneraciones/tipos'
 
@@ -29,7 +28,7 @@ const COMUN = {
   fecha_ingreso: '2025-12-01',
   fecha_termino: '2026-05-31',
   jornada_semanal_horas: 42,
-  sueldo_base: 539000,
+  sueldo_base: 553553,   // subió en mayo 2026 (antes 539.000)
   modalidad_variable: 'meta_liquido' as const,
   valor_por_cremacion: 1750,
   nacionalidad: 'Chilena',
@@ -56,11 +55,6 @@ const EMPLEADOS: Partial<Empleado>[] = [
     notas: 'Sin previsión de salud: el 7% se descuenta y se le entrega aparte como reembolso.',
   },
 ]
-
-/** Valores de cierre conocidos. Los que faltan se completan desde la app. */
-const VALORES_CONOCIDOS: Record<string, { valor_uf: number; valor_utm: number }> = {
-  '2026-06': { valor_uf: 40820.31, valor_utm: 71506 },
-}
 
 const PERIODOS = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08']
 
@@ -100,25 +94,15 @@ async function main() {
       console.log(`·  ${periodo} — ya cargado, no lo toco`)
       continue
     }
-    const base = parametrosPorDefecto(periodo)
-    const conocidos = VALORES_CONOCIDOS[periodo]
-    const p = { ...base, ...(conocidos || {}) }
-    const marca = conocidos ? '' : '  ⚠️ falta UF/UTM'
-    console.log(
-      `+  ${periodo} — mínimo ${p.imm.toLocaleString('es-CL')}, topes ${p.tope_afp_uf}/${p.tope_afc_uf} UF, ` +
-      `SIS ${p.tasa_sis}%, seguro social ${p.tasa_seguro_social}%${marca}`,
-    )
-    if (APLICAR) {
-      await guardarParametros(periodo, {
-        ...p,
-        notas: conocidos ? 'Valores de la planilla de junio.' : 'Falta cargar UF y UTM del mes.',
-      })
-    }
+    if (!APLICAR) { console.log(`+  ${periodo} — se crearía con la UF y la UTM del mes`); continue }
+    const r = await autocompletarPeriodo(periodo)
+    console.log(`+  ${periodo} — UF ${r.uf.toLocaleString('es-CL')} · UTM ${r.utm.toLocaleString('es-CL')}`)
+    for (const a of r.avisos) console.log(`     ⚠️ ${a}`)
   }
 
   console.log('')
   if (APLICAR) {
-    console.log('✅ Listo. Completa la UF y la UTM de cada mes en Remuneraciones → Parámetros legales.')
+    console.log('✅ Listo. Revisa los avisos de arriba si algún mes quedó sin UF o UTM.')
   } else {
     console.log('Nada se escribió. Volvé a correr con --aplicar.')
   }

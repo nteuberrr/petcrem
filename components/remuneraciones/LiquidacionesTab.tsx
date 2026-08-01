@@ -91,8 +91,9 @@ export default function LiquidacionesTab() {
                 <b>Cremaciones:</b> las fichas efectivamente cremadas en el mes (estado cremado o despachado, con la
                 fecha del ciclo de horno). El detalle es auditable ficha por ficha.
                 <br /><br />
-                <b>Días:</b> del calendario chileno con sus feriados. Los trabajados son el divisor de la semana
-                corrida, y los de descanso (domingos + festivos) su multiplicador.
+                <b>Días:</b> del calendario chileno con sus feriados. Los trabajados son todos los del mes menos
+                domingos y festivos — <b>los sábados cuentan</b>, porque el crematorio atiende de lunes a domingo.
+                Son el divisor de la semana corrida, y los de descanso su multiplicador.
                 <br /><br />
                 <b>UF y UTM:</b> se traen solas del Banco Central y el SII. Se editan en «Parámetros legales».
               </InfoTip>
@@ -106,7 +107,7 @@ export default function LiquidacionesTab() {
               <Dato
                 titulo="Días trabajados"
                 valor={String(data.calendario.dias_habiles)}
-                pie={<>lunes a viernes hábiles{data.calendario.manual && ' (ajustado a mano)'}</>}
+                pie={<>el mes menos domingos y feriados{data.calendario.manual && ' (ajustado a mano)'}</>}
               />
               <Dato
                 titulo="Días de descanso"
@@ -193,6 +194,7 @@ export default function LiquidacionesTab() {
           periodo={periodo}
           resultado={data.resultados.find(r => r.empleado_id === abierto)!}
           editable={!!editable}
+          sueldoBaseVigente={data.empleados.find(e => e.id === abierto)?.sueldo_base}
           onCerrar={() => setAbierto(null)}
           onGuardarNovedades={async (empleadoId, novedades) => {
             await recalcular({ [empleadoId]: novedades })

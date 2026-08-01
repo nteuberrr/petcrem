@@ -102,6 +102,12 @@ export interface Empleado extends EmpleadoCalculo {
 export interface Novedades {
   /** Cremaciones efectivamente realizadas en el mes. */
   cremaciones: number
+  /**
+   * Sueldo base de ESTE mes, si difiere del vigente en la ficha. Sirve para
+   * cargar el histórico: el de Oscar y Juan pasó de $539.000 a $553.553 en mayo
+   * de 2026, y sin esto los meses anteriores saldrían con el sueldo de hoy.
+   */
+  sueldo_base?: number
   /** Días del mes trabajados sobre 30 (proporcionalidad del sueldo base). */
   dias_trabajados: number
   /** Días efectivamente trabajados: denominador de la semana corrida. */

@@ -7,15 +7,9 @@
  * No toca la base de datos: el motor es puro. Si algún número se corre un peso,
  * el script falla con código 1 y muestra qué línea cambió.
  *
- * ⚠️ La planilla venía de copiar la del mes anterior, así que varias celdas
- * quedaron sin actualizar: traía la UF y la UTM de JUNIO y un calendario de
- * 21 días hábiles / 5 de descanso que no es el de julio (22/5). Precisamente por
- * eso el módulo trae los indicadores solo y calcula los días del almanaque.
- *
- * Acá se reproduce la planilla TAL COMO ESTABA — es lo único contra lo que se
- * puede contrastar el motor — pero se corre dos veces: con los indicadores que
- * traía y con los verdaderos de julio. Si el líquido cambiara entre una y otra,
- * el error de la planilla habría costado plata.
+ * Los días trabajados son 26, no 22: se cuentan todos los del mes menos los
+ * domingos y el feriado del 16. El crematorio atiende de lunes a domingo, así
+ * que los sábados son días trabajados.
  */
 
 import { liquidar, metaLiquido } from '../lib/remuneraciones/solver'
@@ -24,25 +18,17 @@ import type { EmpleadoCalculo, Novedades, Parametros } from '../lib/remuneracion
 
 const PERIODO = '2026-07'
 
-/** Los indicadores que traía la planilla: son los de junio, quedaron sin actualizar. */
 const parametros: Parametros = {
-  ...parametrosPorDefecto(PERIODO),
-  valor_uf: 40820.31,
-  valor_utm: 71506,
-}
-
-/** Los que de verdad corresponden a julio 2026 (UF del 31, UTM del mes). */
-const parametrosReales: Parametros = {
   ...parametrosPorDefecto(PERIODO),
   valor_uf: 40844.79,
   valor_utm: 71649,
 }
 
-// Los días que traía la planilla, también heredados: julio 2026 tiene 22 hábiles.
+// Julio 2026: 31 días − 4 domingos − 1 feriado (el 16) = 26 trabajados, 5 de descanso.
 const novedades: Novedades = {
-  cremaciones: 44,
+  cremaciones: 73,
   dias_trabajados: 30,
-  dias_efectivos: 21,
+  dias_efectivos: 26,
   dias_descanso: 5,
   horas_extra: 0,
   otros_imponibles: [],
@@ -54,7 +40,9 @@ const novedades: Novedades = {
 const comun = {
   tipo_contrato: 'plazo_fijo' as const,
   jornada_semanal_horas: 42,
-  sueldo_base: 539000,
+  // Subió en mayo 2026 (antes eran $539.000, que sigue siendo el mínimo legal
+  // con que se calcula el tope de la gratificación).
+  sueldo_base: 553553,
   modalidad_variable: 'meta_liquido' as const,
   valor_por_cremacion: 1750,
   plan_salud_uf: 0,
@@ -81,32 +69,34 @@ const juan: EmpleadoCalculo = {
 }
 
 /**
- * Lo que dice la planilla de junio, celda por celda. Cada control es
+ * Lo que dice la planilla de julio, celda por celda. Cada control es
  * [clave, mínimo, máximo]; con mínimo = máximo se exige el valor exacto.
  */
 const ESPERADO: Record<string, [string, number, number][]> = {
   'MUÑOZ SOTO OSCAR NEFTALÍ': [
-    ['variable_imponible', 47583, 47583],
-    ['total_imponible', 747391, 747391],
-    ['afp', 79074, 79074],
-    ['salud', 52317, 52317],
-    ['total_descuentos', 131391, 131391],
-    ['liquido', 616000, 616000],
+    // El Excel deja el bono con decimales de peso ($90.368,11); el motor busca el
+    // menor bono ENTERO que alcanza la meta, así que queda un par de pesos abajo.
+    // Lo que tiene que dar clavado es el líquido, que es lo pactado.
+    ['variable_imponible', 90360, 90369],
+    ['total_imponible', 826620, 826625],
+    ['afp', 87456, 87457],
+    ['salud', 57863, 57864],
+    ['total_descuentos', 145319, 145321],
+    ['liquido', 681303, 681303],
     ['reembolso_salud', 0, 0],
   ],
   'PALENCIA RODRIGUEZ JUAN MIGUEL': [
-    // El Excel calculaba la semana corrida de Juan sobre el variable NETO y la
-    // de Oscar sobre el imponible (inconsistencia entre hojas). El motor las
-    // unifica sobre el imponible, así que su imponible no coincide al peso con
-    // el del Excel — pero el líquido, que es lo pactado, sí.
-    //
-    // Además no existe un bono ENTERO que le deje el líquido en $616.000
-    // clavados: el Excel lo lograba con decimales de peso. El motor toma el
-    // menor bono que alcanza la meta y reporta la diferencia; el control es que
-    // nunca quede por debajo de lo pactado y que el exceso sea despreciable.
-    ['liquido', 616000, 616050],
-    ['salud', 52200, 52300],
-    ['reembolso_salud', 52200, 52300],
+    // El Excel calcula la semana corrida de Juan sobre el variable NETO y la de
+    // Oscar sobre el imponible (inconsistencia entre hojas). El motor las unifica
+    // sobre el imponible, así que su imponible no coincide al peso con el del
+    // Excel — pero el líquido, que es lo pactado, sí. Además puede no existir un
+    // bono ENTERO que deje el líquido clavado: el Excel lo lograba con decimales
+    // de peso. El control es que nunca quede por debajo de lo pactado.
+    ['liquido', 681303, 681350],
+    // El Excel le descuenta $57.780 de salud y se los entrega aparte (G27 =
+    // 681.303 + 57.780 = 739.083).
+    ['salud', 57700, 57900],
+    ['reembolso_salud', 57700, 57900],
   ],
 }
 
@@ -118,7 +108,7 @@ for (const empleado of [oscar, juan]) {
   const meta = metaLiquido(empleado, novedades)
 
   console.log(`\n═══ ${empleado.nombre_completo} — ${PERIODO} ═══`)
-  console.log(`Meta de líquido: $${meta.toLocaleString('es-CL')} (539.000 + 1.750 × ${novedades.cremaciones})`)
+  console.log(`Meta de líquido: $${meta.toLocaleString('es-CL')} (${comun.sueldo_base.toLocaleString('es-CL')} + 1.750 × ${novedades.cremaciones})`)
   console.log('\nHABERES IMPONIBLES')
   for (const l of liquidacion.haberes.imponibles) {
     console.log(`  ${l.etiqueta.padEnd(34)} $${String(l.monto.toLocaleString('es-CL')).padStart(11)}   ${l.formula ?? ''}`)
@@ -167,26 +157,9 @@ for (const empleado of [oscar, juan]) {
   }
 }
 
-// ── ¿La UF vieja de la planilla cambiaba algún número? ──────────────────────
-// A estos sueldos los topes imponibles no muerden (el imponible está muy por
-// debajo de las 90 UF) y la renta queda bajo el tramo exento, así que no
-// debería. Se comprueba en vez de suponerlo.
-console.log('\n═══ Contraste: indicadores de la planilla vs. los reales de julio ═══')
-for (const empleado of [oscar, juan]) {
-  const conPlanilla = liquidar({ empleado, novedades, parametros }).liquidacion.totales
-  const conReales = liquidar({ empleado, novedades, parametros: parametrosReales }).liquidacion.totales
-  const delta = conReales.liquido - conPlanilla.liquido
-  const nombre = empleado.nombre_completo.split(' ').slice(-2).join(' ')
-  console.log(
-    `  ${nombre.padEnd(22)} líquido $${conPlanilla.liquido.toLocaleString('es-CL')} → ` +
-    `$${conReales.liquido.toLocaleString('es-CL')}  ${delta === 0 ? '(sin diferencia ✅)' : `(⚠️ ${delta > 0 ? '+' : ''}${delta})`}`,
-  )
-  if (delta !== 0) fallas++
-}
-
 console.log('')
 if (fallas) {
   console.error(`❌ ${fallas} diferencia(s) contra la planilla de julio.`)
   process.exit(1)
 }
-console.log('✅ El motor reproduce la planilla de julio 2026, y la UF desactualizada no alteraba el líquido.')
+console.log('✅ El motor reproduce la planilla de julio 2026.')

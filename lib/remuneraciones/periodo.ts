@@ -48,7 +48,11 @@ export function calendarioDelPeriodo(periodo: string, override?: { dias_habiles:
   const detalle = diasDelMes(anio, mes)
   const manual = !!(override?.dias_habiles || override?.dias_descanso)
   return {
-    dias_habiles: override?.dias_habiles || detalle.habiles,
+    // Días efectivamente trabajados = el mes menos los de descanso. Incluye los
+    // SÁBADOS a propósito: el crematorio atiende de lunes a domingo, así que un
+    // sábado es día trabajado y no puede quedar fuera del divisor de la semana
+    // corrida (usar solo lunes-viernes inflaría el promedio diario).
+    dias_habiles: override?.dias_habiles || detalle.total - detalle.descanso,
     dias_descanso: override?.dias_descanso || detalle.descanso,
     manual,
     detalle,
@@ -75,6 +79,7 @@ export function mezclarNovedades(base: Novedades, parcial?: Partial<Novedades> |
   if (!parcial) return base
   return {
     cremaciones: parcial.cremaciones ?? base.cremaciones,
+    sueldo_base: parcial.sueldo_base ?? base.sueldo_base,
     dias_trabajados: parcial.dias_trabajados ?? base.dias_trabajados,
     dias_efectivos: parcial.dias_efectivos ?? base.dias_efectivos,
     dias_descanso: parcial.dias_descanso ?? base.dias_descanso,

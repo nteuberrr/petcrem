@@ -29,7 +29,8 @@ function liquidoDe(ctx: ContextoSolver, variableImponible: number): number {
 
 /** Meta de líquido pactada: sueldo base + valor por cremación × cremaciones. */
 export function metaLiquido(empleado: EmpleadoCalculo, novedades: Novedades): number {
-  return Math.round(empleado.sueldo_base + empleado.valor_por_cremacion * novedades.cremaciones)
+  const base = novedades.sueldo_base && novedades.sueldo_base > 0 ? novedades.sueldo_base : empleado.sueldo_base
+  return Math.round(base + empleado.valor_por_cremacion * novedades.cremaciones)
 }
 
 /**

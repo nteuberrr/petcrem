@@ -12,6 +12,7 @@ const MontoNombrado = z.object({ nombre: z.string(), monto: z.number() })
 
 const NovedadesSchema = z.object({
   cremaciones: z.number().optional(),
+  sueldo_base: z.number().optional(),
   dias_trabajados: z.number().optional(),
   dias_efectivos: z.number().optional(),
   dias_descanso: z.number().optional(),
