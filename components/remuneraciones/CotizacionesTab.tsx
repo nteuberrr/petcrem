@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Card, Button } from '@/components/ui/kit'
 import { TableSkeleton } from '@/components/ui/Skeleton'
+import { InfoTip } from '@/components/ui/InfoTip'
 import { fmtPrecio } from '@/lib/format'
 import { moverPeriodo, nombrePeriodo, periodoActual } from './tipos-ui'
 
@@ -80,18 +81,16 @@ export default function CotizacionesTab() {
           <Button variant="secondary" onClick={() => setPeriodo(moverPeriodo(periodo, 1))} aria-label="Mes siguiente">›</Button>
         </div>
         <div className="flex items-center gap-2">
+          <InfoTip titulo="Para qué sirve esta pestaña" posicion="izquierda">
+            Son los montos a declarar en <b>Previred</b>, en el mismo orden del formulario: tipear y listo.
+            <br /><br />
+            No generamos el archivo plano a propósito: son 105 campos en 861 posiciones exactas, se rechaza entero ante
+            un solo carácter fuera de lugar y el formato cambia un par de veces al año. Con dos trabajadores, la
+            declaración directa toma unos minutos.
+          </InfoTip>
           {copiado && <span className="text-xs text-green-700">Copiado</span>}
           <Button variant="secondary" onClick={copiar} disabled={!filas?.length}>Copiar todo</Button>
         </div>
-      </Card>
-
-      <Card className="p-4 text-sm text-gray-700">
-        Estos son los montos que hay que declarar en <b>Previred</b>. Se muestran en el mismo orden del formulario para
-        que sea tipear y listo.{' '}
-        <span className="text-gray-500">
-          Con dos trabajadores la declaración directa toma unos minutos; por eso no generamos el archivo plano, cuyo
-          formato cambia varias veces al año.
-        </span>
       </Card>
 
       {err && <Card className="border-red-300 bg-red-50 p-4 text-sm text-red-700">{err}</Card>}

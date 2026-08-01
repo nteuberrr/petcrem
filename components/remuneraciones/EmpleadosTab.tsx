@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/Modal'
 import { TableSkeleton } from '@/components/ui/Skeleton'
 import { fmtPrecio } from '@/lib/format'
 import { useAccionUnica } from '@/lib/use-accion-unica'
+import { InfoTip } from '@/components/ui/InfoTip'
 import { ISAPRES, NOMBRES_AFP } from '@/lib/remuneraciones/tablas'
 import { formatearRut, validarRut } from '@/lib/rut'
 import { BANCOS_CL, TIPOS_CUENTA } from '@/lib/bancos-cl'
@@ -38,9 +39,19 @@ export default function EmpleadosTab() {
   return (
     <div className="space-y-4">
       <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-        <p className="text-sm text-gray-600">
-          Los datos del contrato y de la previsión de cada trabajador. Nadie se borra: se desactiva, para no romper el histórico.
-        </p>
+        <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-brand">
+          Equipo
+          <InfoTip titulo="Qué se guarda acá">
+            El contrato y la previsión de cada trabajador: es lo que alimenta la liquidación y la declaración de
+            cotizaciones.
+            <br /><br />
+            <b>Nadie se borra</b>, se desactiva — borrar rompería el histórico de liquidaciones ya pagadas.
+            <br /><br />
+            El <b>variable por cremación</b> tiene tres modos: «meta de líquido» resuelve el bono necesario para que
+            el líquido dé sueldo base + valor × cremaciones (es el acuerdo con Oscar y Juan); «monto directo» paga ese
+            valor como haber imponible y el líquido sale el que salga.
+          </InfoTip>
+        </h2>
         <Button variant="primary" onClick={() => setEditando({ ...VACIO })}>+ Nuevo empleado</Button>
       </Card>
 

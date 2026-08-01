@@ -8,6 +8,7 @@
 import { appendRow, getNextId, getSheetData, updateById } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 import { parseDecimalOr0 } from '@/lib/numbers'
+import { obtenerIndicadores } from './indicadores'
 import { parametrosPorDefecto, TRAMOS_IUSC, TASAS_AFP } from './tablas'
 import type { Parametros, TramoImpuesto } from './tipos'
 
@@ -128,6 +129,93 @@ export function periodoAnterior(periodo: string): string {
   const [a, m] = periodo.split('-').map(Number)
   if (!a || !m) return periodo
   return m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`
+}
+
+export interface ResultadoAutocompletar {
+  periodo: string
+  /** 'creado' | 'actualizado' | 'sin_cambios' | 'sin_datos' */
+  accion: string
+  uf: number
+  utm: number
+  detalle: string[]
+  avisos: string[]
+}
+
+/**
+ * Deja un período listo sin intervención: si no existe lo crea copiando las
+ * tasas del mes anterior (para no perder ajustes hechos a mano), y le pone la UF
+ * y la UTM traídas de la fuente.
+ *
+ * Por defecto NO pisa valores ya cargados — si alguien corrigió la UF a mano, se
+ * respeta. `forzar: true` los reemplaza.
+ */
+export async function autocompletarPeriodo(
+  periodo: string,
+  opts: { forzar?: boolean } = {},
+): Promise<ResultadoAutocompletar> {
+  const existente = await getFilaParametros(periodo)
+  const actual = existente ? parsearParametros(existente) : null
+  const detalle: string[] = []
+
+  // Base: lo que ya hay, o el mes anterior (conserva las tasas ajustadas a mano),
+  // o los valores por defecto del período.
+  let base = actual
+  if (!base) {
+    const previo = await getParametros(periodoAnterior(periodo))
+    if (previo) {
+      // Las tasas del aporte del empleador cambian por tramos legales: se toman
+      // las que corresponden al período nuevo, no las heredadas.
+      const def = parametrosPorDefecto(periodo)
+      base = {
+        ...previo,
+        periodo,
+        imm: def.imm,
+        tope_afp_uf: def.tope_afp_uf,
+        tope_afc_uf: def.tope_afc_uf,
+        tasa_sis: def.tasa_sis,
+        tasa_cuenta_individual: def.tasa_cuenta_individual,
+        tasa_fapp: def.tasa_fapp,
+        tasa_seguro_social: def.tasa_seguro_social,
+        valor_uf: 0,
+        valor_utm: 0,
+      }
+      detalle.push(`Tasas copiadas de ${periodoAnterior(periodo)}; topes y aporte del empleador según lo vigente en ${periodo}.`)
+    } else {
+      base = parametrosPorDefecto(periodo)
+      detalle.push('Creado con los valores por defecto del período.')
+    }
+  }
+
+  const ind = await obtenerIndicadores(periodo)
+  const cambios: Partial<Parametros> = {}
+
+  if (ind.uf && (opts.forzar || !base.valor_uf)) {
+    cambios.valor_uf = ind.uf.valor
+    detalle.push(`UF ${ind.uf.valor.toLocaleString('es-CL')} (del ${ind.uf.fecha}).`)
+  } else if (base.valor_uf && ind.uf && Math.round(base.valor_uf) !== Math.round(ind.uf.valor)) {
+    detalle.push(`Se conserva la UF cargada (${base.valor_uf.toLocaleString('es-CL')}); la fuente dice ${ind.uf.valor.toLocaleString('es-CL')}.`)
+  }
+
+  if (ind.utm && (opts.forzar || !base.valor_utm)) {
+    cambios.valor_utm = ind.utm.valor
+    detalle.push(`UTM ${ind.utm.valor.toLocaleString('es-CL')} (del ${ind.utm.fecha}).`)
+  } else if (base.valor_utm && ind.utm && Math.round(base.valor_utm) !== Math.round(ind.utm.valor)) {
+    detalle.push(`Se conserva la UTM cargada (${base.valor_utm.toLocaleString('es-CL')}); la fuente dice ${ind.utm.valor.toLocaleString('es-CL')}.`)
+  }
+
+  const hayQueEscribir = !existente || Object.keys(cambios).length > 0
+  if (hayQueEscribir) {
+    await guardarParametros(periodo, { ...base, ...cambios })
+  }
+
+  return {
+    periodo,
+    accion: !existente ? 'creado' : Object.keys(cambios).length ? 'actualizado' : (ind.uf || ind.utm) ? 'sin_cambios' : 'sin_datos',
+    uf: cambios.valor_uf ?? base.valor_uf,
+    utm: cambios.valor_utm ?? base.valor_utm,
+    detalle,
+    avisos: ind.avisos,
+  }
 }
 
 /** Qué le falta a un período para poder calcular. Vacío = está listo. */

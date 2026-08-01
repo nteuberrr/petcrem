@@ -4,6 +4,7 @@ import { Card, Button } from '@/components/ui/kit'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { TableSkeleton } from '@/components/ui/Skeleton'
+import { InfoTip } from '@/components/ui/InfoTip'
 import { fmtPrecio, fmtFecha } from '@/lib/format'
 import { useAccionUnica } from '@/lib/use-accion-unica'
 import DetalleLiquidacion from './DetalleLiquidacion'
@@ -84,7 +85,18 @@ export default function LiquidacionesTab() {
         <>
           {/* ── Base del mes ────────────────────────────────────────────────── */}
           <Card className="p-4">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-brand">Base del mes</h2>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-brand">
+              Base del mes
+              <InfoTip titulo="De dónde sale cada número">
+                <b>Cremaciones:</b> las fichas efectivamente cremadas en el mes (estado cremado o despachado, con la
+                fecha del ciclo de horno). El detalle es auditable ficha por ficha.
+                <br /><br />
+                <b>Días:</b> del calendario chileno con sus feriados. Los trabajados son el divisor de la semana
+                corrida, y los de descanso (domingos + festivos) su multiplicador.
+                <br /><br />
+                <b>UF y UTM:</b> se traen solas del Banco Central y el SII. Se editan en «Parámetros legales».
+              </InfoTip>
+            </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Dato
                 titulo="Cremaciones realizadas"

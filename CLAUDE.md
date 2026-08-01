@@ -94,6 +94,7 @@ app/
     servicios/        # admin: eutanasias-a-domicilio — tabs Cotizaciones | Veterinarios | Precios (NOT otros_servicios; that's api/servicios)
     adicionales/      # admin: otros_servicios / descuentos management
     mailing/          # admin: email campaigns to veterinarios (HTML editor, segmenting, send, metrics)
+    remuneraciones/   # admin dueño: sueldos — tabs Liquidaciones | Empleados | Parámetros legales | Cotizaciones | Histórico
     reportes/         # xlsx export (ingresos, veterinarios, configuraciones)
   convenio-eutanasias/  # PUBLIC landing: vet self-registration form for the eutanasia network
   eutanasia/            # PUBLIC vet token-action pages: aceptar/ confirmar/ realizado/ datos-pago/ — each [token]/
@@ -162,6 +163,19 @@ A separate domain from the cremation business: a marketplace matching at-home eu
 - **Matching**: [lib/eutanasia-matcher.ts](lib/eutanasia-matcher.ts) filters vets by `activo`, comuna coverage, and the requested day/time slot. Admin picks from the matches and `/api/eutanasias/cotizaciones/[id]/enviar` emails them; each send is logged in `cotizaciones_eutanasia_envios` with its `resend_message_id` and per-vet `estado_envio`.
 - **Token actions**: vet links are HMAC tokens signed with `NEXTAUTH_SECRET` ([lib/eutanasia-tokens.ts](lib/eutanasia-tokens.ts), 72h default / 30d for datos-pago, which is also single-use) — there is no session, so the token *is* the authentication. The public pages `/eutanasia/{aceptar,confirmar,realizado,datos-pago}/<token>` post to the matching `/api/eutanasias/...` endpoints, which re-verify the signature + expiry before mutating. First vet to accept wins; `vet_id_asignado` then sticks. All these routes are whitelisted in [proxy.ts](proxy.ts).
 - Emails for the whole flow live in [lib/eutanasia-mailer.ts](lib/eutanasia-mailer.ts) (uses the same Resend wrapper as mailing).
+
+## Remuneraciones (sueldos del equipo)
+
+Reemplaza el Excel con Solver que se corría a mano cada mes. Cuatro tablas (`rrhh_empleados`, `rrhh_parametros`, `rrhh_liquidaciones`, `rrhh_pagos`; DDL en [supabase/remuneraciones.sql](supabase/remuneraciones.sql)) y la página `/remuneraciones`, módulo `remuneraciones` en `MODULOS` — arranca en `none` para todos los perfiles, o sea hoy solo el dueño.
+
+- **El acuerdo**: Oscar y Juan cobran **líquido** = sueldo base + `valor_por_cremacion` × cremaciones efectivas del mes. Como ese bono paga AFP, salud, gratificación y semana corrida, el imponible que hay que poner arriba no es el que llega abajo: lo resuelve una búsqueda binaria en [lib/remuneraciones/solver.ts](lib/remuneraciones/solver.ts). Cuando no existe un bono ENTERO que dé la meta exacta lo reporta con la diferencia (`exacto:false`) en vez de fingir que cuadró.
+- **[lib/remuneraciones/motor.ts](lib/remuneraciones/motor.ts) es PURO** — sin datastore, sin `new Date()` — y devuelve cada línea con su fórmula en texto, que es lo que muestran la UI y el PDF. `npx tsx scripts/verificar-remuneraciones.ts` lo contrasta contra la planilla real y **debe seguir pasando** ante cualquier cambio.
+- **Parámetros POR PERÍODO** (`rrhh_parametros`, uno por `YYYY-MM`): es lo que impide que el módulo envejezca. La **UF y la UTM se traen solas** de mindicador.cl ([lib/remuneraciones/indicadores.ts](lib/remuneraciones/indicadores.ts)) — UF del último día del mes, que es la que usa Previred — con chequeo de variación >3% contra el mes anterior; el cron diario `/api/cron/remuneraciones` deja al día el mes en curso y el anterior, y **nunca pisa un valor cargado a mano**. Ojo: los topes imponibles se reajustan cada año (desde febrero) y el aporte previsional del empleador sube por tramos hasta 2033 — desde **ago-2026** es 3,5% y absorbe el SIS.
+- **Salud `no_tiene`**: se descuenta el 7% igual y se le entrega aparte como `reembolso_salud`, fuera de la liquidación. Total a transferir = líquido + reembolso.
+- **Estados** `borrador → cerrada → pagada`. Cerrar congela `detalle_json` **y** `parametros_json`: reimprimir enero en diciembre da el mismo PDF. Nunca recalcular un período cerrado desde `rrhh_parametros`.
+- **EERR**: el costo empresa de las liquidaciones `pagada` entra como **fuente automática** por la clave de partida `remuneraciones` ([lib/remuneraciones/eerr.ts](lib/remuneraciones/eerr.ts), mismo patrón que [lib/eerr-retiros.ts](lib/eerr-retiros.ts)), imputado al **mes devengado**. NO se escriben filas en `eerr_gastos_manuales` — si además se cargan a mano quedan contadas dos veces.
+- **No se genera el archivo de Previred** (861 caracteres, 105 campos, cambia un par de veces al año) ni el LRE (147 columnas en ANSI, y solo obligatorio con 5+ trabajadores): en su lugar la pestaña **Cotizaciones** lista los montos a tipear. Si algún día se hacen, `rrhh_empleados` ya guarda RUT, fecha de nacimiento, nacionalidad y códigos de AFP/isapre, que es lo que esos archivos exigen.
+- Las cremaciones del mes salen de [lib/cremaciones-mes.ts](lib/cremaciones-mes.ts) — la MISMA definición que usan el dashboard y los reportes (estado `cremado`/`despachado` + fecha del ciclo). Acá el número decide cuánto cobra cada operario: no duplicar la lógica.
 
 ## Sistema de diseño (estándar UI) — OBLIGATORIO en todo desarrollo
 

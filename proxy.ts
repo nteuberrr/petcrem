@@ -95,6 +95,9 @@ export async function proxy(req: NextRequest) {
     // Avisos automáticos al equipo (Vercel Cron cada hora; auth Bearer CRON_SECRET
     // o sesión admin dentro de la ruta).
     pathname === '/api/cron/avisos' ||
+    // UF y UTM del mes para Remuneraciones (Vercel Cron diario; misma auth
+    // interna Bearer CRON_SECRET o sesión admin).
+    pathname === '/api/cron/remuneraciones' ||
     pathname.startsWith('/api/mailing/pixel/') ||
     pathname.startsWith('/api/mailing/click/') ||
     pathname === '/convenio-eutanasias' ||
