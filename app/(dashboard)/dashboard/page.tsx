@@ -1,4 +1,5 @@
 'use client'
+import { PageHeader } from '@/components/ui/kit'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { fmtPrecio, fmtLitros, fmtNumero } from '@/lib/format'
@@ -102,10 +103,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-extrabold text-brand">Dashboard</h1>
-        <p className="text-gray-600 text-xs sm:text-sm mt-0.5">Resumen operativo — {mesActual} {new Date().getFullYear()}</p>
-      </div>
+      <PageHeader title="Dashboard" subtitle={`Resumen operativo — ${mesActual} ${new Date().getFullYear()}`} />
 
       {/* Solicitudes del bot (encima del timeline): retiros pendientes (rojo),
           confirmados (verde) y eutanasias (naranja/verde). Las ven TODOS los

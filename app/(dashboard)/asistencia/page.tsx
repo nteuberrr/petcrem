@@ -1,4 +1,5 @@
 'use client'
+import { PageHeader } from '@/components/ui/kit'
 import { Banknote } from 'lucide-react'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
@@ -480,18 +481,18 @@ export default function AsistenciaPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-extrabold text-brand tracking-tight">Asistencia</h1>
-          <p className="text-gray-600 text-sm mt-0.5">{isAdmin ? 'Control de asistencia y horas extra' : 'Fichaje diario de entrada y salida'}</p>
-        </div>
+      <PageHeader
+        title="Asistencia"
+        subtitle={isAdmin ? 'Control de asistencia y horas extra' : 'Fichaje diario de entrada y salida'}
+        actions={<>
         {isAdmin && tab === 'retiros' && (
           <button onClick={abrirModalPago} disabled={retiros.filter(r => !r.pago_id).length === 0}
             className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-md">
             <Banknote className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Pagar retiros adicionales
           </button>
         )}
-      </div>
+        </>}
+      />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">

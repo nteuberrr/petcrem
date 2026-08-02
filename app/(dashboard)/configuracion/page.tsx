@@ -1,4 +1,5 @@
 'use client'
+import { PageHeader } from '@/components/ui/kit'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { Camera, Eye, EyeOff, FileText, Handshake, Lock, Package } from 'lucide-react'
@@ -419,8 +420,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
   return (
     <div className="max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Configuración</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Precios, productos y catálogos</p>
+        <PageHeader title="Configuración" subtitle="Precios, productos y catálogos" />
       </div>
 
       {/* Tabs principales */}

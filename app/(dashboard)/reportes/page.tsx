@@ -1,4 +1,5 @@
 'use client'
+import { PageHeader } from '@/components/ui/kit'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { fmtPrecio, fmtNumero as fmtNum, fmtLitros, fmtFecha } from '@/lib/format'
 import { CHART_PALETTE, CHART } from '@/lib/chart-colors'
@@ -317,10 +318,7 @@ export default function ReportesPage() {
 
   return (
     <div className="max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Reportes</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Análisis y exportación de datos</p>
-      </div>
+      <PageHeader title="Reportes" subtitle="Análisis y exportación de datos" />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
@@ -355,17 +353,21 @@ export default function ReportesPage() {
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {[
+              // El color CODIFICA algo, no decora: navy = dato neutro del período,
+              // verde = plata que entra, ámbar = requiere acción. Antes había ocho
+              // colores sin criterio (0 cremaciones en rojo parecía una alarma y
+              // $0 de ingresos en verde parecía un logro).
               { label: 'Mascotas ingresadas', value: data.kpis.ingresos_clientes_mes, color: 'text-brand' },
-              { label: 'Cremaciones', value: data.kpis.total_cremaciones_mes, color: 'text-rose-700' },
-              { label: 'En cámara', value: data.kpis.pendientes, color: 'text-yellow-700' },
-              { label: 'Ciclos', value: data.kpis.ciclos_mes, color: 'text-blue-700' },
-              { label: 'Litros consumidos', value: fmtLitros(data.kpis.litros_mes), color: 'text-orange-700' },
-              { label: 'Litros cargados', value: fmtLitros(data.kpis.litros_cargados_mes), color: 'text-amber-700' },
-              { label: 'Costo petróleo', value: fmt(data.kpis.costo_petroleo_mes), color: 'text-red-700' },
-              { label: 'Costo vehículo', value: fmt(data.kpis.costo_vehiculo_mes), color: 'text-purple-700' },
-              { label: 'Ingresos est.', value: fmt(data.kpis.ingresos_mes), color: 'text-green-700' },
+              { label: 'Cremaciones', value: data.kpis.total_cremaciones_mes, color: 'text-brand' },
+              { label: 'En cámara', value: data.kpis.pendientes, color: 'text-brand' },
+              { label: 'Ciclos', value: data.kpis.ciclos_mes, color: 'text-brand' },
+              { label: 'Litros consumidos', value: fmtLitros(data.kpis.litros_mes), color: 'text-brand' },
+              { label: 'Litros cargados', value: fmtLitros(data.kpis.litros_cargados_mes), color: 'text-brand' },
+              { label: 'Costo petróleo', value: fmt(data.kpis.costo_petroleo_mes), color: 'text-brand' },
+              { label: 'Costo vehículo', value: fmt(data.kpis.costo_vehiculo_mes), color: 'text-brand' },
+              { label: 'Ingresos est.', value: fmt(data.kpis.ingresos_mes), color: 'text-emerald-700' },
               { label: 'Pagos pendientes', value: data.kpis.pendientes_pago, color: 'text-amber-700' },
-              { label: 'Monto por cobrar', value: fmt(data.kpis.monto_pendiente), color: 'text-rose-700' },
+              { label: 'Monto por cobrar', value: fmt(data.kpis.monto_pendiente), color: 'text-amber-700' },
             ].map(k => (
               <div key={k.label} className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 text-center">
                 <p className={`text-xl font-bold ${k.color}`}>{k.value}</p>

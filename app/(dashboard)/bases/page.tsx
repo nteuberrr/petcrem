@@ -1,4 +1,5 @@
 'use client'
+import { PageHeader } from '@/components/ui/kit'
 import { Lock } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
@@ -72,8 +73,7 @@ export default function BasesPage() {
   return (
     <div className="max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Veterinarios</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Fichas de veterinarias derivantes</p>
+        <PageHeader title="Veterinarios" subtitle="Fichas de veterinarias derivantes" />
       </div>
 
       {/* ─── VETERINARIOS ─── */}

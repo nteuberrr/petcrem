@@ -1,4 +1,5 @@
 'use client'
+import { PageHeader } from '@/components/ui/kit'
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Ban, Stethoscope, CalendarDays, MapPin } from 'lucide-react'
@@ -896,21 +897,16 @@ function ServiciosEutanasiasContenido() {
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
-      <header className="mb-4 pl-14 md:pl-0">
-        <p className="text-xs uppercase tracking-wider text-gray-400">Servicios</p>
-        <h1 className="text-xl sm:text-2xl font-extrabold text-brand tracking-tight mt-1">Eutanasias</h1>
-        <p className="text-gray-500 text-xs sm:text-sm mt-1">Convenio de eutanasias a domicilio: cotizaciones, veterinarios participantes y precios.</p>
-      </header>
-
-      {/* Selector de sub-módulo (por ahora único, preparado para más en el futuro). */}
-      <div className="flex gap-2 mb-5">
-        <button
-          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-brand text-white cursor-default"
-          disabled
-        >
-          Eutanasias
-        </button>
+      <div className="mb-4 pl-14 md:pl-0">
+        <PageHeader
+          title="Eutanasias"
+          subtitle="Convenio de eutanasias a domicilio: cotizaciones, veterinarios participantes y precios."
+        />
       </div>
+
+      {/* Antes había acá un selector de sub-módulo con una sola opción ("Eutanasias")
+          deshabilitada: parecía una pestaña, no lo era, y repetía el título de la
+          cabecera. Cuando haya un segundo servicio, vuelve como Tabs del kit. */}
 
       <div className="flex gap-2 flex-wrap mb-6">
         {TABS.map(t => (

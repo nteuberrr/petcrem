@@ -1,4 +1,5 @@
 'use client'
+import { PageHeader } from '@/components/ui/kit'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import {
@@ -769,12 +770,8 @@ export default function ClientesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-extrabold text-brand tracking-tight">Clientes</h1>
-          <p className="text-gray-600 text-sm mt-0.5">Fichas de mascotas</p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="mb-6">
+        <PageHeader title="Clientes" subtitle="Fichas de mascotas" actions={<>
           {/* El alta manual de un retiro se hace desde la agenda del dashboard
               ("+ Nueva solicitud"), que es donde se ven los huecos de la semana. */}
           <button
@@ -783,7 +780,7 @@ export default function ClientesPage() {
           >
             + Nueva ficha
           </button>
-        </div>
+        </>} />
       </div>
 
       {/* Notificaciones compactas: una fila de chips clickeables que aplican el
