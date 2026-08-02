@@ -1,4 +1,5 @@
 'use client'
+import { Handshake } from 'lucide-react'
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { formatDate, formatHoraDia } from '@/lib/dates'
@@ -65,7 +66,7 @@ export default function AceptarPage() {
 
           {token && estado !== 'listo' && (
             <div className="text-center py-2">
-              <p className="text-5xl mb-3">🤝</p>
+              <Handshake className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
               <h2 className="text-xl font-bold text-gray-900 mb-1">¿Confirmas tu disponibilidad?</h2>
               <p className="text-sm text-gray-600 mb-5">
                 Al confirmar, le avisamos a la familia que tú acompañarás a su mascota y te
@@ -103,7 +104,7 @@ export default function AceptarPage() {
           {token && estado === 'listo' && data && data.ok && !data.ya_aceptada && (
             <div>
               <div className="text-center mb-5">
-                <p className="text-5xl mb-2">🤝</p>
+                <Handshake className="w-12 h-12 mx-auto mb-2 text-brand" aria-hidden="true" />
                 <h2 className="text-xl font-bold text-gray-900">¡Gracias por tomar el caso!</h2>
                 <p className="text-sm text-gray-600 mt-1">Te enviamos un correo con un link de confirmación final. Antes, contacta a la familia.</p>
               </div>

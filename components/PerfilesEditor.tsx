@@ -156,7 +156,7 @@ export default function PerfilesEditor() {
           <h2 className="font-semibold text-brand">Perfiles de acceso</h2>
           <p className="text-xs text-gray-600 mt-0.5">
             Cada persona tiene un perfil, y el perfil define qué módulos puede <b>ver</b> y cuáles puede <b>editar</b>.
-            Los cambios se aplican casi al instante. Vos (Administrador) siempre tenés todo.
+            Los cambios se aplican casi al instante. Tú (Administrador) siempre tienes todo.
           </p>
         </div>
         <Button variant="primary" onClick={() => { setNuevo({ nombre: '', descripcion: '', copiar_de: perfil?.id || '' }); setNuevoOpen(true) }}>

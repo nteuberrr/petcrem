@@ -155,7 +155,7 @@ export default function ParametrosTab() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-gray-500">Partidas del estado de resultados. Podés agruparlas en subgrupos y reordenarlas con las flechas. Los gastos se asignan a estas partidas.</p>
+      <p className="text-sm text-gray-500">Partidas del estado de resultados. Puedes agruparlas en subgrupos y reordenarlas con las flechas. Los gastos se asignan a estas partidas.</p>
       {TIPOS.map(t => {
         const sgs = sgDe(t.key)
         const sueltas = sueltasDe(t.key)

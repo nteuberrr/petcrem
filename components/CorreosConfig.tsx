@@ -1,4 +1,5 @@
 'use client'
+import { Mail, Search, Send } from 'lucide-react'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 
 type CorreoMeta = { key: string; titulo: string; modulo: string; audiencia: 'Tutor' | 'Veterinario'; cuando: string }
@@ -276,7 +277,7 @@ export default function CorreosConfig() {
             className="bg-brand hover:bg-brand-dark disabled:opacity-50 text-white px-3 py-2 rounded-lg text-sm font-semibold shadow-md"
             title={!seguimiento ? 'Configura el correo de seguimiento primero' : `Enviar una copia de los ${correos.length} correos a ${seguimiento}`}
           >
-            {enviandoTodos ? '⌛ Enviando…' : `📨 Enviar todos (${correos.length})`}
+            {enviandoTodos ? 'Enviando…' : <><Send className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Enviar todos ({correos.length})</>}
           </button>
         </div>
       </div>
@@ -347,7 +348,7 @@ export default function CorreosConfig() {
                 className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md"
                 title={!seguimiento ? 'Configura el correo de seguimiento primero' : `Enviar prueba a ${seguimiento}`}
               >
-                {enviando ? '⌛ Enviando…' : '📧 Enviar prueba'}
+                {enviando ? 'Enviando…' : <><Mail className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Enviar prueba</>}
               </button>
             </div>
           </div>
@@ -411,7 +412,7 @@ export default function CorreosConfig() {
           </div>
           <button onClick={buscarLog} disabled={logLoading}
             className="bg-brand hover:bg-brand-dark disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md">
-            {logLoading ? '⌛' : '🔍'} Buscar
+            <Search className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Buscar
           </button>
           {(logDesde || logHasta || logQ) && (
             <button

@@ -230,7 +230,7 @@ function ModalParametros({ periodo: periodoInicial, onCerrar, onGuardado }: {
                   Se traen de <b>mindicador.cl</b>, que espeja la UF del Banco Central y la UTM del SII.
                   <br /><br />
                   La UF que corresponde es la del <b>último día del mes</b> (es la que usa Previred para los topes
-                  imponibles y los planes de isapre), no la del día en que calculás. Abajo se muestra la fecha exacta
+                  imponibles y los planes de isapre), no la del día en que calculas. Abajo se muestra la fecha exacta
                   del valor traído: si dice «provisional» es porque el mes todavía no cerró.
                   <br /><br />
                   Además se compara contra el mes anterior: si la variación pasa el 3% te avisa, porque estos

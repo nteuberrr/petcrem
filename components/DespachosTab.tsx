@@ -1,4 +1,5 @@
 'use client'
+import { Flag, House, Map as MapIcon, Save, Search } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
@@ -582,7 +583,7 @@ export default function DespachosTab() {
             <div className="flex items-end">
               <button type="button" onClick={abrirModal}
                 className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                🔍 Seleccionar mascotas
+                <Search className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Seleccionar mascotas
               </button>
             </div>
           </div>
@@ -687,13 +688,13 @@ export default function DespachosTab() {
                             <a href={url || undefined} target="_blank" rel="noopener noreferrer"
                               onClick={e => { if (!url) { e.preventDefault(); alert('No hay paradas pendientes.') } }}
                               className={`text-xs font-semibold rounded-lg px-3 py-1.5 ${pend > 0 ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-                              🗺 Abrir en Maps ({pend} {pend === 1 ? 'pendiente' : 'pendientes'})
+                              <MapIcon className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Abrir en Maps ({pend} {pend === 1 ? 'pendiente' : 'pendientes'})
                             </a>
                           ) })()}
                           {estado !== 'terminada' && (
                             <button onClick={() => terminarRuta(d)} disabled={routeBusy === d.id}
                               className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg px-3 py-1.5 disabled:opacity-50">
-                              🏁 Terminar ruta
+                              <Flag className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Terminar ruta
                             </button>
                           )}
                           <span className="text-[11px] text-gray-500 ml-auto">
@@ -1031,7 +1032,7 @@ export default function DespachosTab() {
                   <ul className="divide-y divide-gray-100">
                     {optimResult.retiros_crematorio.map(r => (
                       <li key={r.cliente_id} className="px-3 py-2 flex items-start gap-3">
-                        <span className="shrink-0 w-6 h-6 bg-emerald-100 text-emerald-700 text-sm rounded-full flex items-center justify-center" title="Retiro en local">🏠</span>
+                        <span className="shrink-0 w-6 h-6 bg-emerald-100 text-emerald-700 text-sm rounded-full flex items-center justify-center" title="Retiro en local"><House className="w-3.5 h-3.5" aria-hidden="true" /></span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-sm text-gray-900">{r.nombre_mascota}</span>
@@ -1083,7 +1084,7 @@ export default function DespachosTab() {
                   disabled={saving || (optimResult.obligatorias.length + optimPicks.size === 0)}
                   className="flex-1 bg-brand hover:bg-brand-dark text-white font-semibold rounded-lg py-2.5 text-sm shadow-md transition-colors disabled:opacity-50"
                 >
-                  {saving ? 'Guardando…' : '💾 Guardar ruta'}
+                  {saving ? 'Guardando…' : <><Save className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Guardar ruta</>}
                 </button>
               </div>
               <p className="text-[11px] text-gray-500 text-center">Guardar la ruta te permite seguirla, marcar entregas e ir avisando a cada tutor.</p>

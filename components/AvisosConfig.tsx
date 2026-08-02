@@ -1,4 +1,5 @@
 'use client'
+import { Eye, Send } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useAccionUnica } from '@/lib/use-accion-unica'
 
@@ -222,14 +223,14 @@ export default function AvisosConfig() {
                   disabled={cargandoPreview === a.clave}
                   className="border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 px-3 py-2 rounded-lg text-sm font-semibold"
                 >
-                  {cargandoPreview === a.clave ? '⌛ Generando…' : '👁 Vista previa'}
+                  {cargandoPreview === a.clave ? 'Generando…' : <><Eye className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Vista previa</>}
                 </button>
                 <button
                   onClick={() => ejecutar(() => enviar(a, 'prueba'))}
                   disabled={procesando || !resendOk}
                   className="border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 px-3 py-2 rounded-lg text-sm font-semibold"
                 >
-                  📨 Enviar prueba
+                  <Send className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Enviar prueba
                 </button>
                 <button
                   onClick={() => ejecutar(() => enviar(a, 'ahora'))}

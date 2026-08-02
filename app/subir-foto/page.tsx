@@ -1,4 +1,5 @@
 'use client'
+import { Camera, PawPrint } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,7 +85,7 @@ export default function SubirFotoPage() {
       <header style={{ backgroundColor: COLOR }} className="text-white py-8 sm:py-10 px-4">
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>🐾 Crematorio Alma Animal</p>
+            <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>Crematorio Alma Animal</p>
             <h1 className="text-2xl sm:text-3xl font-bold mt-2">{esCuadro ? 'Foto para el cuadro' : 'Foto para el certificado'}</h1>
             <p className="text-base mt-3 opacity-95">
               {esCuadro
@@ -117,7 +118,7 @@ export default function SubirFotoPage() {
 
         {estadoCodigo === 'ok' && exito && (
           <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center">
-            <div className="text-5xl mb-3">🐾</div>
+            <PawPrint className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
             <p className="text-base text-gray-800">
               Hemos recibido la foto de <strong>{mascota}</strong>. {esCuadro
                 ? 'La usaremos para crear su cuadro conmemorativo en acuarela.'
@@ -163,7 +164,7 @@ export default function SubirFotoPage() {
                 className="w-full border-2 border-dashed rounded-xl py-10 text-center text-gray-500 hover:bg-gray-50 transition-colors"
                 style={{ borderColor: HAIRLINE }}
               >
-                <span className="block text-3xl mb-2">📷</span>
+                <Camera className="w-8 h-8 mx-auto mb-2 text-gray-400" aria-hidden="true" />
                 <span className="text-sm font-medium">Toca para elegir una foto</span>
                 <span className="block text-xs text-gray-400 mt-1">JPG o PNG, hasta 8 MB</span>
               </button>

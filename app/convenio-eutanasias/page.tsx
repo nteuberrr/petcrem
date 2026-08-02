@@ -1,4 +1,5 @@
 'use client'
+import { Hand, PartyPopper } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import ComunaPicker from '@/components/ui/ComunaPicker'
 import { Modal } from '@/components/ui/Modal'
@@ -124,7 +125,7 @@ export default function ConvenioEutanasiasPage() {
       <header style={{ backgroundColor: COLOR }} className="text-white py-8 sm:py-10 px-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>🐾 Alma Animal · Convenio Veterinarios</p>
+            <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>Alma Animal · Convenio Veterinarios</p>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mt-2">Eutanasias a Domicilio</h1>
             <p className="text-base sm:text-lg mt-3 opacity-95 max-w-2xl">
               Únete a nuestra red de veterinarios: evaluamos a domicilio y, si corresponde, acompañamos a las familias en el último momento de sus mascotas, con un trato digno y cercano.
@@ -375,7 +376,7 @@ export default function ConvenioEutanasiasPage() {
         title={resultado?.tipo === 'duplicado' ? 'Ya estás inscrito' : '¡Bienvenido a la comunidad!'}
       >
         <div className="text-center py-2">
-          <div className="text-5xl mb-3">{resultado?.tipo === 'duplicado' ? '👋' : '🎉'}</div>
+          <div className="text-5xl mb-3">{resultado?.tipo === 'duplicado' ? <Hand className="w-12 h-12 mx-auto" aria-hidden="true" /> : <PartyPopper className="w-12 h-12 mx-auto" aria-hidden="true" />}</div>
           <p className="text-base text-gray-800 mb-2">
             {resultado?.tipo === 'duplicado'
               ? resultado.mensaje

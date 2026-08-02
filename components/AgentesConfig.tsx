@@ -1,4 +1,5 @@
 'use client'
+import { Bot } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { formatDateTime } from '@/lib/dates'
 
@@ -88,7 +89,7 @@ export default function AgentesConfig() {
   return (
     <div className="space-y-4 max-w-3xl">
       <div className="bg-brand/10 border border-brand/20 rounded-xl px-5 py-3 text-sm text-brand">
-        🤖 El <strong>agente de WhatsApp</strong> responde solo a los clientes usando el flujo de atención + los precios en vivo. Aquí lo afinas: dale <strong>instrucciones</strong> y/o <strong>calíbralo</strong> con las conversaciones reales.
+        <Bot className="w-4 h-4 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> El <strong>agente de WhatsApp</strong> responde solo a los clientes usando el flujo de atención + los precios en vivo. Aquí lo afinas: dale <strong>instrucciones</strong> y/o <strong>calíbralo</strong> con las conversaciones reales.
       </div>
 
       {aviso && (

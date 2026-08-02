@@ -1,4 +1,5 @@
 'use client'
+import { PawPrint } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Modal } from '@/components/ui/Modal'
@@ -140,7 +141,7 @@ export default function DatosPagoPage() {
 
         {estado === 'ya_completado' && (
           <div className="bg-white rounded-xl border border-gray-300 p-6 text-center">
-            <p className="text-5xl mb-3">🐾</p>
+            <PawPrint className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
             <h2 className="text-lg font-semibold text-gray-900 mb-1">Tus datos ya están registrados</h2>
             <p className="text-sm text-gray-600">{yaCompletadoMsg}</p>
             <p className="text-xs text-gray-500 mt-4">

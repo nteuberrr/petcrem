@@ -1,4 +1,5 @@
 'use client'
+import { CalendarDays, Hand, Heart, PartyPopper, Search, Truck , Timer } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import ComunaPicker from '@/components/ui/ComunaPicker'
 import { Modal } from '@/components/ui/Modal'
@@ -30,11 +31,11 @@ function rangoPeso(min: string, max: string): string {
 function precioNum(s: string): number { return parseInt((s ?? '').replace(/\D/g, ''), 10) || 0 }
 
 const BENEFICIOS = [
-  { icono: '⏱️', titulo: 'Retiro en menos de 3 horas', detalle: 'Retiramos directamente desde tu clínica, habitualmente en menos de 3 horas.' },
-  { icono: '📅', titulo: 'Lunes a domingo', detalle: 'Operamos todos los días, de 09:00 a 22:00 h.' },
-  { icono: '🚚', titulo: 'Entrega en 4 días hábiles', detalle: 'Cenizas y certificado de cremación de vuelta en máximo 4 días hábiles.' },
-  { icono: '💛', titulo: 'Precios convenientes', detalle: 'Al inscribirte accedes automáticamente a las tarifas preferentes del convenio.' },
-  { icono: '🔎', titulo: 'Trazabilidad total', detalle: 'Código de seguimiento y certificado digital; instalaciones propias y horno certificado.' },
+  { icono: Timer, titulo: 'Retiro en menos de 3 horas', detalle: 'Retiramos directamente desde tu clínica, habitualmente en menos de 3 horas.' },
+  { icono: CalendarDays, titulo: 'Lunes a domingo', detalle: 'Operamos todos los días, de 09:00 a 22:00 h.' },
+  { icono: Truck, titulo: 'Entrega en 4 días hábiles', detalle: 'Cenizas y certificado de cremación de vuelta en máximo 4 días hábiles.' },
+  { icono: Heart, titulo: 'Precios convenientes', detalle: 'Al inscribirte accedes automáticamente a las tarifas preferentes del convenio.' },
+  { icono: Search, titulo: 'Trazabilidad total', detalle: 'Código de seguimiento y certificado digital; instalaciones propias y horno certificado.' },
 ]
 
 export default function ConvenioVeterinariasPage() {
@@ -99,7 +100,7 @@ export default function ConvenioVeterinariasPage() {
       <header style={{ backgroundColor: COLOR }} className="text-white py-8 sm:py-10 px-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>🐾 Alma Animal · Convenio Clínicas y Veterinarias</p>
+            <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>Alma Animal · Convenio Clínicas y Veterinarias</p>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mt-2">Cremación de mascotas para tu clínica</h1>
             <p className="text-base sm:text-lg mt-3 opacity-95 max-w-2xl">
               Súmate a nuestro convenio y ofrece a tus clientes un servicio de cremación serio, rápido y con trazabilidad total —
@@ -119,7 +120,7 @@ export default function ConvenioVeterinariasPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {BENEFICIOS.map(b => (
               <div key={b.titulo} className="bg-white rounded-xl p-5 border shadow-md" style={{ borderColor: HAIRLINE }}>
-                <div className="text-2xl mb-2">{b.icono}</div>
+                <b.icono className="w-7 h-7 mb-2" style={{ color: AMBER }} aria-hidden="true" />
                 <h3 className="font-semibold text-gray-900 mb-1">{b.titulo}</h3>
                 <p className="text-sm text-gray-600">{b.detalle}</p>
               </div>
@@ -283,7 +284,7 @@ export default function ConvenioVeterinariasPage() {
         title={resultado?.tipo === 'duplicado' ? 'Clínica ya inscrita' : '¡Bienvenidos al convenio!'}
       >
         <div className="text-center py-2">
-          <div className="text-5xl mb-3">{resultado?.tipo === 'duplicado' ? '👋' : '🎉'}</div>
+          <div className="text-5xl mb-3">{resultado?.tipo === 'duplicado' ? <Hand className="w-12 h-12 mx-auto" aria-hidden="true" /> : <PartyPopper className="w-12 h-12 mx-auto" aria-hidden="true" />}</div>
           <p className="text-base text-gray-800 mb-2">{resultado?.mensaje}</p>
           {resultado?.tipo === 'ok' && (
             <p className="text-sm text-gray-500 mt-3">

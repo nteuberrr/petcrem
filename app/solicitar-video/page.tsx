@@ -1,4 +1,5 @@
 'use client'
+import { Video } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ export default function SolicitarVideoPage() {
       <header style={{ backgroundColor: COLOR }} className="text-white py-8 sm:py-10 px-4">
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>🐾 Crematorio Alma Animal</p>
+            <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>Crematorio Alma Animal</p>
             <h1 className="text-2xl sm:text-3xl font-bold mt-2">Video del ingreso</h1>
             <p className="text-base mt-3 opacity-95">
               Solicita el video del momento en que tu mascota ingresa al horno, con su etiqueta identificadora a la vista.
@@ -101,7 +102,7 @@ export default function SolicitarVideoPage() {
 
         {estado === 'ok' && confirmado && (
           <div className="bg-white rounded-xl shadow-md border border-gray-300 p-8 text-center">
-            <div className="text-5xl mb-3">🎥</div>
+            <Video className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
             <p className="text-base text-gray-800">
               Registramos que quieres el video del ingreso de <strong>{mascota}</strong>. Te lo haremos llegar como parte del servicio.
             </p>

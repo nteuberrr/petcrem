@@ -2,6 +2,10 @@
 import { useState, useEffect, use, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
+import {
+  FolderOpen, Folder, FileText, RefreshCw, Mail, Clapperboard, Camera,
+  PawPrint, Video, Flame, Image, Stethoscope, Save,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
@@ -966,7 +970,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
       {cliente.estado === 'borrador' && (
         <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3">
-          <p className="text-sm font-bold text-amber-900">🗂 Ficha por ingresar</p>
+          <p className="text-sm font-bold text-amber-900"><FolderOpen className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Ficha por ingresar</p>
           <p className="text-xs text-amber-800 mt-0.5">
             Esta ficha la creó el bot al agendar. Completa los datos que falten (especie, peso, fechas, datos de pago)
             y presiona <strong>Registrar ficha</strong> para generar el código y enviarle el correo al tutor.
@@ -1066,7 +1070,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   onClick={() => setDocsOpen(o => !o)}
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
-                  📁 Documentos <span className="text-[10px]">▾</span>
+                  <Folder className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Documentos <span className="text-[10px]">▾</span>
                 </button>
 
                 {docsOpen && (
@@ -1087,7 +1091,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                       title={!puedeGenerarCert ? 'Disponible cuando la mascota esté cremada' : ''}
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-brand/10 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      📄 <span>{certUltimo ? 'Emitir nueva versión' : 'Emitir certificado'}</span>
+                      <FileText className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> <span>{certUltimo ? 'Emitir nueva versión' : 'Emitir certificado'}</span>
                     </button>
                     <button
                       onClick={() => { setDocsOpen(false); intentarEnviarCertificado() }}
@@ -1095,7 +1099,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                       title={!certUltimo ? 'Emite primero un certificado' : !cliente.email ? 'El cliente no tiene email' : `Enviar a ${cliente.email}`}
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-brand/10 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      {certUltimo?.enviado_ultima_fecha ? '🔄' : '📧'} <span>Reenviar certificado al correo</span>
+                      {certUltimo?.enviado_ultima_fecha ? <RefreshCw className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> : <Mail className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />} <span>Reenviar certificado al correo</span>
                     </button>
                     {/* Certificados emitidos: listados acá mismo, bajo los botones */}
                     {certificadosEmitidos.length > 0 && (
@@ -1104,7 +1108,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                         {certificadosEmitidos.map(c => (
                           <a key={`cert-${c.id}`} href={c.pdf_url || undefined} target="_blank" rel="noopener noreferrer"
                             className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 ${c.pdf_url ? 'text-gray-700' : 'text-gray-400 pointer-events-none'}`}>
-                            📄 <span className="flex-1 truncate">Certificado V{c.version}</span>
+                            <FileText className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> <span className="flex-1 truncate">Certificado V{c.version}</span>
                             <span className="text-[11px] text-gray-400 shrink-0">{fmtFecha(c.fecha_emision)}</span>
                             {c.pdf_url && <span className="text-[11px] font-medium text-brand shrink-0">Abrir</span>}
                           </a>
@@ -1125,20 +1129,20 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     <div className="px-1 pb-2 space-y-0.5">
                       {videosServicio.map((url, i) => (
                         <div key={`vid-${i}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 text-gray-700">
-                          🎬 <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Video {i + 1}</a>
+                          <Clapperboard className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Video {i + 1}</a>
                           <button onClick={() => eliminarVideo(url)} className="text-[11px] text-red-600 hover:text-red-800 shrink-0">Eliminar</button>
                         </div>
                       ))}
                       {fotosEvidencia.map((url, i) => (
                         <div key={`foto-${i}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 text-gray-700">
-                          📷 <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Foto evidencia {i + 1}</a>
+                          <Camera className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Foto evidencia {i + 1}</a>
                           <button onClick={() => eliminarFotoEvidencia(url)} className="text-[11px] text-red-600 hover:text-red-800 shrink-0">Eliminar</button>
                         </div>
                       ))}
                       {/* Fotos que el tutor subió desde el link del correo (certificado) */}
                       {fotosMascota.map((url, i) => (
                         <div key={`fmasc-${i}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 text-gray-700">
-                          🐾 <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Foto del tutor (certificado) {i + 1}</a>
+                          <PawPrint className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Foto del tutor (certificado) {i + 1}</a>
                         </div>
                       ))}
                       {videosServicio.length === 0 && fotosEvidencia.length === 0 && fotosMascota.length === 0 && (
@@ -1161,7 +1165,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               title="El tutor solicitó el video del proceso desde el correo. Recuerda prepararlo y adjuntarlo."
               className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-800"
             >
-              🎥 El tutor solicitó el video del proceso
+              <Video className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> El tutor solicitó el video del proceso
             </div>
           )}
           {feedbackIngreso && (
@@ -1364,7 +1368,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       {/* Proceso de cremación — rediseñado con header colorido y mejor jerarquía */}
       <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 mb-6 overflow-hidden">
         <div className="bg-gradient-to-r from-rose-50 to-orange-50 px-6 py-3 border-b-2 border-rose-100 flex items-center gap-2">
-          <span className="text-lg">🔥</span>
+          <Flame className="w-5 h-5 text-orange-500" aria-hidden="true" />
           <h2 className="text-sm font-bold text-rose-900 uppercase tracking-wide">Proceso de cremación</h2>
         </div>
         <div className="p-6">
@@ -1389,13 +1393,13 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       {(fotosMascota.length > 0 || fotosCuadro.length > 0 || videosServicio.length > 0 || fotosEvidencia.length > 0) && (
         <div className="bg-white rounded-xl shadow-md border-2 border-amber-200 p-6 mb-6">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">🗂️</span>
+            <FolderOpen className="w-5 h-5 text-amber-500" aria-hidden="true" />
             <h2 className="text-base font-bold text-gray-900">Archivos</h2>
           </div>
           <div className="space-y-4">
             {fotosMascota.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-600 mb-2">📷 Fotos del tutor para el certificado</p>
+                <p className="text-xs font-semibold text-gray-600 mb-2"><Camera className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Fotos del tutor para el certificado</p>
                 <div className="flex flex-wrap gap-3">
                   {fotosMascota.map((url, i) => (
                     <a key={url + i} href={url} target="_blank" rel="noopener noreferrer"
@@ -1410,7 +1414,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             {fotosCuadro.length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-gray-600 mb-2">
-                  🖼️ Foto para el cuadro conmemorativo
+                  <Image className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Foto para el cuadro conmemorativo
                   <span className="ml-2 text-[11px] font-semibold text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">Premium</span>
                 </p>
                 <div className="flex flex-wrap gap-3">
@@ -1440,12 +1444,12 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             )}
             {videosServicio.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-600 mb-2">🎬 Videos del servicio</p>
+                <p className="text-xs font-semibold text-gray-600 mb-2"><Clapperboard className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Videos del servicio</p>
                 <div className="space-y-1">
                   {videosServicio.map((url, i) => (
                     <a key={url + i} href={url} target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 text-sm text-brand-soft hover:underline mr-4">
-                      🎬 Video {i + 1}
+                      <Clapperboard className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Video {i + 1}
                     </a>
                   ))}
                 </div>
@@ -1478,7 +1482,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       {cliente.eutanasia && (
         <div className="bg-white rounded-xl shadow-md border-2 border-amber-300 p-6 mb-6">
           <div className="flex items-start justify-between gap-3 mb-1">
-            <h2 className="text-base font-bold text-gray-900">🩺 Eutanasia a domicilio</h2>
+            <h2 className="text-base font-bold text-gray-900"><Stethoscope className="w-4 h-4 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Eutanasia a domicilio</h2>
             {cliente.eutanasia.id && (
               <button
                 type="button"
@@ -1571,7 +1575,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             <div className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <p className="text-xs font-semibold text-amber-900">
-                  📷 Evidencia del peso real{fotosEvidencia.length > 0 ? ` (${fotosEvidencia.length})` : ''}
+                  <Camera className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Evidencia del peso real{fotosEvidencia.length > 0 ? ` (${fotosEvidencia.length})` : ''}
                 </p>
                 <button
                   type="button"
@@ -1579,7 +1583,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   disabled={subiendoFoto}
                   className="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
                 >
-                  {subiendoFoto ? '⌛ Subiendo…' : '📷 Subir foto'}
+                  {subiendoFoto ? 'Subiendo…' : <><Camera className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Subir foto</>}
                 </button>
               </div>
               <p className="text-[11px] text-amber-800 mt-1">
@@ -1617,7 +1621,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   ) : (
                     <>
                       {String(form.peso_ingreso ?? '') !== String(cliente.peso_ingreso ?? '') || String(form.peso_declarado ?? '') !== String(cliente.peso_declarado ?? '') ? (
-                        <p className="text-[11px] text-amber-800">💾 Guarda la ficha para poder enviar el cobro (el monto se calcula con los pesos guardados).</p>
+                        <p className="text-[11px] text-amber-800"><Save className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Guarda la ficha para poder enviar el cobro (el monto se calcula con los pesos guardados).</p>
                       ) : (
                         <button
                           type="button"
@@ -2281,7 +2285,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     />
                     <button type="button" onClick={() => certInputRef.current?.click()}
                       className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition-colors">
-                      📷 Subir foto
+                      <Camera className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Subir foto
                     </button>
                     {certFoto ? (
                       <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -2315,7 +2319,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             </button>
             <button type="submit" disabled={descargandoCert}
               className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg py-2 text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
-              {descargandoCert ? '⏳ Generando...' : '📄 Generar PDF'}
+              {descargandoCert ? 'Generando...' : <><FileText className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Generar PDF</>}
             </button>
           </div>
         </form>

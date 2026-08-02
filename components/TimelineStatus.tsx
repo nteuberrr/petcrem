@@ -55,14 +55,14 @@ export default function TimelineStatus() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900">Timeline Status</h2>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="text-xs sm:text-sm font-semibold text-gray-600 uppercase tracking-wide">Estado de las mascotas</h2>
         <input
           type="text"
           placeholder="Buscar en todas las columnas..."
           value={buscar}
           onChange={e => setBuscar(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand w-64"
+          className="border border-gray-300 rounded-xl px-3 py-2 min-h-11 text-sm focus:outline-none focus:ring-2 focus:ring-brand w-full sm:w-64"
         />
       </div>
 

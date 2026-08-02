@@ -86,8 +86,8 @@ export default function ManualModal({ onClose, onEmitido }: Props) {
       ) : (
         <div className="space-y-5">
           <div className="flex gap-2">
-            <button onClick={() => setTipo(39)} className={`flex-1 rounded-xl border-2 px-4 py-2.5 text-sm font-semibold ${tipo === 39 ? 'border-brand bg-brand/10 text-brand' : 'border-gray-300 text-gray-600'}`}>🧾 Boleta</button>
-            <button onClick={() => setTipo(33)} className={`flex-1 rounded-xl border-2 px-4 py-2.5 text-sm font-semibold ${tipo === 33 ? 'border-brand bg-brand/10 text-brand' : 'border-gray-300 text-gray-600'}`}>📄 Factura</button>
+            <button onClick={() => setTipo(39)} className={`flex-1 rounded-xl border-2 px-4 py-2.5 text-sm font-semibold ${tipo === 39 ? 'border-brand bg-brand/10 text-brand' : 'border-gray-300 text-gray-600'}`}>Boleta</button>
+            <button onClick={() => setTipo(33)} className={`flex-1 rounded-xl border-2 px-4 py-2.5 text-sm font-semibold ${tipo === 33 ? 'border-brand bg-brand/10 text-brand' : 'border-gray-300 text-gray-600'}`}>Factura</button>
           </div>
 
           <div>

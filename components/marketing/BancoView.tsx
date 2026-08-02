@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Clapperboard, MessageCircle, Trash2, Upload } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Card, Button } from '@/components/ui/kit'
 
@@ -122,11 +123,11 @@ function ImagenCard({ img, selected, onToggleSelect, onGrupo, onWhatsapp, onFavo
           </select>
           <div className="flex items-center gap-1 flex-wrap justify-end">
             <SquareBtn title="Editar nombre" onClick={() => { setTexto(img.descripcion || img.alt || ''); setEditando(true) }}>✏️</SquareBtn>
-            <SquareBtn title="El agente de WhatsApp puede enviarla al cliente" active={img.whatsapp} onClick={() => onWhatsapp(img, !img.whatsapp)}>💬</SquareBtn>
-            <SquareBtn title="Animar a video (Veo)" onClick={() => onAnimar(img)}>🎬</SquareBtn>
+            <SquareBtn title="El agente de WhatsApp puede enviarla al cliente" active={img.whatsapp} onClick={() => onWhatsapp(img, !img.whatsapp)}><MessageCircle className="w-3.5 h-3.5" aria-hidden="true" /></SquareBtn>
+            <SquareBtn title="Animar a video (Veo)" onClick={() => onAnimar(img)}><Clapperboard className="w-3.5 h-3.5" aria-hidden="true" /></SquareBtn>
             <SquareBtn title="Descargar" href={`/api/mailing/imagenes/descargar?id=${encodeURIComponent(img.id)}`} download>⬇</SquareBtn>
             <SquareBtn title="Copiar URL" onClick={() => onCopyUrl(img.url)}>⧉</SquareBtn>
-            <SquareBtn title="Eliminar" danger onClick={() => onDelete(img)}>🗑</SquareBtn>
+            <SquareBtn title="Eliminar" danger onClick={() => onDelete(img)}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></SquareBtn>
           </div>
         </div>
       </div>
@@ -179,7 +180,7 @@ function AnimarModal({ imgs, onClose, onDone }: { imgs: ImagenBanco[]; onClose: 
     }
     setFase(''); setProgreso(null)
     if (errores.length) setError(`${ok}/${imgs.length} listos. Errores: ${errores.join(' · ')}`)
-    else { onDone(`🎬 ${ok} video${ok === 1 ? '' : 's'} generado${ok === 1 ? '' : 's'} y guardado${ok === 1 ? '' : 's'} en el banco.`) }
+    else { onDone(`${ok} video${ok === 1 ? '' : 's'} generado${ok === 1 ? '' : 's'} y guardado${ok === 1 ? '' : 's'} en el banco.`) }
   }
 
   return (
@@ -193,7 +194,7 @@ function AnimarModal({ imgs, onClose, onDone }: { imgs: ImagenBanco[]; onClose: 
           {imgs.length > 8 && <div className="w-20 h-20 rounded-lg border border-gray-300 grid place-items-center text-xs text-gray-500 shrink-0">+{imgs.length - 8}</div>}
         </div>
         <div className="text-sm text-gray-600">
-          <p>Veo va a <b>animar {multiple ? 'cada imagen' : 'esta imagen'}</b> en un clip corto. Describí el movimiento que querés (se aplica a {multiple ? 'todas' : 'la imagen'}).</p>
+          <p>Veo va a <b>animar {multiple ? 'cada imagen' : 'esta imagen'}</b> en un clip corto. Describe el movimiento que quieres (se aplica a {multiple ? 'todas' : 'la imagen'}).</p>
           <p className="text-[11px] text-gray-400 mt-1">Calidad alta (1080p). Cada clip tarda 1-3 min y cuesta ~US$2-3{multiple ? ` — ${imgs.length} clips` : ''}. <b>No cierres esta ventana</b> mientras genera.</p>
         </div>
         <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={3} disabled={!!fase}
@@ -212,7 +213,7 @@ function AnimarModal({ imgs, onClose, onDone }: { imgs: ImagenBanco[]; onClose: 
             <option value="8">8 seg</option>
           </select>
           <Button onClick={generar} disabled={!!fase || !prompt.trim()}>
-            {fase ? (progreso ? `Generando ${progreso.i}/${progreso.n}…` : 'Generando…') : `🎬 Generar video${multiple ? 's' : ''}`}
+            {fase ? (progreso ? `Generando ${progreso.i}/${progreso.n}…` : 'Generando…') : `Generar video${multiple ? 's' : ''}`}
           </Button>
         </div>
         {error && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{error}</div>}
@@ -424,7 +425,7 @@ export default function BancoView() {
       <Card className="p-5 space-y-4">
         <div>
           <h2 className="text-base font-bold text-gray-900">Banco de imágenes</h2>
-          <p className="text-sm text-gray-500">Imágenes y videos reutilizables. El agente las recicla y vos te referís a cada una por su <b>código</b> (i-N foto · C-X.Y campaña · v-N/ai-N video).</p>
+          <p className="text-sm text-gray-500">Imágenes y videos reutilizables. El agente las recicla y te refieres a cada una por su <b>código</b> (i-N foto · C-X.Y campaña · v-N/ai-N video).</p>
         </div>
         <div>
           <label className="text-xs font-semibold text-gray-700">Generar una imagen nueva (Nano Banana Pro)</label>
@@ -455,10 +456,10 @@ export default function BancoView() {
               {GRUPOS.map(g => <option key={g} value={g}>{GRUPO_LABEL[g] || g}</option>)}
             </select>
             <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={subiendo}>
-              {subiendo ? 'Subiendo…' : '📤 Subir imágenes'}
+              {subiendo ? 'Subiendo…' : <><Upload className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Subir imágenes</>}
             </Button>
             <input ref={fileRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={subir} className="hidden" />
-            <span className="text-[11px] text-gray-400">Podés elegir varias a la vez.</span>
+            <span className="text-[11px] text-gray-400">Puedes elegir varias a la vez.</span>
           </div>
         </div>
         {error && <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 text-sm">{error}</div>}
@@ -486,7 +487,7 @@ export default function BancoView() {
             <option value="favoritas">Favoritas primero</option>
           </select>
           <button type="button" onClick={() => setFWhatsapp(v => !v)} title="Solo enviables por WhatsApp"
-            className={`text-xs rounded-lg px-2.5 py-1.5 border ${fWhatsapp ? 'bg-green-50 border-green-400 text-green-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>💬 WhatsApp</button>
+            className={`text-xs rounded-lg px-2.5 py-1.5 border ${fWhatsapp ? 'bg-green-50 border-green-400 text-green-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>WhatsApp</button>
           <button type="button" onClick={() => setFFav(v => !v)} title="Solo favoritas"
             className={`text-xs rounded-lg px-2.5 py-1.5 border ${fFav ? 'bg-gold/20 border-gold text-brand' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>★ Favoritas</button>
           {hayFiltro && <button type="button" onClick={limpiarFiltros} className="text-xs text-brand hover:underline">Limpiar filtros</button>}
@@ -517,13 +518,13 @@ export default function BancoView() {
           </select>
           <button type="button" disabled={bulkBusy} onClick={() => bulk('set_favorita', true)} className="text-sm bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1">★ Favorita</button>
           <button type="button" disabled={bulkBusy} onClick={() => bulk('set_favorita', false)} className="text-sm bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1">☆ Quitar</button>
-          <button type="button" disabled={bulkBusy} onClick={() => bulk('set_whatsapp', true)} className="text-sm bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1">💬 WhatsApp ✓</button>
-          <button type="button" disabled={bulkBusy} onClick={() => bulk('set_whatsapp', false)} className="text-sm bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1">💬 ✕</button>
+          <button type="button" disabled={bulkBusy} onClick={() => bulk('set_whatsapp', true)} className="text-sm bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1">WhatsApp ✓</button>
+          <button type="button" disabled={bulkBusy} onClick={() => bulk('set_whatsapp', false)} className="text-sm bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1">Quitar WhatsApp</button>
           <a href={`/api/mailing/imagenes/descargar?ids=${seleccionadas.map(i => i.id).join(',')}`} download
             className="text-sm bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1">⬇ Descargar</a>
-          <button type="button" disabled={bulkBusy} onClick={() => setAnimar(seleccionadas)} className="text-sm bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1">🎬 Animar</button>
+          <button type="button" disabled={bulkBusy} onClick={() => setAnimar(seleccionadas)} className="text-sm bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1">Animar</button>
           <button type="button" disabled={bulkBusy} onClick={() => bulk('delete', undefined, `¿Eliminar ${sel.size} imagen(es) del banco? No se puede deshacer.`)}
-            className="text-sm bg-red-500/90 hover:bg-red-500 rounded-lg px-2.5 py-1">🗑 Eliminar</button>
+            className="text-sm bg-red-500/90 hover:bg-red-500 rounded-lg px-2.5 py-1 inline-flex items-center gap-1.5"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Eliminar</button>
           <button type="button" onClick={limpiarSel} className="text-xs text-white/80 hover:text-white ml-auto">Limpiar selección</button>
         </div>
       )}
@@ -570,7 +571,7 @@ export default function BancoView() {
       {/* Banco de videos */}
       {videos.length > 0 && (
         <Card className="p-4 space-y-3">
-          <h2 className="text-base font-bold text-gray-900">🎬 Videos <span className="text-xs font-normal text-gray-400">({videos.length})</span></h2>
+          <h2 className="text-base font-bold text-gray-900 inline-flex items-center gap-2"><Clapperboard className="w-4 h-4" aria-hidden="true" /> Videos <span className="text-xs font-normal text-gray-400">({videos.length})</span></h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {videos.map(v => (
               <div key={v.id} className="rounded-2xl border border-gray-300 overflow-hidden bg-black/5 shadow-sm">
@@ -582,7 +583,7 @@ export default function BancoView() {
                   <p className="flex-1 text-[11px] text-gray-600 line-clamp-2">{v.descripcion || v.prompt || 'Video'}</p>
                   <SquareBtn title="Descargar" href={v.url} download>⬇</SquareBtn>
                   <SquareBtn title="Copiar URL" onClick={() => copiar(v.url, 'URL copiada.')}>⧉</SquareBtn>
-                  <SquareBtn title="Eliminar" danger onClick={() => eliminarVideo(v)}>🗑</SquareBtn>
+                  <SquareBtn title="Eliminar" danger onClick={() => eliminarVideo(v)}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></SquareBtn>
                 </div>
               </div>
             ))}

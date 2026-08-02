@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { PageHeader, Card, Button, Tabs } from '@/components/ui/kit'
+import { Amphora, FileText, Flame, Globe, Handshake, Hospital, Lightbulb, PenLine } from 'lucide-react'
 import { fmtPrecio } from '@/lib/format'
 import { useAccionUnica } from '@/lib/use-accion-unica'
 import { ColeccionEditor, type Campo } from '@/components/web/ColeccionEditor'
@@ -133,18 +134,18 @@ export default function WebPage() {
       <PageHeader
         title="Web"
         subtitle="Panel del sitio público — controla qué se muestra en crematorioalmaanimal.cl"
-        icon={<span className="text-3xl">🌐</span>}
+        icon={<Globe className="w-7 h-7 text-brand" aria-hidden="true" />}
       />
 
       <Tabs<Tab>
         value={tab}
         onChange={setTab}
         tabs={[
-          { key: 'productos', label: `🏺 Productos (${visiblesEnWeb})` },
-          { key: 'descuentos', label: `🤝 Convenios (${descuentos.filter(descVisible).length})` },
-          { key: 'servicios', label: '🔥 Servicios' },
-          { key: 'blog', label: '📝 Blog' },
-          { key: 'paginas', label: '📄 Páginas' },
+          { key: 'productos', label: <><Amphora className="w-4 h-4" aria-hidden="true" /> Productos ({visiblesEnWeb})</> },
+          { key: 'descuentos', label: <><Handshake className="w-4 h-4" aria-hidden="true" /> Convenios ({descuentos.filter(descVisible).length})</> },
+          { key: 'servicios', label: <><Flame className="w-4 h-4" aria-hidden="true" /> Servicios</> },
+          { key: 'blog', label: <><PenLine className="w-4 h-4" aria-hidden="true" /> Blog</> },
+          { key: 'paginas', label: <><FileText className="w-4 h-4" aria-hidden="true" /> Páginas</> },
         ]}
       />
 
@@ -178,11 +179,11 @@ export default function WebPage() {
       ) : tab === 'productos' ? (
         <div className="space-y-4">
           <Card className="p-4 flex items-start gap-3 bg-cream">
-            <span className="text-xl">💡</span>
+            <Lightbulb className="w-5 h-5 text-gold" aria-hidden="true" />
             <div className="text-sm text-gray-600">
               El catálogo de la web es un <b>espejo de tu Bodega</b>. Los productos se crean y editan en{' '}
               <Link href="/configuracion" className="text-brand-soft font-semibold underline">Configuración → Bodega</Link>{' '}
-              (nombre, foto, precio, stock). Acá solo decides <b>cuáles se muestran</b> en la web. Un producto sin stock aparece con el sello <b>Agotado</b>; el precio publicado es el de lista de Bodega.
+              (nombre, foto, precio, stock). Aquí solo decides <b>cuáles se muestran</b> en la web. Un producto sin stock aparece con el sello <b>Agotado</b>; el precio publicado es el de lista de Bodega.
             </div>
           </Card>
 
@@ -202,7 +203,7 @@ export default function WebPage() {
                         {p.foto_url
                           // eslint-disable-next-line @next/next/no-img-element
                           ? <img src={p.foto_url} alt={p.nombre} className="w-full h-full object-cover" />
-                          : <div className="w-full h-full flex items-center justify-center text-gray-300 text-3xl">🏺</div>}
+                          : <div className="w-full h-full flex items-center justify-center text-gray-300"><Amphora className="w-8 h-8" aria-hidden="true" /></div>}
                         {agotado(p) && (
                           <span className="absolute top-2 left-2 rounded-full bg-gray-900/80 text-white text-[11px] font-bold px-2 py-0.5">Agotado</span>
                         )}
@@ -226,11 +227,11 @@ export default function WebPage() {
       ) : (
         <div className="space-y-4">
           <Card className="p-4 flex items-start gap-3 bg-cream">
-            <span className="text-xl">💡</span>
+            <Lightbulb className="w-5 h-5 text-gold" aria-hidden="true" />
             <div className="text-sm text-gray-600">
               Espejo de tus <b>convenios/descuentos</b>: se crean y editan (incluido el <b>logo</b>) en{' '}
               <Link href="/configuracion" className="text-brand-soft font-semibold underline">Configuración → Descuentos</Link>.
-              Acá solo decides <b>cuáles se muestran</b> en la web. Por defecto están ocultos hasta que los prendas.
+              Aquí solo decides <b>cuáles se muestran</b> en la web. Por defecto están ocultos hasta que los prendas.
             </div>
           </Card>
 
@@ -244,7 +245,7 @@ export default function WebPage() {
                     {d.foto_url
                       // eslint-disable-next-line @next/next/no-img-element
                       ? <img src={d.foto_url} alt={d.nombre} className="w-full h-full object-contain" />
-                      : <span className="text-gray-300 text-2xl">🏥</span>}
+                      : <Hospital className="w-6 h-6 text-gray-300" aria-hidden="true" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold text-gray-800 truncate">{d.nombre}</div>

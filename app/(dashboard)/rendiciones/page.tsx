@@ -1,4 +1,5 @@
 'use client'
+import { Coins, Lock, Receipt } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { fmtPrecio } from '@/lib/format'
@@ -170,7 +171,7 @@ export default function RendicionesPage() {
   if (status === 'loading') return <div className="p-8 text-gray-400 text-sm">Cargando...</div>
   if (!puedeVer) return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
-      <p className="text-4xl mb-4">🔒</p>
+      <Lock className="w-10 h-10 mx-auto mb-4 text-gray-400" aria-hidden="true" />
       <h2 className="text-xl font-bold text-gray-900 mb-2">Acceso restringido</h2>
       <p className="text-gray-500 text-sm">Solo administradores.</p>
     </div>
@@ -223,10 +224,10 @@ export default function RendicionesPage() {
       <PageHeader
         title="Rendiciones"
         subtitle="Gastos del personal y control de pagos"
-        icon={<span className="text-3xl">🧾</span>}
+        icon={<Receipt className="w-7 h-7 text-brand" aria-hidden="true" />}
         actions={<>
           <Button onClick={() => { resetForm(); setShowCrear(true) }}>+ Nueva rendición</Button>
-          <Button variant="gold" onClick={() => setShowPagar(true)}>💰 Pagar rendiciones</Button>
+          <Button variant="gold" onClick={() => setShowPagar(true)}><Coins className="w-4 h-4" aria-hidden="true" /> Pagar rendiciones</Button>
           <Button variant="secondary" onClick={descargarInforme}>↓ Descargar informe</Button>
         </>}
       />
@@ -528,7 +529,7 @@ function BulkEditModal({ ids, partidas, onClose, onSaved }: {
     <Modal open onClose={onClose} title={`Editar ${ids.length} rendición(es)`}>
       <div className="space-y-4">
         <div>
-          <label className="block text-xs text-gray-500 mb-1.5">¿Qué querés editar?</label>
+          <label className="block text-xs text-gray-500 mb-1.5">¿Qué quieres editar?</label>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => elegirCampo('clasificacion')} className={opt(campo === 'clasificacion')}>Clasificación</button>
             <button onClick={() => elegirCampo('tipo_documento')} className={opt(campo === 'tipo_documento')}>Documento</button>

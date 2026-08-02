@@ -1,6 +1,10 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
+import {
+  Bell, CreditCard, Snowflake, Package, FilePen, Coins, MailWarning,
+  Users, Image, Video, FolderOpen, type LucideIcon,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { TableSkeleton } from '@/components/ui/Skeleton'
@@ -502,6 +506,10 @@ export default function ClientesPage() {
 
   /** ¿Hay algún filtro activo además del buscador? */
   const hayFiltros = filtro !== 'todos' || !!filtroVet || !!fechaDesde || !!fechaHasta || filtroPagos.length > 0
+  // Cuántos filtros hay puestos — se muestra en el botón que los pliega en móvil.
+  const cantFiltros = (filtro !== 'todos' ? 1 : 0) + (filtroVet ? 1 : 0)
+    + (fechaDesde || fechaHasta ? 1 : 0) + (filtroPagos.length > 0 ? 1 : 0)
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false)
   function limpiarFiltros() {
     setFiltro('todos'); setFiltroVet(''); setFechaDesde(''); setFechaHasta(''); setFiltroPagos([])
   }
@@ -785,31 +793,31 @@ export default function ClientesPage() {
           {nBorradores > 0 && (
             <button onClick={() => setFiltro('borrador')}
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-red-300 bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-bold text-red-800 shadow-md transition-colors">
-              🔔 {nBorradores} nueva{nBorradores === 1 ? '' : 's'} reserva{nBorradores === 1 ? '' : 's'} del agente
+              <Bell className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {nBorradores} nueva{nBorradores === 1 ? '' : 's'} reserva{nBorradores === 1 ? '' : 's'} del agente
             </button>
           )}
           {alertas.pagoPendiente > 0 && (
             <button onClick={() => setFiltro('pago_pendiente')}
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-amber-400 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-900 shadow-md transition-colors">
-              💳 {alertas.pagoPendiente} con pago pendiente
+              <CreditCard className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {alertas.pagoPendiente} con pago pendiente
             </button>
           )}
           {alertas.enCamara > 0 && (
             <button onClick={() => setFiltro('pendiente')}
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-sky-300 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-800 shadow-md transition-colors">
-              📥 {alertas.enCamara} en cámara por cremar
+              <Snowflake className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {alertas.enCamara} en cámara por cremar
             </button>
           )}
           {alertas.porDespachar > 0 && (
             <button onClick={() => setFiltro('cremado')}
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-800 shadow-md transition-colors">
-              📦 {alertas.porDespachar} cremado{alertas.porDespachar === 1 ? '' : 's'} por despachar
+              <Package className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {alertas.porDespachar} cremado{alertas.porDespachar === 1 ? '' : 's'} por despachar
             </button>
           )}
           {alertas.datosPendientes > 0 && (
             <button onClick={() => setFiltro('datos_pendientes')}
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-orange-300 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-800 shadow-md transition-colors">
-              📝 {alertas.datosPendientes} con datos pendientes
+              <FilePen className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {alertas.datosPendientes} con datos pendientes
             </button>
           )}
           {alertas.faltaPeso > 0 && (
@@ -821,14 +829,14 @@ export default function ClientesPage() {
           {alertas.diferencia > 0 && (
             <button onClick={() => setFiltro('diferencia')}
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-fuchsia-300 bg-fuchsia-50 hover:bg-fuchsia-100 px-3 py-1.5 text-xs font-bold text-fuchsia-800 shadow-md transition-colors">
-              💰 {alertas.diferencia} con diferencia por cobrar
+              <Coins className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {alertas.diferencia} con diferencia por cobrar
             </button>
           )}
           {correosMalos.length > 0 && (
             <button onClick={() => setFiltro('correo_malo')}
               title="Correos de tutores que rebotaron o fallaron — corrígelos en la ficha"
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-red-400 bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-bold text-red-900 shadow-md transition-colors">
-              ✉️ {correosMalos.length} correo{correosMalos.length === 1 ? '' : 's'} de tutor rebotado{correosMalos.length === 1 ? '' : 's'}
+              <MailWarning className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {correosMalos.length} correo{correosMalos.length === 1 ? '' : 's'} de tutor rebotado{correosMalos.length === 1 ? '' : 's'}
             </button>
           )}
         </div>
@@ -836,8 +844,8 @@ export default function ClientesPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-        <KpiCard icon="👥" color="indigo" value={kpis.total.toString()} label="Total clientes" />
-        <KpiCard icon="👥" color="emerald" value={kpis.delMes.toString()} label="Clientes del mes"
+        <KpiCard icon={Users} color="indigo" value={kpis.total.toString()} label="Total clientes" />
+        <KpiCard icon={Users} color="emerald" value={kpis.delMes.toString()} label="Clientes del mes"
           hint={kpis.promMesHist !== null ? `Promedio histórico: ${kpis.promMesHist.toFixed(1)} (${kpis.mesesCerrados} mes${kpis.mesesCerrados !== 1 ? 'es' : ''})` : 'Sin histórico aún'} />
       </div>
 
@@ -845,22 +853,32 @@ export default function ClientesPage() {
       <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 mb-6">
         <input
           type="text"
-          placeholder="🔍 Buscar por nombre, tutor, código, email o teléfono..."
+          placeholder="Buscar por nombre, tutor, código, email o teléfono..."
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
           className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand"
         />
+        {/* Móvil: los filtros se pliegan. Desplegados ocupaban ~560px y, sumados a
+            las alertas y los KPI, dejaban la primera ficha bajo pantalla y media
+            de preámbulo. En ≥640px se muestran siempre. */}
+        <button type="button" onClick={() => setFiltrosAbiertos(v => !v)}
+          className="mt-3 flex w-full items-center justify-between gap-2 rounded-xl border-2 border-gray-300 px-3 py-2 min-h-11 text-xs font-semibold text-gray-700 sm:hidden">
+          <span>Filtros{cantFiltros > 0 ? ` (${cantFiltros})` : ''}</span>
+          <span className="text-brand-soft">{filtrosAbiertos ? 'Ocultar' : 'Mostrar'}</span>
+        </button>
+
+        <div className={`${filtrosAbiertos ? '' : 'hidden'} sm:block`}>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-gray-600 mr-1">Situación:</span>
           {([
             { id: 'todos', label: 'Todos' },
-            { id: 'borrador', label: '🗂 Por ingresar' },
-            { id: 'pendiente', label: '📥 Retirados (en cámara)' },
+            { id: 'borrador', label: 'Por ingresar' },
+            { id: 'pendiente', label: 'Retirados (en cámara)' },
             { id: 'cremado', label: '✓ Cremados' },
-            { id: 'despachado', label: '📦 Despachados' },
+            { id: 'despachado', label: 'Despachados' },
             { id: 'pago_pendiente', label: '⚠ Pago pendiente' },
-            { id: 'correo_malo', label: '✉️ Correo rebotado' },
-            { id: 'datos_pendientes', label: '📝 Datos pendientes' },
+            { id: 'correo_malo', label: 'Correo rebotado' },
+            { id: 'datos_pendientes', label: 'Datos pendientes' },
           ] as const).map(opt => {
             const active = filtro === opt.id
             const esBorr = opt.id === 'borrador'
@@ -942,6 +960,7 @@ export default function ClientesPage() {
             <button onClick={() => setFiltroVet('')} className="text-xs text-brand-soft hover:underline">Quitar filtro</button>
           )}
         </div>
+        </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-gray-500">
             {resultados.length} resultado{resultados.length !== 1 ? 's' : ''} · {clientes.length} en total
@@ -1001,13 +1020,13 @@ export default function ClientesPage() {
                   {esPremiumCuadro(c) && (
                     <span title={jsonTieneItems(c.fotos_cuadro) ? 'Cuadro conmemorativo · foto recibida' : 'Cuadro conmemorativo (Premium) · falta la foto del tutor'}
                       className={`inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded border ${jsonTieneItems(c.fotos_cuadro) ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-amber-700 bg-amber-50 border-amber-200'}`}>
-                      🖼️ cuadro
+                      <Image className="w-3.5 h-3.5" aria-hidden="true" /> cuadro
                     </span>
                   )}
                   {solicitoVideo(c) && (
                     <span title={jsonTieneItems(c.videos_servicio) ? 'Video del proceso solicitado · ya cargado' : 'Video del proceso solicitado · pendiente de cargar'}
                       className={`inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded border ${jsonTieneItems(c.videos_servicio) ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-sky-700 bg-sky-50 border-sky-200'}`}>
-                      🎥 video
+                      <Video className="w-3.5 h-3.5" aria-hidden="true" /> video
                     </span>
                   )}
                 </div>
@@ -1019,7 +1038,7 @@ export default function ClientesPage() {
               )}
               {c.estado === 'borrador' && (
                 <p className="mt-2 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                  🗂 Completa la ficha para registrarla
+                  <FolderOpen className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Completa la ficha para registrarla
                 </p>
               )}
               {c.estado !== 'borrador' && c.estado_pago !== 'pagado' && (() => {
@@ -1713,7 +1732,7 @@ export default function ClientesPage() {
   )
 }
 
-function KpiCard({ icon, color, value, label, hint }: { icon: string; color: string; value: string; label: string; hint?: string }) {
+function KpiCard({ icon: Icon, color, value, label, hint }: { icon: LucideIcon; color: string; value: string; label: string; hint?: string }) {
   const colorMap: Record<string, string> = {
     indigo: 'bg-brand/10 text-brand',
     emerald: 'bg-emerald-100 text-emerald-600',
@@ -1722,8 +1741,8 @@ function KpiCard({ icon, color, value, label, hint }: { icon: string; color: str
   }
   return (
     <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-5 flex items-center gap-4">
-      <div className={`shrink-0 inline-flex w-12 h-12 rounded-xl items-center justify-center text-2xl ${colorMap[color] ?? 'bg-gray-100'}`}>
-        {icon}
+      <div className={`shrink-0 inline-flex w-12 h-12 rounded-xl items-center justify-center ${colorMap[color] ?? 'bg-gray-100'}`}>
+        <Icon className="w-6 h-6" aria-hidden="true" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xl font-bold text-gray-900">{value}</p>

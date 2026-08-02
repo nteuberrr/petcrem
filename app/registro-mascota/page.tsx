@@ -1,4 +1,5 @@
 'use client'
+import { PawPrint } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { fmtPrecio } from '@/lib/format'
@@ -162,7 +163,7 @@ export default function RegistroMascotaPage() {
       <header style={{ backgroundColor: COLOR }} className="text-white py-8 sm:py-10 px-4">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>🐾 Crematorio Alma Animal</p>
+            <p className="text-[11px] sm:text-xs uppercase tracking-[0.18em] font-bold" style={{ color: AMBER }}>Crematorio Alma Animal</p>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mt-2">Completa los datos de tu mascota</h1>
             <p className="text-base sm:text-lg mt-3 opacity-95 max-w-2xl">
               Tu retiro ya está confirmado. Completa lo que puedas para agilizar el ingreso — y si algo no lo sabes, no te preocupes: lo coordinamos al momento del retiro.
@@ -184,7 +185,7 @@ export default function RegistroMascotaPage() {
           /* Sin el link firmado no hay ficha que completar: acá no se abren
              servicios nuevos, eso lo coordina el equipo. */
           <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6 sm:p-8 text-center">
-            <div className="text-5xl mb-3">🐾</div>
+            <PawPrint className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
             <p className="text-base text-gray-800">
               Este formulario se abre con el <strong>link que te enviamos por WhatsApp</strong> cuando confirmamos el retiro de tu mascota.
             </p>
@@ -196,7 +197,7 @@ export default function RegistroMascotaPage() {
           </div>
         ) : yaIngresada ? (
           <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6 sm:p-8 text-center">
-            <div className="text-5xl mb-3">🐾</div>
+            <PawPrint className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
             <p className="text-base text-gray-800">
               Esta ficha ya fue ingresada por nuestro equipo. No necesitas hacer nada más — cualquier duda, escríbenos a <a href="mailto:contacto@crematorioalmaanimal.cl" className="underline" style={{ color: COLOR }}>contacto@crematorioalmaanimal.cl</a>.
             </p>
@@ -350,7 +351,7 @@ export default function RegistroMascotaPage() {
       <Modal open={!!exito} onClose={() => setExito(null)} title="¡Datos recibidos!">
         {exito && (
           <div className="text-center py-2">
-            <div className="text-5xl mb-3">🐾</div>
+            <PawPrint className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
             <p className="text-base text-gray-800 mb-3">
               Gracias por confiar en nosotros para cuidar de <strong>{exito.nombre_mascota}</strong>.
             </p>

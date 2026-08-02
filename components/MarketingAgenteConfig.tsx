@@ -1,4 +1,5 @@
 'use client'
+import { Bot } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { formatDateTime } from '@/lib/dates'
 import MarketingParamsConfig from './MarketingParamsConfig'
@@ -47,7 +48,7 @@ export default function MarketingAgenteConfig() {
   return (
     <div className="space-y-4 max-w-3xl">
       <div className="bg-violet-50 border border-violet-100 rounded-xl px-5 py-3 text-sm text-violet-900">
-        🧠 El <strong>agente de Marketing</strong> propone el plan de campañas, redacta las piezas y arma el calendario (en <strong>Campañas</strong>). Acá lo afinás: dale <strong>instrucciones</strong> con efecto inmediato (tono, horarios de publicación, qué priorizar, cómo hablar).
+        <Bot className="w-4 h-4 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> El <strong>agente de Marketing</strong> propone el plan de campañas, redacta las piezas y arma el calendario (en <strong>Campañas</strong>). Aquí lo afinas: dale <strong>instrucciones</strong> con efecto inmediato (tono, horarios de publicación, qué priorizar, cómo hablar).
       </div>
 
       {aviso && (
@@ -64,7 +65,7 @@ export default function MarketingAgenteConfig() {
         </div>
         <div className="p-5 space-y-3">
           <textarea value={instrucciones} onChange={e => setInstrucciones(e.target.value)} rows={6}
-            placeholder="Escribí acá indicaciones para el agente de marketing…"
+            placeholder="Escribe aquí indicaciones para el agente de marketing…"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-y" />
           <div className="flex items-center gap-3">
             <button onClick={() => guardar({ instrucciones }, 'instr')} disabled={guardandoInstr || instrucciones === (cfg?.instrucciones ?? '')}

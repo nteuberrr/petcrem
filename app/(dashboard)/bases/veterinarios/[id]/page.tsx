@@ -1,4 +1,5 @@
 'use client'
+import { BarChart3, Copy, FileSpreadsheet, FileText, Mail } from 'lucide-react'
 import { useCallback, useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/Badge'
@@ -175,7 +176,7 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={copiarEmail} className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
-            📋 Copiar email
+            <Copy className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Copiar email
           </button>
         </div>
       </div>
@@ -203,7 +204,7 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
       {/* Informes de facturación */}
       <div className="bg-white rounded-xl shadow-md border border-gray-300 mb-6 overflow-hidden">
         <div className="bg-gradient-to-r from-brand/10 to-purple-50 px-6 py-3 border-b border-brand/20 flex items-center gap-2">
-          <span className="text-lg">📊</span>
+          <BarChart3 className="w-5 h-5 text-brand" aria-hidden="true" />
           <h2 className="text-sm font-bold text-brand uppercase tracking-wide">Informes de facturación</h2>
         </div>
         <div className="p-6">
@@ -219,14 +220,14 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
               disabled={generandoExcel || generandoPdf}
               className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
             >
-              {generandoExcel ? '⌛ Generando Excel…' : '📗 Generar Excel'}
+              {generandoExcel ? 'Generando Excel…' : <><FileSpreadsheet className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Generar Excel</>}
             </button>
             <button
               onClick={() => generarInforme('pdf')}
               disabled={generandoExcel || generandoPdf}
               className="inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
             >
-              {generandoPdf ? '⌛ Generando PDF…' : '📕 Generar PDF'}
+              {generandoPdf ? 'Generando PDF…' : <><FileText className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Generar PDF</>}
             </button>
             <button
               onClick={enviarUltimoInforme}
@@ -234,7 +235,7 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
               title={!vet.correo ? 'La veterinaria no tiene email' : !ultimoInforme ? 'Generá un informe primero' : `Enviar a ${vet.correo}`}
               className="inline-flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {enviando ? '⌛ Enviando…' : '📧 Enviar último al correo'}
+              {enviando ? 'Enviando…' : <><Mail className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Enviar último al correo</>}
             </button>
             <button
               onClick={() => setVerHistorico(v => !v)}

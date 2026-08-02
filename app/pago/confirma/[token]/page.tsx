@@ -1,4 +1,5 @@
 'use client'
+import { PawPrint } from 'lucide-react'
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 
@@ -52,7 +53,7 @@ export default function ConfirmaPagoPage() {
 
           {token && estado !== 'listo' && (
             <div className="py-2">
-              <p className="text-5xl mb-3">🐾</p>
+              <PawPrint className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
               <h2 className="text-xl font-bold text-gray-900 mb-1">¿Ya hiciste la transferencia?</h2>
               <p className="text-sm text-gray-600 mb-5">
                 Si ya transferiste el monto indicado en el correo, confírmalo aquí y nuestro equipo lo verificará.

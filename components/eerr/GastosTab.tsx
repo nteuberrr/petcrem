@@ -4,7 +4,7 @@ import FacturasSiiTab from './FacturasSiiTab'
 import GastosManualesTab from './GastosManualesTab'
 
 const SUBS = [
-  { key: 'facturas', label: '📄 Facturas (SII)' },
+  { key: 'facturas', label: 'Facturas (SII)' },
   { key: 'manuales', label: '✍ Manuales' },
 ] as const
 

@@ -1,4 +1,5 @@
 'use client'
+import { PawPrint } from 'lucide-react'
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { formatDate, formatHoraDia } from '@/lib/dates'
@@ -61,7 +62,7 @@ export default function ClienteConfirmaPage() {
 
           {token && estado !== 'listo' && (
             <div className="py-2">
-              <p className="text-5xl mb-3">🐾</p>
+              <PawPrint className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
               <h2 className="text-xl font-bold text-gray-900 mb-1">Confirma la visita</h2>
               <p className="text-sm text-gray-600 mb-5">
                 Si ya coordinaste con el veterinario el día y la hora de la visita,
@@ -89,7 +90,7 @@ export default function ClienteConfirmaPage() {
 
           {token && estado === 'listo' && data && data.ok && (
             <>
-              <p className="text-5xl mb-3">🐾</p>
+              <PawPrint className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
               <h2 className="text-xl font-bold text-gray-900 mb-1">
                 {data.ya_confirmada ? 'Ya habías confirmado la visita' : '¡Visita confirmada!'}
               </h2>

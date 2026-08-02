@@ -1,4 +1,5 @@
 'use client'
+import { HeartHandshake, Stethoscope } from 'lucide-react'
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { fmtPrecio } from '@/lib/format'
@@ -62,7 +63,7 @@ export default function NoRealizadoPage() {
 
           {token && estado !== 'listo' && (
             <div className="py-2">
-              <p className="text-5xl mb-3">🩺</p>
+              <Stethoscope className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
               <h2 className="text-xl font-bold text-gray-900 mb-1">¿La eutanasia NO se realizó?</h2>
               <p className="text-sm text-gray-600 mb-5">
                 Al confirmar, dejamos registrado que evaluaste a la mascota y que no correspondía
@@ -90,7 +91,7 @@ export default function NoRealizadoPage() {
 
           {token && estado === 'listo' && data && data.ok && (
             <>
-              <p className="text-5xl mb-3">🙏</p>
+              <HeartHandshake className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
               <h2 className="text-xl font-bold text-gray-900 mb-2">
                 {data.ya_resuelta ? 'Ya habías registrado esta evaluación' : '¡Gracias por la evaluación!'}
               </h2>

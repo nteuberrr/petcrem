@@ -86,7 +86,7 @@ export default function ProveedoresTab() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-500">
-        Proveedores vistos en las facturas. Si activás la contabilización automática, sus compras <strong>pendientes</strong> y las <strong>futuras</strong> se asignan solas a la partida elegida. Las que ya tienen partida no se tocan.
+        Proveedores vistos en las facturas. Si activas la contabilización automática, sus compras <strong>pendientes</strong> y las <strong>futuras</strong> se asignan solas a la partida elegida. Las que ya tienen partida no se tocan.
       </p>
 
       {/* Filtros + buscar */}

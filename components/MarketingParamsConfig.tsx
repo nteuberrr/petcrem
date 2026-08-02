@@ -1,4 +1,5 @@
 'use client'
+import { Bot } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import type { MarketingParams } from '@/lib/marketing-params'
 
@@ -76,7 +77,7 @@ export default function MarketingParamsConfig() {
       <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-300 flex items-start justify-between gap-4">
           <div>
-            <h2 className="font-semibold text-gray-900">🤖 Autopiloto semanal</h2>
+            <h2 className="font-semibold text-gray-900 inline-flex items-center gap-2"><Bot className="w-4 h-4" aria-hidden="true" /> Autopiloto semanal</h2>
             <p className="text-xs text-gray-500 mt-0.5 max-w-xl">Genera el plan de la semana siguiente y prepara las piezas <strong>para tu aprobación</strong>. Nada se publica ni se programa solo: apruebas y programas tú en Campañas. Las piezas con observaciones de QA quedan marcadas.</p>
           </div>
           <button

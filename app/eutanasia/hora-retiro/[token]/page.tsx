@@ -1,4 +1,5 @@
 'use client'
+import { Clock } from 'lucide-react'
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 
@@ -72,7 +73,7 @@ export default function HoraRetiroPage() {
 
           {token && estado === 'listo' && data && data.ok && (
             <div className="text-center py-2">
-              <p className="text-5xl mb-3">🕒</p>
+              <Clock className="w-12 h-12 mx-auto mb-3 text-brand" aria-hidden="true" />
               <h2 className="text-xl font-bold text-gray-900 mb-1">¡Gracias!</h2>
               <p className="text-sm text-gray-600 mt-2">
                 Registramos el procedimiento a las <strong style={{ color: COLOR }}>{data.hora}</strong>

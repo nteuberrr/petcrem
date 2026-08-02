@@ -1,4 +1,5 @@
 'use client'
+import { Lock } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
@@ -62,7 +63,7 @@ export default function BasesPage() {
   if (status === 'loading' || allowed === null) return <div className="p-8 text-gray-400 text-sm">Cargando...</div>
   if (!isAdmin) return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
-      <p className="text-4xl mb-4">🔒</p>
+      <Lock className="w-10 h-10 mx-auto mb-4 text-gray-400" aria-hidden="true" />
       <h2 className="text-xl font-bold text-gray-900 mb-2">Acceso restringido</h2>
       <p className="text-gray-500 text-sm">Esta sección está disponible solo para administradores.</p>
     </div>
@@ -84,7 +85,8 @@ export default function BasesPage() {
               + Agregar
             </button>
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] text-sm">
             <thead className="bg-gray-50">
               <tr>{['Nombre', 'Comuna', 'Contacto', 'Precios', 'Estado', ''].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{h}</th>
@@ -107,18 +109,18 @@ export default function BasesPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Link href={`/bases/veterinarios/${v.id}`}
-                        className="bg-brand hover:bg-brand-dark text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                        className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 min-h-9 inline-flex items-center rounded-xl text-xs font-medium transition-colors">
                         Ver
                       </Link>
                       <button
                         onClick={() => { setEditingVet(v); setVetForm({ nombre: v.nombre, direccion: v.direccion, telefono: v.telefono, correo: v.correo, nombre_contacto: v.nombre_contacto, cargo_contacto: v.cargo_contacto, comuna: v.comuna, rut: v.rut, razon_social: v.razon_social, giro: v.giro, tipo_precios: v.tipo_precios }); setShowVetModal(true) }}
-                        className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                        className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">
                         Editar
                       </button>
                       {isAdmin && (
                         <button
                           onClick={() => { if (confirm(`¿Eliminar "${v.nombre}"?`)) del(`/api/veterinarios?id=${v.id}`) }}
-                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                          className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">
                           Eliminar
                         </button>
                       )}
@@ -131,6 +133,7 @@ export default function BasesPage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
 
       {/* ─── MODALES ─── */}

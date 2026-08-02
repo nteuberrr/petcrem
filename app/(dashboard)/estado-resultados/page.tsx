@@ -4,6 +4,7 @@ import ParametrosTab from '@/components/eerr/ParametrosTab'
 import ProveedoresTab from '@/components/eerr/ProveedoresTab'
 import GastosTab from '@/components/eerr/GastosTab'
 import EerrIntegralTab from '@/components/eerr/EerrIntegralTab'
+import { PageHeader, Tabs } from '@/components/ui/kit'
 
 const TABS = [
   { key: 'eerr', label: 'EERR Integral' },
@@ -16,23 +17,13 @@ export default function EstadoResultadosPage() {
   const [tab, setTab] = useState<string>('eerr')
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <h1 className="text-2xl font-extrabold text-brand tracking-tight mb-1">Estado de Resultados</h1>
-      <p className="text-sm text-gray-500 mb-5">Resultado del crematorio por mes: ingresos, costos y gastos (en neto).</p>
+    <div className="max-w-6xl mx-auto space-y-4">
+      <PageHeader
+        title="Estado de Resultados"
+        subtitle="Resultado del crematorio por mes: ingresos, costos y gastos (en neto)."
+      />
 
-      <div className="flex gap-2 flex-wrap mb-6">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === t.key ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={TABS.map(t => ({ key: t.key as string, label: t.label }))} value={tab} onChange={setTab} className="mb-2" />
 
       {tab === 'eerr' && <EerrIntegralTab />}
       {tab === 'gastos' && <GastosTab />}

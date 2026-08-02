@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment, type ReactNode } from 'react'
+import { Ban, BarChart3, Bug, CircleCheck, ClipboardList, Folder, HeartHandshake, Images, Megaphone, Moon, Music, PencilLine, Target, Trash2, TrendingUp, Users, type LucideIcon , Search } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatDate, formatDateTime, formatHoraDia } from '@/lib/dates'
 import CalendarioContent from '@/components/marketing/CalendarioContent'
@@ -122,8 +123,8 @@ type ImagenBanco = {
 
 const TABS = ['Campañas', 'Base', 'Nueva campaña'] as const
 type Tab = typeof TABS[number]
-const TAB_ICONS: Record<Tab, string> = {
-  'Campañas': '📊', 'Base': '👥', 'Nueva campaña': '✏️',
+const TAB_ICONS: Record<Tab, LucideIcon> = {
+  'Campañas': BarChart3, 'Base': Users, 'Nueva campaña': PencilLine,
 }
 
 /**
@@ -160,10 +161,10 @@ function NavIcon({ k, className = 'w-6 h-6' }: { k: Vista; className?: string })
   if (k === 'mail') return <GmailIcon className={className} />
   if (k === 'instagram') return <InstagramIcon className={className} />
   if (k === 'facebook') return <FacebookIcon className={className} />
-  if (k === 'tiktok') return <span className="text-xl leading-none">🎵</span>
-  if (k === 'metricas') return <span className="text-xl leading-none">📣</span>
-  if (k === 'embudo') return <span className="text-xl leading-none">📈</span>
-  return <span className="text-xl leading-none">🖼️</span>
+  if (k === 'tiktok') return <Music className={className} aria-hidden="true" />
+  if (k === 'metricas') return <Megaphone className={className} aria-hidden="true" />
+  if (k === 'embudo') return <TrendingUp className={className} aria-hidden="true" />
+  return <Images className={className} aria-hidden="true" />
 }
 
 // ── Estilo compartido de las tablas de métricas: grilla suave (líneas verticales +
@@ -201,7 +202,7 @@ export default function CampanasPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-extrabold text-brand tracking-tight">Marketing</h1>
-        <p className="text-sm text-gray-500">Planificá con el agente, enviá mailing, gestioná la publicidad y el banco de imágenes desde un solo lugar.</p>
+        <p className="text-sm text-gray-500">Planifica con el agente, envía mailing, gestiona la publicidad y el banco de imágenes desde un solo lugar.</p>
         <div className="flex gap-1.5 bg-white border border-gray-300 rounded-2xl p-2 shadow-md overflow-x-auto mt-3">
           {NAV.map(n => {
             const active = vista === n.key
@@ -241,7 +242,7 @@ export default function CampanasPage() {
       {bancoParalelo && (
         <div className="fixed top-0 right-0 h-full w-full sm:w-[380px] z-40 bg-white border-l border-gray-300 shadow-2xl flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-300 bg-brand text-white shrink-0">
-            <span className="font-semibold text-sm">🖼️ Banco en paralelo</span>
+            <span className="font-semibold text-sm inline-flex items-center gap-1.5"><Images className="w-4 h-4" aria-hidden="true" /> Banco en paralelo</span>
             <button onClick={() => setBancoParalelo(false)} title="Cerrar" aria-label="Cerrar" className="w-7 h-7 grid place-items-center rounded-lg hover:bg-white/15">✕</button>
           </div>
           <div className="flex-1 overflow-hidden">
@@ -617,10 +618,10 @@ const ESTADO_GOOGLE: Record<string, { label: string; cls: string }> = {
 // ── Auditoría de cuenta (Fase B) ──────────────────────────────────────────────
 type Hallazgo = { id: string; severidad: 'alta' | 'media' | 'baja'; area: string; titulo: string; detalle: string; accionSugerida: string; dolaresEstimados?: number }
 
-const SEMAFORO: Record<Hallazgo['severidad'], { icono: string; cls: string }> = {
-  alta: { icono: '🔴', cls: 'border-red-200 bg-red-50' },
-  media: { icono: '🟠', cls: 'border-amber-200 bg-amber-50' },
-  baja: { icono: '🟢', cls: 'border-emerald-200 bg-emerald-50' },
+const SEMAFORO: Record<Hallazgo['severidad'], { punto: string; cls: string }> = {
+  alta: { punto: 'bg-red-500', cls: 'border-red-200 bg-red-50' },
+  media: { punto: 'bg-amber-500', cls: 'border-amber-200 bg-amber-50' },
+  baja: { punto: 'bg-emerald-500', cls: 'border-emerald-200 bg-emerald-50' },
 }
 
 function AuditoriaGoogleAds() {
@@ -660,7 +661,7 @@ function AuditoriaGoogleAds() {
               return (
                 <div key={h.id} className={`rounded-lg border p-3 ${s.cls}`}>
                   <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <p className="text-sm font-semibold text-gray-800">{s.icono} {h.titulo} <span className="font-normal text-gray-400">({h.area})</span></p>
+                    <p className="text-sm font-semibold text-gray-800 inline-flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full shrink-0 ${s.punto}`} aria-hidden="true" /> {h.titulo} <span className="font-normal text-gray-400">({h.area})</span></p>
                     {h.dolaresEstimados != null && <span className="text-xs font-bold text-gray-700 shrink-0">~${Math.round(h.dolaresEstimados).toLocaleString('es-CL')}</span>}
                   </div>
                   <p className="text-xs text-gray-600 mt-1">{h.detalle}</p>
@@ -854,7 +855,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                     <MetTh right info="Dinero invertido en esta campaña durante el período.">Gasto</MetTh>
                     <MetTh right info="Conversiones atribuidas a la campaña.">Conv.</MetTh>
                     <MetTh right info="Costo promedio por conversión (Gasto ÷ Conversiones). Más bajo es mejor.">Costo/conv.</MetTh>
-                    <MetTh right info="Impression Share: % de las búsquedas elegibles donde apareciste. ⚠ = perdés apariciones por presupuesto o ranking.">Imp. Share</MetTh>
+                    <MetTh right info="Impression Share: % de las búsquedas elegibles donde apareciste. ⚠ = pierdes apariciones por presupuesto o ranking.">Imp. Share</MetTh>
                     <MetTh right info="Click-Through Rate: % de clics sobre impresiones (clics ÷ impresiones).">CTR</MetTh>
                     <MetTh right info="Costo por clic promedio.">CPC</MetTh>
                     <MetTh info="Tope de gasto diario configurado para la campaña.">Presupuesto/día</MetTh>
@@ -998,7 +999,7 @@ function GoogleAdsPanel({ periodo }: { periodo: string }) {
                         <td className="px-3 py-2 text-right">{fmt(t.clicks)}</td>
                         <td className="px-3 py-2 text-right">{t.conversiones.toLocaleString('es-CL')}</td>
                         <td className="px-3 py-2 text-right">
-                          <button disabled={busyId === `neg-${t.termino}`} onClick={() => agregarNegativa(t)} className="text-xs font-semibold text-red-700 border border-red-200 bg-red-50 rounded-lg px-2.5 py-1 hover:bg-red-100 disabled:opacity-50">🚫 Negativa</button>
+                          <button disabled={busyId === `neg-${t.termino}`} onClick={() => agregarNegativa(t)} className="text-xs font-semibold text-red-700 border border-red-200 bg-red-50 rounded-lg px-2.5 py-1 hover:bg-red-100 disabled:opacity-50 inline-flex items-center gap-1"><Ban className="w-3 h-3" aria-hidden="true" /> Negativa</button>
                         </td>
                       </tr>
                     ))}
@@ -1083,7 +1084,7 @@ function MetricasPanel() {
       <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h2 className="text-base font-bold text-gray-900">📣 Publicidad</h2>
+            <h2 className="text-base font-bold text-gray-900 inline-flex items-center gap-2"><Megaphone className="w-4 h-4" aria-hidden="true" /> Publicidad</h2>
             <p className="text-sm text-gray-500">Rendimiento y gestión de tus anuncios en vivo. El período aplica a las métricas.</p>
           </div>
           <div className="flex items-center gap-2">
@@ -1258,7 +1259,7 @@ function MailContent() {
                 : 'text-gray-600 hover:bg-white hover:text-gray-900'
             }`}
           >
-            <span aria-hidden>{TAB_ICONS[t]}</span>
+            {(() => { const Ico = TAB_ICONS[t]; return <Ico className="w-4 h-4" aria-hidden="true" /> })()}
             {t}
           </button>
         ))}
@@ -1278,7 +1279,7 @@ function DiagBanner({ d }: { d: Diagnostics }) {
       <div className="bg-sky-50 border border-sky-200 rounded-lg px-4 py-2.5 text-sm text-sky-900 flex items-start gap-2">
         <span className="inline-flex w-2 h-2 rounded-full bg-sky-500 mt-1.5 shrink-0"></span>
         <div>
-          <b>Modo desarrollo local</b> — el tracking de aperturas y clicks no funcionará desde acá porque Gmail no puede llegar a <code className="bg-sky-100 rounded px-1 text-[12px]">{d.base_url}</code>. En producción funciona automáticamente si configurás <code className="bg-sky-100 rounded px-1 text-[12px]">PUBLIC_APP_URL</code> en Vercel.
+          <b>Modo desarrollo local</b> — el tracking de aperturas y clicks no funcionará desde aquí porque Gmail no puede llegar a <code className="bg-sky-100 rounded px-1 text-[12px]">{d.base_url}</code>. En producción funciona automáticamente si configurás <code className="bg-sky-100 rounded px-1 text-[12px]">PUBLIC_APP_URL</code> en Vercel.
         </div>
       </div>
     )
@@ -1490,11 +1491,11 @@ function BasePanel() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <StatBox label="Total" value={stats.total} icon="📋" />
-        <StatBox label="Suscritos" value={stats.suscritos} accent="green" icon="✅" />
-        <StatBox label="Prospectos" value={stats.prospectos} accent="indigo" icon="🎯" />
-        <StatBox label="Clientes" value={stats.clientes} accent="emerald" icon="💚" />
-        <StatBox label="Inactivos" value={stats.inactivos} accent="gray" icon="💤" />
+        <StatBox label="Total" value={stats.total} icon={ClipboardList} />
+        <StatBox label="Suscritos" value={stats.suscritos} accent="green" icon={CircleCheck} />
+        <StatBox label="Prospectos" value={stats.prospectos} accent="indigo" icon={Target} />
+        <StatBox label="Clientes" value={stats.clientes} accent="emerald" icon={HeartHandshake} />
+        <StatBox label="Inactivos" value={stats.inactivos} accent="gray" icon={Moon} />
       </div>
 
       {vets.length > 0 && (
@@ -1707,7 +1708,7 @@ function BasePanel() {
   )
 }
 
-function StatBox({ label, value, accent, icon }: { label: string; value: number; accent?: 'green' | 'indigo' | 'emerald' | 'gray'; icon?: string }) {
+function StatBox({ label, value, accent, icon: Icon }: { label: string; value: number; accent?: 'green' | 'indigo' | 'emerald' | 'gray'; icon?: LucideIcon }) {
   const color = accent === 'green' ? 'text-green-700' :
                 accent === 'indigo' ? 'text-brand' :
                 accent === 'emerald' ? 'text-emerald-700' :
@@ -1719,7 +1720,7 @@ function StatBox({ label, value, accent, icon }: { label: string; value: number;
                'bg-gray-100'
   return (
     <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 px-4 py-3 flex items-center gap-3">
-      {icon && <div className={`w-10 h-10 rounded-xl grid place-items-center text-xl shrink-0 ${tint}`}>{icon}</div>}
+      {Icon && <div className={`w-10 h-10 rounded-xl grid place-items-center shrink-0 ${tint}`}><Icon className={`w-5 h-5 ${color}`} aria-hidden="true" /></div>}
       <div className="min-w-0">
         <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">{label}</div>
         <div className={`text-2xl font-bold ${color}`}>{value}</div>
@@ -2022,10 +2023,10 @@ function CampanasPanel({ refreshKey, onDuplicar }: {
                             <button onClick={() => duplicar(c)} className="bg-brand hover:bg-brand-dark text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Duplicar campaña">⧉</button>
                           )}
                           {(c.estado === 'enviado' || c.estado === 'fallido') && (
-                            <button onClick={() => abrirDebug(c)} className="bg-gray-700 hover:bg-gray-800 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Ver diagnóstico de tracking">🔍</button>
+                            <button onClick={() => abrirDebug(c)} className="bg-gray-700 hover:bg-gray-800 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Ver diagnóstico de tracking"><Search className="w-3.5 h-3.5" aria-hidden="true" /></button>
                           )}
                           {c.estado !== 'enviando' && (
-                            <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Eliminar campaña" aria-label="Eliminar campaña">🗑</button>
+                            <button onClick={() => eliminar(c)} className="bg-red-600 hover:bg-red-700 text-white w-7 h-7 grid place-items-center rounded-md text-sm shadow-md" title="Eliminar campaña" aria-label="Eliminar campaña"><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></button>
                           )}
                         </div>
                       </td>
@@ -2731,11 +2732,11 @@ function NuevaCampanaPanel({ initial, onCreada }: {
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setPickerOpen(true)}
                 className="inline-flex items-center gap-1 border-2 border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors">
-                🖼 Insertar imagen del banco
+                <Images className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Insertar imagen del banco
               </button>
               <button type="button" onClick={() => fileRef.current?.click()}
                 className="inline-flex items-center gap-1 border-2 border-brand/30 bg-brand/10 text-brand hover:bg-brand/10 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors">
-                📁 Cargar desde archivo (.html)
+                <Folder className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Cargar desde archivo (.html)
               </button>
             </div>
             <input ref={fileRef} type="file" accept=".html,text/html" onChange={onFileChange} className="hidden" />

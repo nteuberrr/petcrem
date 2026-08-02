@@ -6,6 +6,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid,
 } from 'recharts'
+import { ClipboardList, Coins, CreditCard, Droplets, Flame, Fuel, PawPrint, Recycle, TrendingUp } from 'lucide-react'
 import TimelineStatus from '@/components/TimelineStatus'
 import SolicitudesPendientes from '@/components/SolicitudesPendientes'
 import AgendaSemanal from '@/components/AgendaSemanal'
@@ -71,18 +72,18 @@ export default function DashboardPage() {
 
   // KPIs operativos (todos los usuarios)
   const kpisOperativos = [
-    { label: `Mascotas ${mesActual}`, value: fmtNumero(data.kpis.mascotas_mes), icon: '🐾', color: 'text-brand bg-brand/15' },
-    { label: 'Cremaciones del mes', value: fmtNumero(data.kpis.cremaciones_mes), icon: '🔥', color: 'text-rose-800 bg-rose-100' },
-    { label: 'Ciclos del mes', value: fmtNumero(data.kpis.ciclos_mes), icon: '♻️', color: 'text-orange-800 bg-orange-100' },
-    { label: 'Stock petróleo', value: fmtLitros(data.kpis.stock_petroleo), icon: '⛽', color: data.kpis.stock_bajo ? 'text-red-800 bg-red-100' : 'text-blue-800 bg-blue-100', alert: data.kpis.stock_bajo },
-    { label: 'Litros del mes', value: fmtLitros(data.kpis.litros_mes), icon: '🛢️', color: 'text-sky-800 bg-sky-100' },
+    { label: `Mascotas ${mesActual}`, value: fmtNumero(data.kpis.mascotas_mes), icon: PawPrint, color: 'text-brand bg-brand/15' },
+    { label: 'Cremaciones del mes', value: fmtNumero(data.kpis.cremaciones_mes), icon: Flame, color: 'text-rose-800 bg-rose-100' },
+    { label: 'Ciclos del mes', value: fmtNumero(data.kpis.ciclos_mes), icon: Recycle, color: 'text-orange-800 bg-orange-100' },
+    { label: 'Stock petróleo', value: fmtLitros(data.kpis.stock_petroleo), icon: Fuel, color: data.kpis.stock_bajo ? 'text-red-800 bg-red-100' : 'text-blue-800 bg-blue-100', alert: data.kpis.stock_bajo },
+    { label: 'Litros del mes', value: fmtLitros(data.kpis.litros_mes), icon: Droplets, color: 'text-sky-800 bg-sky-100' },
   ]
 
   // KPIs financieros (solo admin)
   const kpisFinancieros = [
-    { label: 'Ingresos del mes', value: fmtPrecio(data.kpis.ingresos_mes), icon: '💰', color: 'text-emerald-800 bg-emerald-100' },
-    { label: 'Pagos pendientes', value: fmtNumero(data.kpis.pendientes_pago), icon: '💳', color: 'text-rose-800 bg-rose-100' },
-    { label: 'Monto por cobrar', value: fmtPrecio(data.kpis.monto_pendiente), icon: '📋', color: 'text-amber-800 bg-amber-100' },
+    { label: 'Ingresos del mes', value: fmtPrecio(data.kpis.ingresos_mes), icon: Coins, color: 'text-emerald-800 bg-emerald-100' },
+    { label: 'Pagos pendientes', value: fmtNumero(data.kpis.pendientes_pago), icon: CreditCard, color: 'text-rose-800 bg-rose-100' },
+    { label: 'Monto por cobrar', value: fmtPrecio(data.kpis.monto_pendiente), icon: ClipboardList, color: 'text-amber-800 bg-amber-100' },
   ]
 
   const fmtDuracion = (mins: number): string => {
@@ -123,8 +124,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
         {kpisOperativos.map(k => (
           <div key={k.label} className={`bg-white rounded-2xl shadow-md border p-4 sm:p-5 flex items-center gap-3 sm:gap-4 ${k.alert ? 'border-red-300' : 'border-gray-300'}`}>
-            <div className={`shrink-0 inline-flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl text-xl sm:text-2xl ${k.color}`}>
-              {k.icon}
+            <div className={`shrink-0 inline-flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl ${k.color}`}>
+              <k.icon className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-lg sm:text-xl font-bold text-gray-900 truncate tabular-nums">{k.value}</p>
@@ -142,8 +143,8 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             {kpisFinancieros.map(k => (
               <div key={k.label} className="bg-white rounded-2xl shadow-md border border-gray-300 p-4 sm:p-5 flex items-center gap-3 sm:gap-4">
-                <div className={`shrink-0 inline-flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl text-xl sm:text-2xl ${k.color}`}>
-                  {k.icon}
+                <div className={`shrink-0 inline-flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl ${k.color}`}>
+                  <k.icon className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-lg sm:text-xl font-bold text-gray-900 truncate tabular-nums">{k.value}</p>
@@ -164,7 +165,7 @@ export default function DashboardPage() {
               className="text-left bg-white rounded-2xl shadow-md border border-gray-300 hover:border-gold hover:shadow-md p-4 sm:p-5 transition-all">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-gray-600">{r.label}</p>
-                <span className="text-xs text-brand-soft">📈</span>
+                <TrendingUp className="w-3.5 h-3.5 text-brand-soft" aria-hidden="true" />
               </div>
               <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1 tabular-nums">{r.value}</p>
               <p className="text-xs text-gray-600 mt-1 leading-tight">{r.sub}</p>

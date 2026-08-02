@@ -1,4 +1,5 @@
 'use client'
+import { FileSpreadsheet } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Card, Button } from '@/components/ui/kit'
 import { Badge } from '@/components/ui/Badge'
@@ -193,8 +194,8 @@ export default function LiquidacionesTab() {
                 {data.guardadas.length > 0 && (
                   <a
                     href={`/api/remuneraciones/periodos/${periodo}/libro`}
-                    className="inline-flex items-center rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >📗 Libro de remuneraciones</a>
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  ><FileSpreadsheet className="w-3.5 h-3.5" aria-hidden="true" /> Libro de remuneraciones</a>
                 )}
               </div>
             </Card>
@@ -223,8 +224,8 @@ export default function LiquidacionesTab() {
 function TarjetaEmpleado({ r, onAbrir }: { r: ResultadoUI; onAbrir: () => void }) {
   const t = r.liquidacion.totales
   return (
-    <Card className="transition hover:border-brand">
-      <button type="button" onClick={onAbrir} className="w-full rounded-2xl p-4 text-left">
+    <Card className="flex h-full transition hover:border-brand">
+      <button type="button" onClick={onAbrir} className="flex w-full flex-col rounded-2xl p-4 text-left">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-bold text-brand">{r.empleado_nombre}</p>
@@ -263,7 +264,7 @@ function TarjetaEmpleado({ r, onAbrir }: { r: ResultadoUI; onAbrir: () => void }
         )}
       </div>
 
-      <p className="mt-3 text-xs text-brand-soft underline">ver la liquidación completa</p>
+      <p className="mt-auto pt-3 text-xs text-brand-soft underline">ver la liquidación completa</p>
       </button>
     </Card>
   )

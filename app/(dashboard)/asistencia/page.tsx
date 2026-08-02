@@ -1,4 +1,5 @@
 'use client'
+import { Banknote } from 'lucide-react'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { fmtPrecio, fmtNumero, fmtFecha } from '@/lib/format'
@@ -429,6 +430,18 @@ export default function AsistenciaPage() {
     })
   }, [registros, filtroMes, filtroUsuario, filtroEstado, isAdmin, myId])
 
+  // Paginación: sin esto la tabla renderizaba el histórico completo (~200 filas,
+  // 13.000px de alto) y buscar un fichaje viejo era scrollear a ciegas.
+  const POR_PAGINA = 25
+  const [pagina, setPagina] = useState(1)
+  useEffect(() => { setPagina(1) }, [filtroMes, filtroUsuario, filtroEstado])
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA))
+  const paginaActual = Math.min(pagina, totalPaginas)
+  const visibles = useMemo(
+    () => filtrados.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA),
+    [filtrados, paginaActual],
+  )
+
   // Resumen por operador — totales separados por persona
   type ResumenOperador = {
     usuario_id: string; usuario_nombre: string
@@ -475,7 +488,7 @@ export default function AsistenciaPage() {
         {isAdmin && tab === 'retiros' && (
           <button onClick={abrirModalPago} disabled={retiros.filter(r => !r.pago_id).length === 0}
             className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-md">
-            💵 Pagar retiros adicionales
+            <Banknote className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Pagar retiros adicionales
           </button>
         )}
       </div>
@@ -652,7 +665,7 @@ export default function AsistenciaPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtrados.map(r => {
+                {visibles.map(r => {
                   const minNorm = parseFloat(r.minutos_normales) || 0
                   const minExtra = parseFloat(r.minutos_extra) || 0
                   const esFinde = r.es_findesemana === 'TRUE'
@@ -684,25 +697,25 @@ export default function AsistenciaPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           {isAdmin && estado !== 'aprobado' && minExtra > 0 && estado !== 'abierto' && (
                             <button onClick={() => aprobar(r.id, 'aprobado')}
-                              className="bg-emerald-500 hover:bg-emerald-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium">
                               ✓ Aprobar
                             </button>
                           )}
                           {isAdmin && estado !== 'rechazado' && minExtra > 0 && estado !== 'abierto' && (
                             <button onClick={() => aprobar(r.id, 'rechazado')}
-                              className="bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                              className="border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium">
                               ✗ Rechazar
                             </button>
                           )}
                           {puedeEditar && (
                             <button onClick={() => abrirEditar(r)}
-                              className="bg-brand hover:bg-brand-dark text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                              className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium">
                               Editar
                             </button>
                           )}
                           {puedeEditar && (
                             <button onClick={() => eliminar(r.id)}
-                              className="bg-red-500 hover:bg-red-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                              className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium">
                               Eliminar
                             </button>
                           )}
@@ -713,6 +726,24 @@ export default function AsistenciaPage() {
                 })}
               </tbody>
             </table>
+            {totalPaginas > 1 && (
+              <div className="flex items-center justify-between gap-3 flex-wrap border-t border-gray-200 px-4 py-3">
+                <p className="text-xs text-gray-600">
+                  {(paginaActual - 1) * POR_PAGINA + 1}–{Math.min(paginaActual * POR_PAGINA, filtrados.length)} de {filtrados.length} registros
+                </p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={paginaActual <= 1}
+                    className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed">
+                    Anterior
+                  </button>
+                  <span className="text-xs text-gray-600 tabular-nums">{paginaActual} / {totalPaginas}</span>
+                  <button onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))} disabled={paginaActual >= totalPaginas}
+                    className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed">
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -875,7 +906,7 @@ export default function AsistenciaPage() {
                             )}
                             {puedeEditar && (
                               <button onClick={() => eliminarRetiro(r.id)}
-                                className="bg-red-500 hover:bg-red-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                                className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium">
                                 Eliminar
                               </button>
                             )}
@@ -919,7 +950,7 @@ export default function AsistenciaPage() {
                       <td className="px-4 py-3 text-gray-500 text-xs">{p.comentarios || '—'}</td>
                       <td className="px-4 py-3">
                         <button onClick={() => anularPago(p)}
-                          className="bg-red-500 hover:bg-red-600 text-white px-2.5 py-1 rounded-md text-xs font-medium">
+                          className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium">
                           Anular
                         </button>
                       </td>

@@ -1,4 +1,5 @@
 'use client'
+import { Ban, Stethoscope } from 'lucide-react'
 import { use, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PageHeader, Card, Button } from '@/components/ui/kit'
@@ -134,7 +135,7 @@ export default function FichaEutanasiaPage({ params }: { params: Promise<{ id: s
   if (!ficha) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Eutanasia a domicilio" subtitle={`N° ${id}`} icon={<span className="text-3xl">🩺</span>} />
+        <PageHeader title="Eutanasia a domicilio" subtitle={`N° ${id}`} icon={<Stethoscope className="w-7 h-7 text-brand" aria-hidden="true" />} />
         <Card className="p-6">
           <p className="text-sm text-red-600">{error || 'No encontramos esta eutanasia.'}</p>
           <Button variant="secondary" className="mt-3" onClick={() => router.push('/dashboard')}>Volver al dashboard</Button>
@@ -152,7 +153,7 @@ export default function FichaEutanasiaPage({ params }: { params: Promise<{ id: s
       <PageHeader
         title={ficha.mascota_nombre || 'Eutanasia a domicilio'}
         subtitle={`Eutanasia a domicilio · N° ${ficha.id}${ficha.especie ? ` · ${ficha.especie}` : ''}${ficha.peso ? ` · ${ficha.peso} kg` : ''}`}
-        icon={<span className="text-3xl">🩺</span>}
+        icon={<Stethoscope className="w-7 h-7 text-brand" aria-hidden="true" />}
         actions={
           <>
             <Button variant="secondary" onClick={() => router.push('/dashboard')}>← Dashboard</Button>
@@ -208,7 +209,7 @@ export default function FichaEutanasiaPage({ params }: { params: Promise<{ id: s
               onClick={confirmarServicioCancelado}
               disabled={procesando}
               className="px-4 py-2 text-sm bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-xl">
-              🚫 Servicio cancelado
+              <Ban className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Servicio cancelado
             </button>
           </div>
         </Card>

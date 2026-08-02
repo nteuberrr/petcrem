@@ -1,4 +1,5 @@
 'use client'
+import { Camera, ImageIcon, Lightbulb } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Card, Button } from '@/components/ui/kit'
 import { useAccionUnica } from '@/lib/use-accion-unica'
@@ -108,7 +109,7 @@ export function ColeccionEditor({
     <div className="space-y-4">
       {ayuda && (
         <Card className="p-4 flex items-start gap-3 bg-cream">
-          <span className="text-xl">💡</span>
+          <Lightbulb className="w-5 h-5 text-gold" aria-hidden="true" />
           <div className="text-sm text-gray-600">{ayuda}</div>
         </Card>
       )}
@@ -132,7 +133,7 @@ export function ColeccionEditor({
                     {it[imagenCampo]
                       // eslint-disable-next-line @next/next/no-img-element
                       ? <img src={it[imagenCampo]} alt="" className="w-full h-full object-cover" />
-                      : <span className="text-gray-300 text-xl">🖼️</span>}
+                      : <ImageIcon className="w-5 h-5 text-gray-300" aria-hidden="true" />}
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
@@ -183,10 +184,10 @@ export function ColeccionEditor({
                           {val
                             // eslint-disable-next-line @next/next/no-img-element
                             ? <img src={val} alt="" className="w-full h-full object-cover" />
-                            : <span className="text-gray-300 text-xl">🖼️</span>}
+                            : <ImageIcon className="w-5 h-5 text-gray-300" aria-hidden="true" />}
                         </div>
                         <label className="text-xs text-brand-soft font-semibold cursor-pointer hover:underline">
-                          📷 {val ? 'Cambiar' : 'Subir'}
+                          <Camera className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {val ? 'Cambiar' : 'Subir'}
                           <input type="file" accept="image/*" className="hidden" disabled={procesando}
                             onChange={e => { const f = e.target.files?.[0]; if (f) subirImagen(c.name, f); e.target.value = '' }} />
                         </label>

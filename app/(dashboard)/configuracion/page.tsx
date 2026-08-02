@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession } from 'next-auth/react'
+import { Camera, Eye, EyeOff, FileText, Handshake, Lock, Package } from 'lucide-react'
 import { Toggle } from '@/components/ui/Toggle'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
@@ -405,7 +406,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
   if (status === 'loading') return <div className="p-8 text-gray-400 text-sm">Cargando...</div>
   if (!isAdmin) return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
-      <p className="text-4xl mb-4">🔒</p>
+      <Lock className="w-10 h-10 mx-auto mb-4 text-gray-400" aria-hidden="true" />
       <h2 className="text-xl font-bold text-gray-900 mb-2">Acceso restringido</h2>
       <p className="text-gray-500 text-sm">Solo administradores.</p>
     </div>
@@ -607,7 +608,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                     {indexado && (
                       <p className="px-4 sm:px-6 py-2 text-[11px] text-amber-800 bg-amber-50 border-b border-amber-200">
                         Estos tramos se copian solos desde los {indexado === 'general' ? 'precios generales' : 'precios de convenio'}:
-                        si los editás acá, el próximo cambio de esa tabla los reemplaza. Para darle tarifa propia, quitá el indexado.
+                        si los editas aquí, el próximo cambio de esa tabla los reemplaza. Para darle tarifa propia, quita el indexado.
                       </p>
                     )}
                     <table className="w-full text-sm">
@@ -695,7 +696,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                             await refresh('productos')
                           }
                         }}
-                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Eliminar</button>
+                          className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">Eliminar</button>
                       )}
                     </div>
                   </div>
@@ -712,7 +713,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
               <a href="/api/productos/catalogo" target="_blank" rel="noopener"
                 title="Descarga un PDF actualizado con las fotos y precios de los productos, listo para enviar a clientes"
                 className="inline-flex items-center gap-1.5 border border-brand text-brand hover:bg-brand/5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
-                📄 Descargar catálogo de productos
+                <FileText className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Descargar catálogo de productos
               </a>
               <button onClick={() => { setEditingProducto(null); setProdForm({ nombre: '', precio: '', foto_url: '', categoria: '', stock: '' }); setShowProdModal(true) }}
                 className="shrink-0 whitespace-nowrap bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">+ Agregar</button>
@@ -751,7 +752,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                             <div key={p.id} className="flex items-center gap-4 px-6 py-4 flex-wrap">
                               {p.foto_url
                                 ? <img src={p.foto_url} alt={p.nombre} className="w-12 h-12 object-cover rounded-lg border border-gray-300" />
-                                : <div className="w-12 h-12 bg-gray-50 rounded-lg border border-gray-300 flex items-center justify-center text-gray-300 text-xl">📦</div>
+                                : <div className="w-12 h-12 bg-gray-50 rounded-lg border border-gray-300 flex items-center justify-center text-gray-300"><Package className="w-6 h-6" aria-hidden="true" /></div>
                               }
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{p.nombre}</p>
@@ -770,7 +771,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                                 {isAdmin && (
                                   <button
                                     onClick={() => { if (confirm(`¿Eliminar "${p.nombre}"?`)) del(`/api/productos?id=${p.id}`) }}
-                                    className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Eliminar</button>
+                                    className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">Eliminar</button>
                                 )}
                               </div>
                             </div>
@@ -811,7 +812,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                       {isAdmin && (
                         <button
                           onClick={() => { if (confirm(`¿Eliminar "${e.nombre}"?`)) del(`/api/especies?id=${e.id}`) }}
-                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Eliminar</button>
+                          className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">Eliminar</button>
                       )}
                     </div>
                   </td>
@@ -850,7 +851,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                       {isAdmin && (
                         <button
                           onClick={() => { if (confirm(`¿Eliminar "${t.nombre}"?`)) del(`/api/servicios?id=${t.id}`) }}
-                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Eliminar</button>
+                          className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">Eliminar</button>
                       )}
                     </div>
                   </td>
@@ -896,7 +897,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                       {isAdmin && (
                         <button
                           onClick={() => { if (confirm(`¿Eliminar "${o.nombre}"?`)) del(`/api/servicios?tipo=otros&id=${o.id}`) }}
-                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Eliminar</button>
+                          className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">Eliminar</button>
                       )}
                     </div>
                   </td>
@@ -936,9 +937,9 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                           {d.foto_url
                             // eslint-disable-next-line @next/next/no-img-element
                             ? <img src={d.foto_url} alt={d.nombre} className="w-full h-full object-contain" />
-                            : <span className="text-gray-300 text-lg">🤝</span>}
+                            : <Handshake className="w-5 h-5 text-gray-300" aria-hidden="true" />}
                         </span>
-                        <span className="text-xs text-brand-soft font-semibold group-hover:underline">📷</span>
+                        <Camera className="w-4 h-4 text-brand-soft" aria-hidden="true" />
                         <input type="file" accept="image/*" className="hidden"
                           onChange={async e => {
                             const f = e.target.files?.[0]; e.target.value = ''
@@ -963,7 +964,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                         {isAdmin && (
                           <button
                             onClick={() => { if (confirm(`¿Eliminar "${d.nombre}"?`)) del(`/api/descuentos?id=${d.id}`) }}
-                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">Eliminar</button>
+                            className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">Eliminar</button>
                         )}
                       </div>
                     </td>
@@ -1051,7 +1052,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                         </button>
                         <button
                           onClick={() => { if (confirm(`¿Eliminar al usuario "${u.nombre}"?`)) del(`/api/usuarios?id=${u.id}`) }}
-                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                          className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">
                           Eliminar
                         </button>
                       </div>
@@ -1381,7 +1382,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
             }} />
             <button type="button" onClick={() => fileInputRef.current?.click()}
               className="mt-1 flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 w-full transition-colors">
-              <span>📷</span>
+              <Camera className="w-4 h-4" aria-hidden="true" />
               {uploadingFoto ? <span className="text-brand-soft">Subiendo...</span> : <span>{prodForm.foto_url ? 'Cambiar foto' : 'Seleccionar foto'}</span>}
             </button>
             {prodForm.foto_url && <img src={prodForm.foto_url} alt="preview" className="mt-2 w-20 h-20 object-cover rounded-lg" />}
@@ -1771,7 +1772,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
               <button type="button" onClick={() => setMostrarPassword(v => !v)}
                 className="absolute inset-y-0 right-0 px-3 text-gray-400 hover:text-gray-700 text-sm"
                 title={mostrarPassword ? 'Ocultar' : 'Mostrar'}>
-                {mostrarPassword ? '🙈' : '👁'}
+                {mostrarPassword ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
               </button>
             </div>
           </div>
@@ -1972,7 +1973,7 @@ function DatosPersonalesPanel() {
         </div>
         <a href="/api/empresa/informe" target="_blank" rel="noopener"
           className="inline-flex items-center gap-1.5 shrink-0 bg-brand hover:bg-brand-dark text-white px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors">
-          📄 Descargar informe corporativo
+          <FileText className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Descargar informe corporativo
         </a>
       </div>
 

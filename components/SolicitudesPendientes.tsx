@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { fmtFecha, fmtPrecio } from '@/lib/format'
+import { DollarSign, Bell, Hospital, User, MapPin, CalendarDays, Stethoscope, Clock } from 'lucide-react'
 
 type Solicitud = {
   id: string; cliente_nombre: string; nombre_mascota: string; peso: string
@@ -40,7 +41,7 @@ function Valor({ monto, estimado = true, detalle }: { monto?: number; estimado?:
   if (monto == null) return null
   return (
     <p className="text-[11px] leading-tight" title={detalle}>
-      <span className="font-bold text-gray-900">💲 {monto > 0 ? fmtPrecio(monto) : 'Falta el peso'}</span>
+      <span className="font-bold text-gray-900"><DollarSign className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {monto > 0 ? fmtPrecio(monto) : 'Falta el peso'}</span>
       {monto > 0 && estimado && <span className="ml-1 text-[10px] font-semibold text-gray-500">(estimado)</span>}
     </p>
   )
@@ -132,7 +133,7 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
 
       <section>
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-lg">🔔</span>
+          <Bell className="w-5 h-5 text-amber-500" aria-hidden="true" />
           <h2 className="text-sm font-bold text-gray-800">Solicitudes de retiro pendientes ({pendientes.length})</h2>
         </div>
         {pendientes.length === 0 ? (
@@ -149,11 +150,11 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
                       <span className="text-[10px] font-semibold text-red-800 bg-red-100 border border-red-200 px-1.5 py-0.5 rounded shrink-0">{SERVICIO[s.tipo_servicio] || s.tipo_servicio}</span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-700 truncate mt-0.5">{esVet(s) ? '🏥 ' : ''}{quien(s)}</p>
+                  <p className="text-xs text-gray-700 truncate mt-0.5">{esVet(s) && <Hospital className="w-3 h-3 shrink-0 inline-block align-[-2px] mr-1" aria-hidden="true" />}{quien(s)}</p>
                   {s.peso && <p className="text-[11px] text-gray-500">{s.peso} kg</p>}
                   <Valor monto={s.valor} estimado={s.valor_estimado !== false} detalle="Valor a cobrar por el servicio agendado" />
-                  <p className="text-[11px] text-gray-500 mt-1 leading-tight truncate">📍 {direccion(s)}</p>
-                  <p className="text-[11px] text-gray-500 leading-tight">🗓 {cuando(s)}</p>
+                  <p className="text-[11px] text-gray-500 mt-1 leading-tight truncate"><MapPin className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {direccion(s)}</p>
+                  <p className="text-[11px] text-gray-500 leading-tight"><CalendarDays className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {cuando(s)}</p>
                 </div>
                 {puedeResolver ? (
                   <div className="flex gap-1.5">
@@ -200,11 +201,11 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
                   )}
                 </div>
                 <p className="font-bold text-gray-900 text-sm truncate mt-1">{s.nombre_mascota || '—'}</p>
-                <p className="text-xs text-gray-700 truncate">{esVet(s) ? '🏥 ' : '👤 '}{quien(s)}</p>
+                <p className="text-xs text-gray-700 truncate">{esVet(s) ? <Hospital className="w-3 h-3 shrink-0 inline-block align-[-2px] mr-1" aria-hidden="true" /> : <User className="w-3 h-3 shrink-0 inline-block align-[-2px] mr-1" aria-hidden="true" />}{quien(s)}</p>
                 {s.peso && <p className="text-[11px] text-gray-500">{s.peso} kg</p>}
                 <Valor monto={s.valor} estimado={s.valor_estimado !== false} detalle="Valor a cobrar por el servicio agendado" />
-                <p className="text-[11px] text-gray-600 leading-tight mt-auto">🗓 {cuando(s)}</p>
-                <p className="text-[11px] text-gray-600 leading-tight truncate">📍 {direccion(s)}</p>
+                <p className="text-[11px] text-gray-600 leading-tight mt-auto"><CalendarDays className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {cuando(s)}</p>
+                <p className="text-[11px] text-gray-600 leading-tight truncate"><MapPin className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {direccion(s)}</p>
               </div>
             ))}
           </div>
@@ -215,7 +216,7 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
 
       <section>
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-lg">🩺</span>
+          <Stethoscope className="w-5 h-5 text-rose-500" aria-hidden="true" />
           <h2 className="text-sm font-bold text-gray-800">Eutanasias a domicilio ({eutanasias.length})</h2>
         </div>
         {eutanasias.length === 0 ? (
@@ -229,7 +230,7 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
               const horaConfirmada = !!(e.hora_retiro_crematorio || '').trim()
               const cls = horaConfirmada ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'
               const badge = horaConfirmada
-                ? <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">🕒 Hora confirmada</span>
+                ? <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded"><Clock className="w-3 h-3 inline-block align-[-2px]" aria-hidden="true" /> Hora confirmada</span>
                 : <span className="text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">{e.vet_nombre ? '⏳ Esperando hora del vet' : '⏳ Buscando vet'}</span>
               const cuandoEut = `${e.fecha_servicio ? fmtFecha(e.fecha_servicio) : '—'}${e.hora_servicio ? ` · ${e.hora_servicio}` : ''}`
               return (
@@ -240,14 +241,14 @@ export default function SolicitudesPendientes({ puedeResolver = false }: { puede
                   className={`rounded-xl border-2 ${cls} shadow-sm p-3 flex flex-col gap-1 min-h-[150px] cursor-pointer hover:brightness-95 transition-all`}>
                   <div className="flex items-center justify-between gap-1">{badge}</div>
                   <p className="font-bold text-gray-900 text-sm truncate mt-1">{e.mascota_nombre || '—'}</p>
-                  <p className="text-xs text-gray-700 truncate">👤 {e.cliente_nombre || '—'}</p>
-                  {e.vet_nombre && <p className="text-[11px] text-gray-600 truncate">🩺 {e.vet_nombre}</p>}
+                  <p className="text-xs text-gray-700 truncate"><User className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {e.cliente_nombre || '—'}</p>
+                  {e.vet_nombre && <p className="text-[11px] text-gray-600 truncate"><Stethoscope className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {e.vet_nombre}</p>}
                   <Valor
                     monto={e.valor}
                     detalle={`Eutanasia ${fmtPrecio(e.valor_eutanasia ?? 0)} (fuera de boleta)${(e.valor_cremacion ?? 0) > 0 ? ` + cremación ${fmtPrecio(e.valor_cremacion!)}` : ''}`}
                   />
-                  <p className="text-[11px] text-gray-600 leading-tight mt-auto">🗓 {cuandoEut}{e.hora_retiro_crematorio ? ` · retiro ${e.hora_retiro_crematorio}` : ''}</p>
-                  <p className="text-[11px] text-gray-600 leading-tight truncate">📍 {[e.direccion, e.comuna].filter(Boolean).join(', ') || '—'}</p>
+                  <p className="text-[11px] text-gray-600 leading-tight mt-auto"><CalendarDays className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {cuandoEut}{e.hora_retiro_crematorio ? ` · retiro ${e.hora_retiro_crematorio}` : ''}</p>
+                  <p className="text-[11px] text-gray-600 leading-tight truncate"><MapPin className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {[e.direccion, e.comuna].filter(Boolean).join(', ') || '—'}</p>
                   {e.cliente_id && (
                     <button
                       onClick={ev => { ev.stopPropagation(); abrirFicha(e.cliente_id) }}

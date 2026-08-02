@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef, Fragment, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { Archive, Clock, Flame, GalleryHorizontal, Image, RefreshCw } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatDate } from '@/lib/dates'
 import { Markdown } from '@/components/marketing/Markdown'
@@ -36,14 +37,14 @@ type Item = {
 type Msg = { rol: 'usuario' | 'agente'; texto: string }
 
 const CANALES = [
-  { key: 'email', label: 'Email', icon: '✉️' },
-  { key: 'instagram', label: 'Instagram', icon: '📸' },
-  { key: 'facebook', label: 'Facebook', icon: '👍' },
+  { key: 'email', label: 'Email' },
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'facebook', label: 'Facebook' },
 ] as const
-const CANAL_MAP: Record<string, { label: string; icon: string; cls: string; chip: string }> = {
-  email: { label: 'Email', icon: '✉️', cls: 'bg-brand/10 text-brand', chip: 'bg-brand/10 text-brand border-brand/30' },
-  instagram: { label: 'Instagram', icon: '📸', cls: 'bg-pink-100 text-pink-700', chip: 'bg-pink-100 text-pink-800 border-pink-200' },
-  facebook: { label: 'Facebook', icon: '👍', cls: 'bg-blue-100 text-blue-700', chip: 'bg-blue-100 text-blue-800 border-blue-200' },
+const CANAL_MAP: Record<string, { label: string; cls: string; chip: string }> = {
+  email: { label: 'Email', cls: 'bg-brand/10 text-brand', chip: 'bg-brand/10 text-brand border-brand/30' },
+  instagram: { label: 'Instagram', cls: 'bg-pink-100 text-pink-700', chip: 'bg-pink-100 text-pink-800 border-pink-200' },
+  facebook: { label: 'Facebook', cls: 'bg-blue-100 text-blue-700', chip: 'bg-blue-100 text-blue-800 border-blue-200' },
 }
 const ESTADO_MAP: Record<string, { label: string; cls: string; dot: string }> = {
   propuesta: { label: 'Propuesta', cls: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400' },
@@ -68,7 +69,7 @@ const AUDIENCIAS = [
 ]
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const QUICK = [
-  'Armá un plan de campañas para este mes, repartido por canal.',
+  'Arma un plan de campañas para este mes, repartido por canal.',
   'Dame 3 ideas de contenido para Instagram esta semana.',
   'Propón un correo para captar nuevas clínicas veterinarias.',
 ]
@@ -230,7 +231,7 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
       if (r.ok) {
         const its: Item[] = d.items || []
         setItems(its)
-        // Performance de los posts publicados → para destacar (🔥) los que rinden bien.
+        // Performance de los posts publicados → para destacarlos.
         const pubIds = its.filter(x => x.post_externo_id).map(x => x.post_externo_id)
         if (pubIds.length) {
           fetch('/api/mailing/calendario/performance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: pubIds }) })
@@ -329,7 +330,7 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
     if ((!t && adjuntos.length === 0) || pensando) return
     const adj = adjuntos
     const textoBase = t || '(imagen adjunta)'
-    const textoMostrado = adj.length ? `${textoBase}\n\n📎 ${adj.length} imagen(es) adjunta(s)` : textoBase
+    const textoMostrado = adj.length ? `${textoBase}\n\n ${adj.length} imagen(es) adjunta(s)` : textoBase
     const nuevos = [...msgs, { rol: 'usuario' as const, texto: textoMostrado }]
     setMsgs(nuevos); setInput(''); setAdjuntos([]); setPensando(true)
     try {
@@ -384,10 +385,10 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
         <MoreMenu>{(close) => (
           <>
             {puedeGenerar && it.cuerpo && (
-              <MenuItem onClick={() => { close(); generar(it.id) }}>🔄 Regenerar contenido</MenuItem>
+              <MenuItem onClick={() => { close(); generar(it.id) }}><RefreshCw className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Regenerar contenido</MenuItem>
             )}
             {social && activa && it.cuerpo && puedeGenerar && (
-              <MenuItem onClick={() => { close(); nuevaImagen(it.id) }}>🖼️ Nueva imagen</MenuItem>
+              <MenuItem onClick={() => { close(); nuevaImagen(it.id) }}><Image className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Nueva imagen</MenuItem>
             )}
             {social && it.estado === 'programada' && (
               <MenuItem onClick={() => { close(); patch(it.id, { estado: 'aprobada' }, 'desprog') }}>⏸️ Desprogramar</MenuItem>
@@ -402,7 +403,7 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
             )}
             <MenuItem onClick={() => { close(); setEditItem(it) }}>✏️ Editar</MenuItem>
             {activa
-              ? <MenuItem onClick={() => { close(); patch(it.id, { activa: 'FALSE' }, 'inact') }}>🗄️ Inactivar</MenuItem>
+              ? <MenuItem onClick={() => { close(); patch(it.id, { activa: 'FALSE' }, 'inact') }}><Archive className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Inactivar</MenuItem>
               : <MenuItem onClick={() => { close(); patch(it.id, { activa: 'TRUE' }, 'act') }}>♻️ Activar</MenuItem>}
             <div className="my-1 border-t border-gray-100" />
             <MenuItem danger onClick={() => { close(); eliminar(it.id) }}>✕ Eliminar</MenuItem>
@@ -429,7 +430,7 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
           </thead>
           <tbody className="divide-y divide-gray-100">
             {its.map(it => {
-              const cm = CANAL_MAP[it.canal] || { label: it.canal, icon: '•', cls: 'bg-gray-100 text-gray-600' }
+              const cm = CANAL_MAP[it.canal] || { label: it.canal, cls: 'bg-gray-100 text-gray-600' }
               const em = ESTADO_MAP[it.estado] || { label: it.estado, cls: 'bg-gray-100 text-gray-600' }
               return (
                 <Fragment key={it.id}>
@@ -441,8 +442,8 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
                       <div className="font-medium text-gray-900">
                         {it.favorita === 'TRUE' && <span className="text-amber-500 mr-1" title="Favorita">★</span>}
                         <span className="text-gray-400 font-normal mr-1">#{it.id}</span>{it.titulo || it.idea || '(sin título)'}
-                        {nImgs(it) > 1 && <span className="ml-1 text-[10px] font-semibold text-pink-600">🎠 {nImgs(it)}</span>}
-                        {destacada(it) && <span className="ml-1 text-[10px]" title={`Buen rendimiento (${perf[it.post_externo_id] ?? 0} interacciones)`}>🔥</span>}
+                        {nImgs(it) > 1 && <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] font-semibold text-pink-600"><GalleryHorizontal className="w-3 h-3" aria-hidden="true" />{nImgs(it)}</span>}
+                        {destacada(it) && <span className="ml-1 text-[10px]" title={`Buen rendimiento (${perf[it.post_externo_id] ?? 0} interacciones)`}><Flame className="w-3 h-3 text-orange-500" aria-hidden="true" /></span>}
                       </div>
                       {it.titulo && it.idea && <div className="text-xs text-gray-500 line-clamp-2">{it.idea}</div>}
                       <div className="text-[11px] text-gray-400 mt-0.5">{it.audiencia && `${it.audiencia}`}{it.objetivo && ` · ${OBJETIVO_LABEL[it.objetivo] || it.objetivo}`}</div>
@@ -508,7 +509,7 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
           <AgenteIcon className="w-9 h-9 shrink-0" />
           <div>
             <h2 className="text-base font-bold text-gray-900 leading-tight">Calendario y Agente de Marketing</h2>
-            <p className="text-sm text-gray-500">El agente propone el plan; vos aprobás, generás y publicás. Nada se publica solo.</p>
+            <p className="text-sm text-gray-500">El agente propone el plan; tú apruebas, generas y publicas. Nada se publica solo.</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -523,9 +524,9 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
           {/* Barra de herramientas: vista + filtros, agrupados en una tarjeta */}
           <div className="rounded-2xl border border-gray-300 bg-white shadow-sm px-3 py-2.5 flex gap-2.5 flex-wrap items-center text-sm">
             <div className="inline-flex rounded-xl border border-gray-300 overflow-hidden">
-              <button onClick={() => setVista('calendario')} className={`px-3 py-1.5 font-medium transition-colors ${vista === 'calendario' ? 'bg-brand text-white' : 'text-gray-600 hover:bg-gray-50'}`}>📅 Mes</button>
-              <button onClick={() => setVista('semana')} className={`px-3 py-1.5 font-medium transition-colors ${vista === 'semana' ? 'bg-brand text-white' : 'text-gray-600 hover:bg-gray-50'}`}>🗓️ Semana</button>
-              <button onClick={() => setVista('lista')} className={`px-3 py-1.5 font-medium transition-colors ${vista === 'lista' ? 'bg-brand text-white' : 'text-gray-600 hover:bg-gray-50'}`}>📋 Lista</button>
+              <button onClick={() => setVista('calendario')} className={`px-3 py-1.5 font-medium transition-colors ${vista === 'calendario' ? 'bg-brand text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Mes</button>
+              <button onClick={() => setVista('semana')} className={`px-3 py-1.5 font-medium transition-colors ${vista === 'semana' ? 'bg-brand text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Semana</button>
+              <button onClick={() => setVista('lista')} className={`px-3 py-1.5 font-medium transition-colors ${vista === 'lista' ? 'bg-brand text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Lista</button>
             </div>
             <div className="h-6 w-px bg-gray-200" />
             <div className="inline-flex rounded-xl border border-gray-300 overflow-hidden">
@@ -606,7 +607,7 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
                               const dot = ESTADO_MAP[it.estado]?.dot || 'bg-gray-300'
                               const tachado = it.estado === 'descartada'
                               return (
-                                <div key={it.id} title={`${CANAL_MAP[it.canal]?.label || it.canal} · ${ESTADO_MAP[it.estado]?.label || it.estado} · arrastrá para reprogramar`}
+                                <div key={it.id} title={`${CANAL_MAP[it.canal]?.label || it.canal} · ${ESTADO_MAP[it.estado]?.label || it.estado} · arrastra para reprogramar`}
                                   draggable
                                   onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('text/plain', it.id); e.dataTransfer.effectAllowed = 'move' }}
                                   className={`flex items-center gap-1 px-1.5 py-1 rounded-md border text-[10px] leading-tight cursor-grab active:cursor-grabbing ${cm.chip} ${tachado ? 'opacity-50 line-through' : ''}`}>
@@ -676,7 +677,7 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
                               <button key={it.id} onClick={() => setDiaSel(iso)}
                                 draggable
                                 onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('text/plain', it.id); e.dataTransfer.effectAllowed = 'move' }}
-                                title={`${CANAL_MAP[it.canal]?.label || it.canal} · ${ESTADO_MAP[it.estado]?.label || it.estado} · arrastrá para reprogramar`}
+                                title={`${CANAL_MAP[it.canal]?.label || it.canal} · ${ESTADO_MAP[it.estado]?.label || it.estado} · arrastra para reprogramar`}
                                 className={`w-full text-left flex items-start gap-1 px-1.5 py-1.5 rounded-lg border text-[11px] leading-tight cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow ${cm.chip} ${tachado ? 'opacity-50 line-through' : ''}`}>
                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1 ${dot}`} />
                                 <CanalIcon canal={it.canal} className="w-3.5 h-3.5 shrink-0 mt-0.5" />
@@ -712,7 +713,7 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
               {archivados.length > 0 && (
                 <div>
                   <button onClick={() => setVerInactivas(v => !v)} className="text-sm font-bold text-brand inline-flex items-center gap-1 px-1 py-1.5">
-                    <span className="text-gray-400">{verInactivas ? '▾' : '▸'}</span> 🗄️ Inactivas (archivo) <span className="text-gray-400 font-medium">({archivados.length})</span>
+                    <span className="text-gray-400">{verInactivas ? '▾' : '▸'}</span> <Archive className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Inactivas (archivo) <span className="text-gray-400 font-medium">({archivados.length})</span>
                   </button>
                   {verInactivas && <div className="mt-1"><TablaItems its={archivados} /></div>}
                 </div>
@@ -738,7 +739,7 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
             <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50">
               {msgs.length === 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs text-gray-500 px-1">Probá con:</p>
+                  <p className="text-xs text-gray-500 px-1">Prueba con:</p>
                   {QUICK.map((q, i) => (
                     <button key={i} onClick={() => enviar(q)} className="block w-full text-left text-xs px-3 py-2.5 rounded-xl border border-gray-300 bg-white hover:border-gold hover:shadow-md text-gray-700 transition-all">{q}</button>
                   ))}
@@ -779,7 +780,7 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
                 </button>
                 <textarea value={input} onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(input) } }}
-                  rows={2} placeholder="Escribile al agente…"
+                  rows={2} placeholder="Escríbele al agente…"
                   className="flex-1 text-sm border border-gray-300 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand" />
                 <button disabled={pensando || (!input.trim() && adjuntos.length === 0)} onClick={() => enviar(input)} className="px-4 py-2 rounded-xl bg-brand text-white text-sm font-medium hover:bg-brand-dark disabled:opacity-50 self-end shadow-md">Enviar</button>
               </div>
@@ -794,7 +795,7 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
           <div className="space-y-3">
             {itemsDe(diaSel).length === 0 && <p className="text-sm text-gray-500">No hay campañas este día.</p>}
             {itemsDe(diaSel).map(it => {
-              const cm = CANAL_MAP[it.canal] || { label: it.canal, icon: '•', cls: 'bg-gray-100 text-gray-600' }
+              const cm = CANAL_MAP[it.canal] || { label: it.canal, cls: 'bg-gray-100 text-gray-600' }
               const em = ESTADO_MAP[it.estado] || { label: it.estado, cls: 'bg-gray-100 text-gray-600' }
               const thumb = thumbDe(it)
               return (
@@ -805,13 +806,13 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
                         <div className="flex items-center gap-2 flex-wrap mb-1.5">
                           <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cm.cls}`}><CanalIcon canal={it.canal} className="w-3.5 h-3.5" /> {cm.label}</span>
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${em.cls}`}><span className={`w-1.5 h-1.5 rounded-full ${ESTADO_MAP[it.estado]?.dot || 'bg-gray-300'}`} />{em.label}</span>
-                          {it.hora && <span className="text-[11px] font-semibold text-gray-600">🕐 {it.hora}</span>}
+                          {it.hora && <span className="text-[11px] font-semibold text-gray-600"><Clock className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {it.hora}</span>}
                           {it.objetivo && <span className="text-[11px] text-gray-400">· {OBJETIVO_LABEL[it.objetivo] || it.objetivo}</span>}
                         </div>
                         <div className="font-semibold text-gray-900 text-sm leading-snug">
                           {it.favorita === 'TRUE' && <span className="text-amber-500 mr-1" title="Favorita">★</span>}
                           <span className="text-gray-400 font-normal mr-1">#{it.id}</span>{it.titulo || it.idea || '(sin título)'}
-                          {nImgs(it) > 1 && <span className="ml-1 text-[10px] font-semibold text-pink-600">🎠 {nImgs(it)}</span>}
+                          {nImgs(it) > 1 && <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] font-semibold text-pink-600"><GalleryHorizontal className="w-3 h-3" aria-hidden="true" />{nImgs(it)}</span>}
                         </div>
                         {it.titulo && it.idea && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{it.idea}</div>}
                       </div>
@@ -885,7 +886,7 @@ function ItemForm({ item, fechaInicial, onClose, onSaved }: { item?: Item; fecha
             <input type="time" value={hora} onChange={e => setHora(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand" /></label>
           <label className="block text-sm"><span className="text-gray-600">Canal</span>
             <select value={canal} onChange={e => setCanal(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand">
-              {CANALES.map(c => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
+              {CANALES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select></label>
           <label className="block text-sm"><span className="text-gray-600">Audiencia</span>
             <select value={audiencia} onChange={e => setAudiencia(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand">
@@ -906,7 +907,7 @@ function ItemForm({ item, fechaInicial, onClose, onSaved }: { item?: Item; fecha
               <textarea value={cuerpo} onChange={e => setCuerpo(e.target.value)} rows={5} className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand font-mono text-xs" /></label>
             {esCarrusel ? (
               <div className="text-sm rounded-lg bg-pink-50 border border-pink-200 text-pink-800 px-3 py-2">
-                🎠 Este post es un <b>carrusel de {nImgs(item)} imágenes</b>. Para cambiar las imágenes usá <b>Regenerar</b> (editar la URL acá no afecta al carrusel).
+                <GalleryHorizontal className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Este post es un <b>carrusel de {nImgs(item)} imágenes</b>. Para cambiar las imágenes usa <b>Regenerar</b> (editar la URL acá no afecta al carrusel).
               </div>
             ) : (
               <label className="block text-sm"><span className="text-gray-600">URL de imagen</span>
@@ -942,7 +943,7 @@ function PreviewModal({ item, onClose, onUpdated }: { item: Item; onClose: () =>
   // Descarga mismo-origen (el atributo download se ignora cross-origin en R2).
   const dl = (url: string) => `/api/mailing/imagenes/descargar?url=${encodeURIComponent(url)}`
   async function regenerar(indice: number) {
-    const instruccion = window.prompt('¿Qué querés ajustar de esta imagen? (ej. "corregí las manos", "poné el logo arriba a la derecha")')
+    const instruccion = window.prompt('¿Qué quieres ajustar de esta imagen? (ej. "corrige las manos", "pon el logo arriba a la derecha")')
     if (!instruccion?.trim()) return
     setEditando(indice)
     try {
@@ -961,14 +962,14 @@ function PreviewModal({ item, onClose, onUpdated }: { item: Item; onClose: () =>
             {item.titulo && <div className="text-sm"><span className="text-gray-500">Asunto:</span> <span className="font-medium">{item.titulo}</span></div>}
             <iframe title="preview" srcDoc={item.cuerpo} className="w-full h-[60vh] border border-gray-300 rounded-lg bg-white" />
             <div className="text-xs rounded-lg bg-brand/10 border border-brand/30 text-brand px-3 py-2">
-              ✉️ Este correo quedó como <b>borrador en Mailing</b> (Marketing → Mailing → Campañas). Desde ahí lo editás, elegís la segmentación y lo enviás por lotes con seguimiento.
+              ✉️ Este correo quedó como <b>borrador en Mailing</b> (Marketing → Mailing → Campañas). Desde ahí lo editas, eliges la segmentación y lo envías por lotes con seguimiento.
             </div>
           </>
         ) : (
           <>
             {esCarrusel && (
               <div className="text-xs font-medium text-gray-500 inline-flex items-center gap-1">
-                <span className="px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">🎠 Carrusel · {imgs.length} imágenes</span>
+                <span className="px-2 py-0.5 rounded-full bg-pink-100 text-pink-700"><GalleryHorizontal className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Carrusel · {imgs.length} imágenes</span>
                 <span className="text-gray-400">tocá una para ampliarla y descargarla</span>
               </div>
             )}

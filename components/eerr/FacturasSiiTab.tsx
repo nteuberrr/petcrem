@@ -136,7 +136,7 @@ export default function FacturasSiiTab() {
             className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50">
             {subiendo ? 'Subiendo…' : '⬆ Subir compras (CSV)'}
           </button>
-          <p className="text-xs text-gray-400">Podés elegir varios archivos.{ultimaCarga ? ` · Última carga: ${formatDate(ultimaCarga)}` : ''}</p>
+          <p className="text-xs text-gray-400">Puedes elegir varios archivos.{ultimaCarga ? ` · Última carga: ${formatDate(ultimaCarga)}` : ''}</p>
         </div>
 
         {/* Filtros + buscar en una fila */}

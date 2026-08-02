@@ -1,4 +1,5 @@
 'use client'
+import { Bot, Paperclip, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { formatDateTime } from '@/lib/dates'
 
@@ -299,7 +300,7 @@ export default function MensajesView() {
                   <button onClick={() => setAgentePausado(!conv.etiquetas.includes('pausado'))}
                     title={conv.etiquetas.includes('pausado') ? 'El agente está en pausa (responde un humano). Clic para reactivarlo.' : 'El agente responde automáticamente. Clic para pausarlo y atender tú.'}
                     className={`text-xs font-semibold rounded-lg px-3 py-1.5 ${conv.etiquetas.includes('pausado') ? 'bg-gray-200 text-gray-600' : 'bg-emerald-600 text-white'}`}>
-                    {conv.etiquetas.includes('pausado') ? '🤖 Agente en pausa' : '🤖 Agente activo'}
+                    <><Bot className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> {conv.etiquetas.includes('pausado') ? 'Agente en pausa' : 'Agente activo'}</>
                   </button>
                   <select
                     value={normEstado(conv.estado)}
@@ -310,7 +311,7 @@ export default function MensajesView() {
                   </select>
                   <button onClick={eliminar} title="Eliminar conversación y todos sus mensajes"
                     className="text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50">
-                    🗑
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -337,11 +338,11 @@ export default function MensajesView() {
                       ) : m.tipo === 'audio' ? (
                         <audio src={m.media_url} controls className="max-w-full" />
                       ) : (
-                        <a href={m.media_url} target="_blank" rel="noreferrer" className="underline break-all">📎 Abrir archivo</a>
+                        <a href={m.media_url} target="_blank" rel="noreferrer" className="underline break-all"><Paperclip className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Abrir archivo</a>
                       )
                     ) : (m.tipo !== 'texto' && <span className="text-[10px] opacity-70 italic">[{m.tipo}]</span>)}
                     {m.cuerpo ? <div className={m.media_url ? 'mt-1' : ''}>{m.cuerpo}</div> : null}
-                    <div className={`text-[9px] mt-0.5 ${m.direccion === 'saliente' ? 'text-white/60' : 'text-gray-400'}`}>{fecha(m.ts)}{m.enviado_por === 'agente' ? ' · 🤖' : ''}{m.estado ? ` · ${m.estado}` : ''}</div>
+                    <div className={`text-[9px] mt-0.5 ${m.direccion === 'saliente' ? 'text-white/60' : 'text-gray-400'}`}>{fecha(m.ts)}{m.enviado_por === 'agente' ? ' · agente' : ''}{m.estado ? ` · ${m.estado}` : ''}</div>
                   </div>
                 </div>
               ))}
@@ -373,7 +374,7 @@ export default function MensajesView() {
                   {enviando ? '…' : 'Enviar'}
                 </button>
               </div>
-              <p className="text-[10px] text-gray-400 mt-1">📎 Adjunta fotos, videos o documentos (máx ~4 MB); si escribes texto, va como comentario del archivo. El envío en vivo requiere WhatsApp conectado y la ventana de 24h abierta.</p>
+              <p className="text-[10px] text-gray-400 mt-1"><Paperclip className="w-3 h-3 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Adjunta fotos, videos o documentos (máx ~4 MB); si escribes texto, va como comentario del archivo. El envío en vivo requiere WhatsApp conectado y la ventana de 24h abierta.</p>
             </div>
           </>
         )}

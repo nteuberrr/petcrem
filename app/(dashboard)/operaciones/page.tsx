@@ -8,7 +8,8 @@ import { TablaScroll, THEAD_STICKY, HistorialPie } from '@/components/ui/TablaSc
 import VehiculoTab from '@/components/VehiculoTab'
 import DespachosTab from '@/components/DespachosTab'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-
+import { Tabs } from '@/components/ui/kit'
+import { Flame, Fuel, Package, Search, TrendingUp, Truck } from 'lucide-react'
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
   especie: string; peso_declarado?: string; peso_ingreso?: string
@@ -44,6 +45,7 @@ function calcMinutos(ini: string, fin: string): number | null {
 
 export default function OperacionesPage() {
   const [operTab, setOperTab] = useState<'ciclos' | 'petroleo' | 'vehiculo' | 'despachos'>('ciclos')
+  const [nuevoCicloAbierto, setNuevoCicloAbierto] = useState(false)
   const [fecha, setFecha] = useState(() => todayISO())
   const [litrosFin, setLitrosFin] = useState('')
   const [comentarios, setComentarios] = useState('')
@@ -343,24 +345,29 @@ export default function OperacionesPage() {
       </div>
 
       {/* Sub-tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {(['ciclos', 'petroleo', 'vehiculo', 'despachos'] as const).map(t => (
-          <button key={t} onClick={() => setOperTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${operTab === t ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
-            {t === 'ciclos' ? '🔥 Ciclos de cremación'
-              : t === 'petroleo' ? '⛽ Carga de Petróleo'
-              : t === 'vehiculo' ? '🚐 Vehículo'
-              : '📦 Despachos'}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        tabs={[
+          { key: 'ciclos' as const, label: <><Flame className="w-4 h-4" aria-hidden="true" /> Ciclos de cremación</> },
+          { key: 'petroleo' as const, label: <><Fuel className="w-4 h-4" aria-hidden="true" /> Carga de Petróleo</> },
+          { key: 'vehiculo' as const, label: <><Truck className="w-4 h-4" aria-hidden="true" /> Vehículo</> },
+          { key: 'despachos' as const, label: <><Package className="w-4 h-4" aria-hidden="true" /> Despachos</> },
+        ]}
+        value={operTab}
+        onChange={setOperTab}
+      />
 
       {operTab === 'ciclos' && (
         <>
-      {/* Formulario nuevo ciclo */}
+      {/* Formulario nuevo ciclo — plegado por defecto: la mayoría de las visitas a
+          esta pestaña son a consultar el historial, y expandido se comía el primer
+          pantallazo entero. */}
       <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6">
-        <h2 className="text-base font-semibold text-gray-900 mb-5">Nuevo ciclo</h2>
-        <form onSubmit={guardarCiclo} className="space-y-4">
+        <button type="button" onClick={() => setNuevoCicloAbierto(v => !v)}
+          className={`flex w-full items-center justify-between gap-3 text-left ${nuevoCicloAbierto ? 'mb-5' : ''}`}>
+          <h2 className="text-base font-semibold text-gray-900">Nuevo ciclo</h2>
+          <span className="text-xs font-medium text-brand-soft">{nuevoCicloAbierto ? 'Cerrar' : 'Registrar uno'}</span>
+        </button>
+        <form onSubmit={guardarCiclo} className={`space-y-4 ${nuevoCicloAbierto ? '' : 'hidden'}`}>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="text-xs font-medium text-gray-700">Fecha</label>
@@ -430,7 +437,7 @@ export default function OperacionesPage() {
                 title="Ver todas las mascotas pendientes"
                 className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
               >
-                🔍 <span className="text-xs">Todas</span>
+                <Search className="w-3.5 h-3.5" aria-hidden="true" /> <span className="text-xs">Todas</span>
               </button>
             </div>
             {/* Dropdown búsqueda inline */}
@@ -519,11 +526,11 @@ export default function OperacionesPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <button onClick={(e) => { e.stopPropagation(); abrirEditarCiclo(ciclo) }}
-                              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                              className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">
                               Editar
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); eliminarCiclo(ciclo) }}
-                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                              className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">
                               Eliminar
                             </button>
                           </div>
@@ -661,7 +668,7 @@ export default function OperacionesPage() {
             >
               <div className="flex items-center justify-between">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Costo prom. / L (histórico)</p>
-                <span className="text-xs text-brand-soft">📈</span>
+                <TrendingUp className="w-3.5 h-3.5 text-brand-soft" aria-hidden="true" />
               </div>
               <p className="text-2xl font-bold text-brand mt-1">{fmtPrecio(resumenPet.costo_promedio_litro ?? 0)}</p>
               <p className="text-xs text-gray-400 mt-1">total: {fmtPrecio(resumenPet.total_costo ?? 0)}</p>
@@ -734,12 +741,12 @@ export default function OperacionesPage() {
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => abrirEditarCarga(c)}
-                              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                              className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">
                               Editar
                             </button>
                             <button
                               onClick={() => eliminarCarga(c.id)}
-                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
+                              className="border border-red-200 text-red-600 bg-white hover:bg-red-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">
                               Eliminar
                             </button>
                           </div>

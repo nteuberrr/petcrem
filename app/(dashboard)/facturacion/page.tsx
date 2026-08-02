@@ -1,6 +1,7 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { PageHeader, Card, Button, Tabs } from '@/components/ui/kit'
+import { FileText, Hospital, Receipt, Undo2 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { TableSkeleton } from '@/components/ui/Skeleton'
@@ -76,10 +77,10 @@ export interface Documento {
   abonado?: number
 }
 
-const TABS: { key: TipoTab; label: string }[] = [
-  { key: '39', label: '🧾 Boletas' },
-  { key: '33', label: '📄 Facturas' },
-  { key: '61', label: '↩️ Notas de Crédito' },
+const TABS: { key: TipoTab; label: ReactNode }[] = [
+  { key: '39', label: <><Receipt className="w-4 h-4" aria-hidden="true" /> Boletas</> },
+  { key: '33', label: <><FileText className="w-4 h-4" aria-hidden="true" /> Facturas</> },
+  { key: '61', label: <><Undo2 className="w-4 h-4" aria-hidden="true" /> Notas de Crédito</> },
 ]
 
 export default function FacturacionPage() {
@@ -90,12 +91,12 @@ export default function FacturacionPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        icon={<span className="text-2xl">🧾</span>}
+        icon={<Receipt className="w-7 h-7 text-brand" aria-hidden="true" />}
         title="Facturación"
         subtitle="Ventas del negocio y sus documentos tributarios (OpenFactura / SII)"
         actions={
           <>
-            <Button variant="secondary" onClick={() => setShowVets(true)}>🏥 Facturar Veterinarios (lote)</Button>
+            <Button variant="secondary" onClick={() => setShowVets(true)}><Hospital className="w-4 h-4" aria-hidden="true" /> Facturar Veterinarios (lote)</Button>
             <Button variant="primary" onClick={() => setShowManual(true)}>+ Documento manual</Button>
           </>
         }
@@ -243,6 +244,17 @@ function BoletasTab() {
 
   useEffect(() => { cargar() }, [cargar])
 
+  // Paginación: la tabla renderizaba las ~250 ventas de una (16.000px de alto).
+  const POR_PAGINA = 25
+  const [pagina, setPagina] = useState(1)
+  useEffect(() => { setPagina(1) }, [desde, hasta, q])
+  const totalPaginas = Math.max(1, Math.ceil(ventas.length / POR_PAGINA))
+  const paginaActual = Math.min(pagina, totalPaginas)
+  const visibles = useMemo(
+    () => ventas.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA),
+    [ventas, paginaActual],
+  )
+
   const tot = useMemo(() => {
     const total = ventas.reduce((s, v) => s + v.monto, 0)
     const emitidas = ventas.filter(v => v.boleta).length
@@ -289,7 +301,7 @@ function BoletasTab() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {ventas.map(v => (
+                  {visibles.map(v => (
                     <tr key={v.id} className="hover:bg-gray-50">
                       <td className="px-2 md:px-4 py-2.5 font-mono text-xs font-bold text-brand">{v.codigo || `#${v.id}`}</td>
                       <td className="px-2 md:px-4 py-2.5">
@@ -348,6 +360,24 @@ function BoletasTab() {
                 </tbody>
               </table>
             </div>
+            {totalPaginas > 1 && (
+              <div className="flex items-center justify-between gap-3 flex-wrap border-t border-gray-200 px-4 py-3">
+                <p className="text-xs text-gray-600">
+                  Mostrando {(paginaActual - 1) * POR_PAGINA + 1}–{Math.min(paginaActual * POR_PAGINA, ventas.length)} de {ventas.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={paginaActual <= 1}
+                    className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed">
+                    Anterior
+                  </button>
+                  <span className="text-xs text-gray-600 tabular-nums">{paginaActual} / {totalPaginas}</span>
+                  <button onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))} disabled={paginaActual >= totalPaginas}
+                    className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed">
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm text-gray-600 flex flex-wrap justify-between gap-2">
               <span>
                 {ventas.length} venta{ventas.length === 1 ? '' : 's'} · {tot.emitidas} con boleta · {tot.pagadasSinBoleta} pagada{tot.pagadasSinBoleta === 1 ? '' : 's'} sin boleta
@@ -460,7 +490,7 @@ function FacturasTab({ onAbrirLote }: { onAbrirLote: () => void }) {
           </label>
           {(mes || q) && <button onClick={() => { setMes(''); setQ('') }} className="text-xs text-brand-soft hover:underline pb-2">Limpiar</button>}
           <div className="flex-1" />
-          <Button variant="secondary" onClick={onAbrirLote}>🏥 Facturar el mes por veterinaria (lote)</Button>
+          <Button variant="secondary" onClick={onAbrirLote}><Hospital className="w-4 h-4" aria-hidden="true" /> Facturar el mes por veterinaria (lote)</Button>
         </div>
       </Card>
 
