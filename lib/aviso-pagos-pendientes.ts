@@ -1,13 +1,20 @@
 import { getSheetData } from './datastore'
 import { crearEstimadorFichas } from './precio-estimado'
-import { getConfigCobroEutanasia, cobroClienteCon } from './eutanasia-precios'
+import { getConfigCobroEutanasia, cobroClienteCon, pagoVetCon, type ConfigCobroEutanasia } from './eutanasia-precios'
 import { renderEmailLayout, getContacto, escapeHtml, BRAND } from './email-layout'
 import { formatDate, formatDateForSheet, daysSince, fechaChileISO } from './dates'
 import { parseDecimalOr0 } from './numbers'
 import { fmtPrecio } from './format'
 
 /**
- * AVISO "Pagos pendientes": el informe diario de lo que está por cobrar.
+ * AVISO "Cuentas por cobrar y por pagar": el informe diario de la plata.
+ *
+ * POR COBRAR — fichas de cremación con saldo (ver más abajo).
+ * POR PAGAR  — la nómina de veterinarios de la red de eutanasias: cada servicio
+ *   cerrado (realizado, o evaluado y no realizado) que todavía no tiene el pago
+ *   confirmado, agrupado por veterinario y con sus datos de transferencia, para
+ *   poder pagar leyendo el correo. Sale de la ficha en Servicios → Eutanasias:
+ *   al marcar "Pago confirmado" ese vet desaparece de la nómina.
  *
  * Entra una ficha REGISTRADA cuando (a) su `estado_pago` no es 'pagado', o
  * (b) tiene cobros no pagados en la tabla `cobros` (un adicional o una
@@ -49,12 +56,36 @@ export interface FichaPendiente {
   nota: string
 }
 
+/** Un servicio de eutanasia cerrado que todavía le debemos al veterinario. */
+export interface ServicioPorPagar {
+  fecha: string          // ISO del servicio
+  mascota: string
+  /** 'eutanasia' (se realizó) o 'consulta' (evaluó y no correspondía). */
+  concepto: string
+  monto: number
+}
+
+/** Una línea de la nómina: un veterinario con todo lo que se le debe. */
+export interface VetPorPagar {
+  id: string
+  nombre: string
+  rut: string
+  banco: string
+  tipoCuenta: string
+  numeroCuenta: string
+  servicios: ServicioPorPagar[]
+  total: number
+}
+
 export interface InformePagosPendientes {
   fecha: string          // YYYY-MM-DD (Chile)
   tutores: FichaPendiente[]
   convenio: FichaPendiente[]
   totalTutores: number
   totalConvenio: number
+  /** Nómina de veterinarios de eutanasia por pagar (más antiguo primero). */
+  vetsPorPagar: VetPorPagar[]
+  totalPorPagar: number
 }
 
 function normalizarEstadoPago(v: unknown): string {
@@ -70,12 +101,13 @@ function esFichaRegistrada(c: Record<string, string>): boolean {
 
 /** Junta los datos del informe. Sin efectos: la usan el cron, la vista previa y la prueba. */
 export async function construirInformePagosPendientes(): Promise<InformePagosPendientes> {
-  const [clientes, cobrosRows, vets, cotis, cfgEut, estimar] = await Promise.all([
+  const [clientes, cobrosRows, vets, cotis, cfgEut, vetsEut, estimar] = await Promise.all([
     getSheetData('clientes'),
     getSheetData('cobros').catch(() => [] as Record<string, string>[]),
     getSheetData('veterinarios').catch(() => [] as Record<string, string>[]),
     getSheetData('cotizaciones_eutanasia').catch(() => [] as Record<string, string>[]),
     getConfigCobroEutanasia().catch(() => null),
+    getSheetData('vet_convenio_eutanasia').catch(() => [] as Record<string, string>[]),
     crearEstimadorFichas(),
   ])
 
@@ -162,13 +194,85 @@ export async function construirInformePagosPendientes(): Promise<InformePagosPen
   tutores.sort(porFecha)
   convenio.sort(porFecha)
 
+  const vetsPorPagar = armarNomina(cotis, vetsEut, cfgEut)
+
   return {
     fecha: fechaChileISO(),
     tutores,
     convenio,
     totalTutores: tutores.reduce((s, f) => s + f.porCobrar, 0),
     totalConvenio: convenio.reduce((s, f) => s + f.porCobrar, 0),
+    vetsPorPagar,
+    totalPorPagar: vetsPorPagar.reduce((s, v) => s + v.total, 0),
   }
+}
+
+/**
+ * Nómina de la red de eutanasias: cada cotización CERRADA (realizada o evaluada
+ * y no realizada) cuyo pago al vet no está confirmado, agrupada por veterinario.
+ * Sin la config de cobro no se puede saber cuánto vale una consulta, así que en
+ * ese caso no se arma (mejor nada que un monto inventado).
+ */
+/**
+ * Nombre del vet sin repetir el apellido: en la hoja de la red hay fichas donde
+ * `nombre` ya trae el nombre completo (quedaba "Manuel Astorga Rogazy Astorga
+ * Rogazy" al concatenar a ciegas).
+ */
+function nombreVet(v: Record<string, string>): string {
+  const nombre = String(v.nombre || '').trim()
+  const apellido = String(v.apellido || '').trim()
+  if (!apellido) return nombre
+  if (nombre.toLowerCase().includes(apellido.toLowerCase())) return nombre
+  return `${nombre} ${apellido}`.trim()
+}
+
+function armarNomina(
+  cotis: Record<string, string>[],
+  vetsEut: Record<string, string>[],
+  cfg: ConfigCobroEutanasia | null,
+): VetPorPagar[] {
+  if (!cfg) return []
+  const datosVet = new Map(vetsEut.map(v => [String(v.id), v]))
+  const porVet = new Map<string, VetPorPagar>()
+
+  for (const c of cotis) {
+    const estado = String(c.estado || '')
+    if (estado !== 'realizada' && estado !== 'no_realizada') continue
+    if (String(c.estado_pago || '') === 'pago_confirmado') continue
+    const monto = pagoVetCon(c, cfg)
+    if (!(monto > 0)) continue
+
+    const vetId = String(c.vet_id_asignado || '').trim()
+    const v = vetId ? datosVet.get(vetId) : undefined
+    // Sin vet asignado no hay a quién pagarle: se agrupa igual bajo el nombre
+    // que quedó en la cotización para que el caso no se pierda de vista.
+    const clave = vetId || `sin-id:${String(c.vet_nombre_asignado || '(sin veterinario)')}`
+    const nombre = v ? nombreVet(v) : String(c.vet_nombre_asignado || '(sin veterinario)')
+
+    const linea = porVet.get(clave) ?? {
+      id: vetId,
+      nombre: nombre || '(sin veterinario)',
+      rut: String(v?.rut || ''),
+      banco: String(v?.banco || ''),
+      tipoCuenta: String(v?.tipo_cuenta || ''),
+      numeroCuenta: String(v?.numero_cuenta || ''),
+      servicios: [],
+      total: 0,
+    }
+    linea.servicios.push({
+      fecha: formatDateForSheet(c.fecha_servicio) || formatDateForSheet(c.fecha_realizacion) || '',
+      mascota: String(c.mascota_nombre || ''),
+      concepto: estado === 'realizada' ? 'eutanasia' : 'consulta',
+      monto,
+    })
+    linea.total += monto
+    porVet.set(clave, linea)
+  }
+
+  const nomina = [...porVet.values()]
+  for (const v of nomina) v.servicios.sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
+  // El que espera hace más tiempo, primero.
+  return nomina.sort((a, b) => (a.servicios[0]?.fecha || '').localeCompare(b.servicios[0]?.fecha || ''))
 }
 
 // ─── Render ──────────────────────────────────────────────────────────────────
@@ -262,19 +366,85 @@ function renderBloque(titulo: string, emoji: string, fichas: FichaPendiente[], t
   </table>`
 }
 
-/** El número grande de arriba: lo primero que se ve al abrir el correo. */
-function renderHero(n: number, total: number, masAntigua: number | null): string {
-  const detalle = [
-    `${n} ${n === 1 ? 'ficha' : 'fichas'}`,
-    masAntigua && masAntigua > 1 ? `la más antigua lleva ${masAntigua} días` : '',
-  ].filter(Boolean).join(' · ')
+/** Los dos números grandes de arriba: lo primero que se ve al abrir el correo. */
+function renderHero(cobrar: { total: number; detalle: string }, pagar: { total: number; detalle: string }): string {
+  const celda = (etiqueta: string, total: number, detalle: string, borde: string) => `
+    <td width="50%" style="padding:14px 16px;background:${BRAND.cream};border-left:4px solid ${borde};border-radius:12px;vertical-align:top">
+      <div style="font-size:12px;color:#9a8a63;text-transform:uppercase;letter-spacing:.05em;font-weight:700">${etiqueta}</div>
+      <div style="font-size:28px;font-weight:800;color:${BRAND.navy};line-height:1.15;margin:2px 0">${fmtPrecio(total)}</div>
+      <div style="font-size:12px;color:#9a8a63">${escapeHtml(detalle)}</div>
+    </td>`
   return `
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 18px;background:${BRAND.cream};border-left:4px solid ${BRAND.amber};border-radius:12px">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:8px 0;margin:0 0 18px">
     <tr>
-      <td style="padding:16px 18px">
-        <div style="font-size:12px;color:#9a8a63;text-transform:uppercase;letter-spacing:.05em;font-weight:700">Por cobrar</div>
-        <div style="font-size:34px;font-weight:800;color:${BRAND.navy};line-height:1.15;margin:2px 0">${fmtPrecio(total)}</div>
-        <div style="font-size:13px;color:#9a8a63">${escapeHtml(detalle)}</div>
+      ${celda('Por cobrar', cobrar.total, cobrar.detalle, BRAND.amber)}
+      ${celda('Por pagar', pagar.total, pagar.detalle, BRAND.navy)}
+    </tr>
+  </table>`
+}
+
+/** Rótulo de sección: separa el "por cobrar" del "por pagar" sin agregar peso. */
+function renderSeccion(texto: string): string {
+  return `<div style="margin:0 0 8px;font-size:12px;font-weight:700;color:#9a9a9a;text-transform:uppercase;letter-spacing:.06em">${escapeHtml(texto)}</div>`
+}
+
+/** Una línea de la nómina: el vet, lo que se le debe y a dónde transferirle. */
+function renderFilaVet(v: VetPorPagar): string {
+  // Sin número de cuenta no se puede transferir: se avisa en ámbar (el vet
+  // completa sus datos con el link de "datos de pago" que ya recibe por correo).
+  const cuenta = [v.banco, [v.tipoCuenta, v.numeroCuenta].filter(Boolean).join(' '), v.rut].filter(Boolean).join(' · ')
+  const faltaCuenta = !v.numeroCuenta
+  const lineaCuenta = !cuenta ? 'sin datos de transferencia' : faltaCuenta ? `${cuenta} · falta la cuenta` : cuenta
+  const servicios = v.servicios.map(s => `
+    <div style="font-size:12px;color:#666">
+      ${escapeHtml(fechaCorta(s.fecha))} · ${escapeHtml(s.mascota || 'sin nombre')}
+      ${s.concepto === 'consulta' ? '<span style="color:#B45309"> (consulta)</span>' : ''}
+      <span style="color:#aaa"> ${fmtPrecio(s.monto)}</span>
+    </div>`).join('')
+
+  return `
+    <tr>
+      <td style="${TD}">
+        <strong>${escapeHtml(v.nombre)}</strong>
+        <div style="font-size:11px;color:${faltaCuenta ? '#B45309' : '#aaa'};margin-top:2px">${escapeHtml(lineaCuenta)}</div>
+      </td>
+      <td style="${TD}">${servicios}</td>
+      <td style="${TD};text-align:right;white-space:nowrap"><strong style="color:${BRAND.navy};font-size:15px">${fmtPrecio(v.total)}</strong></td>
+    </tr>`
+}
+
+/** La nómina de veterinarios de eutanasia, en la misma tarjeta que el resto. */
+function renderNomina(vets: VetPorPagar[], total: number): string {
+  if (vets.length === 0) return ''
+  const nServicios = vets.reduce((s, v) => s + v.servicios.length, 0)
+  return `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 18px;background:#fff;border:1px solid #e6e6e6;border-radius:14px;overflow:hidden">
+    <tr>
+      <td style="padding:14px 14px 8px">
+        <span style="font-size:15px;font-weight:700;color:${BRAND.navy}">🩺 Veterinarios de eutanasia</span>
+        <span style="font-size:12px;color:#aaa"> · ${vets.length} ${vets.length === 1 ? 'vet' : 'vets'} · ${nServicios} ${nServicios === 1 ? 'servicio' : 'servicios'}</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 6px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse">
+          <tr>
+            <th style="${TH}">Veterinario</th>
+            <th style="${TH}">Servicios</th>
+            <th style="${TH};text-align:right">Monto</th>
+          </tr>
+          ${vets.map(renderFilaVet).join('')}
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:12px 16px;background:#f6f8fa;border-top:1px solid #ececec">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="font-size:12px;color:#999;text-transform:uppercase;letter-spacing:.04em">Total por pagar</td>
+            <td style="text-align:right;font-size:22px;font-weight:800;color:${BRAND.navy};white-space:nowrap">${fmtPrecio(total)}</td>
+          </tr>
+        </table>
       </td>
     </tr>
   </table>`
@@ -294,21 +464,24 @@ export async function renderAvisoPagosPendientes(informe: InformePagosPendientes
   const contacto = await getContacto()
   const n = informe.tutores.length + informe.convenio.length
   const total = informe.totalTutores + informe.totalConvenio
+  const nVets = informe.vetsPorPagar.length
   const fechaLegible = formatDate(informe.fecha)
+  const TITULO = 'Cuentas por cobrar y por pagar'
+  const CONTEXTO = 'Cobranzas y pagos del día'
 
-  if (n === 0) {
+  if (n === 0 && nVets === 0) {
     const bodyHtml = `
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;background:${BRAND.cream};border-left:4px solid ${BRAND.amber};border-radius:12px">
         <tr><td style="padding:20px">
-          <div style="font-size:22px;font-weight:800;color:${BRAND.navy};margin-bottom:4px">Todo cobrado 🎉</div>
-          <div style="font-size:14px;color:#9a8a63">Al ${escapeHtml(fechaLegible)} no queda ni un peso pendiente. Buen trabajo.</div>
+          <div style="font-size:22px;font-weight:800;color:${BRAND.navy};margin-bottom:4px">Todo al día 🎉</div>
+          <div style="font-size:14px;color:#9a8a63">Al ${escapeHtml(fechaLegible)} no queda nada por cobrar ni por pagar. Buen trabajo.</div>
         </td></tr>
       </table>`
     return {
-      subject: `Pagos pendientes: ninguno — todo cobrado (${fechaLegible})`,
-      html: renderEmailLayout({ titulo: 'Pagos pendientes', bodyHtml, contacto, contexto: 'Cobranza del día' }),
+      subject: `Cuentas al día: nada por cobrar ni por pagar (${fechaLegible})`,
+      html: renderEmailLayout({ titulo: TITULO, bodyHtml, contacto, contexto: CONTEXTO }),
       vacio: true,
-      resumen: 'Sin pagos pendientes.',
+      resumen: 'Nada por cobrar ni por pagar.',
     }
   }
 
@@ -316,26 +489,41 @@ export async function renderAvisoPagosPendientes(informe: InformePagosPendientes
   const masAntigua = [...informe.tutores, ...informe.convenio]
     .map(f => f.dias ?? 0)
     .reduce((max, d) => Math.max(max, d), 0)
+  const nServicios = informe.vetsPorPagar.reduce((s, v) => s + v.servicios.length, 0)
 
   const bodyHtml = `
-    <p style="margin:0 0 14px;font-size:15px;color:#444">Esto es lo que quedó por cobrar 🐾</p>
-    ${renderHero(n, total, masAntigua)}
+    ${renderHero(
+      {
+        total,
+        detalle: [
+          `${n} ${n === 1 ? 'ficha' : 'fichas'}`,
+          masAntigua > 1 ? `la más antigua lleva ${masAntigua} días` : '',
+        ].filter(Boolean).join(' · '),
+      },
+      {
+        total: informe.totalPorPagar,
+        detalle: nVets ? `${nVets} ${nVets === 1 ? 'veterinario' : 'veterinarios'} · ${nServicios} ${nServicios === 1 ? 'servicio' : 'servicios'}` : 'nada pendiente',
+      },
+    )}
+    ${n > 0 ? `${renderSeccion('Por cobrar')}
     ${renderBloque('Tutores', '🏠', informe.tutores, informe.totalTutores)}
-    ${renderBloque('Convenio', '🏥', informe.convenio, informe.totalConvenio)}
+    ${renderBloque('Convenio', '🏥', informe.convenio, informe.totalConvenio)}` : ''}
+    ${nVets > 0 ? `${renderSeccion('Por pagar')}
+    ${renderNomina(informe.vetsPorPagar, informe.totalPorPagar)}` : ''}
     <p style="margin:4px 0 0;font-size:13px;color:#999">
-      Apenas cobres una, márcala como pagada en su ficha y desaparece sola de esta lista.
+      Cada cobro que marques como pagado en su ficha, y cada pago que confirmes en Servicios → Eutanasias, desaparece solo de esta lista.
     </p>`
 
-  const partes = [
-    informe.tutores.length ? `${informe.tutores.length} de tutores` : '',
-    informe.convenio.length ? `${informe.convenio.length} de convenio` : '',
-  ].filter(Boolean).join(' y ')
+  const resumen = [
+    n ? `${n} ${n === 1 ? 'ficha' : 'fichas'} por cobrar (${fmtPrecio(total)})` : '',
+    nVets ? `${nVets} ${nVets === 1 ? 'vet' : 'vets'} por pagar (${fmtPrecio(informe.totalPorPagar)})` : '',
+  ].filter(Boolean).join(' · ')
 
   return {
-    subject: `${fmtPrecio(total)} por cobrar — ${n} ${n === 1 ? 'ficha' : 'fichas'} (${fechaLegible})`,
-    html: renderEmailLayout({ titulo: 'Pagos pendientes', bodyHtml, contacto, contexto: 'Cobranza del día' }),
+    subject: `Por cobrar ${fmtPrecio(total)} · Por pagar ${fmtPrecio(informe.totalPorPagar)} (${fechaLegible})`,
+    html: renderEmailLayout({ titulo: TITULO, bodyHtml, contacto, contexto: CONTEXTO }),
     vacio: false,
-    resumen: `${n} ${n === 1 ? 'ficha' : 'fichas'} (${partes}) por ${fmtPrecio(total)}.`,
+    resumen: `${resumen}.`,
   }
 }
 

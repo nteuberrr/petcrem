@@ -32,9 +32,10 @@ export interface AvisoMeta {
 
 export const AVISOS: AvisoMeta[] = [
   {
+    // La clave NO cambia: es la que guarda la configuración (horario, destinatarios).
     clave: 'pagos_pendientes',
-    titulo: 'Pagos pendientes',
-    descripcion: 'Fichas con pago pendiente o parcial, separadas en tutores y convenio. Muestra el día, los datos del tutor, el detalle del cobro y la nota de la ficha.',
+    titulo: 'Cuentas por cobrar y por pagar',
+    descripcion: 'POR COBRAR: fichas con pago pendiente o parcial, separadas en tutores y convenio, con el detalle del cobro y la nota de la ficha. POR PAGAR: la nómina de veterinarios de eutanasia con servicios cerrados sin pago confirmado, agrupada por veterinario y con sus datos de transferencia.',
     construir: construirAvisoPagosPendientes,
   },
   {

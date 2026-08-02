@@ -321,6 +321,19 @@ export interface MargenEutanasia {
 }
 
 /**
+ * Lo que se le PAGA AL VETERINARIO por una cotización cerrada: el precio del
+ * tramo congelado si la eutanasia se realizó, o la consulta si evaluó y no
+ * correspondía. 0 si la cotización no está cerrada. Fuente única — la usan el
+ * margen del EERR y la nómina de pagos por hacer del aviso diario.
+ */
+export function pagoVetCon(cot: CotCobro, cfg: ConfigCobroEutanasia): number {
+  const estado = String(cot.estado || '')
+  if (estado === 'realizada') return num(cot.precio_snapshot)
+  if (estado === 'no_realizada') return num(cot.consulta_vet_snapshot) || cfg.consulta.vet
+  return 0
+}
+
+/**
  * MARGEN de una eutanasia = lo cobrado al cliente − lo pagado al veterinario.
  * Es lo que entra al Estado de Resultados en la cuenta "Eutanasias": el servicio
  * lo presta el vet (pasamos su pago completo), así que el ingreso real de Alma es
@@ -336,9 +349,7 @@ export function margenEutanasiaCon(cot: CotCobro & { fecha_realizacion?: string 
   if (estado !== 'realizada' && estado !== 'no_realizada') return null
   const cobroCliente = cobroClienteCon(cot, cfg)
   if (cobroCliente.total <= 0) return null
-  const pagoVet = estado === 'realizada'
-    ? num(cot.precio_snapshot)
-    : (num(cot.consulta_vet_snapshot) || cfg.consulta.vet)
+  const pagoVet = pagoVetCon(cot, cfg)
   return {
     cobro: cobroCliente.total,
     pagoVet,
