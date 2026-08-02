@@ -432,14 +432,49 @@ export async function getTranscriptsParaCalibracion(maxConversaciones = 60, maxM
   return transcripts
 }
 
-/** Obtiene o crea la conversación de un contacto en un canal. */
+/**
+ * Obtiene o crea la conversación de un contacto en un canal.
+ *
+ * ⚠️ NO usar `.maybeSingle()` acá. PostgREST lo traduce a "espero 0 o 1 fila" y
+ * ante 2+ filas devuelve ERROR con data=null. Como el error se descartaba, un
+ * único duplicado (creado por dos mensajes en ráfaga que entran a la vez) hacía
+ * que de ahí en adelante CADA mensaje abriera otra conversación: el bot perdía
+ * el historial y saludaba de nuevo como si fuera un desconocido. Caso Carlos
+ * (2026-08-02): 8 hilos y 8 saludos en dos minutos, sin llegar nunca al precio.
+ *
+ * Ahora se pide la MÁS ANTIGUA con limit(1): tolera duplicados preexistentes en
+ * vez de multiplicarlos. El índice único parcial (contacto_id, canal) de
+ * supabase/mensajes-schema.sql cierra la carrera de raíz; si igual choca, se
+ * re-consulta y se devuelve la que ganó.
+ */
 export async function getOrCreateConversacion(contactoId: number, canal: Canal, audiencia: Audiencia = 'A', fuente = 'whatsapp'): Promise<Conversacion> {
   const sb = getMensajesSupabase()
-  const { data } = await sb.from(T_CONV).select('*').eq('contacto_id', contactoId).eq('canal', canal).maybeSingle()
-  if (data) return data as Conversacion
-  const { data: nueva, error } = await sb.from(T_CONV).insert({ contacto_id: contactoId, canal, audiencia, fuente, estado: 'activo' }).select('*').single()
-  if (error) throw new Error(error.message)
-  return nueva as Conversacion
+
+  const buscar = async () => {
+    const { data, error } = await sb.from(T_CONV)
+      .select('*')
+      .eq('contacto_id', contactoId)
+      .eq('canal', canal)
+      .order('id', { ascending: true })
+      .limit(1)
+    if (error) throw new Error(error.message)
+    return (data?.[0] as Conversacion | undefined) ?? null
+  }
+
+  const existente = await buscar()
+  if (existente) return existente
+
+  const { data: nueva, error } = await sb.from(T_CONV)
+    .insert({ contacto_id: contactoId, canal, audiencia, fuente, estado: 'activo' })
+    .select('*')
+    .single()
+  if (!error) return nueva as Conversacion
+
+  // Otro mensaje de la misma ráfaga la creó entremedio (violación del índice
+  // único): usamos la suya en vez de fallar o duplicar.
+  const ganadora = await buscar()
+  if (ganadora) return ganadora
+  throw new Error(error.message)
 }
 
 /**

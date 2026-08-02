@@ -44,6 +44,15 @@ create table if not exists mensajes_conversaciones (
 );
 create index if not exists idx_mconv_contacto on mensajes_conversaciones(contacto_id);
 create index if not exists idx_mconv_ultimo    on mensajes_conversaciones(ultimo_mensaje_at desc nulls last);
+-- UNA conversación por contacto y canal. Mismo backstop que uq_mcontactos_wa_id,
+-- pero para conversaciones: dos mensajes en ráfaga entraban a la vez, ninguno veía
+-- fila y ambos insertaban. Con el duplicado creado, el .maybeSingle() de
+-- getOrCreateConversacion pasaba a devolver ERROR ante 2+ filas, el código lo
+-- descartaba y abría OTRA conversación con cada mensaje siguiente — el bot perdía
+-- el historial y volvía a saludar (caso Carlos 2026-08-02: 8 hilos en 2 minutos).
+-- Ojo: si ya hay duplicados hay que fusionarlos antes o este índice falla.
+create unique index if not exists uq_mconv_contacto_canal
+  on mensajes_conversaciones (contacto_id, canal);
 -- Idempotente para entornos ya creados:
 alter table mensajes_conversaciones add column if not exists no_leido boolean not null default false;
 -- Cuándo se envió el seguimiento automático al lead (null = nunca). Idempotencia
