@@ -14,7 +14,7 @@ import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-maile
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin } from '@/lib/roles'
 import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
-import { dispararCobroAdicional, cobrosPendientesPorCliente, sincronizarSaldoParcial, cerrarSaldoParcial } from '@/lib/cobros'
+import { dispararCobroAdicional, cobrosPendientesPorCliente, cobrosPorCliente, sincronizarSaldoParcial, cerrarSaldoParcial } from '@/lib/cobros'
 import { excluirIncluidos } from '@/lib/anforas-premium'
 import { emitirBoletaSiCorresponde } from '@/lib/facturacion'
 import { desgloseValorCotizacion, valorEutanasiaPorCliente } from '@/lib/eutanasia-precios'
@@ -45,7 +45,12 @@ export async function GET(
     }
 
     // Cobros pendientes (adicional / diferencia) → banner "cobro pendiente".
-    const cobros = await cobrosPendientesPorCliente(id).catch(() => [])
+    // `cobros_historial` trae TODOS (pagados incluidos) para el resumen de la
+    // ficha: son partes del total que se cobraron aparte, no plata adicional.
+    const [cobros, cobrosHistorial] = await Promise.all([
+      cobrosPendientesPorCliente(id).catch(() => []),
+      cobrosPorCliente(id).catch(() => []),
+    ])
 
     // Eutanasia asociada (si la ficha vino de una eutanasia a domicilio): para
     // mostrar "Hora Vet" / "Hora Retiro" y el VALOR a cobrar por la eutanasia,
@@ -78,7 +83,7 @@ export async function GET(
       }
     } catch { /* best-effort: la ficha se muestra igual sin datos de eutanasia */ }
 
-    return NextResponse.json({ ...cliente, ciclo, despacho, cobros, eutanasia })
+    return NextResponse.json({ ...cliente, ciclo, despacho, cobros, cobros_historial: cobrosHistorial, eutanasia })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

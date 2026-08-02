@@ -67,6 +67,24 @@ export async function marcarBoletaCobro(id: string, boletaId: string): Promise<v
   await updateById(TABLE, id, { ...c, boleta_id: String(boletaId) })
 }
 
+/**
+ * TODOS los cobros de una ficha (pagados incluidos), del más antiguo al más
+ * nuevo. Es lo que la ficha muestra en el resumen: un cobro no es plata extra
+ * —el snapshot de la ficha ya lo contempla— sino una parte del total que se
+ * cobró aparte, y sin verlo el equipo no entiende de dónde sale el monto.
+ */
+export async function cobrosPorCliente(clienteId: string): Promise<Cobro[]> {
+  if (!clienteId) return []
+  try {
+    const rows = (await getSheetData(TABLE)).map(toCobro)
+    return rows
+      .filter(c => c.cliente_id === String(clienteId))
+      .sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0))
+  } catch {
+    return []
+  }
+}
+
 /** Cobros NO pagados de una ficha (para el banner "cobro pendiente"). */
 export async function cobrosPendientesPorCliente(clienteId: string): Promise<Cobro[]> {
   if (!clienteId) return []

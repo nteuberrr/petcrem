@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
-import { fmtLitros, fmtPrecio, fmtFecha } from '@/lib/format'
+import { fmtLitros, fmtPrecio, fmtFecha, fmtKg } from '@/lib/format'
 import { formatDateForSheet } from '@/lib/dates'
 import { parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
@@ -43,6 +43,30 @@ type CorreoCliente = {
 type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string; precio: number; qty: number }
 
 type Cobro = { id: string; cliente_id: string; tipo: string; detalle: string; monto: string; estado: string; fecha_creacion: string }
+
+/** Nombre legible del tipo de cobro (los tipos son 'diferencia' | 'saldo' | 'adicional'). */
+const NOMBRE_COBRO: Record<string, string> = {
+  diferencia: 'Diferencia de peso',
+  saldo: 'Saldo pendiente (pago parcial)',
+  adicional: 'Productos adicionales',
+}
+
+/** Etapas del proceso que le mandan un correo al tutor, en orden. */
+const ETAPAS_CORREO = [
+  { tipo: 'registro', label: 'Registro / bienvenida' },
+  { tipo: 'inicio_cremacion', label: 'Inicio de cremación' },
+  { tipo: 'inicio_despacho', label: 'Vamos en camino (ruta)' },
+  { tipo: 'entrega', label: 'Entrega confirmada' },
+  { tipo: 'certificado', label: 'Certificado de cremación' },
+  { tipo: 'cobro_diferencia', label: 'Cobro diferencia de peso' },
+] as const
+
+/** Estado del cobro, en una etiqueta. */
+const ESTADO_COBRO: Record<string, { label: string; cls: string }> = {
+  pendiente: { label: 'por cobrar', cls: 'bg-amber-100 text-amber-800 border-amber-200' },
+  cliente_confirmo: { label: 'transferencia por verificar', cls: 'bg-sky-100 text-sky-800 border-sky-200' },
+  pagado: { label: 'pagado', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+}
 
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
 
@@ -93,7 +117,10 @@ type ClienteDetalle = {
   fotos_evidencia?: string
   correo_diferencia_fecha?: string
   correo_diferencia_monto?: string
+  /** Cobros SIN pagar: los que alimentan el banner de cobranza. */
   cobros?: Cobro[]
+  /** TODOS los cobros de la ficha (pagados incluidos), para el desglose. */
+  cobros_historial?: Cobro[]
   ciclo?: {
     id: string
     fecha: string
@@ -204,6 +231,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
   // Correos transaccionales enviados al tutor (estado de entrega por etapa).
   const [correos, setCorreos] = useState<CorreoCliente[]>([])
+  // El bloque arranca plegado: se consulta de vez en cuando, no todos los días.
+  const [correosAbierto, setCorreosAbierto] = useState(false)
 
   // Reenvío del correo de ingreso (bienvenida + código + links de foto/video,
   // que se regeneran con 48 h nuevas de vigencia).
@@ -869,6 +898,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const precioEsEstimado = !precioCongelado
   const faltaModalidad = !form.codigo_servicio
 
+  // Cobros de la ficha para el desglose (todos, pagados incluidos). Si la API
+  // todavía no manda el historial, se cae a los pendientes.
+  const cobrosFicha = cliente.cobros_historial ?? cliente.cobros ?? []
+
   const certUltimo = certificadosEmitidos[0]
   const puedeGenerarCert = cliente.estado === 'cremado' || cliente.estado === 'despachado'
 
@@ -889,6 +922,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const correoProblema = ultimoCorreoEmail && ['rebotado', 'spam', 'fallido'].includes(ultimoCorreoEmail.estado)
     ? ultimoCorreoEmail
     : null
+  // Cuántas etapas ya tienen un correo salido (para el resumen del encabezado).
+  const correosEnviados = ETAPAS_CORREO.filter(et => correosPorTipo[et.tipo]).length
   const videosServicio: string[] = (() => {
     try { const x = JSON.parse(cliente.videos_servicio || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
   })()
@@ -972,11 +1007,13 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      {/* Header limpio sobre fondo claro: borde lateral indigo + tipografía grande.
-          El acento navy va sobre la tarjeta redondeada (el borde respeta el border-radius),
-          así no hace falta overflow-hidden — que recortaba el menú "Documentos" en desktop. */}
-      <div className="rounded-2xl bg-white border-2 border-gray-300 border-l-4 border-l-brand shadow-md mb-6">
-        <div className="px-6 py-6 sm:px-8 sm:py-7">
+      {/* CABECERA de la ficha. Dos zonas claras: arriba la identidad (código,
+          estados, nombre, tutor) con las acciones alineadas a la derecha; abajo,
+          separado por una línea, el panel de dinero con el desglose a la
+          izquierda y el total a la derecha. Sin overflow-hidden: el menú
+          "Documentos" se despliega fuera de la tarjeta. */}
+      <div className="rounded-2xl bg-white border border-gray-300 shadow-md mb-6">
+        <div className="px-5 py-4 sm:px-7 sm:py-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex-1 min-w-[260px]">
               <div className="flex items-center gap-2 flex-wrap mb-2">
@@ -990,33 +1027,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 {vetSeleccionada && <Badge variant="blue">{vetSeleccionada.nombre}</Badge>}
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-brand truncate">{cliente.nombre_mascota}</h1>
-              <p className="text-sm text-gray-600 mt-1">Tutor: <span className="font-semibold text-gray-900">{cliente.nombre_tutor || '—'}</span></p>
-
-              {/* Valor a cobrar por los servicios contratados. Visible siempre —
-                  en una ficha por ingresar es la estimación en vivo. */}
-              <div className="mt-3 rounded-xl border-2 border-brand/25 bg-cream px-4 py-2.5">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-gray-600">Valor a cobrar</span>
-                  <span className="text-xl font-extrabold text-brand">{fmtPrecio(totalACobrarHeader)}</span>
-                  {precioEsEstimado && (
-                    <span className="text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded"
-                      title="El precio se congela al registrar la ficha; por ahora se calcula con las tablas de precios vigentes.">
-                      estimado
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-gray-600 mt-1 leading-tight">
-                  {pesoKg <= 0
-                    ? 'Falta el peso de la mascota para calcular el valor.'
-                    : <>
-                        {tablaNombre} · {codigoServ} · {fmtPrecio(precioServicio)}
-                        {totalAdicionales > 0 && <> + adicionales {fmtPrecio(totalAdicionales)}</>}
-                        {montoDescuento > 0 && <> − descuento {fmtPrecio(montoDescuento)}</>}
-                        {eutanasiaValorHeader > 0 && <> + eutanasia {fmtPrecio(eutanasiaValorHeader)} <span className="text-gray-400">(fuera de boleta)</span></>}
-                      </>}
-                  {faltaModalidad && pesoKg > 0 && <> · <span className="text-amber-800 font-semibold">falta confirmar la modalidad (estimado como Cremación Individual)</span></>}
-                </p>
-              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                <span className="text-gray-500">Tutor</span> <span className="font-semibold text-gray-900">{cliente.nombre_tutor || '—'}</span>
+                {cliente.especie && <> <span className="text-gray-300">·</span> {cliente.especie}</>}
+                {pesoKg > 0 && <> <span className="text-gray-300">·</span> {fmtKg(pesoKg)}</>}
+              </p>
             </div>
             {cliente.estado !== 'borrador' && (
               <div className="flex flex-wrap items-start gap-2 w-full sm:w-auto sm:shrink-0">
@@ -1026,7 +1041,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   onClick={reenviarCorreoIngreso}
                   disabled={reenviandoIngreso || !cliente.email}
                   title={!cliente.email ? 'La ficha no tiene correo registrado' : `Reenviar el correo de ingreso a ${cliente.email}, con enlaces nuevos de foto y video (48 h)`}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1 whitespace-nowrap border border-brand/40 text-brand hover:bg-brand/10 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 whitespace-nowrap border border-gray-300 bg-white text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {reenviandoIngreso ? '⌛ Enviando…' : '✉️ Reenviar correo de ingreso'}
                 </button>
@@ -1049,7 +1064,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
 
                 <button
                   onClick={() => setDocsOpen(o => !o)}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
                   📁 Documentos <span className="text-[10px]">▾</span>
                 </button>
@@ -1134,18 +1149,21 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   </>
                 )}
 
-                {solicitaVideo && (
-                  <div
-                    title="El tutor solicitó el video del proceso desde el correo. Recuerda prepararlo y adjuntarlo."
-                    className="mt-3 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-50 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-800"
-                  >
-                    🎥 Cliente solicita video
-                  </div>
-                )}
               </div>
               </div>
             )}
           </div>
+
+          {/* Avisos de la ficha: no son botones, así que no van en la fila de
+              acciones (ahí parecían un botón más y se podía intentar clickearlos). */}
+          {solicitaVideo && (
+            <div
+              title="El tutor solicitó el video del proceso desde el correo. Recuerda prepararlo y adjuntarlo."
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-800"
+            >
+              🎥 El tutor solicitó el video del proceso
+            </div>
+          )}
           {feedbackIngreso && (
             <div className={`mt-4 rounded-lg px-3 py-2 text-xs font-medium border ${
               feedbackIngreso.kind === 'ok'
@@ -1164,6 +1182,76 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               {feedbackCert.msg}
             </div>
           )}
+
+          {/* PANEL DE DINERO — al pie de la cabecera, separado por una línea y
+              a sangre (los márgenes negativos lo llevan al borde de la tarjeta).
+              A la izquierda el desglose línea por línea; a la derecha el total.
+              En una ficha por ingresar el precio todavía no está congelado: el
+              monto es una estimación en vivo con las tablas vigentes. */}
+          <div className="-mx-5 sm:-mx-7 -mb-4 sm:-mb-5 mt-5 px-5 sm:px-7 py-4 sm:py-5 border-t border-gray-200 bg-cream rounded-b-2xl">
+            <div className="flex flex-col-reverse gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0 flex-1 sm:max-w-md">
+                {pesoKg <= 0 ? (
+                  <p className="text-sm font-medium text-amber-800">Falta el peso de la mascota para calcular el valor.</p>
+                ) : (
+                  <div className="space-y-1">
+                    <LineaValor label={`Cremación ${codigoServ}`} sub={tablaNombre} valor={fmtPrecio(precioServicio)} />
+                    {totalAdicionales > 0 && (
+                      <LineaValor label="Adicionales" sub={`${adicionales.length} ${adicionales.length === 1 ? 'ítem' : 'ítems'}`} valor={fmtPrecio(totalAdicionales)} />
+                    )}
+                    {montoDescuento > 0 && (
+                      <LineaValor label="Descuento" sub={descuentoElegido?.nombre} valor={`− ${fmtPrecio(montoDescuento)}`} tono="verde" />
+                    )}
+                    {eutanasiaValorHeader > 0 && (
+                      <LineaValor label="Eutanasia a domicilio" sub="se cobra fuera de la boleta" valor={fmtPrecio(eutanasiaValorHeader)} />
+                    )}
+                  </div>
+                )}
+                {faltaModalidad && pesoKg > 0 && (
+                  <p className="mt-2 text-xs font-semibold text-amber-800">Falta confirmar la modalidad (estimado como Cremación Individual).</p>
+                )}
+              </div>
+              <div className="shrink-0 sm:pl-6 sm:text-right">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Valor a cobrar</div>
+                <div className="text-3xl font-extrabold leading-tight text-brand">{fmtPrecio(totalACobrarHeader)}</div>
+                {precioEsEstimado && (
+                  <span className="mt-1 inline-block rounded border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900"
+                    title="El precio se congela al registrar la ficha; por ahora se calcula con las tablas de precios vigentes.">
+                    estimado
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Cobros de la ficha: NO son plata extra — el valor de arriba ya los
+                contempla (el snapshot se recalcula al agregar el adicional o al
+                registrar el peso real). Se muestran para saber qué parte del
+                total se cobró aparte y en qué estado quedó. */}
+            {cobrosFicha.length > 0 && (
+              <div className="mt-4 border-t border-brand/15 pt-3">
+                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                  Cobros de esta ficha <span className="font-normal normal-case tracking-normal text-gray-400">· ya incluidos en el valor de arriba</span>
+                </p>
+                <div className="space-y-1">
+                  {cobrosFicha.map(cb => {
+                    const est = ESTADO_COBRO[cb.estado] ?? ESTADO_COBRO.pendiente
+                    return (
+                      <div key={cb.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm">
+                        <span className="min-w-0 text-gray-700">
+                          {NOMBRE_COBRO[cb.tipo] ?? 'Cobro'}
+                          {cb.detalle && <span className="text-gray-400"> · {cb.detalle}</span>}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase ${est.cls}`}>{est.label}</span>
+                          <span className="font-semibold text-gray-900">{fmtPrecio(parseInt(cb.monto, 10) || 0)}</span>
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Viñeta: ¿adjuntar el video del servicio al correo del certificado? */}
           <Modal open={confirmVideoOpen} onClose={() => setConfirmVideoOpen(false)} title="Adjuntar video al correo">
@@ -1213,16 +1301,31 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      {/* Correos al tutor: estado de entrega por etapa del proceso. */}
+      {/* Correos al tutor: estado de entrega por etapa del proceso. Va PLEGADO
+          por defecto (es información de consulta, no de trabajo diario); el
+          encabezado resume cuántos salieron. La alerta de rebote queda SIEMPRE
+          a la vista, plegado o no: es lo único accionable del bloque. */}
       {cliente.estado !== 'borrador' && (
         <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 mb-6 overflow-hidden">
-          <div className="bg-gradient-to-r from-sky-50 to-brand/10 px-6 py-3 border-b-2 border-sky-100 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCorreosAbierto(o => !o)}
+            aria-expanded={correosAbierto}
+            className="w-full bg-gradient-to-r from-sky-50 to-brand/10 px-4 sm:px-6 py-3 border-b-2 border-sky-100 flex items-center gap-2 text-left hover:from-sky-100 transition-colors"
+          >
             <span className="text-lg">✉️</span>
             <h2 className="text-sm font-bold text-sky-900 uppercase tracking-wide">Correos al tutor</h2>
-          </div>
-          <div className="p-4 sm:p-6">
+            <span className="ml-auto flex items-center gap-2">
+              {correoProblema && (
+                <span className="rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-800">rebotó</span>
+              )}
+              <span className="text-xs font-medium text-sky-800/70">{correosEnviados} de {ETAPAS_CORREO.length}</span>
+              <span className={`text-sky-900 text-xs transition-transform ${correosAbierto ? 'rotate-180' : ''}`}>▾</span>
+            </span>
+          </button>
+          <div className={correosAbierto ? 'p-4 sm:p-6' : correoProblema ? 'p-4 sm:p-6' : 'hidden'}>
             {correoProblema && (
-              <div className="mb-3 rounded-lg bg-red-50 border-2 border-red-200 px-3 py-2.5 text-xs text-red-800 flex items-start gap-2">
+              <div className={`${correosAbierto ? 'mb-3' : ''} rounded-lg bg-red-50 border-2 border-red-200 px-3 py-2.5 text-xs text-red-800 flex items-start gap-2`}>
                 <span className="text-base leading-none">⚠</span>
                 <span>
                   El correo <b>{cliente.email}</b> {correoProblema.estado === 'rebotado' ? 'rebotó' : correoProblema.estado === 'spam' ? 'fue marcado como spam' : 'falló al enviarse'} — el tutor podría no estar recibiendo los avisos. Revisa que la dirección sea correcta.
@@ -1238,18 +1341,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 </span>
               </div>
             )}
-            {correos.length === 0 ? (
+            {!correosAbierto ? null : correos.length === 0 ? (
               <p className="text-sm text-gray-400">Sin registro de correos para esta ficha todavía. Los correos enviados de aquí en adelante quedan registrados con su estado de entrega.</p>
             ) : (
               <ul className="divide-y divide-gray-100">
-                {([
-                  { tipo: 'registro', label: 'Registro / bienvenida' },
-                  { tipo: 'inicio_cremacion', label: 'Inicio de cremación' },
-                  { tipo: 'inicio_despacho', label: 'Vamos en camino (ruta)' },
-                  { tipo: 'entrega', label: 'Entrega confirmada' },
-                  { tipo: 'certificado', label: 'Certificado de cremación' },
-                  { tipo: 'cobro_diferencia', label: 'Cobro diferencia de peso' },
-                ] as const).map(et => {
+                {ETAPAS_CORREO.map(et => {
                   const c = correosPorTipo[et.tipo]
                   return (
                     <li key={et.tipo} className="flex items-center gap-3 py-2">
@@ -2354,6 +2450,23 @@ function InfoField({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs font-medium text-gray-500">{label}</p>
       <p className="text-sm text-gray-900 mt-0.5">{value}</p>
+    </div>
+  )
+}
+
+/**
+ * Una línea del desglose de la cabecera: concepto (con su aclaración chica) a la
+ * izquierda, monto a la derecha, alineados por la línea de puntos del medio.
+ */
+function LineaValor({ label, sub, valor, tono }: { label: string; sub?: string; valor: string; tono?: 'verde' }) {
+  return (
+    <div className="flex items-baseline gap-2 text-sm">
+      <span className="shrink-0 text-gray-700">
+        {label}
+        {sub && <span className="text-gray-400"> · {sub}</span>}
+      </span>
+      <span className="min-w-4 flex-1 translate-y-[-3px] border-b border-dotted border-gray-300" aria-hidden="true" />
+      <span className={`shrink-0 font-semibold ${tono === 'verde' ? 'text-emerald-700' : 'text-gray-900'}`}>{valor}</span>
     </div>
   )
 }
