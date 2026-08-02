@@ -7,6 +7,7 @@ import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { PageHeader, Card, Button } from '@/components/ui/kit'
+import { nombreVisible } from '@/lib/roles'
 
 type Rendicion = {
   id: string; usuario: string; descripcion: string; fecha: string
@@ -128,7 +129,7 @@ export default function RendicionesPage() {
   }
 
   async function eliminar(r: Rendicion) {
-    if (!confirm(`¿Eliminar la rendición de ${r.usuario} (${fmtPrecio(r.monto)})?`)) return
+    if (!confirm(`¿Eliminar la rendición de ${nombreVisible(r.usuario)} (${fmtPrecio(r.monto)})?`)) return
     const res = await fetch(`/api/rendiciones?id=${encodeURIComponent(r.id)}`, { method: 'DELETE' })
     if (res.ok) await fetchAll()
     else alert('No se pudo eliminar')
@@ -243,7 +244,7 @@ export default function RendicionesPage() {
             <div className="mt-3 divide-y divide-gray-200 border-t border-gray-200">
               {pendientesPorUsuarioArr.map(([usuario, monto]) => (
                 <div key={usuario} className="flex items-center justify-between py-1.5 text-sm">
-                  <span className="text-gray-700">{usuario}</span>
+                  <span className="text-gray-700">{nombreVisible(usuario)}</span>
                   <span className="font-semibold text-gray-900">{fmtPrecio(monto)}</span>
                 </div>
               ))}
@@ -272,7 +273,7 @@ export default function RendicionesPage() {
         <select value={filtroUsuario} onChange={e => setFiltroUsuario(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
           <option value="">Todos los usuarios</option>
-          {usuarios.map(u => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+          {usuarios.map(u => <option key={u.id} value={u.nombre}>{nombreVisible(u.nombre)}</option>)}
         </select>
         <select value={filtroDoc} onChange={e => setFiltroDoc(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
@@ -324,7 +325,7 @@ export default function RendicionesPage() {
               return (
                 <tr key={r.id} className={`transition-colors ${sel.has(r.id) ? 'bg-brand/5' : 'hover:bg-gray-50'}`}>
                   <td className="px-3 py-3 text-center">{esPrincipal && <input type="checkbox" checked={sel.has(r.id)} onChange={() => toggleSel(r.id)} className="accent-[#143C64] w-4 h-4 cursor-pointer" />}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{r.usuario}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{nombreVisible(r.usuario)}</td>
                   <td className="px-4 py-3 text-gray-700">{r.descripcion}</td>
                   <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(r.fecha)}</td>
                   <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{fmtPrecio(r.monto)}</td>
@@ -374,7 +375,7 @@ export default function RendicionesPage() {
             <select required value={form.usuario} onChange={e => setForm(f => ({ ...f, usuario: e.target.value }))}
               className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="">Seleccionar...</option>
-              {usuarios.map(u => <option key={u.id} value={u.nombre}>{u.nombre} ({u.email})</option>)}
+              {usuarios.map(u => <option key={u.id} value={u.nombre}>{nombreVisible(u.nombre)} ({u.email})</option>)}
             </select>
           </div>
           <div>
@@ -456,7 +457,7 @@ export default function RendicionesPage() {
                     onChange={() => togglePago(r.id)}
                     className="w-4 h-4 text-brand" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">{r.usuario} · {r.descripcion}</div>
+                    <div className="text-sm font-medium text-gray-900 truncate">{nombreVisible(r.usuario)} · {r.descripcion}</div>
                     <div className="text-xs text-gray-500">{formatDate(r.fecha)} · {clasifLabel(r.clasificacion)}{r.tipo_documento ? ` · ${docLabel(r.tipo_documento)}` : ''}</div>
                   </div>
                   <div className="text-sm font-semibold text-gray-900">{fmtPrecio(r.monto)}</div>
@@ -473,7 +474,7 @@ export default function RendicionesPage() {
             <select required value={pagoForm.usuario_pagado} onChange={e => setPagoForm(p => ({ ...p, usuario_pagado: e.target.value }))}
               className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="">Seleccionar...</option>
-              {usuarios.map(u => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
+              {usuarios.map(u => <option key={u.id} value={u.nombre}>{nombreVisible(u.nombre)}</option>)}
             </select>
           </div>
           <div>

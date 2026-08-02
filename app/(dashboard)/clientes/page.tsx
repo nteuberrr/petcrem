@@ -18,6 +18,7 @@ import { anforaPremiumIncluida, servicioIncluyeAnforaPremium, repartirAnforasPre
 import { esComunaNoCubierta } from '@/lib/cobertura'
 import { aplicaReglaAuto, etiquetaRegla } from '@/lib/adicionales-auto'
 import { ORIGENES_MANUALES, labelOrigen } from '@/lib/origen-cliente'
+import { pidioVideo } from '@/lib/video-solicitado'
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
@@ -29,7 +30,7 @@ type Cliente = {
   direccion_retiro?: string; direccion_despacho?: string; comuna?: string; depto?: string
   adicionales?: string
   veterinaria_id?: string; notas?: string; origen?: string
-  fotos_cuadro?: string; videos_servicio?: string
+  fotos_cuadro?: string; videos_servicio?: string; video_solicitado?: string
   correo_diferencia_fecha?: string
   precio_servicio?: string; precio_adicionales?: string; precio_total?: string
   /** Valor a cobrar de la eutanasia a domicilio asociada (fuera de boleta); lo agrega el GET de la lista. */
@@ -381,7 +382,7 @@ export default function ClientesPage() {
   // Íconos de estado para las tarjetas.
   const jsonTieneItems = (s?: string) => { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) && a.length > 0 } catch { return false } }
   const esPremiumCuadro = (c: Cliente) => (c.codigo_servicio || '').toUpperCase() === 'CP'
-  const solicitoVideo = (c: Cliente) => (c.notas || '').includes('El tutor solicitó el video')
+  const solicitoVideo = (c: Cliente) => pidioVideo(c)
 
   // Ids de fichas con al menos un cobro NO pagado (de la tabla `cobros`).
   const idsConCobroPendiente = useMemo(() => new Set(cobrosPend.map(c => String(c.cliente_id))), [cobrosPend])

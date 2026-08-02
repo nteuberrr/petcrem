@@ -12,15 +12,35 @@
 
 export type Rol = 'admin' | 'admin2' | 'operador' | 'operador2'
 
+/**
+ * Etiqueta VISIBLE del rol dueño. El valor interno sigue siendo 'admin' (lo leen
+ * proxy, permisos y la base); esto es solo lo que ve la gente en pantalla —
+ * decisión del dueño: en la UI el admin se llama "Nicolas (Admin)".
+ */
+export const LABEL_ADMIN = 'Nicolas (Admin)'
+
 export const ROLES: { value: Rol; label: string }[] = [
-  { value: 'admin', label: 'Admin' },
+  { value: 'admin', label: LABEL_ADMIN },
   { value: 'admin2', label: 'General' },
   { value: 'operador', label: 'Operario Nivel 1' },
   { value: 'operador2', label: 'Operario Nivel 2' },
 ]
 
 export const ROL_LABEL: Record<string, string> = {
-  admin: 'Admin', admin2: 'General', operador: 'Operario Nivel 1', operador2: 'Operario Nivel 2',
+  admin: LABEL_ADMIN, admin2: 'General', operador: 'Operario Nivel 1', operador2: 'Operario Nivel 2',
+}
+
+/**
+ * Nombres con los que el dueño quedó guardado en filas viejas (rendiciones,
+ * fichajes, auditorías…). NO se migran los datos: se traducen al MOSTRARLOS, así
+ * los registros históricos siguen calzando con los filtros que los guardaron.
+ */
+const NOMBRES_ADMIN = ['administrador', 'admin']
+
+/** Nombre a MOSTRAR de un usuario: el dueño siempre se ve como "Nicolas (Admin)". */
+export function nombreVisible(nombre?: string | null): string {
+  const n = (nombre || '').trim()
+  return NOMBRES_ADMIN.includes(n.toLowerCase()) ? LABEL_ADMIN : n
 }
 
 /** Normaliza un valor arbitrario a un Rol válido (default operador = Nivel 1). */

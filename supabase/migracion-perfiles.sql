@@ -46,11 +46,16 @@ alter table "usuarios" add column if not exists "perfil_id" text not null defaul
 
 -- ── 5. Perfiles semilla ─────────────────────────────────────────────────────
 insert into "perfiles" ("slug", "nombre", "descripcion", "sistema", "activo") values
-  ('administrador', 'Administrador',    'Dueño del sistema. Acceso total, incluida la Configuración Avanzada. No se edita ni se elimina.', 'TRUE', 'TRUE'),
+  ('administrador', 'Nicolas (Admin)',  'Dueño del sistema. Acceso total, incluida la Configuración Avanzada. No se edita ni se elimina.', 'TRUE', 'TRUE'),
   ('general',       'General',          'Acceso amplio a la operación, comercial y finanzas. Sin Configuración Avanzada.',                  'TRUE', 'TRUE'),
   ('operario-n1',   'Operario Nivel 1', 'Operación diaria: dashboard, fichas, operaciones y asistencia.',                                   'TRUE', 'TRUE'),
   ('operario-n2',   'Operario Nivel 2', 'Igual que el Nivel 1, en una fila aparte para poder diferenciarlos.',                              'TRUE', 'TRUE')
 on conflict ("slug") do nothing;
+
+-- El perfil del dueño se muestra con su nombre (decisión 2026-08-02). El `insert`
+-- de arriba no lo pisa si la fila ya existe, así que se renombra explícito.
+update "perfiles" set "nombre" = 'Nicolas (Admin)'
+where "slug" = 'administrador' and "nombre" <> 'Nicolas (Admin)';
 
 -- ── 6. Permisos iniciales de los perfiles semilla ───────────────────────────
 --  Se siembran desde el modelo viejo (`permisos_modulos`, booleano por rol) para

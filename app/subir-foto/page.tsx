@@ -25,6 +25,9 @@ export default function SubirFotoPage() {
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState('')
   const [exito, setExito] = useState(false)
+  // ya = la ficha YA tiene una foto de este tipo. Solo se guarda una: la última
+  // pisa a la anterior, así que se lo avisamos antes de que suba otra.
+  const [ya, setYa] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const [tipo, setTipo] = useState<'certificado' | 'cuadro'>('certificado')
   const esCuadro = tipo === 'cuadro'
@@ -41,7 +44,7 @@ export default function SubirFotoPage() {
       fetch(`/api/clientes/foto?token=${encodeURIComponent(tok)}&tipo=${tp}`)
         .then(r => r.json())
         .then(d => {
-          if (d?.ok) { setMascota(d.nombre_mascota); setEstadoCodigo('ok') }
+          if (d?.ok) { setMascota(d.nombre_mascota); setYa(!!d.ya); setEstadoCodigo('ok') }
           else setEstadoCodigo('invalido')
         })
         .catch(() => setEstadoCodigo('invalido'))
@@ -69,6 +72,7 @@ export default function SubirFotoPage() {
       const d = await r.json().catch(() => ({}))
       if (r.ok && d?.ok) {
         setMascota(d.nombre_mascota || mascota)
+        setYa(true)
         setExito(true)
       } else {
         setError(d?.error || 'No pudimos subir la foto. Inténtalo de nuevo.')
@@ -130,8 +134,9 @@ export default function SubirFotoPage() {
               className="mt-6 text-sm font-medium underline"
               style={{ color: COLOR }}
             >
-              Subir otra foto
+              Cambiar la foto
             </button>
+            <p className="text-xs text-gray-500 mt-2">Si subes otra, quedará esa como la elegida.</p>
           </div>
         )}
 
@@ -140,6 +145,12 @@ export default function SubirFotoPage() {
             <p className="text-sm text-gray-700">
               Foto de <strong>{mascota}</strong>
             </p>
+
+            {ya && (
+              <p className="text-sm rounded-lg p-3 border" style={{ backgroundColor: '#FDF6E7', borderColor: AMBER, color: '#7a5a12' }}>
+                Ya has subido una imagen. Si subes una nueva, <strong>esta quedará como la elegida</strong> y reemplazará a la anterior.
+              </p>
+            )}
 
             <input
               ref={inputRef}

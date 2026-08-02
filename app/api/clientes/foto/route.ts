@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateById, ensureColumns } from '@/lib/datastore'
-import { uploadToR2 } from '@/lib/cloudflare-r2'
+import { uploadToR2, deleteFromR2 } from '@/lib/cloudflare-r2'
 import { verifyTutorToken, type AccionTutor } from '@/lib/tutor-token'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12,8 +12,12 @@ import { verifyTutorToken, type AccionTutor } from '@/lib/tutor-token'
 //   tipo=cuadro                → acción 'subir_foto_cuadro' → clientes.fotos_cuadro
 //   (el cuadro acuarela conmemorativo es exclusivo del servicio Premium/CP)
 //
-//   GET  ?token=XXX[&tipo=] → { ok, nombre_mascota }  (precarga del landing)
-//   POST multipart (token, tipo?, foto) → sube a R2 y la agrega al campo del tipo
+//   GET  ?token=XXX[&tipo=] → { ok, nombre_mascota, ya }  (precarga del landing)
+//   POST multipart (token, tipo?, foto) → sube a R2 y REEMPLAZA la del campo
+//
+// Por decisión del dueño el tutor tiene UNA sola foto por tipo: si sube otra,
+// pisa a la anterior (y la anterior se borra de R2). Así el operador nunca ve
+// una galería del mismo tutor sin saber cuál es la buena — la última es la elegida.
 //
 // Ruta whitelisteada en proxy.ts (sin sesión).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -27,6 +31,20 @@ type Tipo = 'certificado' | 'cuadro'
 const ACCION: Record<Tipo, AccionTutor> = { certificado: 'subir_foto', cuadro: 'subir_foto_cuadro' }
 const CAMPO: Record<Tipo, string> = { certificado: 'fotos_mascota', cuadro: 'fotos_cuadro' }
 const parseTipo = (v: unknown): Tipo => (String(v) === 'cuadro' ? 'cuadro' : 'certificado')
+
+/** URLs guardadas en el campo (JSON array); [] si está vacío o corrupto. */
+function fotosDe(cliente: Record<string, string>, campo: string): string[] {
+  try {
+    const x = JSON.parse(cliente[campo] || '[]')
+    return Array.isArray(x) ? x.filter((u): u is string => typeof u === 'string') : []
+  } catch { return [] }
+}
+
+/** Key de R2 a partir de la URL pública (…/mascotas/fotos/ABC-123.jpg → mascotas/…). */
+function keyDesdeUrl(url: string): string | null {
+  const i = url.indexOf('/mascotas/')
+  return i === -1 ? null : url.slice(i + 1)
+}
 
 /** Resuelve la ficha del cliente a partir del token firmado para ESE tipo, o null. */
 async function clienteDesdeToken(token: string, tipo: Tipo): Promise<Record<string, string> | null> {
@@ -44,7 +62,12 @@ export async function GET(req: NextRequest) {
     if (!token) return NextResponse.json({ ok: false, error: 'Falta el token' }, { status: 400 })
     const cliente = await clienteDesdeToken(token, tipo)
     if (!cliente) return NextResponse.json({ ok: false, error: 'Enlace inválido o vencido' }, { status: 404 })
-    return NextResponse.json({ ok: true, nombre_mascota: cliente.nombre_mascota, tipo })
+    return NextResponse.json({
+      ok: true,
+      nombre_mascota: cliente.nombre_mascota,
+      tipo,
+      ya: fotosDe(cliente, CAMPO[tipo]).length > 0,
+    })
   } catch (e) {
     console.error('[clientes/foto]', e)
     return NextResponse.json({ ok: false, error: 'No se pudo procesar la solicitud. Intenta nuevamente.' }, { status: 500 })
@@ -77,13 +100,19 @@ export async function POST(req: NextRequest) {
     const key = `mascotas/${carpeta}/${cliente.codigo || cliente.id}-${Date.now()}.${ext}`
     const up = await uploadToR2(Buffer.from(ab), key, foto.type)
 
-    let fotos: string[] = []
-    try { const x = JSON.parse(cliente[campo] || '[]'); if (Array.isArray(x)) fotos = x } catch { /* */ }
-    fotos.push(up.url)
+    // Una sola foto por tipo: la nueva REEMPLAZA a la anterior.
+    const previas = fotosDe(cliente, campo)
+    await updateById('clientes', cliente.id, { ...cliente, [campo]: JSON.stringify([up.url]) })
 
-    await updateById('clientes', cliente.id, { ...cliente, [campo]: JSON.stringify(fotos) })
+    // Las anteriores ya no las referencia nadie → se borran de R2 (best-effort,
+    // después de guardar: si falla solo queda un objeto huérfano).
+    for (const vieja of previas) {
+      if (vieja === up.url) continue
+      const key = keyDesdeUrl(vieja)
+      if (key) await deleteFromR2(key).catch(() => false)
+    }
 
-    return NextResponse.json({ ok: true, nombre_mascota: cliente.nombre_mascota, url: up.url, tipo })
+    return NextResponse.json({ ok: true, nombre_mascota: cliente.nombre_mascota, url: up.url, tipo, ya: true })
   } catch (e) {
     console.error('[clientes/foto]', e)
     return NextResponse.json({ ok: false, error: 'No se pudo procesar la solicitud. Intenta nuevamente.' }, { status: 500 })

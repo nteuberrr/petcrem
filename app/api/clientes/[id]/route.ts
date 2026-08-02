@@ -129,6 +129,7 @@ export async function PATCH(
     const CAMPOS_SISTEMA = [
       'id', 'codigo', 'estado', 'ciclo_id', 'despacho_id', 'origen', 'fecha_creacion',
       'fotos_mascota', 'fotos_cuadro', 'videos_servicio', 'fotos_evidencia',
+      'video_solicitado', // lo escribe solo /api/clientes/video (link del tutor)
       'correo_diferencia_fecha', 'correo_diferencia_monto',
       'greda_descontada', // lo administra el sync de greda de abajo, nunca el form
       // Punteros a documentos tributarios YA emitidos: los escriben solo los flujos

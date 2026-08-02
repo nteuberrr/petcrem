@@ -8,6 +8,7 @@ import {
   HeartHandshake, Megaphone, FileText, HandCoins, Globe, Wallet, Settings, LineChart,
   Menu, X, LogOut, type LucideIcon,
 } from 'lucide-react'
+import { ROL_LABEL } from '@/lib/roles'
 
 // Cada ítem se asocia a un módulo; el sidebar muestra solo los módulos permitidos
 // para el rol (dinámico, vía /api/mis-modulos). El admin (dueño) ve todos.
@@ -169,7 +170,7 @@ export default function Sidebar() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-xs text-white/90 truncate">{userName}</div>
-                <div className="text-[10px] text-white/50 uppercase tracking-wide">{role}</div>
+                <div className="text-[10px] text-white/50 tracking-wide">{ROL_LABEL[role] ?? role}</div>
               </div>
             </div>
           )}

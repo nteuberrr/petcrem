@@ -15,7 +15,7 @@ import DescuentosConvenios from '@/components/DescuentosConvenios'
 import PerfilesEditor from '@/components/PerfilesEditor'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 import { formatDate, formatHora } from '@/lib/dates'
-import { esAdmin, esAdminTotal, ROL_LABEL } from '@/lib/roles'
+import { esAdmin, esAdminTotal, ROL_LABEL, LABEL_ADMIN } from '@/lib/roles'
 import { comunasDeServicio, etiquetaRegla } from '@/lib/adicionales-auto'
 
 const TABS = ['Precios', 'Artículos', 'Descuentos', 'Descuentos Convenios', 'Jornada', 'Configuración Avanzada'] as const
@@ -1004,14 +1004,14 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                 if (!adminEnRow) {
                   return (
                     <tr className="bg-brand/10/40">
-                      <td className="px-4 py-3 font-medium text-gray-900">Administrador</td>
+                      <td className="px-4 py-3 font-medium text-gray-900">{LABEL_ADMIN}</td>
                       <td className="px-4 py-3 text-gray-600 text-xs">{adminEmail || '(env)'}</td>
                       <td className="px-4 py-3 text-gray-400 text-xs">—</td>
-                      <td className="px-4 py-3"><Badge variant="purple">admin</Badge></td>
+                      <td className="px-4 py-3"><Badge variant="purple">{LABEL_ADMIN}</Badge></td>
                       <td className="px-4 py-3"><Badge variant="green">activo</Badge></td>
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: 'Administrador', email: adminEmail, password: '', rol: 'admin', perfil_id: '', telefono: '', avisos_whatsapp: 'FALSE' }); setShowUsuarioModal(true) }}
+                          onClick={() => { setEditingUsuario(null); setUsuarioForm({ nombre: LABEL_ADMIN, email: adminEmail, password: '', rol: 'admin', perfil_id: '', telefono: '', avisos_whatsapp: 'FALSE' }); setShowUsuarioModal(true) }}
                           className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors">
                           Editar
                         </button>

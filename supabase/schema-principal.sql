@@ -68,6 +68,7 @@ create table if not exists "clientes" (
   "fotos_mascota" text not null default '',
   "fotos_cuadro" text not null default '',
   "videos_servicio" text not null default '',
+  "video_solicitado" text not null default '',
   "fotos_evidencia" text not null default '',
   "correo_diferencia_fecha" text not null default '',
   "correo_diferencia_monto" text not null default '',
@@ -1190,3 +1191,26 @@ create table if not exists "usuario_permisos" (
   primary key ("usuario_id", "modulo")
 );
 alter table "usuario_permisos" enable row level security;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Parches idempotentes sobre tablas ya creadas (correr sobre una base existente;
+-- en una base nueva los CREATE de arriba ya los traen).
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- clientes.video_solicitado (2026-08-02): la solicitud del video del proceso
+-- pasa a tener columna propia. Antes se escribía como una línea dentro de
+-- `notas`, pero ese campo es SOLO para los comentarios manuales del equipo.
+alter table "clientes" add column if not exists "video_solicitado" text not null default '';
+
+-- Migra las solicitudes que quedaron dentro de `notas` y limpia esa línea.
+-- Toma la fecha del propio texto ("(DD/MM/YYYY)") y si no se puede leer usa hoy.
+update "clientes"
+set "video_solicitado" = coalesce(
+      to_char(
+        to_date(substring("notas" from 'El tutor solicitó el video del proceso \((\d{2}/\d{2}/\d{4})\)'), 'DD/MM/YYYY'),
+        'YYYY-MM-DD'),
+      to_char(current_date, 'YYYY-MM-DD')),
+    "notas" = btrim(regexp_replace("notas", '\n?[^\n]*El tutor solicitó el video[^\n]*', '', 'g'), E' \n')
+where "notas" like '%El tutor solicitó el video%';
+
+notify pgrst, 'reload schema';

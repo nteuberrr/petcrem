@@ -156,7 +156,7 @@ export default function PerfilesEditor() {
           <h2 className="font-semibold text-brand">Perfiles de acceso</h2>
           <p className="text-xs text-gray-600 mt-0.5">
             Cada persona tiene un perfil, y el perfil define qué módulos puede <b>ver</b> y cuáles puede <b>editar</b>.
-            Los cambios se aplican casi al instante. Tú (Administrador) siempre tienes todo.
+            Los cambios se aplican casi al instante. Tú, <b>Nicolas (Admin)</b>, siempre tienes todo.
           </p>
         </div>
         <Button variant="primary" onClick={() => { setNuevo({ nombre: '', descripcion: '', copiar_de: perfil?.id || '' }); setNuevoOpen(true) }}>
@@ -241,7 +241,7 @@ export default function PerfilesEditor() {
 
                 {!perfil.editable ? (
                   <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    El perfil <b>Administrador</b> tiene acceso total a todos los módulos y es el único que entra a
+                    El perfil <b>Nicolas (Admin)</b> tiene acceso total a todos los módulos y es el único que entra a
                     Configuración Avanzada (donde se editan estos permisos). No se puede modificar ni eliminar, a
                     propósito: es lo que evita que alguien se quite a sí mismo el acceso o se escale privilegios.
                   </div>

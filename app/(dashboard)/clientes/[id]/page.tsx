@@ -17,6 +17,7 @@ import { anforaPremiumIncluida, servicioIncluyeAnforaPremium, repartirAnforasPre
 import { aplicaReglaAuto, cremacionLlevaRecargoFueraHorario } from '@/lib/adicionales-auto'
 import { retiroPendiente, ahoraEnChile } from '@/lib/ficha-retiro'
 import { esAdmin } from '@/lib/roles'
+import { pidioVideo } from '@/lib/video-solicitado'
 
 type Certificado = {
   id: string
@@ -118,6 +119,8 @@ type ClienteDetalle = {
   fotos_mascota?: string
   fotos_cuadro?: string
   videos_servicio?: string
+  /** Fecha ISO en que el tutor pidió el video del proceso ('' = no lo pidió). */
+  video_solicitado?: string
   fotos_evidencia?: string
   correo_diferencia_fecha?: string
   correo_diferencia_monto?: string
@@ -931,8 +934,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const videosServicio: string[] = (() => {
     try { const x = JSON.parse(cliente.videos_servicio || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
   })()
-  // El tutor pidió el video del proceso desde el correo (deja la marca en `notas`).
-  const solicitaVideo = /solicit[oó] el video/i.test(cliente.notas || '')
+  // El tutor pidió el video del proceso desde el correo (columna video_solicitado).
+  const solicitaVideo = pidioVideo(cliente)
   const fotosEvidencia: string[] = (() => {
     try { const x = JSON.parse(cliente.fotos_evidencia || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
   })()

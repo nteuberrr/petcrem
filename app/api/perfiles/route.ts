@@ -237,7 +237,7 @@ export async function PUT(req: NextRequest) {
     if (!fila) return NextResponse.json({ error: 'Perfil no encontrado.' }, { status: 404 })
     const slug = (fila as { slug: string }).slug
     if (slug === PERFIL_ADMIN) {
-      return NextResponse.json({ error: 'El perfil Administrador no se puede modificar.' }, { status: 400 })
+      return NextResponse.json({ error: 'El perfil Nicolas (Admin) no se puede modificar.' }, { status: 400 })
     }
 
     // ── Datos del perfil ──────────────────────────────────────────────────

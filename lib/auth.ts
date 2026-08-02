@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs'
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { getSheetData, updateById } from '@/lib/datastore'
-import { normalizarRol } from '@/lib/roles'
+import { normalizarRol, LABEL_ADMIN } from '@/lib/roles'
 import { estaBloqueado, registrarIntentoFallido, limpiarIntentosFallidos } from '@/lib/login-rate-limit'
 
 const BCRYPT_RE = /^\$2[aby]\$/
@@ -43,7 +43,7 @@ export const authOptions: NextAuthOptions = {
           safeEqual(password, process.env.ADMIN_PASSWORD)
         ) {
           await limpiarIntentosFallidos(email, ip)
-          return { id: '0', name: 'Administrador', email, role: 'admin' }
+          return { id: '0', name: LABEL_ADMIN, email, role: 'admin' }
         }
         // Check usuarios sheet
         try {

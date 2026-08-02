@@ -31,6 +31,10 @@ export const SHEETS: Record<string, string[]> = {
     // JSON array de URLs (R2) de videos del servicio que sube el operador; se
     // pueden adjuntar al correo del certificado.
     'videos_servicio',
+    // Fecha ISO en que el tutor pidió el video del proceso desde /solicitar-video
+    // ('' = no lo pidió). Antes esto era una marca dentro de `notas`; se sacó de
+    // ahí porque `notas` es solo para comentarios manuales (lib/video-solicitado.ts).
+    'video_solicitado',
     // JSON array de URLs (R2) de fotos de EVIDENCIA del peso real, que sube el
     // operador cuando hay diferencia de tramo (peso_ingreso > peso_declarado).
     'fotos_evidencia',
