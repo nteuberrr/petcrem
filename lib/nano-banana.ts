@@ -110,6 +110,13 @@ export interface GenerarImagenOpts {
    * Permite texto y usa el estilo de diseño on-brand en vez del de foto.
    */
   conTexto?: boolean
+  /**
+   * Resolución de salida ('1K' | '2K' | '4K'). Solo la aceptan los modelos Pro de
+   * imagen; si la API la rechaza, el reintento sin imageConfig la ignora y sale en
+   * 1K. Útil para piezas que se ven a pantalla completa (un héroe del sitio en 1K
+   * se ve pixelado en un monitor grande).
+   */
+  imageSize?: '1K' | '2K' | '4K'
 }
 
 export interface ImagenGenerada {
@@ -164,7 +171,14 @@ export async function generarImagen(opts: GenerarImagenOpts): Promise<ImagenGene
       ...baseBody,
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE'],
-        ...(opts.aspect && !editar ? { imageConfig: { aspectRatio: opts.aspect } } : {}),
+        ...((opts.aspect && !editar) || opts.imageSize
+          ? {
+              imageConfig: {
+                ...(opts.aspect && !editar ? { aspectRatio: opts.aspect } : {}),
+                ...(opts.imageSize ? { imageSize: opts.imageSize } : {}),
+              },
+            }
+          : {}),
       },
     },
     { ...baseBody, generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } },

@@ -20,7 +20,12 @@ import sharp from 'sharp'
 
 const DIR = path.join(process.cwd(), 'public', 'sitio', 'assets')
 const APLICAR = process.argv.includes('--aplicar')
-const ANCHO_MAX = 1600          // ninguna imagen del sitio se muestra más grande
+// ⚠️ Estos números ya se pasaron una vez: con 1600 px, JPEG q76 y PNG con paleta
+// las fotos grandes quedaron con bloques visibles y los degradados con bandas
+// (hubo que recuperarlas con scripts/restaurar-calidad-imagenes-sitio.ts). Si
+// hace falta bajar más el peso, la salida son formatos modernos (WebP/AVIF), no
+// seguir apretando la calidad.
+const ANCHO_MAX = 2000          // techo: un héroe a pantalla completa en retina
 const MINIMO = 120 * 1024       // por debajo de 120 KB no vale la pena tocarla
 
 const kb = (b: number) => (b / 1024).toFixed(0).padStart(6) + ' KB'
@@ -42,8 +47,9 @@ async function main() {
       const necesitaResize = (meta.width || 0) > ANCHO_MAX
       let pipe = necesitaResize ? img.resize({ width: ANCHO_MAX, withoutEnlargement: true }) : img
       pipe = /\.png$/i.test(f)
-        ? pipe.png({ quality: 72, compressionLevel: 9, effort: 8, palette: true })
-        : pipe.jpeg({ quality: 76, mozjpeg: true, progressive: true })
+        // Sin `palette`: cuantizar a 256 colores es lo que dejaba bandeado.
+        ? pipe.png({ compressionLevel: 9, effort: 10 })
+        : pipe.jpeg({ quality: 85, mozjpeg: true, progressive: true })
       const out = await pipe.toBuffer()
 
       if (out.length < orig.length * 0.92) {
