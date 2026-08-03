@@ -10,6 +10,7 @@ import {
   renderClienteAgradecimientoEutanasia, renderClienteCotizacionEutanasia, renderNoRealizada,
 } from './eutanasia-mailer'
 import { renderInformeFacturacionEmail } from './informe-mailer'
+import { asuntoLiquidacion, renderLiquidacionEmail } from './remuneraciones/mailer'
 import {
   buildRetiroConfirmadoVet, buildCodigoVet, buildInicioRutaVet, buildEntregaVet,
   buildBienvenidaConvenioVet,
@@ -45,7 +46,7 @@ export interface CorreoDef {
   /** Módulo donde está implementado (para agrupar). */
   modulo: string
   /** A quién va dirigido. */
-  audiencia: 'Tutor' | 'Veterinario'
+  audiencia: 'Tutor' | 'Veterinario' | 'Empleado'
   /** Breve descripción de cuándo se envía. */
   cuando: string
   build: (m: MuestraCorreo, contacto: Contacto) => CorreoRender
@@ -350,6 +351,27 @@ export const CORREOS: CorreoDef[] = [
         nombreVet: 'Veterinaria San Francisco',
         nombreContacto: VET_MUESTRA,
         periodoHasta: m.fechaCremacion,
+        contacto: c,
+      }),
+    }),
+  },
+
+  // ── Remuneraciones (equipo) ─────────────────────────────────────────────────
+  {
+    key: 'rrhh_liquidacion',
+    titulo: 'Liquidación de sueldo (adjunta el PDF)',
+    modulo: 'Remuneraciones',
+    audiencia: 'Empleado',
+    cuando: 'Al apretar «Enviar liquidación» en Remuneraciones → Histórico.',
+    build: (_m, c) => ({
+      subject: asuntoLiquidacion('julio 2026'),
+      html: renderLiquidacionEmail({
+        nombre: 'Juan Miguel Palencia',
+        periodoTexto: 'julio 2026',
+        liquido: 780000,
+        reembolsoSalud: 54600,
+        totalTransferir: 834600,
+        cremaciones: 92,
         contacto: c,
       }),
     }),

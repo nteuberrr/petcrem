@@ -48,7 +48,10 @@ export const authOptions: NextAuthOptions = {
         // Check usuarios sheet
         try {
           const usuarios = await getSheetData('usuarios')
-          const u = usuarios.find(u => u.email === email && u.activo === 'TRUE')
+          // El correo no distingue mayúsculas (nadie tipea "Munoz.oscar.n@…"
+          // con la M grande, y el teclado del teléfono la pone solo).
+          const emailNorm = email.trim().toLowerCase()
+          const u = usuarios.find(u => (u.email || '').trim().toLowerCase() === emailNorm && u.activo === 'TRUE')
           if (u && u.password) {
             const esHash = BCRYPT_RE.test(u.password)
             const ok = esHash

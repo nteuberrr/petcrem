@@ -1,7 +1,8 @@
 'use client'
-import { Bot, Paperclip, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowDown, Bot, Paperclip, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { formatDateTime } from '@/lib/dates'
+import TextoWhatsapp from '@/components/TextoWhatsapp'
 
 type Canal = 'whatsapp' | 'instagram' | 'facebook'
 type Contacto = { id: number; nombre: string | null; telefono: string | null; audiencia: string; cliente_id: string | null }
@@ -68,19 +69,33 @@ export default function MensajesView() {
   // un refresco viejo no sobrescriba el estado recién cambiado (ej. activar el agente).
   const pausaRef = useRef(0)
 
+  // La búsqueda pega contra un ILIKE sobre el historial: se espera a que el
+  // usuario deje de escribir en vez de disparar un fetch por tecla.
+  const [buscarQ, setBuscarQ] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setBuscarQ(buscar.trim()), 350)
+    return () => clearTimeout(t)
+  }, [buscar])
+
+  /** Firma barata de la lista para no re-renderizarla si nada cambió. */
+  const firma = (l: Conversacion[]) => l.map(c => `${c.id}:${c.ultimo_mensaje_at}:${c.no_leido ? 1 : 0}:${c.estado}:${c.etiquetas.join(',')}`).join('|')
+
   const fetchConvs = useCallback(async (silent = false) => {
     if (!silent) { setCargando(true); setError('') }
     try {
       const p = new URLSearchParams()
       if (estado) p.set('estado', estado)
-      if (buscar) p.set('buscar', buscar)
+      if (buscarQ) p.set('buscar', buscarQ)
       const r = await fetch(`/api/mensajes?${p}`, { cache: 'no-store' })
       const j = await r.json()
       if (!r.ok) { if (!silent) { setError(j.error || 'Error al cargar'); setConvs([]) } }
-      else setConvs(Array.isArray(j) ? j : [])
+      else {
+        const lista: Conversacion[] = Array.isArray(j) ? j : []
+        setConvs(prev => (firma(prev) === firma(lista) ? prev : lista))
+      }
     } catch { if (!silent) setError('Error de red') }
     if (!silent) setCargando(false)
-  }, [estado, buscar])
+  }, [estado, buscarQ])
 
   useEffect(() => { fetchConvs() }, [fetchConvs])
 
@@ -93,17 +108,35 @@ export default function MensajesView() {
   }, [])
   useEffect(() => { fetchNoLeidos() }, [fetchNoLeidos])
 
+  // Conversación seleccionada, leída dentro de callbacks sin re-crearlos.
+  const selRef = useRef<number | null>(null)
+  useEffect(() => { selRef.current = sel }, [sel])
+
+  /**
+   * Trae la conversación y REEMPLAZA su contenido sin blanquear el panel.
+   * Es lo que se usa después de una mutación (enviar, etiquetar, cambiar
+   * categoría): antes se llamaba a `abrir`, que ponía conv=null y desmontaba
+   * todo el chat → parpadeo, scroll al inicio y pérdida del foco del input.
+   */
+  const sincronizar = useCallback(async (id: number) => {
+    const r = await fetch(`/api/mensajes/${id}`, { cache: 'no-store' })
+    if (!r.ok) return
+    const j = await r.json()
+    if (j.conversacion) setConv(j.conversacion)
+    setMsgs(j.mensajes || [])
+  }, [])
+
   const abrir = useCallback(async (id: number) => {
     pausaRef.current++
     try {
-      setSel(id); setConv(null); setMsgs([])
+      // Solo se blanquea al CAMBIAR de conversación (si es la misma, sería un parpadeo).
+      if (selRef.current !== id) { setConv(null); setMsgs([]) }
+      setSel(id); selRef.current = id
       // Al abrir, la marcamos leída localmente (el GET la marca en el server).
       setConvs(prev => prev.map(c => (c.id === id ? { ...c, no_leido: false } : c)))
-      const r = await fetch(`/api/mensajes/${id}`, { cache: 'no-store' })
-      const j = await r.json()
-      if (r.ok) { setConv(j.conversacion); setMsgs(j.mensajes || []) }
+      await sincronizar(id)
     } finally { pausaRef.current-- }
-  }, [])
+  }, [sincronizar])
 
   // Refresco SILENCIOSO de la conversación abierta (no resetea ni parpadea).
   // Solo reemplaza los mensajes si cambió el último o la cantidad → evita re-render inútil.
@@ -116,12 +149,10 @@ export default function MensajesView() {
       const j = await r.json()
       if (pausaRef.current > 0) return
       const nuevos: Mensaje[] = j.mensajes || []
-      setMsgs(prev => {
-        const a = prev[prev.length - 1]
-        const b = nuevos[nuevos.length - 1]
-        if (prev.length === nuevos.length && a?.id === b?.id) return prev
-        return nuevos
-      })
+      // Compara ids + estados: así también se ve pasar un mensaje de
+      // "pendiente" a "enviado"/"fallido" sin recargar nada.
+      const sig = (l: Mensaje[]) => l.map(m => `${m.id}:${m.estado || ''}`).join(',')
+      setMsgs(prev => (sig(prev) === sig(nuevos) ? prev : nuevos))
       if (j.conversacion) setConv(j.conversacion)
     } catch { /* silencioso */ }
   }, [sel])
@@ -136,39 +167,107 @@ export default function MensajesView() {
     return () => clearInterval(t)
   }, [fetchConvs, refrescarAbierta, fetchNoLeidos])
 
-  // Auto-scroll al final cuando llegan/envían mensajes nuevos (no al releer historial).
-  const bottomRef = useRef<HTMLDivElement>(null)
+  // ── Scroll del chat (como WhatsApp) ───────────────────────────────────────
+  // Se mueve SOLO el contenedor de mensajes, nunca el documento: `scrollIntoView`
+  // arrastraba también la ventana y por eso "saltaba" toda la página.
+  const listaRef = useRef<HTMLDivElement>(null)
+  const pegadoRef = useRef(true)          // ¿el usuario está mirando el final?
+  const convScrollRef = useRef<number | null>(null) // conversación ya posicionada
   const prevLenRef = useRef(0)
-  useEffect(() => {
-    if (msgs.length > prevLenRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const [nuevosAbajo, setNuevosAbajo] = useState(false)
+
+  const irAlFondo = useCallback((suave: boolean) => {
+    const el = listaRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: suave ? 'smooth' : 'auto' })
+    pegadoRef.current = true
+    setNuevosAbajo(false)
+  }, [])
+
+  useLayoutEffect(() => {
+    const el = listaRef.current
+    if (!el || msgs.length === 0) return
+    if (convScrollRef.current !== sel) {
+      // Chat recién abierto: al final de una, sin animación (antes se veía
+      // recorrer todo el historial con scroll suave).
+      convScrollRef.current = sel
+      prevLenRef.current = msgs.length
+      el.scrollTop = el.scrollHeight
+      pegadoRef.current = true
+      return
+    }
+    if (msgs.length > prevLenRef.current) {
+      // Si estaba leyendo historial más arriba, no se lo arrastra: se le avisa.
+      if (pegadoRef.current) irAlFondo(true)
+      else setNuevosAbajo(true)
+    }
     prevLenRef.current = msgs.length
-  }, [msgs])
+  }, [msgs, sel, irAlFondo])
+
+  // El campo de escritura crece con el texto (hasta ~5 líneas) y vuelve a una
+  // sola línea al enviar.
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+  }, [texto])
+
+  const onScrollLista = () => {
+    const el = listaRef.current
+    if (!el) return
+    const cerca = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    pegadoRef.current = cerca
+    if (cerca) setNuevosAbajo(false)
+  }
 
   async function enviar() {
-    if (!sel || !texto.trim()) return
+    const cuerpo = texto.trim()
+    if (!sel || !cuerpo || enviando || subiendo) return
+    // Optimista: la burbuja aparece al instante (como WhatsApp) y después se
+    // reemplaza por la fila real que devuelve el POST. Sin recargar el chat.
+    const idTmp = -Date.now()
+    const optimista: Mensaje = {
+      id: idTmp, direccion: 'saliente', cuerpo, tipo: 'texto',
+      estado: 'enviando', enviado_por: null, ts: new Date().toISOString(), media_url: null,
+    }
+    setTexto('')
+    setMsgs(prev => [...prev, optimista])
+    pegadoRef.current = true
     setEnviando(true); pausaRef.current++
     try {
       const r = await fetch(`/api/mensajes/${sel}/mensaje`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cuerpo: texto }),
+        body: JSON.stringify({ cuerpo }),
       })
       const j = await r.json().catch(() => ({}))
-      if (r.ok) {
-        setTexto(''); await abrir(sel)
-        if (j.plantilla_disponible) {
-          // Ventana de 24h cerrada: ofrecer la plantilla aprobada de reapertura.
-          if (confirm('La ventana de 24h está cerrada, así que ese texto no se pudo entregar.\n\n¿Enviar la plantilla de reapertura? ("Hola…, te escribimos de Crematorio Alma Animal para retomar tu conversación…")\nTiene un costo pequeño por mensaje; si la persona responde, la conversación se reabre y puedes escribir libre.')) {
-            const r2 = await fetch(`/api/mensajes/${sel}/mensaje`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ plantilla: true }),
-            })
-            const j2 = await r2.json().catch(() => ({}))
-            if (r2.ok) await abrir(sel)
-            else alert(j2.error || 'No se pudo enviar la plantilla')
-          }
-        } else if (j.aviso) alert(j.aviso)
+      if (!r.ok) {
+        setMsgs(prev => prev.filter(m => m.id !== idTmp))
+        setTexto(t => t || cuerpo) // no se pierde lo escrito
+        alert(j.error || 'No se pudo registrar el mensaje')
+        return
       }
-      else alert(j.error || 'No se pudo registrar el mensaje')
+      if (j.mensaje) setMsgs(prev => prev.map(m => (m.id === idTmp ? (j.mensaje as Mensaje) : m)))
+      // El backend pausa el agente cuando responde un humano: se refleja acá
+      // mismo en vez de recargar toda la conversación para enterarse.
+      setConv(prev => (prev && !prev.etiquetas.includes('pausado') ? { ...prev, etiquetas: [...prev.etiquetas, 'pausado'] } : prev))
+      if (j.plantilla_disponible) {
+        // Ventana de 24h cerrada: ofrecer la plantilla aprobada de reapertura.
+        if (confirm('La ventana de 24h está cerrada, así que ese texto no se pudo entregar.\n\n¿Enviar la plantilla de reapertura? ("Hola…, te escribimos de Crematorio Alma Animal para retomar tu conversación…")\nTiene un costo pequeño por mensaje; si la persona responde, la conversación se reabre y puedes escribir libre.')) {
+          const r2 = await fetch(`/api/mensajes/${sel}/mensaje`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plantilla: true }),
+          })
+          const j2 = await r2.json().catch(() => ({}))
+          if (r2.ok) await sincronizar(sel)
+          else alert(j2.error || 'No se pudo enviar la plantilla')
+        }
+      } else if (j.aviso) alert(j.aviso)
+    } catch {
+      setMsgs(prev => prev.filter(m => m.id !== idTmp))
+      setTexto(t => t || cuerpo)
+      alert('Error de red: el mensaje no se envió.')
     } finally { pausaRef.current--; setEnviando(false) }
   }
 
@@ -181,7 +280,7 @@ export default function MensajesView() {
       if (texto.trim()) fd.append('caption', texto.trim())
       const r = await fetch(`/api/mensajes/${sel}/media`, { method: 'POST', body: fd })
       const j = await r.json().catch(() => ({}))
-      if (r.ok) { setTexto(''); await abrir(sel); if (j.aviso) alert(j.aviso) }
+      if (r.ok) { setTexto(''); pegadoRef.current = true; await sincronizar(sel); if (j.aviso) alert(j.aviso) }
       else alert(j.error || 'No se pudo enviar el archivo')
     } finally { pausaRef.current--; setSubiendo(false) }
   }
@@ -191,7 +290,7 @@ export default function MensajesView() {
     pausaRef.current++
     try {
       await fetch(`/api/mensajes/${sel}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      await abrir(sel); await fetchConvs()
+      await sincronizar(sel); await fetchConvs(true)
     } finally { pausaRef.current-- }
   }
 
@@ -212,7 +311,7 @@ export default function MensajesView() {
     try {
       const r = await fetch(`/api/mensajes/${sel}`, { method: 'DELETE' })
       if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error || 'No se pudo eliminar'); return }
-      setSel(null); setConv(null); setMsgs([])
+      setSel(null); selRef.current = null; convScrollRef.current = null; setConv(null); setMsgs([])
       await fetchConvs()
     } finally { pausaRef.current-- }
   }
@@ -288,7 +387,7 @@ export default function MensajesView() {
             <div className="p-3 border-b border-gray-300">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <button onClick={() => { setSel(null); setConv(null); setMsgs([]) }}
+                  <button onClick={() => { setSel(null); selRef.current = null; convScrollRef.current = null; setConv(null); setMsgs([]) }}
                     aria-label="Volver a la lista"
                     className="md:hidden shrink-0 text-gray-500 hover:text-gray-800 text-2xl leading-none px-1">‹</button>
                   <div className="min-w-0">
@@ -323,10 +422,11 @@ export default function MensajesView() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50">
+            <div ref={listaRef} onScroll={onScrollLista}
+              className="relative flex-1 overflow-y-auto overscroll-contain p-3 space-y-2 bg-gray-50/50">
               {msgs.map(m => (
                 <div key={m.id} className={`flex ${m.direccion === 'saliente' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direccion === 'saliente' ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-800'}`}>
+                  <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direccion === 'saliente' ? 'bg-brand text-white' : 'bg-white border border-gray-300 text-gray-800'} ${m.estado === 'enviando' ? 'opacity-70' : ''}`}>
                     {m.media_url ? (
                       m.tipo === 'imagen' ? (
                         <a href={m.media_url} target="_blank" rel="noreferrer">
@@ -341,17 +441,24 @@ export default function MensajesView() {
                         <a href={m.media_url} target="_blank" rel="noreferrer" className="underline break-all"><Paperclip className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Abrir archivo</a>
                       )
                     ) : (m.tipo !== 'texto' && <span className="text-[10px] opacity-70 italic">[{m.tipo}]</span>)}
-                    {m.cuerpo ? <div className={m.media_url ? 'mt-1' : ''}>{m.cuerpo}</div> : null}
+                    {m.cuerpo ? <TextoWhatsapp texto={m.cuerpo} className={m.media_url ? 'mt-1' : ''} /> : null}
                     <div className={`text-[9px] mt-0.5 ${m.direccion === 'saliente' ? 'text-white/60' : 'text-gray-400'}`}>{fecha(m.ts)}{m.enviado_por === 'agente' ? ' · agente' : ''}{m.estado ? ` · ${m.estado}` : ''}</div>
                   </div>
                 </div>
               ))}
               {msgs.length === 0 && <p className="text-center text-xs text-gray-400 py-6">Sin mensajes</p>}
-              <div ref={bottomRef} />
             </div>
 
+            {/* Llegaron mensajes mientras se leía historial más arriba */}
+            {nuevosAbajo && (
+              <button onClick={() => irAlFondo(true)}
+                className="self-center -mt-11 mb-1 z-10 flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-md hover:bg-brand-dark">
+                <ArrowDown className="w-3.5 h-3.5" aria-hidden="true" /> Mensajes nuevos
+              </button>
+            )}
+
             <div className="p-3 border-t border-gray-300">
-              <div className="flex gap-2 items-center">
+              <div className="flex gap-2 items-end">
                 <input ref={fileRef} type="file" className="hidden"
                   accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
                   onChange={e => { const f = e.target.files?.[0]; if (f) enviarArchivo(f); e.target.value = '' }} />
@@ -360,7 +467,14 @@ export default function MensajesView() {
                   className="shrink-0 w-9 h-9 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center text-2xl leading-none font-light">
                   {subiendo ? '…' : '+'}
                 </button>
-                <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enviar() }}
+                {/* Textarea (no input): ahora los saltos de línea se ven en la
+                    burbuja, así que hay que poder escribirlos. Enter envía,
+                    Shift+Enter hace salto — igual que WhatsApp Web. */}
+                <textarea ref={inputRef} value={texto} rows={1}
+                  onChange={e => setTexto(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); enviar() }
+                  }}
                   onPaste={e => {
                     // Pegar una imagen (Ctrl/⌘+V) → se envía como adjunto.
                     const item = Array.from(e.clipboardData?.items || []).find(i => i.kind === 'file' && i.type.startsWith('image/'))
@@ -368,7 +482,7 @@ export default function MensajesView() {
                     if (file) { e.preventDefault(); enviarArchivo(file) }
                   }}
                   placeholder="Escribe un mensaje… (o pega una imagen)"
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                  className="flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand" />
                 <button onClick={enviar} disabled={enviando || subiendo || !texto.trim()}
                   className="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
                   {enviando ? '…' : 'Enviar'}

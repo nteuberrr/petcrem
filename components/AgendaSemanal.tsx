@@ -1,7 +1,7 @@
 'use client'
-import { Fragment, useState, useEffect, useCallback, useMemo } from 'react'
+import { Fragment, useState, useEffect, useCallback, useMemo, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
-import { Stethoscope, Hospital, PawPrint, CalendarDays } from 'lucide-react'
+import { Stethoscope, Hospital, PawPrint, CalendarDays, Check } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import NuevaSolicitudModal from '@/components/NuevaSolicitudModal'
 import { useAccionUnica } from '@/lib/use-accion-unica'
@@ -12,6 +12,8 @@ type Item = {
   estado: 'pendiente' | 'confirmada'; mascota: string; quien: string; esVet: boolean
   comuna: string; direccion: string; tipo_servicio?: string; clienteId?: string
   horaEutanasia?: string; esperandoHoraVet?: boolean; sinCremacion?: boolean
+  /** La mascota ya está con nosotros (retiro hecho) → etiqueta azul "listo". */
+  retirada?: boolean
   /** Valor a cobrar por lo agendado (lo calcula /api/agenda). */
   valor?: number; valorEstimado?: boolean
 }
@@ -27,6 +29,8 @@ const HORAS = Array.from({ length: 16 }, (_, i) => 8 + i) // 8..23 (la agenda mu
 const DIAS_LBL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const SERVICIO: Record<string, string> = { CI: 'Individual', CP: 'Premium', SD: 'Sin Devolución' }
+// Mismo corte que el `md:` de Tailwind, que es el que decide qué vista se muestra.
+const MQ_MOVIL = '(max-width: 767px)'
 
 // Grilla estilo Google Calendar: cada hora mide HOUR_PX y los eventos se
 // posicionan por su minuto real, con alto proporcional a la duración del bloque.
@@ -131,6 +135,25 @@ function nowChile(): { iso: string; h: number; m: number } {
   return { iso, h: h || 0, m: m || 0 }
 }
 
+/** Fecha (mediodía local) a N días de hoy. */
+function hoyMas(dias: number): Date {
+  const d = new Date()
+  d.setHours(12, 0, 0, 0)
+  d.setDate(d.getDate() + dias)
+  return d
+}
+/** Día de la semana (0 = lunes) de una fecha ISO, sin corrimiento UTC. */
+function dowDe(iso: string): number {
+  const [y, m, d] = iso.split('-').map(Number)
+  return (new Date(y, (m || 1) - 1, d || 1).getDay() + 6) % 7
+}
+/** Encabezado del día en la agenda móvil: "Lun 4 ago" + "Hoy"/"Mañana". */
+function rotuloDia(iso: string, hoyIso: string, mananaIso: string): { titulo: string; relativo: string | null } {
+  const [, m, d] = iso.split('-')
+  const titulo = `${DIAS_LBL[dowDe(iso)]} ${Number(d)} ${MESES[Number(m) - 1]}`
+  const relativo = iso === hoyIso ? 'Hoy' : iso === mananaIso ? 'Mañana' : null
+  return { titulo, relativo }
+}
 /** Lunes de la semana de hoy + offset (en semanas). */
 function lunesDe(offsetSemanas: number): Date {
   const d = new Date()
@@ -139,6 +162,28 @@ function lunesDe(offsetSemanas: number): Date {
   d.setDate(d.getDate() - dow + offsetSemanas * 7)
   return d
 }
+/**
+ * Color de la etiqueta de un agendamiento. UNA sola definición para la lista del
+ * teléfono y la grilla del computador (antes estaba duplicada y se desincronizaba).
+ *
+ *   gris   → eutanasia sin cremación (solo recordatorio, no hay retiro)
+ *   azul   → LISTO: la mascota ya fue retirada, está con nosotros
+ *   ámbar  → por confirmar
+ *   verde  → confirmado, pendiente de retirar
+ */
+function estiloDe(it: Item): { cls: string; hover: string; listo: boolean } {
+  if (it.tipo === 'eutanasia' && it.sinCremacion) {
+    return { cls: 'bg-gray-100 border-gray-300 text-gray-700', hover: 'hover:bg-gray-200', listo: false }
+  }
+  if (it.retirada) {
+    return { cls: 'bg-blue-100 border-blue-400 text-blue-900', hover: 'hover:bg-blue-200', listo: true }
+  }
+  if (it.estado === 'pendiente') {
+    return { cls: 'bg-amber-100 border-amber-300 text-amber-900', hover: 'hover:bg-amber-200', listo: false }
+  }
+  return { cls: 'bg-emerald-100 border-emerald-300 text-emerald-900', hover: 'hover:bg-emerald-200', listo: false }
+}
+
 /** Ícono del tipo de agendamiento (SVG, no emoji: se ve igual en todo equipo). */
 function IconoTipo({ it, className = 'w-3 h-3 shrink-0' }: { it: Item; className?: string }) {
   if (it.tipo === 'eutanasia') return <Stethoscope className={className} aria-hidden="true" />
@@ -159,9 +204,11 @@ function detalle(it: Item): string {
     (it.direccion || it.comuna) && `${[it.direccion, it.comuna].filter(Boolean).join(', ')}`,
     eutSinCrem
       ? 'Sin retiro del crematorio: el chofer no pasa a buscarla. No bloquea la agenda.'
+      : it.retirada
+      ? '✓ Listo: la mascota ya fue retirada y está con nosotros'
       : it.tipo === 'eutanasia' && it.esperandoHoraVet
       ? `⏳ Esperando que el veterinario informe la hora de retiro (se muestra en la hora de la eutanasia${it.horaEutanasia ? ` ${it.horaEutanasia}` : ''})`
-      : it.estado === 'pendiente' ? 'Pendiente de confirmación' : 'Confirmado',
+      : it.estado === 'pendiente' ? 'Pendiente de confirmación' : 'Confirmado, pendiente de retirar',
     it.tipo === 'eutanasia' ? '→ Clic: abre la ficha de la eutanasia' : null,
   ].filter(Boolean)
   return partes.join('\n')
@@ -189,23 +236,44 @@ export default function AgendaSemanal() {
     return () => clearInterval(t)
   }, [])
 
+  // En el teléfono la agenda NO es una grilla semanal sino una lista continua de
+  // los próximos días (ver el render `md:hidden`), así que el rango que se pide a
+  // la API es distinto según el ancho. En el servidor se asume escritorio.
+  const movil = useSyncExternalStore(
+    cb => {
+      const mq = window.matchMedia(MQ_MOVIL)
+      mq.addEventListener('change', cb)
+      return () => mq.removeEventListener('change', cb)
+    },
+    () => window.matchMedia(MQ_MOVIL).matches,
+    () => false,
+  )
+  const [diasVista, setDiasVista] = useState(30)
+
   const lunes = useMemo(() => lunesDe(offset), [offset])
   const dias = useMemo(() => Array.from({ length: 7 }, (_, i) => {
     const d = new Date(lunes); d.setDate(lunes.getDate() + i)
     return { iso: isoLocal(d), num: d.getDate(), mes: d.getMonth() }
   }), [lunes])
   const hoyIso = isoLocal(new Date())
+  const mananaIso = useMemo(() => isoLocal(hoyMas(1)), [])
+
+  // Móvil: de hoy hacia adelante. Escritorio: la semana visible.
+  const rangoFetch = useMemo(() => (
+    movil
+      ? { from: hoyIso, to: isoLocal(hoyMas(diasVista - 1)) }
+      : { from: dias[0].iso, to: dias[6].iso }
+  ), [movil, diasVista, dias, hoyIso])
 
   const cargar = useCallback(async () => {
     try {
-      const from = dias[0].iso, to = dias[6].iso
-      const r = await fetch(`/api/agenda?from=${from}&to=${to}`, { cache: 'no-store' })
+      const r = await fetch(`/api/agenda?from=${rangoFetch.from}&to=${rangoFetch.to}`, { cache: 'no-store' })
       if (!r.ok) return
       const d = await r.json()
       setItems(Array.isArray(d?.items) ? d.items : [])
       setBloqueos(Array.isArray(d?.bloqueos) ? d.bloqueos : [])
     } catch { /* reintenta al próximo tick */ } finally { setCargado(true) }
-  }, [dias])
+  }, [rangoFetch])
 
   useEffect(() => {
     cargar()
@@ -215,6 +283,31 @@ export default function AgendaSemanal() {
 
   const rango = `${dias[0].num} ${MESES[dias[0].mes]} – ${dias[6].num} ${MESES[dias[6].mes]}`
   const total = items.length
+
+  /**
+   * Agenda del teléfono: días con algo agendado (o bloqueado), de hoy en adelante,
+   * en orden. Los días vacíos NO se listan — es una agenda, no un calendario.
+   */
+  const diasAgenda = useMemo(() => {
+    const porDia = new Map<string, { items: Item[]; bloqueos: Bloqueo[] }>()
+    const bucket = (iso: string) => {
+      let b = porDia.get(iso)
+      if (!b) { b = { items: [], bloqueos: [] }; porDia.set(iso, b) }
+      return b
+    }
+    for (const it of items) if (it.fecha >= hoyIso) bucket(it.fecha).items.push(it)
+    for (const b of bloqueos) {
+      // Un bloqueo de varios días aparece en cada día que tapa (dentro del rango).
+      for (let i = 0; i < diasVista; i++) {
+        const iso = isoLocal(hoyMas(i))
+        if (iso > rangoFetch.to) break
+        if (rangoBloqueoEnDia(b, iso)) bucket(iso).bloqueos.push(b)
+      }
+    }
+    return [...porDia.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([iso, d]) => ({ iso, ...d, items: d.items.sort((a, b) => minutosDe(a) - minutosDe(b)) }))
+  }, [items, bloqueos, hoyIso, diasVista, rangoFetch.to])
 
   // Edición rápida de la hora directamente desde la agenda (sin abrir la ficha,
   // para no arriesgar un "Registrar ficha" accidental que avise al tutor). Solo
@@ -368,8 +461,11 @@ export default function AgendaSemanal() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
           <CalendarDays className="w-5 h-5 text-brand" aria-hidden="true" />
-          <h2 className="text-sm sm:text-base font-bold text-brand">Agenda de la semana</h2>
-          <span className="text-xs text-gray-500 hidden sm:inline">· {rango}</span>
+          <h2 className="text-sm sm:text-base font-bold text-brand">
+            <span className="md:hidden">Agenda</span>
+            <span className="hidden md:inline">Agenda de la semana</span>
+          </h2>
+          <span className="text-xs text-gray-500 hidden md:inline">· {rango}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <button onClick={() => setModalSolicitud(true)} title="Registrar a mano un retiro: crea la ficha «Por ingresar» y le avisa al tutor por WhatsApp"
@@ -380,79 +476,115 @@ export default function AgendaSemanal() {
             className="px-3 h-8 rounded-lg border border-red-300 bg-red-50 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors mr-1">
             Bloquear agenda
           </button>
+          {/* Navegación por semanas: solo tiene sentido en la grilla. En el teléfono
+              la agenda corre de hoy hacia adelante (botón "Ver 30 días más"). */}
           <button onClick={() => setOffset(o => o - 1)} title="Semana anterior"
-            className="w-8 h-8 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors">‹</button>
+            className="hidden md:inline-flex w-8 h-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors">‹</button>
           <button onClick={() => setOffset(0)} disabled={offset === 0}
-            className="px-3 h-8 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-40 transition-colors">Hoy</button>
+            className="hidden md:inline-flex px-3 h-8 items-center rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-40 transition-colors">Hoy</button>
           <button onClick={() => setOffset(o => o + 1)} title="Semana siguiente"
-            className="w-8 h-8 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors">›</button>
+            className="hidden md:inline-flex w-8 h-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors">›</button>
         </div>
       </div>
 
       {/* Leyenda */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 text-[11px] text-gray-600">
-        <span className="sm:hidden font-medium text-gray-500">{rango}</span>
+        <span className="md:hidden font-medium text-gray-500">Próximos {diasVista} días</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-200 border border-amber-400" /> Por confirmar</span>
-        <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-200 border border-emerald-400" /> Confirmado</span>
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-200 border border-emerald-400" /> Por retirar</span>
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-200 border border-blue-400" /> Listo (ya retirada)</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-200 border border-gray-400" /> Eutanasia sin cremación (recordatorio)</span>
-        <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{ background: SOMBRA_BG }} /> Bloqueo 30 min</span>
+        <span className="hidden md:inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{ background: SOMBRA_BG }} /> Bloqueo 30 min</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-red-300" style={{ background: BLOQUEO_BG }} /> Agenda bloqueada</span>
         <span className="inline-flex items-center gap-1"><PawPrint className="w-3 h-3" aria-hidden="true" /> Retiro · <Hospital className="w-3 h-3" aria-hidden="true" /> Vet · <Stethoscope className="w-3 h-3" aria-hidden="true" /> Eutanasia</span>
       </div>
 
       {/* MÓVIL: la grilla semanal no entra en 390px (se veían 3 de 7 días), así que
-          acá la agenda es una lista de días hacia abajo mostrando solo las etiquetas
-          de cada agendamiento. La grilla tipo calendario queda para ≥768px. */}
-      <div className="md:hidden divide-y divide-gray-200 border-t border-gray-200">
-        {dias.map((d, i) => {
-          const esHoy = d.iso === hoyIso
-          const delDia = items.filter(it => it.fecha === d.iso).sort((a, b) => minutosDe(a) - minutosDe(b))
-          const bloqueosDia = bloqueos.filter(b => rangoBloqueoEnDia(b, d.iso))
-          return (
-            <div key={d.iso} className="py-2.5">
-              <div className="flex items-baseline gap-2 mb-1.5">
-                <span className={`text-sm font-bold ${esHoy ? 'text-brand' : 'text-gray-700'}`}>
-                  {DIAS_LBL[i]} {d.num}
-                </span>
-                {esHoy && <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Hoy</span>}
-                {delDia.length > 0 && <span className="ml-auto text-[11px] text-gray-500">{delDia.length}</span>}
-              </div>
+          acá es una AGENDA: los próximos días hacia abajo, y solo los que tienen algo
+          agendado (nada de horarios vacíos). La grilla tipo calendario va desde 768px. */}
+      <div className="md:hidden">
+        {diasAgenda.length === 0 ? (
+          <p className="border-t border-gray-200 pt-4 text-center text-xs text-gray-400">
+            {cargado ? `No hay nada agendado en los próximos ${diasVista} días.` : 'Cargando…'}
+          </p>
+        ) : (
+          <div className="divide-y divide-gray-200 border-t border-gray-200">
+            {diasAgenda.map(d => {
+              const { titulo, relativo } = rotuloDia(d.iso, hoyIso, mananaIso)
+              return (
+                <div key={d.iso} className="py-3">
+                  <div className="mb-2 flex items-baseline gap-2">
+                    <span className={`text-sm font-bold ${d.iso === hoyIso ? 'text-brand' : 'text-gray-700'}`}>{titulo}</span>
+                    {relativo && (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${d.iso === hoyIso ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600'}`}>
+                        {relativo}
+                      </span>
+                    )}
+                    {d.items.length > 0 && (
+                      <span className="ml-auto text-[11px] text-gray-500">
+                        {d.items.length} {d.items.length === 1 ? 'agendamiento' : 'agendamientos'}
+                      </span>
+                    )}
+                  </div>
 
-              {bloqueosDia.map(b => (
-                <button key={`mb${b.id}`} onClick={() => abrirModalBloqueo(b)}
-                  className="mb-1 flex w-full items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-left min-h-11">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-red-700">Bloqueada</span>
-                  <span className="truncate text-xs text-red-800">{rotuloBloqueo(b)}</span>
-                </button>
-              ))}
+                  {d.bloqueos.map(b => (
+                    <button key={`mb${b.id}`} onClick={() => abrirModalBloqueo(b)}
+                      className="mb-1.5 flex w-full items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-left min-h-11">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-red-700">Bloqueada</span>
+                      <span className="truncate text-xs text-red-800">{rotuloBloqueo(b)}</span>
+                    </button>
+                  ))}
 
-              {delDia.length === 0 && bloqueosDia.length === 0 ? (
-                <p className="text-xs text-gray-400">Sin agendamientos.</p>
-              ) : (
-                <div className="space-y-1">
-                  {delDia.map(it => {
-                    const gris = it.tipo === 'eutanasia' && it.sinCremacion
-                    const amarillo = it.estado === 'pendiente'
-                    const cls = gris
-                      ? 'bg-gray-100 border-gray-300 text-gray-700'
-                      : amarillo
-                      ? 'bg-amber-100 border-amber-300 text-amber-900'
-                      : 'bg-emerald-100 border-emerald-300 text-emerald-900'
-                    return (
-                      <button key={it.id} onClick={() => abrir(it)}
-                        className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left min-h-11 ${cls}`}>
-                        <span className="text-xs font-bold tabular-nums">{it.hora}</span>
-                        <IconoTipo it={it} className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate text-xs font-medium">{it.mascota || it.quien || '—'}</span>
-                        {it.tipo === 'eutanasia' && it.esperandoHoraVet && <span className="ml-auto text-xs" title="Esperando hora del veterinario">⏳</span>}
-                      </button>
-                    )
-                  })}
+                  <div className="space-y-1.5">
+                    {d.items.map(it => {
+                      const { cls, listo } = estiloDe(it)
+                      const donde = [it.direccion, it.comuna].filter(Boolean).join(', ')
+                      return (
+                        // En el teléfono no hay hover: el resumen que en la grilla vive
+                        // en el tooltip va escrito dentro de la etiqueta.
+                        <button key={it.id} onClick={() => abrir(it)}
+                          className={`flex w-full gap-2.5 rounded-xl border px-3 py-2.5 text-left ${cls}`}>
+                          <span className="text-sm font-bold tabular-nums pt-px">{it.hora}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-1.5">
+                              <IconoTipo it={it} className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate text-sm font-semibold">{it.mascota || it.quien || '—'}</span>
+                              {/* El color no puede ser el único indicador */}
+                              {listo && (
+                                <span className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-blue-600 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-white">
+                                  <Check className="w-2.5 h-2.5" aria-hidden="true" /> Listo
+                                </span>
+                              )}
+                              {it.tipo === 'eutanasia' && it.esperandoHoraVet && <span className="text-xs" title="Esperando hora del veterinario">⏳</span>}
+                            </span>
+                            {(it.quien || it.tipo_servicio) && (
+                              <span className="mt-0.5 block truncate text-[11px] opacity-80">
+                                {[it.quien, it.tipo_servicio ? (SERVICIO[it.tipo_servicio] || it.tipo_servicio) : null].filter(Boolean).join(' · ')}
+                              </span>
+                            )}
+                            {donde && <span className="block truncate text-[11px] opacity-70">{donde}</span>}
+                          </span>
+                          {it.valor != null && it.valor > 0 && (
+                            <span className="shrink-0 text-[11px] font-semibold tabular-nums opacity-90">
+                              {fmtPrecio(it.valor)}{it.valorEstimado ? '*' : ''}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-              )}
-            </div>
-          )
-        })}
+              )
+            })}
+          </div>
+        )}
+
+        {diasVista < 120 && (
+          <button onClick={() => setDiasVista(n => n + 30)}
+            className="mt-3 w-full rounded-xl border border-gray-300 py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+            Ver 30 días más
+          </button>
+        )}
       </div>
 
       {/* Grilla estilo Google Calendar: columnas continuas, evento posicionado por
@@ -532,15 +664,11 @@ export default function AgendaSemanal() {
                     const izq = `calc(${col * wPct}% + 1px)`
                     const ancho = `calc(${wPct}% - 2px)`
                     const gris = it.tipo === 'eutanasia' && it.sinCremacion
-                    const amarillo = it.estado === 'pendiente'
                     // Las eutanasias SIN cremación no ocupan la agenda del chofer → sin sombra.
                     const sombraTop = (Math.max(START_MIN, startMin - SOMBRA_ANTES_MIN) - START_MIN) / 60 * HOUR_PX
                     const sombraAlto = top - sombraTop
-                    const cls = gris
-                      ? 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
-                      : amarillo
-                      ? 'bg-amber-100 border-amber-300 text-amber-900 hover:bg-amber-200'
-                      : 'bg-emerald-100 border-emerald-300 text-emerald-900 hover:bg-emerald-200'
+                    const { cls: base, hover, listo } = estiloDe(it)
+                    const cls = `${base} ${hover}`
                     return (
                       <Fragment key={it.id}>
                         {!gris && sombraAlto > 2 && (
@@ -554,6 +682,7 @@ export default function AgendaSemanal() {
                           <div className="flex items-center gap-1 text-[11px] font-bold">
                             <span>{it.hora}</span>
                             <IconoTipo it={it} />
+                            {listo && <Check className="w-3 h-3 shrink-0" aria-hidden="true" />}
                             {it.tipo === 'eutanasia' && it.esperandoHoraVet && <span title="Esperando hora del veterinario">⏳</span>}
                           </div>
                           <div className="text-[10px] font-medium truncate">{it.mascota || it.quien || '—'}</div>
@@ -576,7 +705,8 @@ export default function AgendaSemanal() {
       </div>
 
       {cargado && total === 0 && (
-        <p className="text-center text-xs text-gray-400 mt-3">Sin agendamientos esta semana.</p>
+        // En móvil el vacío ya lo dice la lista de la agenda.
+        <p className="hidden md:block text-center text-xs text-gray-400 mt-3">Sin agendamientos esta semana.</p>
       )}
 
       {/* Alta manual de una solicitud de retiro. Al crearla, refrescamos la

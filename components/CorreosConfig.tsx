@@ -2,7 +2,7 @@
 import { Mail, Search, Send } from 'lucide-react'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 
-type CorreoMeta = { key: string; titulo: string; modulo: string; audiencia: 'Tutor' | 'Veterinario'; cuando: string }
+type CorreoMeta = { key: string; titulo: string; modulo: string; audiencia: 'Tutor' | 'Veterinario' | 'Empleado'; cuando: string }
 type Muestra = { nombreMascota: string; nombreTutor: string; codigo: string; email: string; fechaCremacion: string }
 type LogRow = {
   id: string; fecha_envio: string; tipo: string; audiencia: string; destinatario: string
@@ -307,7 +307,11 @@ export default function CorreosConfig() {
                             title={copia ? 'Recibes copia de este correo' : 'No recibes copia de este correo'}
                             className={`inline-block w-2 h-2 rounded-full ${copia ? 'bg-emerald-500' : 'bg-gray-300'}`}
                           />
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${c.audiencia === 'Tutor' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{c.audiencia}</span>
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                            c.audiencia === 'Tutor' ? 'bg-emerald-100 text-emerald-700'
+                            : c.audiencia === 'Empleado' ? 'bg-violet-100 text-violet-700'
+                            : 'bg-blue-100 text-blue-700'
+                          }`}>{c.audiencia}</span>
                         </span>
                       </div>
                       <p className="text-[11px] text-gray-500 mt-0.5">{c.cuando}</p>

@@ -49,7 +49,7 @@ export interface AttachmentSpec {
 export interface SeguimientoMeta {
   /** Key del catálogo (lib/correos-catalogo), p.ej. 'cliente_registro'. */
   tipo: string
-  audiencia?: 'Tutor' | 'Veterinario'
+  audiencia?: 'Tutor' | 'Veterinario' | 'Empleado'
   codigo?: string
   nombre?: string
   clienteId?: string

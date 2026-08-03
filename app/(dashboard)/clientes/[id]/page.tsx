@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import {
   FolderOpen, Folder, FileText, RefreshCw, Mail, Clapperboard, Camera,
-  PawPrint, Video, Flame, Image, Stethoscope, Save,
+  PawPrint, Video, Flame, Image, Stethoscope, Save, Tag,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -18,6 +18,7 @@ import { aplicaReglaAuto, cremacionLlevaRecargoFueraHorario } from '@/lib/adicio
 import { retiroPendiente, ahoraEnChile } from '@/lib/ficha-retiro'
 import { esAdmin } from '@/lib/roles'
 import { pidioVideo } from '@/lib/video-solicitado'
+import { datosEtiqueta, formatearTelefono, ETIQUETA_MM } from '@/lib/etiqueta-datos'
 
 type Certificado = {
   id: string
@@ -201,6 +202,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   // Menú "Documentos" (certificados + archivos).
   const [docsOpen, setDocsOpen] = useState(false)
   const docsMenuRef = useRef<HTMLDivElement>(null)
+  // Vista previa de la etiqueta de despacho (80 × 50 mm).
+  const [etiquetaOpen, setEtiquetaOpen] = useState(false)
   // Viñeta de confirmación para adjuntar el video del servicio al correo del certificado.
   const [confirmVideoOpen, setConfirmVideoOpen] = useState(false)
   const certInputRef = useRef<HTMLInputElement>(null)
@@ -1051,6 +1054,15 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 whitespace-nowrap border border-gray-300 bg-white text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {reenviandoIngreso ? '⌛ Enviando…' : '✉️ Reenviar correo de ingreso'}
+                </button>
+                {/* Etiqueta para la impresora térmica (80 × 50 mm). Va al lado de
+                    Documentos porque se imprime en el momento de despachar. */}
+                <button
+                  onClick={() => setEtiquetaOpen(true)}
+                  title="Ver e imprimir la etiqueta de despacho (80 × 50 mm)"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 whitespace-nowrap border border-gray-300 bg-white text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Tag className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Etiqueta de despacho
                 </button>
               <div className="relative w-full sm:w-auto sm:shrink-0" ref={docsMenuRef}>
                 {/* Inputs ocultos: compartidos por el menú y el botón de evidencia del peso. */}
@@ -2232,6 +2244,70 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* Etiqueta de despacho: se ve horizontal (se lee mejor) y se imprime
+          vertical, que es como entra en el rollo de 80 × 50 mm. */}
+      <Modal open={etiquetaOpen} onClose={() => setEtiquetaOpen(false)} title="Etiqueta de despacho" size="xl">
+        {(() => {
+          const d = datosEtiqueta(cliente as unknown as Record<string, unknown>)
+          const PX = 5.6 // px por mm en la vista previa
+          return (
+            <div className="space-y-4">
+              <div className="flex justify-center">
+                <div
+                  className="bg-white text-black border-2 border-gray-400 shadow-md overflow-hidden"
+                  style={{ width: ETIQUETA_MM.ancho * PX, height: ETIQUETA_MM.alto * PX, padding: 6 * PX / 2.4 }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/certificates/logo_alma_animal.png" alt="Alma Animal"
+                      className="h-6 w-auto grayscale contrast-200" />
+                    <div className="text-right leading-none">
+                      <p className="font-bold tracking-tight" style={{ fontSize: 17 }}>{d.codigo || '—'}</p>
+                      <p className="text-gray-500 mt-0.5" style={{ fontSize: 7 }}>CÓDIGO</p>
+                    </div>
+                  </div>
+                  <div className="border-t-2 border-black my-1.5" />
+                  <div className="space-y-1.5 leading-tight">
+                    <div>
+                      <p className="text-gray-500" style={{ fontSize: 7 }}>MASCOTA</p>
+                      <p className="font-bold truncate" style={{ fontSize: 13 }}>{d.nombre_mascota || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500" style={{ fontSize: 7 }}>TUTOR</p>
+                      <p className="font-semibold truncate" style={{ fontSize: 11 }}>{d.nombre_tutor || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500" style={{ fontSize: 7 }}>DIRECCIÓN</p>
+                      <p className="font-semibold line-clamp-2" style={{ fontSize: 9 }}>{d.direccion || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500" style={{ fontSize: 7 }}>TELÉFONO</p>
+                      <p className="font-semibold" style={{ fontSize: 11 }}>{formatearTelefono(d.telefono) || '—'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-gray-500 text-center">
+                80 × 50 mm. El PDF sale <b>vertical</b> (girado 90°), que es como entra en la impresora
+                térmica de etiquetas: al imprimir, elegí tamaño real / 100 % (sin «ajustar a la página»).
+              </p>
+
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setEtiquetaOpen(false)}
+                  className="flex-1 px-4 py-2 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-50">
+                  Cerrar
+                </button>
+                <a href={`/api/clientes/${cliente.id}/etiqueta`} target="_blank" rel="noopener"
+                  className="flex-1 px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold text-center">
+                  Abrir PDF para imprimir
+                </a>
+              </div>
+            </div>
+          )
+        })()}
       </Modal>
 
       {/* Modal generar certificado */}

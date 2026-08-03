@@ -160,7 +160,70 @@ export async function GET(req: NextRequest) {
       }
     })
 
+    // ── Evolución de los últimos 12 meses ─────────────────────────────────────
+    // Termina en el mes SELECCIONADO, y usa exactamente los mismos criterios que
+    // los KPI de arriba (fecha de cremación para las mascotas, fecha del ciclo
+    // para ciclos/litros): así el último punto de la serie es el número de la
+    // tarjeta. No se incluyen "En cámara", "Pagos pendientes" ni "Monto por
+    // cobrar": son fotos de HOY, no del mes, y no son reconstruibles hacia atrás.
+    const meses: Array<{ key: string; label: string }> = []
+    const idxDeMes = new Map<string, number>()
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(anio, mes - 1 - i, 1)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      idxDeMes.set(key, meses.length)
+      meses.push({ key, label: d.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' }) })
+    }
+    const bucketDeFecha = (d: Date | null): number | null => {
+      if (!d) return null
+      const i = idxDeMes.get(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+      return i === undefined ? null : i
+    }
+    const bucketDe = (raw: string) => bucketDeFecha(parseFecha(raw))
+
+    const serie = meses.map(m => ({
+      mes: m.label,
+      ingresos_clientes_mes: 0, total_cremaciones_mes: 0, ciclos_mes: 0,
+      litros_mes: 0, litros_cargados_mes: 0, costo_petroleo_mes: 0,
+      costo_vehiculo_mes: 0, ingresos_mes: 0,
+      litros_por_mascota: 0, litros_por_ciclo: 0, costo_vehiculo_por_mascota: 0,
+    }))
+
+    for (const c of clientes) {
+      const i = bucketDeFecha(fechaCliente(c))
+      if (i == null) continue
+      serie[i].ingresos_clientes_mes += 1
+      if (c.estado === 'cremado' || c.estado === 'despachado') {
+        serie[i].total_cremaciones_mes += 1
+        serie[i].ingresos_mes += ingresoCliente(c)
+      }
+    }
+    for (const c of ciclos) {
+      const i = bucketDe(c.fecha)
+      if (i == null) continue
+      serie[i].ciclos_mes += 1
+      serie[i].litros_mes += Math.abs(parseDecimalOr0(c.litros_fin) - parseDecimalOr0(c.litros_inicio))
+    }
+    for (const r of cargasPet) {
+      const i = bucketDe(r.fecha)
+      if (i == null) continue
+      serie[i].litros_cargados_mes += parseDecimalOr0(r.litros)
+      serie[i].costo_petroleo_mes += parseDecimalOr0(r.total_bruto)
+    }
+    for (const r of cargasVeh) {
+      const i = bucketDe(r.fecha)
+      if (i == null) continue
+      serie[i].costo_vehiculo_mes += parseDecimalOr0(r.monto) * parseDecimalOr0(r.litros)
+    }
+    for (const f of serie) {
+      f.litros_mes = Math.round(f.litros_mes * 10) / 10
+      f.litros_por_mascota = f.ingresos_clientes_mes > 0 ? f.litros_mes / f.ingresos_clientes_mes : 0
+      f.litros_por_ciclo = f.ciclos_mes > 0 ? f.litros_mes / f.ciclos_mes : 0
+      f.costo_vehiculo_por_mascota = f.ingresos_clientes_mes > 0 ? f.costo_vehiculo_mes / f.ingresos_clientes_mes : 0
+    }
+
     return NextResponse.json({
+      serie_12m: serie,
       kpis: {
         total_cremaciones_mes: cremados.length,
         ingresos_clientes_mes: delMes.length,

@@ -1,4 +1,5 @@
 'use client'
+import { Mail } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Card } from '@/components/ui/kit'
 import { Badge } from '@/components/ui/Badge'
@@ -24,6 +25,25 @@ export default function HistoricoTab() {
   const [filas, setFilas] = useState<FilaHistorico[] | null>(null)
   const [anio, setAnio] = useState<string>('')
   const [empleado, setEmpleado] = useState<string>('')
+  // id de la liquidación que se está enviando (bloquea el doble clic).
+  const [enviandoId, setEnviandoId] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  /** Manda la liquidación al correo del trabajador con el PDF adjunto. */
+  async function enviar(f: FilaHistorico) {
+    if (enviandoId) return
+    if (!confirm(`¿Enviar la liquidación de ${nombrePeriodo(f.periodo)} a ${f.empleado_nombre}?\n\nSe manda a su correo con el PDF adjunto.`)) return
+    setEnviandoId(f.id); setAviso(null)
+    try {
+      const r = await fetch(`/api/remuneraciones/liquidaciones/${f.id}/enviar`, { method: 'POST' })
+      const j = await r.json().catch(() => ({}))
+      setAviso(r.ok
+        ? { ok: true, msg: `Liquidación enviada a ${j.destinatario}.` }
+        : { ok: false, msg: j.error || 'No se pudo enviar la liquidación.' })
+    } catch {
+      setAviso({ ok: false, msg: 'Error de red: la liquidación no se envió.' })
+    } finally { setEnviandoId(null) }
+  }
 
   useEffect(() => {
     fetch('/api/remuneraciones/liquidaciones', { cache: 'no-store' })
@@ -83,6 +103,12 @@ export default function HistoricoTab() {
         </label>
       </Card>
 
+      {aviso && (
+        <div className={`rounded-xl border px-4 py-2.5 text-sm ${aviso.ok ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-red-300 bg-red-50 text-red-700'}`}>
+          {aviso.msg}
+        </div>
+      )}
+
       {!filas && <TableSkeleton rows={5} />}
 
       {filas && filas.length === 0 && (
@@ -113,7 +139,7 @@ export default function HistoricoTab() {
           )}
 
           <Card className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[1000px] text-sm">
               <thead>
                 <tr className="border-b border-gray-300 bg-cream text-left text-xs uppercase tracking-wide text-gray-600">
                   <th className="px-4 py-3">Período</th>
@@ -141,8 +167,17 @@ export default function HistoricoTab() {
                         : <Badge variant="gray">Borrador</Badge>}
                       {f.fecha_pago && <span className="ml-2 text-xs text-gray-500">{fmtFecha(f.fecha_pago)}</span>}
                     </td>
-                    <td className="px-3 text-right">
-                      <a href={`/api/remuneraciones/liquidaciones/${f.id}/pdf`} className="text-sm text-brand-soft underline">PDF</a>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-end gap-3 whitespace-nowrap">
+                        <a href={`/api/remuneraciones/liquidaciones/${f.id}/pdf`} target="_blank" rel="noopener"
+                          className="text-sm text-brand-soft underline">PDF</a>
+                        <button type="button" onClick={() => enviar(f)} disabled={enviandoId === f.id}
+                          title={`Enviar la liquidación de ${nombrePeriodo(f.periodo)} al correo de ${f.empleado_nombre}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 disabled:opacity-40">
+                          <Mail className="w-3.5 h-3.5" aria-hidden="true" />
+                          {enviandoId === f.id ? 'Enviando…' : 'Enviar liquidación'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

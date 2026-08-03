@@ -1,5 +1,7 @@
 'use client'
 import { PageHeader } from '@/components/ui/kit'
+import { Modal } from '@/components/ui/Modal'
+import { TrendingUp } from 'lucide-react'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { fmtPrecio, fmtNumero as fmtNum, fmtLitros, fmtFecha } from '@/lib/format'
 import { CHART_PALETTE, CHART } from '@/lib/chart-colors'
@@ -10,7 +12,20 @@ import {
   PieChart, Pie, Cell, Legend, CartesianGrid,
 } from 'recharts'
 
+/** Una fila de la evolución mensual que devuelve /api/reportes (últimos 12 meses). */
+type SerieMes = {
+  mes: string
+  ingresos_clientes_mes: number; total_cremaciones_mes: number; ciclos_mes: number
+  litros_mes: number; litros_cargados_mes: number; costo_petroleo_mes: number
+  costo_vehiculo_mes: number; ingresos_mes: number
+  litros_por_mascota: number; litros_por_ciclo: number; costo_vehiculo_por_mascota: number
+}
+type SerieKey = Exclude<keyof SerieMes, 'mes'>
+/** Cómo se formatea cada métrica en el eje y el tooltip del histórico. */
+type FormatoMetrica = 'numero' | 'precio' | 'litros' | 'ratio'
+
 type ReporteData = {
+  serie_12m?: SerieMes[]
   kpis: {
     total_cremaciones_mes: number; ingresos_clientes_mes: number; pendientes: number
     ciclos_mes: number; litros_mes: number; ingresos_mes: number
@@ -93,6 +108,8 @@ export default function ReportesPage() {
   const [mes, setMes] = useState(now.getMonth() + 1)
   const [anio, setAnio] = useState(now.getFullYear())
   const [data, setData] = useState<ReporteData | null>(null)
+  // Índice cuyo histórico de 12 meses se está mirando (null = modal cerrado).
+  const [metrica, setMetrica] = useState<{ key: SerieKey; label: string; formato: FormatoMetrica } | null>(null)
   const [configData, setConfigData] = useState<ConfigData | null>(null)
   const [vetData, setVetData] = useState<VetReporteData | null>(null)
   const [asistencia, setAsistencia] = useState<RegistroAsistencia[]>([])
@@ -351,42 +368,61 @@ export default function ReportesPage() {
       {/* ─── TAB MENSUAL ─── */}
       {tab === 'Mensual' && data && data.kpis && (
         <>
+          {/* Cada índice con historia es un botón: abre su evolución de 12 meses
+              (mismo gesto que las tarjetas de ratio del Dashboard). */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {[
+            {([
               // El color CODIFICA algo, no decora: navy = dato neutro del período,
               // verde = plata que entra, ámbar = requiere acción. Antes había ocho
               // colores sin criterio (0 cremaciones en rojo parecía una alarma y
               // $0 de ingresos en verde parecía un logro).
-              { label: 'Mascotas ingresadas', value: data.kpis.ingresos_clientes_mes, color: 'text-brand' },
-              { label: 'Cremaciones', value: data.kpis.total_cremaciones_mes, color: 'text-brand' },
-              { label: 'En cámara', value: data.kpis.pendientes, color: 'text-brand' },
-              { label: 'Ciclos', value: data.kpis.ciclos_mes, color: 'text-brand' },
-              { label: 'Litros consumidos', value: fmtLitros(data.kpis.litros_mes), color: 'text-brand' },
-              { label: 'Litros cargados', value: fmtLitros(data.kpis.litros_cargados_mes), color: 'text-brand' },
-              { label: 'Costo petróleo', value: fmt(data.kpis.costo_petroleo_mes), color: 'text-brand' },
-              { label: 'Costo vehículo', value: fmt(data.kpis.costo_vehiculo_mes), color: 'text-brand' },
-              { label: 'Ingresos est.', value: fmt(data.kpis.ingresos_mes), color: 'text-emerald-700' },
-              { label: 'Pagos pendientes', value: data.kpis.pendientes_pago, color: 'text-amber-700' },
-              { label: 'Monto por cobrar', value: fmt(data.kpis.monto_pendiente), color: 'text-amber-700' },
-            ].map(k => (
-              <div key={k.label} className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 text-center">
-                <p className={`text-xl font-bold ${k.color}`}>{k.value}</p>
-                <p className="text-xs text-gray-500 mt-1">{k.label}</p>
-              </div>
+              { label: 'Mascotas ingresadas', value: data.kpis.ingresos_clientes_mes, color: 'text-brand', serie: 'ingresos_clientes_mes', formato: 'numero' },
+              { label: 'Cremaciones', value: data.kpis.total_cremaciones_mes, color: 'text-brand', serie: 'total_cremaciones_mes', formato: 'numero' },
+              // Sin serie: es una foto de HOY (cuántas hay en cámara ahora), no del mes.
+              { label: 'En cámara', value: data.kpis.pendientes, color: 'text-brand', nota: 'Es el estado de hoy, no del mes: no tiene evolución histórica.' },
+              { label: 'Ciclos', value: data.kpis.ciclos_mes, color: 'text-brand', serie: 'ciclos_mes', formato: 'numero' },
+              { label: 'Litros consumidos', value: fmtLitros(data.kpis.litros_mes), color: 'text-brand', serie: 'litros_mes', formato: 'litros' },
+              { label: 'Litros cargados', value: fmtLitros(data.kpis.litros_cargados_mes), color: 'text-brand', serie: 'litros_cargados_mes', formato: 'litros' },
+              { label: 'Costo petróleo', value: fmt(data.kpis.costo_petroleo_mes), color: 'text-brand', serie: 'costo_petroleo_mes', formato: 'precio' },
+              { label: 'Costo vehículo', value: fmt(data.kpis.costo_vehiculo_mes), color: 'text-brand', serie: 'costo_vehiculo_mes', formato: 'precio' },
+              { label: 'Ingresos est.', value: fmt(data.kpis.ingresos_mes), color: 'text-emerald-700', serie: 'ingresos_mes', formato: 'precio' },
+              { label: 'Pagos pendientes', value: data.kpis.pendientes_pago, color: 'text-amber-700', nota: 'Es lo que está impago hoy (de cualquier mes): no tiene evolución histórica.' },
+              { label: 'Monto por cobrar', value: fmt(data.kpis.monto_pendiente), color: 'text-amber-700', nota: 'Es lo que está impago hoy (de cualquier mes): no tiene evolución histórica.' },
+            ] as Array<{ label: string; value: React.ReactNode; color: string; serie?: SerieKey; formato?: FormatoMetrica; nota?: string }>).map(k => (
+              k.serie ? (
+                <button key={k.label} type="button" onClick={() => setMetrica({ key: k.serie!, label: k.label, formato: k.formato || 'numero' })}
+                  title={`Ver la evolución de «${k.label}» en los últimos 12 meses`}
+                  className="bg-white rounded-xl shadow-md border-2 border-gray-300 hover:border-gold hover:shadow-lg p-4 text-center transition-all">
+                  <p className={`text-xl font-bold ${k.color}`}>{k.value}</p>
+                  <p className="text-xs text-gray-500 mt-1 inline-flex items-center gap-1">
+                    {k.label} <TrendingUp className="w-3 h-3 text-brand-soft" aria-hidden="true" />
+                  </p>
+                </button>
+              ) : (
+                <div key={k.label} title={k.nota} className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 text-center">
+                  <p className={`text-xl font-bold ${k.color}`}>{k.value}</p>
+                  <p className="text-xs text-gray-500 mt-1">{k.label}</p>
+                </div>
+              )
             ))}
           </div>
 
           {/* Ratios del período */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { label: 'Litros / mascota', value: `${data.ratios.litros_por_mascota.toFixed(1)} L` },
-              { label: 'Litros / ciclo', value: `${data.ratios.litros_por_ciclo.toFixed(1)} L` },
-              { label: 'Costo vehículo / mascota', value: fmt(data.ratios.costo_vehiculo_por_mascota) },
-            ].map(r => (
-              <div key={r.label} className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4">
-                <p className="text-xs font-semibold text-gray-600">{r.label}</p>
+            {([
+              { label: 'Litros / mascota', value: `${data.ratios.litros_por_mascota.toFixed(1)} L`, serie: 'litros_por_mascota' },
+              { label: 'Litros / ciclo', value: `${data.ratios.litros_por_ciclo.toFixed(1)} L`, serie: 'litros_por_ciclo' },
+              { label: 'Costo vehículo / mascota', value: fmt(data.ratios.costo_vehiculo_por_mascota), serie: 'costo_vehiculo_por_mascota' },
+            ] as Array<{ label: string; value: string; serie: SerieKey }>).map(r => (
+              <button key={r.label} type="button"
+                onClick={() => setMetrica({ key: r.serie, label: r.label, formato: r.serie === 'costo_vehiculo_por_mascota' ? 'precio' : 'ratio' })}
+                title={`Ver la evolución de «${r.label}» en los últimos 12 meses`}
+                className="bg-white rounded-xl shadow-md border-2 border-gray-300 hover:border-gold hover:shadow-lg p-4 text-left transition-all">
+                <p className="text-xs font-semibold text-gray-600 inline-flex items-center gap-1">
+                  {r.label} <TrendingUp className="w-3 h-3 text-brand-soft" aria-hidden="true" />
+                </p>
                 <p className="text-xl font-bold text-gray-900 mt-1">{r.value}</p>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -460,6 +496,46 @@ export default function ReportesPage() {
               ↓ Descargar Excel
             </button>
           </div>
+
+          {/* Evolución del índice elegido: 12 meses terminando en el mes filtrado,
+              así el último punto es exactamente el número de la tarjeta. */}
+          <Modal open={!!metrica} onClose={() => setMetrica(null)} title={metrica ? `${metrica.label} — últimos 12 meses` : ''} size="3xl">
+            {metrica && (() => {
+              const serie = data.serie_12m || []
+              const ejeY = (v: number) =>
+                metrica.formato === 'precio' ? fmtPrecioCorto(v)
+                : metrica.formato === 'ratio' ? v.toFixed(1)
+                : metrica.formato === 'litros' ? `${Math.round(v)}`
+                : String(Math.round(v))
+              const tooltip = (v: number) =>
+                metrica.formato === 'precio' ? fmt(v)
+                : metrica.formato === 'ratio' ? v.toFixed(2)
+                : metrica.formato === 'litros' ? fmtLitros(v)
+                : fmtNum(v)
+              const valores = serie.map(s => s[metrica.key])
+              const promedio = valores.length ? valores.reduce((a, b) => a + b, 0) / valores.length : 0
+              return (
+                <div>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Hasta {MESES[mes - 1].toLowerCase()} {anio}. Promedio del período: <b>{tooltip(promedio)}</b>.
+                  </p>
+                  {serie.length === 0 ? (
+                    <div className="flex items-center justify-center h-[240px] text-sm text-gray-400">Sin datos históricos</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={320}>
+                      <LineChart data={serie} margin={{ bottom: 24, right: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="mes" fontSize={11} tick={{ fill: '#6b7280' }} interval={0} angle={-35} textAnchor="end" height={56} />
+                        <YAxis fontSize={11} tick={{ fill: '#6b7280' }} tickFormatter={v => ejeY(v as number)} />
+                        <Tooltip formatter={(v) => tooltip(v as number)} labelStyle={{ color: '#143C64' }} />
+                        <Line type="monotone" dataKey={metrica.key} name={metrica.label} stroke={CHART.navy} strokeWidth={2} dot={{ r: 3 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              )
+            })()}
+          </Modal>
         </>
       )}
 

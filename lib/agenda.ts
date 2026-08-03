@@ -33,6 +33,7 @@ import { formatDateForSheet, formatHora } from './dates'
 import { incluyeCremacion } from './eutanasia-cremacion'
 import { crearEstimadorFichas, valorFicha, type EstimacionFicha } from './precio-estimado'
 import { getConfigCobroEutanasia, cobroClienteCon, type ConfigCobroEutanasia } from './eutanasia-precios'
+import { ahoraEnChile, yaFueRetirada } from './ficha-retiro'
 
 export const HORA_APERTURA = 9         // primera hora de la agenda (09:00)
 export const HORA_ULTIMO_RETIRO = 21   // hora de referencia de la agenda; el corte real es 21:10
@@ -234,6 +235,12 @@ export interface AgendaItem {
   esperandoHoraVet?: boolean
   /** Eutanasia SIN cremación: solo recordatorio (etiqueta gris), NO bloquea la agenda. */
   sinCremacion?: boolean
+  /**
+   * La mascota YA está en nuestras manos (el retiro ocurrió) → en la agenda se
+   * muestra como "listo" (azul) en vez de pendiente (verde). Usa la definición
+   * única de lib/ficha-retiro: ficha registrada + la hora de retiro ya pasada.
+   */
+  retirada?: boolean
   /** Valor a cobrar por lo agendado (cremación + eutanasia si corresponde). */
   valor?: number
   /** true mientras el precio no esté congelado en la ficha (es una estimación). */
@@ -267,6 +274,11 @@ export async function listarAgenda(
   const clientePorId = new Map(clientes.map(c => [String(c.id), c]))
   const inRange = (iso: string) => (!fromISO || iso >= fromISO) && (!toISO || iso <= toISO)
   const out: AgendaItem[] = []
+
+  // "Ya fue retirada": una sola definición para todo el sistema (lib/ficha-retiro),
+  // la misma que usan el bot y la ficha. Sin ficha vinculada no hay retiro posible.
+  const ahora = ahoraEnChile()
+  const yaRetirada = (ficha: Record<string, string> | undefined) => !!ficha && yaFueRetirada(ficha, ahora)
 
   // Valor a cobrar de cada agendamiento: el precio congelado de la ficha si ya
   // lo tiene, si no la estimación en vivo (fichas "por ingresar" y solicitudes
@@ -319,6 +331,7 @@ export async function listarAgenda(
       direccion: r.direccion || '',
       tipo_servicio: r.tipo_servicio || '',
       clienteId: r.cliente_id || '',
+      retirada: yaRetirada(ficha),
       ...valorDe(ficha, {
         peso_declarado: r.peso || '',
         codigo_servicio: r.tipo_servicio || '',
@@ -386,6 +399,7 @@ export async function listarAgenda(
       clienteId: c.cliente_id || '',
       horaEutanasia: formatHora(c.hora_servicio) || '',
       esperandoHoraVet: !tieneRetiro,
+      retirada: yaRetirada(c.cliente_id ? clientePorId.get(String(c.cliente_id)) : undefined),
       ...valorEutanasia(c),
     })
   }
