@@ -17,6 +17,7 @@ import { esLogo } from './marca-logo'
 import { registrarUso } from './uso-ia'
 import { generarPieza, editarImagenPieza, regenerarImagenPieza, setImagenesPieza, ajustarPiezaEmail } from './marketing-pieza'
 import { prepararVideo } from './marketing-video-preparar'
+import { linkDescarga } from './marketing-video-armar'
 import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
 import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, PLANTILLA_TOOL_DESC, SLOTS_TOOL_PROPS, familiaDe, type SlotsPlantilla } from './marketing-plantillas'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
@@ -1094,7 +1095,9 @@ export async function generarRespuestaMarketing(
               })
               cambios = true
               resultText = (pendiente.video_url
-                ? `VIDEO LISTO: ${pendiente.video_url}\nMostráselo al dueño con ese link (es un MP4 descargable, ya publicable).\n`
+                // El link va por NUESTRO dominio: la URL cruda de r2.dev la
+                // bloquean los adblockers y el dueño ve "sitio no disponible".
+                ? `VIDEO LISTO: ${linkDescarga(pendiente.video_url)}\nMostráselo al dueño con ese link EXACTO (es un MP4 descargable, ya publicable). NO uses ninguna otra URL del video.\n`
                 : `Video PREPARADO (el MP4 no se pudo armar en el servidor): está en Marketing → Video para armarlo desde ahí.\n`)
                 + `Título en pantalla: "${pendiente.titulo}"\n`
                 + `Guion (${pendiente.duracion.toFixed(0)} s): ${pendiente.guion}\n`

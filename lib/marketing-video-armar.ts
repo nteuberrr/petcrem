@@ -24,10 +24,23 @@ export interface ArmarVideoArgs {
 }
 
 export interface VideoArmado {
+  /** URL directa en R2 (la usa el render y el guardado). */
   url: string
+  /**
+   * Link para COMPARTIR/descargar, por nuestro dominio. La URL de R2 (`r2.dev`)
+   * la bloquean los adblockers: al dueño le decía "el sitio no está disponible"
+   * aunque el archivo estuviera perfecto.
+   */
+  descarga_url: string
   key: string
   bytes: number
   segundos: number
+}
+
+/** Link de descarga por nuestro origen (esquiva el bloqueo de r2.dev). */
+export function linkDescarga(urlR2: string): string {
+  const base = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '').replace(/\/+$/, '')
+  return `${base}/api/marketing/medio?descargar=1&u=${encodeURIComponent(urlR2)}`
 }
 
 export async function armarVideo(a: ArmarVideoArgs): Promise<VideoArmado> {
@@ -57,7 +70,7 @@ export async function armarVideo(a: ArmarVideoArgs): Promise<VideoArmado> {
     const key = `marketing/videos/${Date.now()}-${slug}.mp4`
     const { url } = await uploadToR2(mp4, key, 'video/mp4')
 
-    return { url, key, bytes: mp4.length, segundos: duracionTotal(a.duracion) }
+    return { url, descarga_url: linkDescarga(url), key, bytes: mp4.length, segundos: duracionTotal(a.duracion) }
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

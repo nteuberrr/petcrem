@@ -32,6 +32,8 @@ type VideoPendiente = {
 /** Todo lo que vive en R2 se pide por nuestro origen: si no, el canvas queda
  *  "sucio" y no se puede grabar (y además los adblockers filtran r2.dev). */
 const porNuestroOrigen = (url: string) => `/api/marketing/medio?u=${encodeURIComponent(url)}`
+/** Igual, pero forzando la descarga (el `download` de un <a> no cruza origen). */
+const paraDescargar = (url: string) => `/api/marketing/medio?descargar=1&u=${encodeURIComponent(url)}`
 
 const FUENTE = "'InterMarca', var(--font-geist-sans), system-ui, sans-serif"
 
@@ -73,7 +75,8 @@ export default function VideoPanel() {
   const [grabando, setGrabando] = useState(false)
   const [progreso, setProgreso] = useState(0)
   const [error, setError] = useState('')
-  const [listo, setListo] = useState<{ url: string; ext: string; esMp4: boolean } | null>(null)
+  // `url` para el <video> de la vista, `descarga` para el botón (fuerza el guardado).
+  const [listo, setListo] = useState<{ url: string; descarga?: string; ext: string; esMp4: boolean } | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fondoRef = useRef<Fondo | null>(null)
@@ -353,7 +356,7 @@ export default function VideoPanel() {
       })
       const j = await r.json()
       if (!r.ok) { setError(`${j.error || 'No se pudo armar en el servidor'} — probá "Armar acá".`); return }
-      setListo({ url: porNuestroOrigen(j.url), ext: 'mp4', esMp4: true })
+      setListo({ url: porNuestroOrigen(j.url), descarga: paraDescargar(j.url), ext: 'mp4', esMp4: true })
     } catch {
       setError('Error de red al armar el video en el servidor — probá "Armar acá".')
     } finally { setGrabando(false) }
@@ -480,7 +483,7 @@ export default function VideoPanel() {
                 </span>
                 {p.video_url ? (
                   // El servidor ya lo armó: se descarga y listo.
-                  <a href={porNuestroOrigen(p.video_url)} download={`alma-animal-${p.formato}.mp4`}
+                  <a href={paraDescargar(p.video_url)}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
                     <Download className="h-4 w-4" aria-hidden="true" /> Descargar MP4
                   </a>
@@ -684,7 +687,7 @@ export default function VideoPanel() {
             {listo && (
               <div className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50 p-3">
                 <video src={listo.url} controls className="mb-2 w-full rounded-lg" />
-                <a href={listo.url} download={`alma-animal-${formato}.${listo.ext}`}
+                <a href={listo.descarga || listo.url} download={`alma-animal-${formato}.${listo.ext}`}
                   className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
                   <Download className="h-4 w-4" aria-hidden="true" /> Descargar .{listo.ext}
                 </a>
