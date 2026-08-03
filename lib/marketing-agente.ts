@@ -5,7 +5,7 @@ import { getMarketingConfig } from './marketing-config'
 import { listarCalendario, crearItems, actualizarItem, eliminarItem, obtenerItem, reutilizarItem, validarCambioEstado, type NuevoItem } from './marketing-calendario'
 import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, type ImagenBanco } from './mailing-images'
 import { isNanoBananaConfigurado } from './nano-banana'
-import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
+import { MARCA_VISUAL, MARCA_GRAFICO, recetasVariadas } from './marca-visual'
 import { GUIA_SOCIAL, GUIA_EMAIL, GUIA_PERFIL } from './marketing-guia'
 import { getMarketingParams, bloqueParametros } from './marketing-params'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
@@ -17,7 +17,7 @@ import { esLogo } from './marca-logo'
 import { registrarUso } from './uso-ia'
 import { generarPieza, editarImagenPieza, regenerarImagenPieza, setImagenesPieza, ajustarPiezaEmail } from './marketing-pieza'
 import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
-import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, type SlotsPlantilla } from './marketing-plantillas'
+import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, PLANTILLA_TOOL_DESC, SLOTS_TOOL_PROPS, familiaDe, type SlotsPlantilla } from './marketing-plantillas'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
 import { publicarItem } from './marketing-publicar'
 import { resumenAds, resumenOrganico, isInsightsConfigurado } from './meta-insights'
@@ -88,7 +88,8 @@ LÍNEA VISUAL DE MARCA
 - Seguí SIEMPRE la DIRECCIÓN VISUAL (fotos) y la DIRECCIÓN PARA GRÁFICOS (piezas con texto) que tenés más abajo. Paleta: crema/blanco domina, navy ESTRUCTURA (no fondo por defecto), dorado acento; sobrio, cálido y premium. VARIÁ el layout y el fondo entre piezas (crema, blanco, foto cálida, navy): el feed muestra todo junto y no puede verse como un bloque azul.
 - El logo de marca se agrega solo (nítido) a las imágenes que generás; no necesitás "dibujarlo".
 - VARIÁ DE VERDAD, NO REPITAS EL MISMO MOLDE (queja directa del dueño: "salen todas iguales, mismo formato"). Reglas concretas:
-  · ROTÁ las plantillas: tenés 9 (portada, contenido, dato, foto, cierre, cita, split, numeros, marco). NO caigas siempre en portada/contenido apiladas. Usá a propósito las que rompen el molde — "foto" y "marco" (foto protagonista), "split" (lado a lado), "numeros" (lista numerada), "cita" (testimonio), "dato" (cifra grande). Mirá qué formato usaste recién y elegí OTRO.
+  · ROTÁ las plantillas: tenés 29, agrupadas en FAMILIAS. Apiladas: portada, contenido, cierre. Foto protagonista: foto, marco, revista, diptico, overlay, arco, collage, split. Listas: numeros, checklist, timeline, comparativa. Cifras: dato, mosaico_datos, precio. Texto puro: cita, testimonio, faq, tipografico, bicolor, horario. Memorial (homenaje a una mascota por su nombre): memorial_placa, memorial_retrato, memorial_medallon, memorial_cuadro, memorial_cinta — son CINCO justamente para no publicar siempre el mismo homenaje: mirá cuál usaste la última vez y elegí otra. NO caigas siempre en portada/contenido apiladas — son las MÁS vistas y las más aburridas. Regla dura: no repitas plantilla en una misma tanda, y no uses dos veces seguidas la misma FAMILIA. Antes de elegir, mirá qué usaste recién y andá a otra familia.
+  · APROVECHÁ las estructuras nuevas: "revista" y "overlay" para abrir con una foto potente, "comparativa" para diferenciarnos, "timeline" para explicar el proceso, "faq" para las dudas reales, "precio" para tarifas, "collage" para mostrar variedad de mascotas, "tipografico" para una frase con impacto, "testimonio" para prueba social con cara.
   · APOYATE EN FOTOS REALES, no todo placas de texto. Tenemos fotos de mascotas/personas en el banco: cuando aporte calidez (sobre todo para tutores) reutilizá una o generá una nueva, en vez de hacer TODO "puras letras". Un feed de solo placas de texto se ve plano y repetido.
   · ALTERNÁ el FONDO entre piezas (crema, blanco, foto; navy como máximo 1 de cada 3) y el ÁNGULO/tema. No repitas un mismo tema ni una misma composición en piezas seguidas.
   · Criterio, no fórmula: no metas foto a la fuerza en cada post, pero tampoco entregues la 5ª placa navy de texto seguida. Si lo que venís haciendo se parece a lo anterior, cambiá el enfoque.
@@ -443,29 +444,13 @@ const TOOL_DISENAR_PLANTILLA: Anthropic.Tool = {
   input_schema: {
     type: 'object',
     properties: {
-      plantilla: { type: 'string', enum: [...PLANTILLAS], description: 'portada = apertura/gancho (eyebrow + titular + bajada + foto arriba + CTA); contenido = idea + hasta 4 bullets; dato = una cifra/palabra grande; foto = foto protagonista con una frase; cierre = CTA final (titular + teléfono/web); cita = testimonio/frase destacada (comilla dorada, sin foto); split = editorial foto a la izquierda + texto a la derecha; numeros = lista numerada (pasos/razones) con números dorados grandes (bullets = los pasos); marco = foto enmarcada estilo galería + pie centrado (homenajes, prueba social). ROTÁ entre plantillas: no caigas siempre en portada/contenido.' },
+      plantilla: { type: 'string', enum: [...PLANTILLAS], description: PLANTILLA_TOOL_DESC },
       formato: { type: 'string', enum: ['post_vertical', 'post', 'story'], description: 'post_vertical (1080x1350, feed IG/FB — DEFAULT), post (1080x1080), story (1080x1920).' },
       carrusel: { type: 'string', description: 'Mismo identificador en todas las placas de un carrusel/serie (las agrupa en una campaña C-X.1, C-X.2…). Vacío si es suelta.' },
       slots: {
         type: 'object',
         description: 'Contenido de la plantilla (textos CORTOS; lo que no cabe se recorta). No todos aplican a cada plantilla.',
-        properties: {
-          eyebrow: { type: 'string', description: 'Etiqueta corta arriba (ej. "PARA VETERINARIOS").' },
-          titulo: { type: 'string', description: 'Titular (2-4 palabras); en "foto" una frase corta.' },
-          titulo_destacado: { type: 'string', description: '2ª línea del titular, en DORADO.' },
-          bajada: { type: 'string', description: 'Frase de apoyo corta.' },
-          bullets: { type: 'array', items: { type: 'string' }, description: '"contenido" y "numeros": 2-4 ítems MUY cortos (en "numeros" cada uno es un paso/razón).' },
-          dato: { type: 'string', description: 'Solo "dato": el número/palabra grande (ej. "4 días").' },
-          dato_label: { type: 'string', description: 'Solo "dato": qué es esa cifra.' },
-          cta: { type: 'string', description: 'CTA corto o teléfono (portada/cierre).' },
-          cta_secundario: { type: 'string', description: 'Web o dato secundario del CTA.' },
-          fondo: { type: 'string', enum: ['navy', 'crema', 'blanco'], description: 'Fondo dominante (alterná entre piezas).' },
-          foto: {
-            type: 'object',
-            description: 'Foto de la plantilla. prompt para generar una nueva, o url para reutilizar una del banco.',
-            properties: { prompt: { type: 'string', description: 'Descripción fotográfica cálida (mascota viva/tutor; NUNCA instalaciones).' }, url: { type: 'string', description: 'URL exacta del banco para reutilizar.' } },
-          },
-        },
+        properties: SLOTS_TOOL_PROPS,
       },
     },
     required: ['plantilla'],
@@ -934,6 +919,9 @@ export async function generarRespuestaMarketing(
   system.push({ type: 'text', text: bloqueParametros(params) })
   if (empresa) system.push({ type: 'text', text: empresa })
   system.push({ type: 'text', text: bloqueFechaChile() })
+  // Recetas de escena ROTADAS (sin caché a propósito): sin esto el modelo escribe
+  // siempre el mismo prompt de foto y el feed sale clonado.
+  system.push({ type: 'text', text: recetasVariadas() })
   system.push({ type: 'text', text: bloqueBanco(banco) })
   const logos = bloqueLogos(banco)
   if (logos) system.push({ type: 'text', text: logos })
@@ -960,6 +948,10 @@ export async function generarRespuestaMarketing(
   let textoFinal = ''
   // Carruseles de disenar_grafico en este turno: identificador → campaña compartida.
   const campaniasCarrusel = new Map<string, string>()
+  // Rotación dentro de un carrusel armado en el chat (una llamada por placa):
+  // qué plantillas ya se usaron en cada carrusel, para RECHAZAR la repetición en
+  // vez de solo pedírselo por prompt. Ver lintRotacion en marketing-pieza.
+  const plantillasCarrusel = new Map<string, string[]>()
   // Bitácora: registra cada ESCRITURA ejecutada (best-effort, nunca corta la acción).
   const anotar = (area: string, accion: string, detalle: string, motivo?: string) =>
     registrarDecision({ area, accion, detalle, motivo, aprobadoPor: opts.creadoPor })
@@ -1154,10 +1146,18 @@ export async function generarRespuestaMarketing(
           const s = inp.slots || {}
           const textos = [s.eyebrow, s.titulo, s.titulo_destacado, s.bajada, s.dato, s.dato_label, s.cta, s.cta_secundario, ...(s.bullets || [])].filter(Boolean).join(' · ')
           const lintP = textos.trim() ? lintCopy({ placas: [textos], telefono: contacto?.telefono, web: contacto?.web }) : []
+          const carrId = (inp.carrusel || '').trim()
+          const carrPrev = carrId ? (plantillasCarrusel.get(carrId) || []) : []
+          const familiaPrev = familiaDe(carrPrev[carrPrev.length - 1])
+          const familiaAhora = familiaDe(inp.plantilla)
           if (!inp.plantilla) {
             resultText = 'Falta indicar qué plantilla usar.'
           } else if (lintP.length) {
             resultText = 'RECHAZADO por reglas de marca (corregí los textos de los slots y volvé a llamar disenar_plantilla):\n- ' + lintP.map(h => `[${h.campo}] ${h.problema}`).join('\n- ')
+          } else if (carrPrev.includes(inp.plantilla)) {
+            resultText = `RECHAZADO por rotación: en este carrusel ya usaste la plantilla "${inp.plantilla}" (van: ${carrPrev.join(', ')}). Dentro de una misma serie no se repite plantilla — elegí otra que calce con el contenido de esta lámina y volvé a llamar disenar_plantilla.`
+          } else if (familiaPrev && familiaAhora && familiaPrev === familiaAhora) {
+            resultText = `RECHAZADO por rotación: la lámina anterior ya era de la familia "${familiaAhora}" y dos seguidas de la misma familia se ven parecidas. Alterná (después de una lista va una foto, una cifra o una de texto) y volvé a llamar disenar_plantilla.`
           } else {
             const logos = banco.filter(esLogo)
             const dd = (l: ImagenBanco) => `${l.descripcion || ''} ${l.alt || ''}`.toLowerCase()
@@ -1172,6 +1172,7 @@ export async function generarRespuestaMarketing(
             const formato = String(inp.formato || 'post_vertical')
             const { html, fotos } = construirPlantilla(inp.plantilla, s, { formato, logoBlanco, logoNavy })
             const r = await generarGraficoMarca({ formato, html, fotos, creadoPor: opts.creadoPor, campania })
+            if (carrKey) plantillasCarrusel.set(carrKey, [...carrPrev, inp.plantilla])
             cambios = true
             resultText = `Placa on-brand generada con la plantilla "${inp.plantilla}" (marca, encuadre y logo exactos) — código ${r.codigo || '(sin código)'}. Muéstrasela al dueño con ![](${r.url}) y decile su código (${r.codigo || ''}).${r.avisos.length ? ' Avisos: ' + r.avisos.join('; ') : ''}`
           }

@@ -1,8 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { BRAND, getContacto } from './email-layout'
-import { MARCA_VISUAL, MARCA_GRAFICO } from './marca-visual'
+import { MARCA_VISUAL, MARCA_GRAFICO, recetasVariadas } from './marca-visual'
 import { GUIA_SOCIAL, GUIA_QA } from './marketing-guia'
-import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, type SlotsPlantilla } from './marketing-plantillas'
+import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, PLANTILLA_TOOL_DESC, SLOTS_TOOL_PROPS, familiaDe, llevaFoto, type SlotsPlantilla } from './marketing-plantillas'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { REGLAS_INVIOLABLES } from './marca-voz'
 import { lintCopy, extraerTextoHtml } from './marketing-lint'
@@ -203,8 +203,15 @@ function bancoBloque(banco: ImagenBanco[], fotosUsadas?: Set<string>): string {
  * anti-monotonía: cada pieza se generaba a ciegas de las anteriores y todas convergían
  * al mismo molde navy. Devuelve el bloque de texto + el set de fotos vetadas.
  */
-async function memoriaVariedad(exceptoId: string): Promise<{ bloque: string; fotosUsadas: Set<string> }> {
-  const vacio = { bloque: '', fotosUsadas: new Set<string>() }
+async function memoriaVariedad(exceptoId: string): Promise<{
+  bloque: string
+  fotosUsadas: Set<string>
+  /** Plantillas de la pieza MÁS RECIENTE (para el rechazo determinista). */
+  ultimaPieza: string[]
+  /** Último memorial publicado, si hubo uno en las piezas recientes. */
+  ultimoMemorial: string
+}> {
+  const vacio = { bloque: '', fotosUsadas: new Set<string>(), ultimaPieza: [] as string[], ultimoMemorial: '' }
   try {
     const recientes = (await listarCalendario({}))
       .filter(it => String(it.id) !== String(exceptoId) && (it.canal === 'instagram' || it.canal === 'facebook'))
@@ -213,18 +220,103 @@ async function memoriaVariedad(exceptoId: string): Promise<{ bloque: string; fot
       .slice(0, 6)
     if (recientes.length === 0) return vacio
     const fotosUsadas = new Set<string>()
-    const lineas = recientes.map(it => {
-      let e: { portada?: string; fondos?: string[]; fotos?: string[] } = {}
+    let ultimaPieza: string[] = []
+    let ultimoMemorial = ''
+    const lineas = recientes.map((it, idx) => {
+      let e: { portada?: string; fondos?: string[]; fotos?: string[]; plantillas?: string[] } = {}
       try { e = JSON.parse(it.estilo) } catch { /* estilo corrupto: se lista sin detalle */ }
       for (const f of e.fotos || []) fotosUsadas.add(f)
+      const usadas = (e.plantillas || []).filter(Boolean)
+      if (idx === 0) ultimaPieza = usadas
+      if (!ultimoMemorial) ultimoMemorial = usadas.find(p => familiaDe(p) === 'memorial') || ''
       const fondos = (e.fondos || []).join(', ') || '?'
-      return `- "${(it.titulo || it.idea || '').slice(0, 60)}" (${it.fecha || 's/f'}): portada ${e.portada || '?'}; fondos: ${fondos}${(e.fotos || []).length ? `; fotos del banco: ${(e.fotos || []).length}` : ''}`
+      const plt = usadas.length ? `; plantillas: ${usadas.join(', ')}` : ''
+      return `- "${(it.titulo || it.idea || '').slice(0, 60)}" (${it.fecha || 's/f'}): portada ${e.portada || '?'}; fondos: ${fondos}${plt}${(e.fotos || []).length ? `; fotos del banco: ${(e.fotos || []).length}` : ''}`
     })
     return {
-      bloque: `ÚLTIMAS PIEZAS GENERADAS (el feed las muestra JUNTAS — memoria de variedad):\n${lineas.join('\n')}\nREGLA DURA: para ESTA pieza elegí un layout y un fondo de portada DISTINTOS a los que dominan arriba. Si arriba domina el navy, esta portada va en crema/blanco o foto protagonista. Las fotos del banco marcadas "USADA" están vetadas.`,
-      fotosUsadas,
+      bloque: `ÚLTIMAS PIEZAS GENERADAS (el feed las muestra JUNTAS — memoria de variedad):\n${lineas.join('\n')}\nREGLA DURA (se valida por CÓDIGO y la pieza se RECHAZA si no se cumple): para ESTA pieza elegí un layout y un fondo de portada DISTINTOS a los que dominan arriba. Si arriba domina el navy, esta portada va en crema/blanco o foto protagonista. Las fotos del banco marcadas "USADA" están vetadas.`,
+      fotosUsadas, ultimaPieza, ultimoMemorial,
     }
   } catch { return vacio }
+}
+
+/**
+ * ROTACIÓN OBLIGATORIA (validador determinista).
+ *
+ * Hasta acá la variedad dependía de que el modelo obedeciera el prompt, y no lo
+ * hacía: caía siempre en portada/contenido apiladas y en el mismo memorial. Esto
+ * lo vuelve binario — si repite, la pieza se RECHAZA y se regenera con el
+ * hallazgo, igual que con las reglas de marca (pedido del dueño 2026-08).
+ *
+ * Solo mira las imágenes en modo "plantilla": las fotos sueltas (reuse/nueva) y
+ * el HTML libre no tienen familia que controlar.
+ */
+export function lintRotacion(
+  imagenes: SalidaPost['imagenes'],
+  mem: { ultimaPieza: string[]; ultimoMemorial: string },
+): { campo: string; problema: string }[] {
+  const hallazgos: { campo: string; problema: string }[] = []
+  const ims = imagenes || []
+  const plantillas = ims.map(im => (im.modo === 'plantilla' ? (im.plantilla || '') : ''))
+
+  // 1) Dentro de la MISMA pieza (carrusel): ninguna plantilla se repite.
+  const vistas = new Map<string, number>()
+  plantillas.forEach((p, i) => {
+    if (!p) return
+    const antes = vistas.get(p)
+    if (antes !== undefined) {
+      hallazgos.push({
+        campo: `imagen ${i + 1}`,
+        problema: `Repetiste la plantilla "${p}" (ya la usaste en la imagen ${antes + 1}). Dentro de un mismo carrusel NO se repite plantilla: cambiá esta por otra que calce con el contenido.`,
+      })
+    } else vistas.set(p, i)
+  })
+
+  // 2) Slides CONSECUTIVAS de la misma familia: dos listas seguidas se ven igual
+  //    aunque la plantilla cambie.
+  for (let i = 1; i < plantillas.length; i++) {
+    const a = familiaDe(plantillas[i - 1])
+    const b = familiaDe(plantillas[i])
+    if (a && b && a === b) {
+      hallazgos.push({
+        campo: `imagen ${i + 1}`,
+        problema: `Las imágenes ${i} y ${i + 1} son de la MISMA familia (${a}) y se ven parecidas. Alterná: después de una lista va una foto, una cifra o una de texto.`,
+      })
+    }
+  }
+
+  // 3) Al menos 1 de cada 3 imágenes con FOTO (plantilla con foto, o foto suelta).
+  if (ims.length >= 3) {
+    const conFoto = ims.filter((im, i) =>
+      im.modo === 'reuse' || im.modo === 'nueva' || llevaFoto(plantillas[i])).length
+    const minimo = Math.floor(ims.length / 3)
+    if (conFoto < minimo) {
+      hallazgos.push({
+        campo: 'imágenes',
+        problema: `De ${ims.length} imágenes solo ${conFoto} llevan foto y tienen que ser al menos ${minimo}. Un carrusel de puras placas de texto se ve plano: cambiá alguna por una plantilla con foto (revista, overlay, arco, split, marco, diptico, collage, foto) o por una foto del banco.`,
+      })
+    }
+  }
+
+  // 4) La PORTADA no puede repetir la de la pieza anterior (es lo que se ve en la grilla).
+  const portada = plantillas[0]
+  const portadaPrevia = mem.ultimaPieza[0]
+  if (portada && portadaPrevia && portada === portadaPrevia) {
+    hallazgos.push({
+      campo: 'imagen 1',
+      problema: `La pieza anterior ya abrió con "${portada}". En el perfil las portadas se ven una al lado de la otra: elegí OTRA plantilla para abrir esta.`,
+    })
+  }
+
+  // 5) Dos homenajes seguidos con la misma de las cinco memoriales.
+  const memorialAhora = plantillas.find(p => familiaDe(p) === 'memorial')
+  if (memorialAhora && mem.ultimoMemorial && memorialAhora === mem.ultimoMemorial) {
+    hallazgos.push({
+      campo: 'homenaje',
+      problema: `El último homenaje ya usó "${memorialAhora}". Hay cinco (memorial_placa, memorial_retrato, memorial_medallon, memorial_cuadro, memorial_cinta): usá una distinta.`,
+    })
+  }
+  return hallazgos
 }
 
 const TOOL_POST: Anthropic.Tool = {
@@ -241,27 +333,11 @@ const TOOL_POST: Anthropic.Tool = {
           type: 'object',
           properties: {
             modo: { type: 'string', enum: ['plantilla', 'grafico', 'reuse', 'nueva'], description: 'plantilla = PLACA de una PLANTILLA MAESTRA on-brand (RECOMENDADO para casi todo: elegís plantilla + slots y el layout no se rompe); reuse = usar una foto del banco; nueva = generar una foto fotorrealista NUEVA; grafico = HTML libre (SOLO si ninguna plantilla calza — es más frágil).' },
-            plantilla: { type: 'string', enum: [...PLANTILLAS], description: 'Si modo=plantilla: qué plantilla usar (portada = apertura/gancho; contenido = idea + bullets; dato = una cifra fuerte; foto = foto protagonista casi sin texto; cierre = CTA final; cita = testimonio/frase destacada; split = editorial foto-al-lado-de-texto). Varía la plantilla entre piezas.' },
+            plantilla: { type: 'string', enum: [...PLANTILLAS], description: 'Si modo=plantilla: ' + PLANTILLA_TOOL_DESC },
             slots: {
               type: 'object',
               description: 'Si modo=plantilla: el CONTENIDO de la plantilla (textos CORTOS; lo que no cabe se recorta). No todos aplican a cada plantilla — mirá PLANTILLAS DISPONIBLES.',
-              properties: {
-                eyebrow: { type: 'string', description: 'Etiqueta corta arriba (ej. "PARA VETERINARIOS").' },
-                titulo: { type: 'string', description: 'Titular (2-4 palabras). En "foto" es una frase corta.' },
-                titulo_destacado: { type: 'string', description: '2ª línea del titular; sale en DORADO, en su propia línea.' },
-                bajada: { type: 'string', description: 'Una frase de apoyo, corta.' },
-                bullets: { type: 'array', items: { type: 'string' }, description: 'Solo "contenido": 2-4 bullets MUY cortos.' },
-                dato: { type: 'string', description: 'Solo "dato": el número/palabra grande (ej. "4 días").' },
-                dato_label: { type: 'string', description: 'Solo "dato": qué es esa cifra.' },
-                cta: { type: 'string', description: 'Llamado a la acción corto o teléfono (portada/cierre).' },
-                cta_secundario: { type: 'string', description: 'Web o dato secundario del CTA.' },
-                fondo: { type: 'string', enum: ['navy', 'crema', 'blanco'], description: 'Color de fondo dominante (alterná entre piezas).' },
-                foto: {
-                  type: 'object',
-                  description: 'Foto de la plantilla (banda o full-bleed). prompt para generar una nueva, o url para reutilizar una del banco.',
-                  properties: { prompt: { type: 'string', description: 'Descripción fotográfica cálida (mascota viva/tutor; NUNCA instalaciones).' }, url: { type: 'string', description: 'URL exacta del banco para reutilizar.' } },
-                },
-              },
+              properties: SLOTS_TOOL_PROPS,
             },
             layout: { type: 'string', enum: ['foto_full', 'foto_protagonista', 'recorte_color', 'asomandose', 'editorial', 'placa_texto', 'foto_banco'], description: 'Layout de ESTA imagen (memoria de variedad: se guarda para que la próxima pieza no repita el molde).' },
             fondo: { type: 'string', enum: ['navy', 'crema', 'blanco', 'foto'], description: 'Fondo/color DOMINANTE de esta imagen (para alternar entre piezas y dentro del carrusel).' },
@@ -372,6 +448,9 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
     // Hasta acá el prefijo es 100% estático → cacheado 1 hora. Lo aprovechan los
     // reintentos del linter (hasta 3 por pieza) y las piezas seguidas de un lote.
     { type: 'text', text: MODALIDADES_SERVICIOS, cache_control: { type: 'ephemeral', ttl: '1h' } },
+    // ⚠️ De acá para abajo va lo VARIABLE (rompe caché a propósito). Las recetas
+    // rotan en cada llamada: es lo que evita que todas las fotos salgan iguales.
+    { type: 'text', text: recetasVariadas() },
     { type: 'text', text: bancoBloque(banco, memoria.fotosUsadas) },
     ...(bloqueLogosPieza(banco) ? [{ type: 'text' as const, text: bloqueLogosPieza(banco) }] : []),
     ...(memoria.bloque ? [{ type: 'text' as const, text: memoria.bloque }] : []),
@@ -404,6 +483,8 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
       .filter(im => im.modo === 'grafico' && (im.html || '').trim())
       .map(im => extraerTextoHtml(String(im.html)))
     const hallazgos = lintCopy({ caption: opts.soloImagen ? undefined : cuerpo, placas: placaTextos, telefono: contacto.telefono, web })
+    // Rotación: mismo mecanismo de rechazo que las reglas de marca (ver lintRotacion).
+    hallazgos.push(...lintRotacion(out.imagenes, memoria))
     // Regla del dueño: en Instagram TODO va 4:5 vertical (el render usa las dimensiones
     // del root del HTML, así que se valida acá y se regenera con feedback si no cumple).
     if (item.canal === 'instagram') {
@@ -422,11 +503,11 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
     }
     if (hallazgos.length === 0) break
     if (intento === 2) {
-      avisos.push('Tras reintentar, la pieza aún podría tener problemas de marca: ' + hallazgos.map(h => `${h.campo}: ${h.problema}`).join('; '))
+      avisos.push('Tras reintentar, la pieza aún podría tener problemas de marca o repetir formato: ' + hallazgos.map(h => `${h.campo}: ${h.problema}`).join('; '))
       break
     }
     convo.push({ role: 'assistant', content: res.content })
-    convo.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: tu.id, content: 'RECHAZADO por reglas de marca. Corregí EXACTAMENTE esto y volvé a entregar con entregar_post (mantené el resto igual):\n- ' + hallazgos.map(h => `[${h.campo}] ${h.problema}`).join('\n- ') }] })
+    convo.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: tu.id, content: 'RECHAZADO por reglas de marca y de rotación. Corregí EXACTAMENTE esto y volvé a entregar con entregar_post (mantené el resto igual):\n- ' + hallazgos.map(h => `[${h.campo}] ${h.problema}`).join('\n- ') }] })
   }
   if (!out) throw new Error('El modelo no devolvió el post')
   // En modo solo-imagen se conserva el copy actual (el caption del modelo se ignora).
@@ -636,6 +717,9 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
     portada: `${estilos[0]?.layout || '?'}/${estilos[0]?.fondo || '?'}`,
     fondos: estilos.map(e => e.fondo),
     fotos: [...fotosDelBanco],
+    // Plantillas usadas, en orden: lo lee `memoriaVariedad` para RECHAZAR por
+    // código que la próxima pieza repita la misma portada o el mismo memorial.
+    plantillas: (out.imagenes || []).map(im => (im.modo === 'plantilla' ? im.plantilla || '' : '')),
   }) : ''
   return { cuerpo, imagenUrl, imagenId, imagenesJson, estiloJson, avisos }
 }

@@ -34,10 +34,60 @@ export const MARCA_VISUAL = `DIRECCIÓN VISUAL DE MARCA (cómo se ve una imagen 
   · Tutores (B2C): luz natural cálida y VARIADA entre piezas (golden hour, pero también mañanas claras y luminosas, mediodía suave o tarde cálida de interior — no siempre el mismo dorado), hogar y momentos cotidianos, ternura, profundidad de campo suave, amplio espacio negativo. Pueden aparecer manos o tutores acariciando/sosteniendo a la mascota con cariño.
   · Veterinarios (B2B): tono profesional, espacios limpios y ordenados, personas trabajando con concentración, luz neutra controlada, composición estructurada y simétrica; transmite capacidad técnica y respaldo serio, SIN frialdad clínica (nada de batas, instrumental ni quirófano).
 - Paleta: la paleta de marca es del DISEÑO (placas, velos, textos), NO de la escena de la foto. La ESCENA va CÁLIDA: neutros cálidos (crema ${BRAND.cream}, beige, madera miel, verdes naturales suaves) y luz dorada — NUNCA una escena teñida de azul ni llena de props navy (mantas, ropa, paredes azules; a lo sumo UN detalle navy sutil). El dorado/ámbar ${BRAND.amber} como acento queda on-brand. Evita negro puro, rojos intensos, neones/fluorescentes, verdes "clínicos" y el tinte azul/frío general.
+- ESCRIBÍ PROMPTS CONCRETOS, NO GENÉRICOS (regla dura — es LA causa de que "todas las fotos salgan iguales"): un prompt como "una mascota con luz cálida" siempre devuelve la misma foto (golden retriever, living beige, golden hour, plano medio). Todo prompt de foto tiene que fijar CUATRO cosas: (1) QUÉ animal (especie, tipo/tamaño, edad — variá de verdad: gatos, mestizos, perros viejos, cachorros, razas chicas y grandes, conejos, aves), (2) DÓNDE (ventana, cocina, terraza, jardín, plaza, sendero, auto, escalera, alfombra…), (3) LUZ/HORA (mañana clara, mediodía suave, tarde cálida, día nublado difuso, contraluz suave — el golden hour es UNA opción entre varias, no la default) y (4) ÁNGULO/ACCIÓN (primerísimo plano de la cara, a la altura del suelo, cenital, de perfil, plano entero; durmiendo, jugando, esperando, siendo acariciada). Entre dos fotos de una misma tanda tienen que cambiar AL MENOS DOS de esas cuatro.
 - Composición limpia, sin recargar; regla de tercios o centrada. Deja espacio negativo limpio donde luego irá el texto o el logo (el logo se agrega después en el HTML/edición; la IA NO lo dibuja ni incrusta texto).
-- ENCUADRE (CLAVE): la mascota debe verse BIEN COMPUESTA y ENTERA — su CARA y OJOS SIEMPRE visibles y NUNCA cortados por los bordes; dejá margen de aire alrededor del animal (no pegado al borde). El espacio negativo para el texto va AL LADO o ALREDEDOR del sujeto, NUNCA recortándole la cabeza. El sujeto centrado o en un tercio y a buen tamaño (ni diminuto ni tapando todo). Evitá mostrar solo un pedazo del animal (lomo, patas o cuerpo sin rostro).
+- ENCUADRE (CLAVE): la mascota debe verse BIEN COMPUESTA y ENTERA — su CARA y OJOS SIEMPRE visibles y NUNCA cortados por los bordes NI TAPADOS por el texto, un velo o el logo que se le pongan encima después; dejá margen de aire alrededor del animal (no pegado al borde). El espacio negativo para el texto va AL LADO o ALREDEDOR del sujeto, NUNCA recortándole la cabeza. Si la pieza lleva un bloque de texto ABAJO (placa, tarjeta, banda), pedí explícitamente al animal en la MITAD SUPERIOR y la inferior despejada; si el texto va arriba, al revés. El sujeto centrado o en un tercio y a buen tamaño (ni diminuto ni tapando todo). Evitá mostrar solo un pedazo del animal (lomo, patas o cuerpo sin rostro).
 - NUNCA muestres: mascotas fallecidas, enfermas o agonizantes; urnas, ataúdes, lápidas, tumbas o cementerios; hornos crematorios ni el proceso de cremación; sangre o escenas clínicas/quirúrgicas duras; lágrimas o duelo dramático; símbolos religiosos; "puente del arcoíris", ángeles o halos; velas; ni texto/letras/logos incrustados en la imagen.
 - INSTALACIONES del crematorio (local, salas, recepción, fachada, hornos, vehículos): NO se generan NUNCA con IA; solo se muestran reutilizando fotos REALES del banco (grupo "instalaciones").`
+
+/**
+ * RECETAS DE ESCENA — el antídoto contra "todas las fotos son iguales".
+ *
+ * El problema real (feedback del dueño, 2026-08): pedirle al modelo "una foto
+ * cálida de una mascota" siempre colapsa en la MISMA imagen — golden retriever,
+ * living beige, golden hour, plano medio. La dirección de arte genérica no
+ * alcanza: hay que darle una escena CONCRETA y distinta cada vez.
+ *
+ * Cada receta fija las cuatro variables que hacen que dos fotos se vean
+ * distintas: ESPECIE/tipo · LUGAR · LUZ/hora · ÁNGULO/acción. Se inyectan de a
+ * pocas y ROTADAS en el prompt del generador (ver `recetasVariadas`), así una
+ * tanda de piezas nunca repite la misma combinación.
+ */
+export const RECETAS_ESCENA: string[] = [
+  'un gato atigrado estirado en el marco de una ventana, luz de mañana entrando de costado, primer plano de su cara',
+  'un perro mestizo mediano trotando en el pasto de una plaza, media tarde luminosa, cámara a la altura del suelo',
+  'las manos de una persona mayor acariciando a su perro viejo echado en su regazo, luz cálida de living',
+  'un cachorro de raza pequeña asomándose desde una manta de lana, plano cenital, tonos crema',
+  'un gato negro sentado muy erguido sobre una mesa de madera, fondo neutro, luz suave de día nublado',
+  'un perro grande esperando junto a la puerta de entrada, contraluz suave de la calle, plano entero',
+  'una niña abrazando a su gato en el sillón, ambos de perfil, tarde cálida de interior',
+  'un conejo sobre una alfombra clara, primer plano a su altura, luz natural difusa',
+  'dos perros compartiendo una siesta en el piso de madera, plano cenital, sombras suaves de la tarde',
+  'un perro salchicha asomando la cabeza por la ventanilla de un auto estacionado, luz dorada de atardecer',
+  'un gato joven jugando con un cordel en la cocina, movimiento congelado, luz clara de mediodía',
+  'un labrador chocolate sentado en una terraza con plantas, retrato de tres cuartos, sol bajo de la tarde',
+  'un perro pequeño de pelo largo en brazos de su tutora en el jardín, ambos mirando a cámara, luz de primavera',
+  'un gato durmiendo hecho un ovillo sobre una silla de mimbre, plano medio, luz tenue de amanecer',
+  'un perro adulto caminando por un sendero de tierra entre árboles, plano general, luz filtrada entre las hojas',
+  'un ave pequeña posada en el dedo de su tutor dentro de la casa, primerísimo plano, fondo desenfocado claro',
+  'un perro mojado y feliz después del baño envuelto en una toalla, plano medio, baño luminoso',
+  'un gato observando la lluvia desde el interior, silueta suave contra el vidrio, luz gris cálida',
+]
+
+/**
+ * Devuelve `n` recetas DISTINTAS, arrancando en una posición variable para que
+ * dos tandas seguidas no reciban el mismo set. Formateadas para pegar en el
+ * prompt del agente que escribe los prompts de imagen.
+ */
+export function recetasVariadas(n = 6): string {
+  const total = RECETAS_ESCENA.length
+  const inicio = Math.floor(Math.random() * total)
+  const elegidas: string[] = []
+  for (let i = 0; i < Math.min(n, total); i++) elegidas.push(RECETAS_ESCENA[(inicio + i * 5) % total])
+  return `ESCENAS SUGERIDAS PARA ESTA TANDA (usalas como PUNTO DE PARTIDA y adaptalas al mensaje; si una no calza, inventá otra igual de concreta — lo que NO se acepta es "una mascota con luz cálida" a secas):
+- ${[...new Set(elegidas)].join('\n- ')}
+Regla: dentro de una misma tanda, NINGUNA foto puede repetir la especie + el lugar + la hora de otra. Cambiá al menos DOS de esas tres entre foto y foto.`
+}
 
 /**
  * Sufijo de estilo (inglés) que se añade a TODO prompt enviado al modelo de

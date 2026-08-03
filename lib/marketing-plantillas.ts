@@ -70,6 +70,22 @@ export interface SlotsPlantilla {
   cta_secundario?: string
   fondo?: 'navy' | 'crema' | 'blanco'
   foto?: { prompt?: string; url?: string }
+
+  // ── Slots de las plantillas nuevas (2026-08) ────────────────────────────────
+  /** Encabezado del SEGUNDO lado/columna ('comparativa'). */
+  titulo_b?: string
+  /** Items del SEGUNDO lado/columna ('comparativa'). */
+  bullets_b?: string[]
+  /** Pares clave→valor ('horario', 'comparativa' en modo tabla). */
+  filas?: { izq: string; der: string }[]
+  /** Varias cifras ('mosaico_datos'): 2 a 4 celdas. */
+  datos?: { valor: string; label: string }[]
+  /** Varias fotos ('collage'): 1 grande + 2 chicas. */
+  fotos?: { prompt?: string; url?: string }[]
+  /** Nota al pie / aclaración chica ('precio', 'horario', 'mosaico_datos'). */
+  pie?: string
+  /** Años de la mascota en las plantillas 'memorial_*' (ej. "2014 — 2026"). */
+  fechas?: string
 }
 
 export interface OpcionesPlantilla {
@@ -80,8 +96,118 @@ export interface OpcionesPlantilla {
 
 export interface ResultadoPlantilla { html: string; fotos: FotoGrafico[] }
 
-export const PLANTILLAS = ['portada', 'contenido', 'dato', 'foto', 'cierre', 'cita', 'split', 'numeros', 'marco'] as const
+export const PLANTILLAS = [
+  // base
+  'portada', 'contenido', 'dato', 'foto', 'cierre', 'cita', 'split', 'numeros', 'marco',
+  // 2026-08: estructuras nuevas para romper la monotonía del feed
+  'revista', 'diptico', 'comparativa', 'timeline', 'collage', 'faq', 'precio',
+  'arco', 'bicolor', 'checklist', 'mosaico_datos', 'testimonio', 'horario',
+  'overlay', 'tipografico',
+  // MEMORIAL: homenaje a UNA mascota por su nombre (5 estructuras distintas).
+  'memorial_placa', 'memorial_retrato', 'memorial_medallon', 'memorial_cuadro', 'memorial_cinta',
+] as const
 export type NombrePlantilla = (typeof PLANTILLAS)[number]
+
+/** Plantillas que llevan al menos una FOTO (para equilibrar una tanda). */
+export const PLANTILLAS_CON_FOTO: NombrePlantilla[] = [
+  'foto', 'marco', 'split', 'revista', 'diptico', 'collage', 'arco', 'testimonio', 'overlay',
+  'memorial_placa', 'memorial_retrato', 'memorial_medallon', 'memorial_cuadro', 'memorial_cinta',
+]
+
+/** Las cinco de homenaje: el agente DEBE rotarlas, no usar siempre la misma. */
+export const PLANTILLAS_MEMORIAL: NombrePlantilla[] = [
+  'memorial_placa', 'memorial_retrato', 'memorial_medallon', 'memorial_cuadro', 'memorial_cinta',
+]
+
+export type FamiliaPlantilla = 'apiladas' | 'foto' | 'listas' | 'cifras' | 'texto' | 'memorial'
+
+/**
+ * FAMILIA de cada plantilla. Es la unidad que se controla para la rotación: dos
+ * piezas de la misma familia se ven parecidas aunque la plantilla sea distinta
+ * (dos listas siguen siendo dos listas). Fuente única — la consume el validador
+ * determinista de `generar_pieza`, no solo el prompt.
+ */
+export const FAMILIA: Record<NombrePlantilla, FamiliaPlantilla> = {
+  portada: 'apiladas', contenido: 'apiladas', cierre: 'apiladas',
+  foto: 'foto', marco: 'foto', split: 'foto', revista: 'foto', diptico: 'foto',
+  collage: 'foto', arco: 'foto', overlay: 'foto',
+  numeros: 'listas', checklist: 'listas', timeline: 'listas', comparativa: 'listas',
+  dato: 'cifras', mosaico_datos: 'cifras', precio: 'cifras',
+  cita: 'texto', testimonio: 'texto', faq: 'texto', tipografico: 'texto',
+  bicolor: 'texto', horario: 'texto',
+  memorial_placa: 'memorial', memorial_retrato: 'memorial', memorial_medallon: 'memorial',
+  memorial_cuadro: 'memorial', memorial_cinta: 'memorial',
+}
+
+export const familiaDe = (p?: string): FamiliaPlantilla | null =>
+  (p && FAMILIA[p as NombrePlantilla]) || null
+
+/** ¿Esta plantilla muestra una foto? (para exigir fotos en una tanda). */
+export const llevaFoto = (p?: string): boolean =>
+  !!p && PLANTILLAS_CON_FOTO.includes(p as NombrePlantilla)
+
+/**
+ * Descripción del enum `plantilla` para las TOOLS del modelo. Fuente única: la
+ * usan `disenar_plantilla` (chat) y `generar_pieza` (calendario), así que sumar
+ * una plantilla no deja una de las dos desactualizada.
+ */
+export const PLANTILLA_TOOL_DESC =
+  'Qué plantilla usar. BASE: portada (apertura/gancho) · contenido (idea + bullets) · dato (una cifra grande) · ' +
+  'foto (foto protagonista con una frase) · cierre (CTA final) · cita (frase destacada, sin foto) · ' +
+  'split (foto al lado del texto) · numeros (lista numerada) · marco (foto enmarcada). ' +
+  'ESTRUCTURAS NUEVAS (usalas seguido): revista (portada editorial: foto a sangre + banda con el titular) · ' +
+  'diptico (mitad foto / mitad color, titular centrado) · comparativa (dos columnas: nosotros vs lo habitual) · ' +
+  'timeline (hitos en un riel dorado) · collage (3 fotos) · faq (pregunta grande + respuesta) · ' +
+  'precio (tarjeta de plan con cifra y qué incluye) · arco (foto en un arco, editorial) · ' +
+  'bicolor (lienzo partido navy/claro con el titular a caballo) · checklist (items en barras con filete) · ' +
+  'mosaico_datos (grilla 2×2 de cifras) · testimonio (avatar redondo + cita) · horario (filas clave→valor) · ' +
+  'overlay (foto a sangre + tarjeta flotante) · tipografico (póster de una palabra). ' +
+  'MEMORIAL (homenaje a una mascota, titulo = su nombre + fechas = sus años; ROTÁ las cinco, nunca dos seguidas iguales): ' +
+  'memorial_placa (foto a sangre + placa crema) · memorial_retrato (foto vertical + columna) · ' +
+  'memorial_medallon (medallón circular dorado — la foto REDONDA es EXCLUSIVA de los homenajes, en piezas comerciales usá "arco") · memorial_cuadro (retrato enmarcado) · ' +
+  'memorial_cinta (foto arriba + banda navy con el nombre en dorado). ' +
+  'ROTÁ: no repitas plantilla ni familia dentro de una misma tanda; al menos 1 de cada 3 piezas con FOTO.'
+
+/**
+ * Propiedades del objeto `slots` para el input_schema de las tools. Compartido
+ * por las dos herramientas por la misma razón que `PLANTILLA_TOOL_DESC`.
+ */
+export const SLOTS_TOOL_PROPS: Record<string, unknown> = {
+  eyebrow: { type: 'string', description: 'Etiqueta corta arriba (ej. "PARA VETERINARIOS"). En "precio" es el nombre del plan; en "tipografico" la línea chica de arriba.' },
+  titulo: { type: 'string', description: 'Titular (2-4 palabras). En "foto"/"cita"/"testimonio" es la frase; en "faq" la pregunta; en "tipografico" la palabra grande.' },
+  titulo_destacado: { type: 'string', description: '2ª línea del titular; sale en DORADO, en su propia línea. En "bicolor" es la línea que cae en el bloque claro.' },
+  bajada: { type: 'string', description: 'Frase de apoyo corta. En "faq" es la RESPUESTA (hasta ~260 car); en "cita"/"testimonio" el autor.' },
+  bullets: { type: 'array', items: { type: 'string' }, description: 'Items cortos: "contenido" (2-4) · "numeros" (pasos) · "timeline" (hitos) · "checklist" (2-5) · "comparativa" (lo nuestro) · "precio" (qué incluye) · "split"/"bicolor" (2-3).' },
+  bullets_b: { type: 'array', items: { type: 'string' }, description: 'Solo "comparativa": items de la columna de enfrente ("lo habitual").' },
+  titulo_b: { type: 'string', description: 'Solo "comparativa": encabezado de NUESTRA columna (ej. "Alma Animal").' },
+  filas: {
+    type: 'array',
+    description: 'Solo "horario": 2-5 pares clave→valor (ej. izq "Lunes a domingo", der "09:00–22:00").',
+    items: { type: 'object', properties: { izq: { type: 'string' }, der: { type: 'string' } } },
+  },
+  datos: {
+    type: 'array',
+    description: 'Solo "mosaico_datos": 2-4 cifras (valor = el número, label = qué es).',
+    items: { type: 'object', properties: { valor: { type: 'string' }, label: { type: 'string' } } },
+  },
+  dato: { type: 'string', description: '"dato": el número/palabra grande (ej. "4 días"). "precio": la cifra (ej. "$120.000").' },
+  dato_label: { type: 'string', description: 'Qué es esa cifra (acompaña a "dato").' },
+  pie: { type: 'string', description: 'Letra chica al pie ("precio", "horario", "mosaico_datos").' },
+  fechas: { type: 'string', description: 'Solo "memorial_*": los años de la mascota (ej. "2014 — 2026").' },
+  cta: { type: 'string', description: 'CTA corto o teléfono.' },
+  cta_secundario: { type: 'string', description: 'Web o dato secundario del CTA.' },
+  fondo: { type: 'string', enum: ['navy', 'crema', 'blanco'], description: 'Fondo dominante (alterná entre piezas). En "overlay" es el color de la tarjeta.' },
+  foto: {
+    type: 'object',
+    description: 'Foto de la plantilla. prompt para generar una nueva, o url para reutilizar una del banco.',
+    properties: { prompt: { type: 'string', description: 'Descripción fotográfica cálida y CONCRETA (especie, escena, hora, ángulo). Mascota viva; NUNCA instalaciones.' }, url: { type: 'string', description: 'URL exacta del banco para reutilizar.' } },
+  },
+  fotos: {
+    type: 'array',
+    description: 'Solo "collage": 3 fotos (la 1ª va grande arriba). Cada una con prompt o url.',
+    items: { type: 'object', properties: { prompt: { type: 'string' }, url: { type: 'string' } } },
+  },
+}
 
 /** Guía de slots por plantilla, para el prompt/tool del modelo. */
 export const PLANTILLAS_INFO = `PLANTILLAS DISPONIBLES (elegí UNA y llená sus slots; el layout ya es on-brand y no se rompe):
@@ -94,7 +220,35 @@ export const PLANTILLAS_INFO = `PLANTILLAS DISPONIBLES (elegí UNA y llená sus 
 - "split": editorial lado-a-lado — foto a la izquierda, texto a la derecha (layout DISTINTO a los apilados). slots: foto {prompt} (obligatoria), titulo, titulo_destacado (opcional, dorado), bajada (opcional), bullets (2-3, opcional), cta (opcional), fondo (del panel de texto; default crema). Para una idea con una foto potente, con aire de revista.
 - "numeros": lista NUMERADA (pasos o razones) con números dorados grandes — otro ritmo visual que los bullets. slots: eyebrow (opcional), titulo, bajada (opcional), bullets (2-4, cada uno es un paso/razón, MUY cortos), fondo (default crema). Ideal para "los pasos del proceso", "3 razones para…". SIN foto.
 - "marco": foto ENMARCADA (estilo galería) centrada, con aire alrededor + pie de foto. slots: foto {prompt} (obligatoria), titulo (frase/pie centrado), bajada (opcional, autor/contexto), fondo (default crema). Distinta de "foto" (full-bleed): acá la foto respira sobre el color de marca. Cálida para homenajes, humanización y prueba social.
-Reglas: textos CORTOS (si no caben, se recortan). El fondo alterna navy/crema/blanco entre piezas — la PORTADA también (ya NO es siempre navy): NO dejes todas las portadas en navy, variá a crema o blanco (o con la foto mandando) para que el feed no se vea "todo azul". Regla práctica: máximo ~1 de cada 3 piezas de una misma tanda con fondo navy dominante. La foto: mascota viva y feliz o tutor con su mascota, cálida; NUNCA instalaciones. El logo se coloca solo.`
+
+ESTRUCTURAS NUEVAS (romper el molde apilado — usalas SEGUIDO, no son "de repuesto"):
+- "revista": portada editorial. Foto A SANGRE arriba (2/3 del alto) y una BANDA sólida abajo con el titular. slots: foto {prompt} (obligatoria), eyebrow, titulo, titulo_destacado, bajada, cta, fondo (de la banda). La más linda para abrir una campaña.
+- "diptico": mitad foto / mitad color, con el titular CENTRADO (el resto de las plantillas alinea a la izquierda → cambia el ritmo). slots: foto {prompt} (obligatoria), titulo, titulo_destacado, bajada, fondo.
+- "comparativa": DOS columnas enfrentadas. La izquierda (dorada, destacada) somos nosotros; la derecha, "lo habitual". slots: titulo, titulo_b (encabezado de la columna nuestra, ej. "Alma Animal"), bullets (2-4, lo nuestro), bullets_b (2-4, lo otro), fondo. Ideal para diferenciadores.
+- "timeline": hitos enlazados por un riel dorado vertical. slots: eyebrow, titulo, bullets (2-4 = los hitos), fondo. Para "cómo es el proceso", "qué pasa después de llamarnos".
+- "collage": mosaico de 3 fotos (1 grande + 2 chicas) + titular abajo. slots: fotos [{prompt} ×3], titulo, titulo_destacado, bajada, fondo. Muy vivo para "un día en Alma Animal" o variedad de mascotas.
+- "faq": una PREGUNTA grande con signo dorado + su respuesta. slots: eyebrow (default "Preguntas frecuentes"), titulo (la pregunta), bajada (la respuesta, hasta ~260 car), cta, fondo. Formato que la gente lee.
+- "precio": tarjeta de plan/servicio. slots: eyebrow (nombre del plan), titulo, dato (la cifra, ej. "$120.000"), dato_label ("Cremación individual hasta 10 kg"), bullets (2-4 = qué incluye), cta, pie (letra chica), fondo.
+- "arco": la foto dentro de un ARCO (rectángulo con la parte de arriba redondeada) y el texto abajo. slots: foto {prompt} (obligatoria), eyebrow, titulo, bajada, cta, fondo. Cálida y editorial para retratos y presentaciones. ⚠️ La foto REDONDA tipo foto de perfil quedó RESERVADA para los homenajes ("memorial_medallon"): en una pieza comercial se lee como memorial, así que acá usá el arco.
+- "bicolor": el lienzo partido en dos bloques (navy arriba / claro abajo) y el titular a caballo: titulo va en el navy y titulo_destacado en el claro. slots: eyebrow, titulo, titulo_destacado, bajada, bullets (2-3), cta.
+- "checklist": cada item en su propia BARRA con filete dorado (más contundente que los bullets). slots: eyebrow, titulo, bullets (2-5), fondo. Para "qué incluye", "lo que sí hacemos".
+- "mosaico_datos": grilla de 2×2 con cifras. slots: titulo, datos [{valor, label} ×2-4], pie, fondo. Para varios números juntos (dato = uno solo).
+- "testimonio": foto del tutor en cuadrado redondeado + comilla + la cita. Prueba social CON cara (cita es solo tipografía). slots: foto {prompt} (obligatoria: retrato cálido de un tutor con su mascota), titulo (el testimonio), bajada (autor), fondo.
+- "horario": filas clave→valor con líneas. slots: eyebrow, titulo, filas [{izq, der} ×2-5] (ej. izq "Lunes a domingo" / der "09:00–22:00"), pie, cta, fondo. Para horarios, cobertura por comuna, plazos.
+- "overlay": foto A SANGRE + una TARJETA clara flotando encima abajo (no un velo). slots: foto {prompt} (obligatoria), eyebrow, titulo, titulo_destacado, bajada, cta, fondo (color de la tarjeta). Se ve moderna y deja ver la foto entera.
+- "tipografico": póster de UNA idea, la palabra manda (tipografía gigante). slots: eyebrow (línea chica arriba), titulo (la palabra/frase grande), titulo_destacado (2ª línea en dorado), bajada. SIN foto. Para una frase de marca con impacto.
+
+MEMORIAL — homenaje a UNA mascota por su nombre (5 estructuras; ROTALAS, es lo que más se publica y no puede salir siempre igual). En las cinco: titulo = el NOMBRE de la mascota, fechas = sus años ("2014 — 2026"), bajada = la dedicatoria (una frase concreta y cotidiana, no un lugar común), eyebrow = "En memoria" / "Hasta siempre" / etc., foto = retrato CÁLIDO de la mascota VIVA y en calma (jamás enferma ni "ausente"; nada de urnas, lápidas, velas, arcoíris ni símbolos religiosos):
+- "memorial_placa": foto a sangre + una placa color crema centrada abajo con el nombre. La más sobria y la más linda para el feed.
+- "memorial_retrato": foto vertical a sangre a la izquierda y una columna de homenaje a la derecha. Aire de página de revista.
+- "memorial_medallon": foto en un medallón CIRCULAR con anillo dorado, centrado, con el nombre gigante de fondo. Solemne sin ser fúnebre.
+- "memorial_cuadro": la foto enmarcada como un retrato colgado (passe-partout blanco grueso) y el nombre debajo. Cálida, de living.
+- "memorial_cinta": foto arriba y una banda navy abajo con el nombre en dorado. La más gráfica de las cinco.
+
+ENCUADRE DE LAS FOTOS (regla dura — el dueño rebotó una pieza donde la placa le tapaba el hocico al gato): en las plantillas que apoyan TEXTO ENCIMA de la foto ("foto", "overlay", "memorial_placa", y las bandas de "portada" y "revista"), el prompt de la foto DEBE dejar despejada la zona donde va el texto: mascota en la mitad de arriba y la mitad de abajo libre (piso, manta, pasto, fondo liso). El sistema ya le agrega esa exigencia al prompt, pero escribilo vos también en la descripción de la escena. Y en TODAS: la cara y los ojos de la mascota se ven COMPLETOS, nunca cortados por el borde ni tapados por un bloque de texto, un velo o el logo.
+
+Reglas: textos CORTOS (si no caben, se recortan). El fondo alterna navy/crema/blanco entre piezas — la PORTADA también (ya NO es siempre navy): NO dejes todas las portadas en navy, variá a crema o blanco (o con la foto mandando) para que el feed no se vea "todo azul". Regla práctica: máximo ~1 de cada 3 piezas de una misma tanda con fondo navy dominante. La foto: mascota viva y feliz o tutor con su mascota, cálida; NUNCA instalaciones. El logo se coloca solo.
+ROTACIÓN (regla dura, feedback del dueño "los posts son siempre parecidos"): hay 29 plantillas. En una misma tanda/carrusel NO repitas plantilla, y NO uses dos veces seguidas la misma FAMILIA (apiladas: portada/contenido/cierre · foto protagonista: foto/marco/revista/diptico/overlay/arco/collage · listas: numeros/checklist/timeline/comparativa · cifras: dato/mosaico_datos/precio · texto: cita/testimonio/faq/tipografico/bicolor · memorial: las cinco memorial_*). Al menos 1 de cada 3 piezas tiene que llevar FOTO. En los HOMENAJES: nunca dos memoriales seguidos con la misma plantilla — llevá la cuenta y andá rotando las cinco. Si te pasan las "ÚLTIMAS PIEZAS GENERADAS", elegí plantillas de familias que NO aparezcan ahí.`
 
 // ─── helpers de bloque ────────────────────────────────────────────────────────
 function eyebrowChip(text: string, abs?: { top: number; left: number }): string {
@@ -135,6 +289,38 @@ function bgColor(fondo?: string): string {
   return fondo === 'crema' ? CREAM : fondo === 'blanco' ? WHITE : NAVY
 }
 
+// ─── capas gráficas (lo que separa una placa de un documento de Word) ─────────
+// Las plantillas de SOLO TEXTO se veían planas: tipografía centrada sobre un
+// color liso. Estos helpers agregan profundidad sin romper nada — todo es flex
+// + position:absolute + opacity, que es lo único que satori entiende bien.
+
+/**
+ * Tipografía GIGANTE y tenue de fondo (un número, una palabra, una comilla).
+ * Es el recurso editorial clásico para que una placa de texto tenga capas: se
+ * ve la trama, no se lee, y el contenido real queda encima.
+ */
+function ghost(texto: string, o: {
+  size: number; color: string; opacidad?: number
+  top?: number; left?: number; right?: number; bottom?: number
+}): string {
+  if (!texto) return ''
+  const pos = [
+    o.top !== undefined ? `top:${o.top}px` : '', o.bottom !== undefined ? `bottom:${o.bottom}px` : '',
+    o.left !== undefined ? `left:${o.left}px` : '', o.right !== undefined ? `right:${o.right}px` : '',
+  ].filter(Boolean).join(';')
+  return `<div style="display:flex;position:absolute;${pos};opacity:${o.opacidad ?? 0.09}"><span style="font-family:Inter;font-weight:700;font-size:${o.size}px;color:${o.color};line-height:0.78">${esc(texto)}</span></div>`
+}
+
+/** Filete dorado vertical: ancla el bloque de texto al margen izquierdo. */
+function rielGold(alto: number | 'auto' = 'auto'): string {
+  return `<div style="display:flex;width:6px;${alto === 'auto' ? 'align-self:stretch' : `height:${alto}px`};background:${GOLD};border-radius:3px;flex-shrink:0"></div>`
+}
+
+/** Banda de color a sangre (arriba o abajo) para cerrar la composición. */
+function bandaBorde(C: { w: number; h: number }, alto: number, color: string, abajo = true): string {
+  return `<div style="display:flex;position:absolute;${abajo ? 'bottom' : 'top'}:0;left:0;width:${C.w}px;height:${alto}px;background:${color}"></div>`
+}
+
 // ─── plantillas ───────────────────────────────────────────────────────────────
 function portada(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
   const fotos: FotoGrafico[] = []
@@ -147,7 +333,7 @@ function portada(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlan
   let banda = ''
   if (conFoto) {
     const src = s.foto!.url ? esc(s.foto!.url) : 'FOTO:principal'
-    if (!s.foto!.url) fotos.push({ slot: 'principal', prompt: s.foto!.prompt || 'una mascota viva y feliz junto a su tutor, luz cálida natural', aspect: '3:2' })
+    if (!s.foto!.url) fotos.push({ slot: 'principal', prompt: `${s.foto!.prompt || 'una mascota viva y feliz junto a su tutor, luz cálida natural'}. ${ZONA_LIBRE.arriba}`, aspect: '3:2' })
     const eb = s.eyebrow ? eyebrowChip(s.eyebrow, { top: 44, left: PAD - 16 }) : ''
     const lg = logoImg(o.logoBlanco, `top:40px;right:${PAD - 16}px`, 150)
     banda = `<div style="display:flex;position:relative;width:${C.w}px;height:${bandaH}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${C.w}" height="${bandaH}" style="object-fit:cover;object-position:center 35%;display:block" />${eb}${lg}</div>`
@@ -181,35 +367,52 @@ function contenido(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPl
   // a la mitad (ej. "Elige la" sin "modalidad que te acomode").
   const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, C.w - PAD * 2, 62) : ''
   const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:20px">${esc(clampText(s.bajada, 120))}</span>` : ''
-  // 90 (no 42): el bullet puede pasar a 2 líneas igual que la bajada — el límite
-  // corto cortaba bullets normales a mitad de palabra ("exposición d…").
+  // Los bullets van dentro de un PANEL con filete dorado, no sueltos sobre el
+  // fondo: le da peso y estructura a la lámina más usada de todas (era la más
+  // plana del set — puro texto flotando en el medio del color).
+  const panelBg = oscuro ? '#1c4c7c' : (bg === CREAM ? WHITE : '#f4f6f9')
   const items = (s.bullets || []).slice(0, 4).map(b =>
     `<div style="display:flex;flex-direction:row;align-items:flex-start;gap:16px"><div style="display:flex;width:11px;height:11px;border-radius:6px;background:${GOLD};margin-top:12px;flex-shrink:0"></div><span style="font-family:Inter;font-weight:600;font-size:30px;color:${col};line-height:1.3">${esc(clampText(b, 90))}</span></div>`).join('')
-  const bullets = items ? `<div style="display:flex;flex-direction:column;gap:18px;margin-top:34px">${items}</div>` : ''
+  const bullets = items
+    ? `<div style="display:flex;flex-direction:row;gap:26px;margin-top:34px;background:${panelBg};border-radius:16px;padding:30px 30px">${rielGold()}<div style="display:flex;flex-direction:column;gap:20px;flex:1">${items}</div></div>`
+    : ''
+  // Marca de agua con la 1ª palabra del titular: trama de fondo, no se lee.
+  const primera = (s.titulo || s.titulo_destacado || '').split(/\s+/)[0] || ''
+  const marca = conFoto ? '' : ghost(primera, { size: Math.round(C.h * 0.30), color: oscuro ? WHITE : NAVY, opacidad: 0.055, bottom: Math.round(C.h * 0.04), right: -Math.round(C.w * 0.08) })
   const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
   const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:56px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${tit}${bajada}${bullets}</div>`
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${banda}${body}${lg}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${banda}${marca}${body}${lg}</div>`
   return { html, fotos }
 }
 
 function dato(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  // Póster de cifra: la cifra grande apoyada sobre una COPIA fantasma enorme que
+  // sangra por el borde, y una banda inferior que cierra la composición. Antes
+  // era un número solo en el medio de un rectángulo liso.
   const bg = bgColor(s.fondo || 'navy')
   const oscuro = bg === NAVY
   const col = oscuro ? WHITE : NAVY
+  const bandaBg = oscuro ? '#0f3054' : (bg === CREAM ? '#f2ece1' : '#f4f6f9')
+  const bandaH = Math.round(C.h * 0.26)
+  const fondo = ghost(s.dato || '', {
+    size: Math.round(C.h * 0.36), color: GOLD, opacidad: oscuro ? 0.11 : 0.14,
+    top: Math.round(C.h * 0.10), left: -Math.round(C.w * 0.05),
+  })
   const eb = s.eyebrow ? eyebrowChip(s.eyebrow) : ''
-  const big = s.dato ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.dato, C.w - PAD * 2, 200, 90)}px;color:${GOLD};line-height:1.0">${esc(s.dato)}</span>` : ''
-  const label = s.dato_label ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.dato_label, C.w - PAD * 2, 56, 34)}px;color:${col};line-height:1.15;margin-top:12px">${esc(clampText(s.dato_label, 40))}</span>` : ''
-  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:24px">${esc(clampText(s.bajada, 120))}</span>` : ''
-  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;align-items:flex-start;padding:64px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${big}${label}${ruleGold()}${bajada}</div>`
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  const big = s.dato ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.dato, C.w - PAD * 2, 210, 90, 0.55)}px;color:${GOLD};line-height:0.94">${esc(s.dato)}</span>` : ''
+  const label = s.dato_label ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.dato_label, C.w - PAD * 2, 56, 34)}px;color:${col};line-height:1.15;margin-top:18px">${esc(clampText(s.dato_label, 40))}</span>` : ''
+  const arriba = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;align-items:flex-start;padding:64px ${PAD}px 40px ${PAD}px">${eb}${big}${label}</div>`
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.4">${esc(clampText(s.bajada, 120))}</span>` : ''
+  const banda = `<div style="display:flex;flex-direction:row;align-items:center;gap:26px;width:${C.w}px;height:${bandaH}px;background:${bandaBg};padding:0 ${PAD}px;flex-shrink:0">${rielGold(72)}${bajada}</div>`
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `top:${PAD - 16}px;right:${PAD - 16}px`, 140)
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${fondo}${arriba}${banda}${lg}</div>`
   return { html, fotos: [] }
 }
 
 function foto(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
   const fotos: FotoGrafico[] = []
   const src = s.foto?.url ? esc(s.foto.url) : 'FOTO:principal'
-  if (!s.foto?.url) fotos.push({ slot: 'principal', prompt: s.foto?.prompt || 'una mascota viva, feliz y serena, retrato cálido con luz dorada', aspect: '4:5' })
+  if (!s.foto?.url) fotos.push({ slot: 'principal', prompt: `${s.foto?.prompt || 'una mascota viva, feliz y serena, retrato cálido con luz dorada'}. ${ZONA_LIBRE.abajo}`, aspect: '4:5' })
   const frase = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2, 58, 34)}px;color:${WHITE};line-height:1.15">${esc(clampText(s.titulo, 70))}</span>` : ''
   // velo SOLO en la franja inferior (degradé que se desvanece) — no tapa la foto.
   const velo = `<div style="display:flex;position:absolute;bottom:0;left:0;width:${C.w}px;height:${Math.round(C.h * 0.42)}px;background:linear-gradient(to bottom, rgba(20,60,100,0) 0%, rgba(20,60,100,0.82) 78%)"></div>`
@@ -238,10 +441,16 @@ function cierre(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlant
   }
   const tit = tituloBloque(s, oscuro ? WHITE : NAVY, C.w - PAD * 2, 76)
   const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:22px">${esc(clampText(s.bajada, 120))}</span>` : ''
-  const cta = ctaRow(s, oscuro)
-  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 168)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${tit}${bajada}${cta}</div>`
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${banda}${body}${lg}</div>`
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `top:${PAD - 16}px;right:${PAD - 16}px`, 150)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:flex-end;padding:${conFoto ? 60 : 120}px ${PAD}px 56px ${PAD}px">${tit}${bajada}</div>`
+  // El CTA es una BANDA DORADA a sangre abajo, no un chip perdido en el medio:
+  // en un cierre el teléfono tiene que ser lo primero que se ve.
+  const tel = s.cta ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.cta, C.w - PAD * 2, 62, 34)}px;color:${NAVY};line-height:1.05">${esc(clampText(s.cta, 26))}</span>` : ''
+  const web = s.cta_secundario ? `<span style="font-family:Inter;font-weight:600;font-size:27px;color:${NAVY};opacity:0.78;margin-top:10px">${esc(clampText(s.cta_secundario, 40))}</span>` : ''
+  const bandaCta = (tel || web)
+    ? `<div style="display:flex;flex-direction:column;justify-content:center;width:${C.w}px;height:${Math.round(C.h * 0.20)}px;background:${GOLD};padding:0 ${PAD}px;flex-shrink:0">${tel}${web}</div>`
+    : ''
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${banda}${body}${bandaCta}${lg}</div>`
   return { html, fotos }
 }
 
@@ -250,13 +459,16 @@ function cita(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantil
   const bg = bgColor(s.fondo || 'crema')
   const oscuro = bg === NAVY
   const col = oscuro ? WHITE : NAVY
+  // La comilla ya no es un caracterito arriba: es una MARCA DE AGUA enorme que
+  // sangra por el borde y sobre la que se apoya la frase. Da capas a una placa
+  // que si no es tipografía suelta sobre un color liso.
+  const marca = ghost('“', { size: Math.round(C.h * 0.62), color: GOLD, opacidad: oscuro ? 0.16 : 0.20, top: -Math.round(C.h * 0.06), left: PAD - 30 })
   const eb = s.eyebrow ? eyebrowChip(s.eyebrow) : ''
-  const comilla = `<div style="display:flex;font-family:Inter;font-weight:700;font-size:170px;color:${GOLD};line-height:0.8;margin-bottom:8px">“</div>`
-  const frase = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2, 68, 40)}px;color:${col};line-height:1.24">${esc(clampText(s.titulo, 200))}</span>` : ''
-  const autor = s.bajada ? `<span style="font-family:Inter;font-weight:600;font-size:30px;color:${oscuro ? SOFT : INK};margin-top:30px">— ${esc(clampText(s.bajada, 60))}</span>` : ''
+  const frase = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2, 70, 40, 0.53)}px;color:${col};line-height:1.24">${esc(clampText(s.titulo, 200))}</span>` : ''
+  const autor = s.bajada ? `<div style="display:flex;flex-direction:row;align-items:center;gap:20px;margin-top:36px">${rielGold(46)}<span style="font-family:Inter;font-weight:600;font-size:30px;color:${oscuro ? SOFT : INK}">${esc(clampText(s.bajada, 60))}</span></div>` : ''
   const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:64px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${comilla}${frase}${autor}</div>`
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:${Math.round(C.h * 0.30)}px ${PAD}px ${Math.round(C.h * 0.12)}px ${PAD}px">${eb}${frase}${autor}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${marca}${body}${lg}</div>`
   return { html, fotos: [] }
 }
 
@@ -295,9 +507,13 @@ function numeros(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlan
   const eb = s.eyebrow ? eyebrowChip(s.eyebrow) : ''
   const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, C.w - PAD * 2, 60) : ''
   const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:18px">${esc(clampText(s.bajada, 120))}</span>` : ''
+  // Numerales EDITORIALES: cifra dorada enorme al margen + hairline que separa
+  // cada paso. El circulito de 66px con el número adentro era el recurso más
+  // genérico del set.
+  const linea = oscuro ? '#2a5c8d' : '#e2dace'
   const rows = (s.bullets || []).slice(0, 4).map((b, i) =>
-    `<div style="display:flex;flex-direction:row;align-items:center;gap:24px"><div style="display:flex;align-items:center;justify-content:center;width:66px;height:66px;border-radius:34px;background:${GOLD};flex-shrink:0"><span style="font-family:Inter;font-weight:700;font-size:36px;color:${NAVY}">${i + 1}</span></div><span style="font-family:Inter;font-weight:600;font-size:32px;color:${col};line-height:1.25">${esc(clampText(b, 76))}</span></div>`).join('')
-  const lista = rows ? `<div style="display:flex;flex-direction:column;gap:26px;margin-top:40px">${rows}</div>` : ''
+    `<div style="display:flex;flex-direction:row;align-items:center;gap:28px;padding:26px 0;border-top:${i === 0 ? '0px' : '2px'} solid ${linea}"><span style="font-family:Inter;font-weight:700;font-size:86px;color:${GOLD};line-height:0.9;width:110px;flex-shrink:0">${i + 1}</span><span style="font-family:Inter;font-weight:600;font-size:32px;color:${col};line-height:1.25">${esc(clampText(b, 76))}</span></div>`).join('')
+  const lista = rows ? `<div style="display:flex;flex-direction:column;margin-top:34px">${rows}</div>` : ''
   const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
   const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${tit}${bajada}${lista}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
@@ -325,8 +541,495 @@ function marco(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlanti
   return { html, fotos }
 }
 
+// ─── plantillas nuevas (2026-08) ──────────────────────────────────────────────
+// Objetivo del dueño: que el feed deje de verse "siempre igual". Cada una rompe
+// el molde apilado (eyebrow → título → bajada → bullets) con una ESTRUCTURA
+// distinta: bandas sólidas, dos columnas, rieles, grillas, tarjetas flotantes,
+// círculos y póster tipográfico. Todas satori-safe (solo flex, sin transform).
+
+/**
+ * Exigencia de encuadre para las plantillas que APOYAN TEXTO SOBRE LA FOTO.
+ *
+ * Bug real (2026-08, reportado por el dueño): en `memorial_placa` la placa le
+ * tapaba el hocico al gato. La plantilla no sabe dónde está el animal, así que
+ * la única solución robusta es PEDIR la foto ya compuesta con la zona del texto
+ * despejada. Se le suma al prompt venga de donde venga (del modelo o del
+ * fallback), porque el modelo se olvida de decirlo.
+ */
+const ZONA_LIBRE: Record<'abajo' | 'arriba', string> = {
+  abajo: 'Composición OBLIGATORIA: la mascota en la MITAD SUPERIOR del encuadre, con su cara y ojos completos y bien visibles, y la MITAD INFERIOR despejada (piso, manta, pasto o fondo liso) porque ahí va a ir un bloque de texto que no puede taparle la cara.',
+  arriba: 'Composición OBLIGATORIA: la mascota en la MITAD INFERIOR del encuadre, con su cara y ojos completos y bien visibles, y el TERCIO SUPERIOR despejado (pared, cielo o fondo liso) porque ahí va a ir texto que no puede taparle la cara.',
+}
+
+/** Pide una foto para un slot y devuelve el `src` a usar en el <img>. */
+function pedirFoto(
+  fotos: FotoGrafico[],
+  f: { prompt?: string; url?: string } | undefined,
+  slot: string,
+  fallback: string,
+  aspect: string,
+  zonaLibre?: 'abajo' | 'arriba',
+): string {
+  if (f?.url) return esc(f.url)
+  const base = f?.prompt || fallback
+  fotos.push({ slot, prompt: zonaLibre ? `${base}. ${ZONA_LIBRE[zonaLibre]}` : base, aspect })
+  return `FOTO:${slot}`
+}
+
+/** 1. Portada de REVISTA: foto a sangre + banda sólida abajo con el titular. */
+function revista(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const fotos: FotoGrafico[] = []
+  const src = pedirFoto(fotos, s.foto, 'principal', 'un perro tranquilo mirando a cámara junto a la ventana de su casa, luz cálida de mañana', '4:5', 'arriba')
+  const bg = bgColor(s.fondo || 'crema')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const bandaH = Math.round(C.h * 0.34)
+  const fotoH = C.h - bandaH
+  const eb = s.eyebrow ? eyebrowChip(s.eyebrow, { top: 48, left: PAD - 16 }) : ''
+  const lgFoto = logoImg(o.logoBlanco, `top:44px;right:${PAD - 16}px`, 150)
+  const zona = `<div style="display:flex;position:relative;width:${C.w}px;height:${fotoH}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${C.w}" height="${fotoH}" style="object-fit:cover;object-position:center 45%;display:block" />${eb}${lgFoto}</div>`
+  const tit = tituloBloque(s, col, C.w - PAD * 2, 70)
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:29px;color:${oscuro ? SOFT : INK};line-height:1.35;margin-top:18px">${esc(clampText(s.bajada, 130))}</span>` : ''
+  const cta = ctaRow(s, oscuro)
+  const banda = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:0 ${PAD}px">${tit}${bajada}${cta}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${zona}${banda}</div>`
+  return { html, fotos }
+}
+
+/** 2. DÍPTICO: mitad foto / mitad color, con el titular CENTRADO. */
+function diptico(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const fotos: FotoGrafico[] = []
+  const src = pedirFoto(fotos, s.foto, 'principal', 'un gato descansando sobre una manta de lana en un sillón, luz suave de tarde', '1:1')
+  const bg = bgColor(s.fondo || 'navy')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const mitad = Math.round(C.h / 2)
+  const arriba = `<div style="display:flex;width:${C.w}px;height:${mitad}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${C.w}" height="${mitad}" style="object-fit:cover;object-position:center 40%;display:block" /></div>`
+  const largo = [s.titulo, s.titulo_destacado].filter((x): x is string => !!x).reduce((m, l) => (l.length > m.length ? l : m), '')
+  const fs = fitFont(largo, C.w - PAD * 2, 78, 40)
+  const l1 = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fs}px;color:${col};line-height:1.08;text-align:center">${esc(s.titulo)}</span>` : ''
+  const l2 = s.titulo_destacado ? `<span style="font-family:Inter;font-weight:700;font-size:${fs}px;color:${GOLD};line-height:1.08;text-align:center">${esc(s.titulo_destacado)}</span>` : ''
+  const regla = `<div style="display:flex;width:70px;height:5px;background:${GOLD};border-radius:3px;margin-top:26px"></div>`
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:29px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:24px;text-align:center">${esc(clampText(s.bajada, 130))}</span>` : ''
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:44px;left:${Math.round(C.w / 2) - 75}px`, 150)
+  const abajo = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:44px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${l1}${l2}${regla}${bajada}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${arriba}${abajo}${lg}</div>`
+  return { html, fotos }
+}
+
+/** 3. COMPARATIVA: dos columnas enfrentadas (nosotros / lo habitual). */
+function comparativa(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const bg = bgColor(s.fondo || 'crema')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, C.w - PAD * 2, 54) : ''
+  const colW = Math.round((C.w - PAD * 2 - 24) / 2)
+  const columna = (encabezado: string, items: string[], destacada: boolean) => {
+    const head = `<div style="display:flex;align-items:center;justify-content:center;height:${destacada ? 92 : 78}px;background:${destacada ? GOLD : (oscuro ? '#1d4f7f' : '#dfe6ee')};border-radius:14px 14px 0 0"><span style="font-family:Inter;font-weight:700;font-size:${destacada ? 28 : 24}px;color:${destacada ? NAVY : (oscuro ? SOFT : INK)};letter-spacing:0.5px">${esc(clampText((encabezado || '').toUpperCase(), 22))}</span></div>`
+    const rows = items.slice(0, 4).map(b =>
+      `<div style="display:flex;flex-direction:row;align-items:flex-start;gap:12px"><div style="display:flex;width:9px;height:9px;border-radius:5px;background:${destacada ? GOLD : (oscuro ? SOFT : '#9aa8b6')};margin-top:10px;flex-shrink:0"></div><span style="font-family:Inter;font-weight:600;font-size:25px;color:${destacada ? col : (oscuro ? SOFT : '#5c6b7a')};line-height:1.3">${esc(clampText(b, 64))}</span></div>`).join('')
+    const body = `<div style="display:flex;flex-direction:column;gap:20px;padding:30px 24px;background:${destacada ? (oscuro ? '#1a4a78' : WHITE) : 'transparent'};border-radius:0 0 14px 14px">${rows}</div>`
+    return `<div style="display:flex;flex-direction:column;width:${colW}px">${head}${body}</div>`
+  }
+  // `align-items:stretch` (sin flex:1): las dos columnas quedan del MISMO alto y
+  // ese alto lo manda el contenido. Con flex:1 la columna blanca se estiraba
+  // hasta abajo y dejaba medio lienzo en blanco vacío.
+  // Insignia "VS" pisando el medio: convierte dos listas paralelas en una
+  // comparación de verdad. Va absoluta para que no empuje el layout.
+  const vs = `<div style="display:flex;align-items:center;justify-content:center;position:absolute;top:${Math.round(C.h * 0.455)}px;left:${Math.round(C.w / 2) - 42}px;width:84px;height:84px;border-radius:44px;background:${bg};border:5px solid ${GOLD}"><span style="font-family:Inter;font-weight:700;font-size:30px;color:${oscuro ? WHITE : NAVY}">VS</span></div>`
+  const cols = `<div style="display:flex;flex-direction:row;align-items:stretch;gap:24px;margin-top:38px">${columna(s.titulo_b || 'Alma Animal', s.bullets || [], true)}${columna('Lo habitual', s.bullets_b || [], false)}</div>`
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:50px;right:${PAD - 16}px`, 140)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${tit}${cols}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${vs}${lg}</div>`
+  return { html, fotos: [] }
+}
+
+/** 4. TIMELINE: hitos enlazados por un riel vertical dorado. */
+function timeline(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const bg = bgColor(s.fondo || 'navy')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const eb = s.eyebrow ? eyebrowChip(s.eyebrow) : ''
+  const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, C.w - PAD * 2, 56) : ''
+  const items = (s.bullets || []).slice(0, 4)
+  const rows = items.map((b, i) => {
+    const ultimo = i === items.length - 1
+    const riel = ultimo ? '' : `<div style="display:flex;width:4px;flex:1;background:${GOLD};border-radius:2px;margin-top:6px"></div>`
+    const punto = `<div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:18px;background:${GOLD};flex-shrink:0"></div>`
+    const carril = `<div style="display:flex;flex-direction:column;align-items:center;width:34px;flex-shrink:0">${punto}${riel}</div>`
+    const texto = `<div style="display:flex;flex-direction:column;flex:1;padding-bottom:${ultimo ? 0 : 30}px"><span style="font-family:Inter;font-weight:600;font-size:31px;color:${col};line-height:1.28">${esc(clampText(b, 90))}</span></div>`
+    // flex:1 por fila → los hitos se REPARTEN a lo alto y el riel dorado recorre
+    // el lienzo. Sin esto quedaban apretados arriba con medio afiche vacío.
+    return `<div style="display:flex;flex-direction:row;gap:22px;align-items:stretch;flex:1">${carril}${texto}</div>`
+  }).join('')
+  const lista = rows ? `<div style="display:flex;flex-direction:column;flex:1;margin-top:40px">${rows}</div>` : ''
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${tit}${lista}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos: [] }
+}
+
+/** 5. COLLAGE: una foto grande + dos chicas + titular. */
+function collage(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const fotos: FotoGrafico[] = []
+  const list = s.fotos && s.fotos.length ? s.fotos : [s.foto || {}, {}, {}]
+  const bg = bgColor(s.fondo || 'crema')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const anchoUtil = C.w - PAD * 2
+  const grandeH = Math.round(C.h * 0.34)
+  const chicaW = Math.round((anchoUtil - 18) / 2)
+  const chicaH = Math.round(C.h * 0.20)
+  const s1 = pedirFoto(fotos, list[0], 'foto1', 'un perro jugando en el pasto de un parque a media tarde', '3:2')
+  const s2 = pedirFoto(fotos, list[1], 'foto2', 'primer plano de la cara de un gato atigrado descansando, luz de ventana', '1:1')
+  const s3 = pedirFoto(fotos, list[2], 'foto3', 'las manos de una persona acariciando a su perro sentado en el sillón', '1:1')
+  const grande = `<div style="display:flex;width:${anchoUtil}px;height:${grandeH}px;overflow:hidden;border-radius:12px"><img src="${s1}" width="${anchoUtil}" height="${grandeH}" style="object-fit:cover;display:block" /></div>`
+  const fila = `<div style="display:flex;flex-direction:row;gap:18px;margin-top:18px"><div style="display:flex;width:${chicaW}px;height:${chicaH}px;overflow:hidden;border-radius:12px"><img src="${s2}" width="${chicaW}" height="${chicaH}" style="object-fit:cover;display:block" /></div><div style="display:flex;width:${chicaW}px;height:${chicaH}px;overflow:hidden;border-radius:12px"><img src="${s3}" width="${chicaW}" height="${chicaH}" style="object-fit:cover;display:block" /></div></div>`
+  const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, anchoUtil, 56) : ''
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:28px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:16px">${esc(clampText(s.bajada, 120))}</span>` : ''
+  const texto = `<div style="display:flex;flex-direction:column;margin-top:36px">${tit}${bajada}</div>`
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:50px;right:${PAD - 16}px`, 140)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${grande}${fila}${texto}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos }
+}
+
+/** 6. FAQ: pregunta grande + respuesta, con signo dorado de fondo. */
+function faq(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const bg = bgColor(s.fondo || 'blanco')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  // El "?" es una marca de agua gigante que sangra por la derecha; la pregunta
+  // se apoya encima y la respuesta va sobre un panel. Antes el signo era un
+  // caracter suelto más y la placa quedaba en tres bloques de texto apilados.
+  const marca = ghost('?', { size: Math.round(C.h * 0.72), color: GOLD, opacidad: oscuro ? 0.16 : 0.20, top: -Math.round(C.h * 0.05), right: -Math.round(C.w * 0.04) })
+  const panelBg = oscuro ? '#1c4c7c' : (bg === CREAM ? WHITE : '#f4f6f9')
+  const eb = eyebrowChip(s.eyebrow || 'Preguntas frecuentes')
+  const preg = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2, 64, 38)}px;color:${col};line-height:1.18;margin-top:26px">${esc(clampText(s.titulo, 120))}</span>` : ''
+  const resp = s.bajada
+    ? `<div style="display:flex;flex-direction:row;gap:26px;margin-top:34px;background:${panelBg};border-radius:16px;padding:30px">${rielGold()}<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.42;flex:1">${esc(clampText(s.bajada, 260))}</span></div>`
+    : ''
+  const cta = ctaRow(s, oscuro)
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${preg}${resp}${cta}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${marca}${body}${lg}</div>`
+  return { html, fotos: [] }
+}
+
+/** 7. PRECIO: tarjeta de plan (nombre + cifra + incluye + CTA). */
+function precio(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const bg = bgColor(s.fondo || 'navy')
+  const oscuro = bg === NAVY
+  const cardBg = oscuro ? WHITE : NAVY
+  const cardCol = oscuro ? NAVY : WHITE
+  const cardSub = oscuro ? INK : SOFT
+  const cardW = C.w - PAD * 2
+  const plan = s.eyebrow ? `<div style="display:flex;align-self:flex-start;background:${GOLD};border-radius:8px;padding:8px 20px"><span style="font-family:Inter;font-weight:700;font-size:23px;color:${NAVY};letter-spacing:1px">${esc((s.eyebrow || '').toUpperCase())}</span></div>` : ''
+  const nombre = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, cardW - 96, 46, 30)}px;color:${cardCol};line-height:1.15;margin-top:20px">${esc(clampText(s.titulo, 60))}</span>` : ''
+  const cifra = s.dato ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.dato, cardW - 96, 112, 56)}px;color:${GOLD};line-height:1.0;margin-top:16px">${esc(s.dato)}</span>` : ''
+  const label = s.dato_label ? `<span style="font-family:Inter;font-weight:600;font-size:26px;color:${cardSub};margin-top:8px">${esc(clampText(s.dato_label, 46))}</span>` : ''
+  const items = (s.bullets || []).slice(0, 4).map(b =>
+    `<div style="display:flex;flex-direction:row;align-items:flex-start;gap:14px"><div style="display:flex;width:18px;height:4px;border-radius:2px;background:${GOLD};margin-top:14px;flex-shrink:0"></div><span style="font-family:Inter;font-weight:600;font-size:27px;color:${cardCol};line-height:1.3">${esc(clampText(b, 70))}</span></div>`).join('')
+  const lista = items ? `<div style="display:flex;flex-direction:column;gap:14px;margin-top:28px">${items}</div>` : ''
+  const ctaChip = s.cta ? `<div style="display:flex;align-items:center;justify-content:center;height:74px;background:${GOLD};border-radius:12px;margin-top:32px"><span style="font-family:Inter;font-weight:700;font-size:29px;color:${NAVY}">${esc(clampText(s.cta, 28))}</span></div>` : ''
+  // La tarjeta OCUPA la zona segura (flex:1 + contenido centrado): una card de
+  // plan que llena el lienzo se lee como diseño; flotando arriba parecía cortada.
+  const card = `<div style="display:flex;flex-direction:column;justify-content:center;flex:1;width:${cardW}px;background:${cardBg};border-radius:22px;padding:48px 48px">${plan}${nombre}${cifra}${label}${lista}${ctaChip}</div>`
+  const pie = s.pie ? `<span style="font-family:Inter;font-weight:400;font-size:22px;color:${oscuro ? SOFT : INK};margin-top:20px">${esc(clampText(s.pie, 90))}</span>` : ''
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:46px;right:${PAD - 16}px`, 132)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;padding:56px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${card}${pie}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos: [] }
+}
+
+/**
+ * 8. ARCO: la foto dentro de un arco (rectángulo con la parte de arriba
+ * redondeada) que llega hasta el borde superior, y el texto abajo.
+ *
+ * Antes esto era un CÍRCULO con anillo dorado y el dueño lo bajó (2026-08): una
+ * foto redonda tipo foto de perfil se lee como HOMENAJE y competía con
+ * `memorial_medallon`. El círculo con anillo queda RESERVADO para los
+ * memoriales; para las piezas comerciales el arco da la misma calidez sin
+ * ninguna connotación fúnebre.
+ */
+function arco(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const fotos: FotoGrafico[] = []
+  const src = pedirFoto(fotos, s.foto, 'principal', 'un perro mestizo sentado en el pasillo de su casa mirando a cámara con calma, luz de mañana', '3:4')
+  const bg = bgColor(s.fondo || 'crema')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const arcoW = C.w - PAD * 2
+  const arcoH = Math.round(C.h * 0.52)
+  const radio = Math.round(arcoW / 2)
+  const marco = `<div style="display:flex;width:${arcoW}px;height:${arcoH}px;overflow:hidden;border-radius:${radio}px ${radio}px 20px 20px;flex-shrink:0"><img src="${src}" width="${arcoW}" height="${arcoH}" style="object-fit:cover;object-position:center 30%;display:block" /></div>`
+  const eb = s.eyebrow ? `<div style="display:flex;background:${GOLD};border-radius:8px;padding:8px 20px;margin-bottom:26px"><span style="font-family:Inter;font-weight:700;font-size:23px;color:${NAVY};letter-spacing:1px">${esc((s.eyebrow || '').toUpperCase())}</span></div>` : ''
+  const tit = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, arcoW, 58, 36)}px;color:${col};line-height:1.16;margin-top:38px">${esc(clampText(s.titulo, 90))}</span>` : ''
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:28px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:16px">${esc(clampText(s.bajada, 130))}</span>` : ''
+  const cta = ctaRow(s, oscuro)
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:46px;right:${PAD - 16}px`, 132)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;padding:${PAD}px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${marco}${tit}${bajada}${cta}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos }
+}
+
+/** 9. BICOLOR: el lienzo partido en dos bloques de color, titular a caballo. */
+function bicolor(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const claro = bgColor(s.fondo === 'blanco' ? 'blanco' : 'crema')
+  const altoTop = Math.round(C.h * 0.46)
+  const fs = fitFont([s.titulo, s.titulo_destacado].filter((x): x is string => !!x).reduce((m, l) => (l.length > m.length ? l : m), ''), C.w - PAD * 2, 78, 40)
+  const l1 = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fs}px;color:${WHITE};line-height:1.08">${esc(s.titulo)}</span>` : ''
+  const eb = s.eyebrow ? eyebrowChip(s.eyebrow) : ''
+  const top = `<div style="display:flex;flex-direction:column;justify-content:flex-end;width:${C.w}px;height:${altoTop}px;background:${NAVY};padding:0 ${PAD}px 52px ${PAD}px;flex-shrink:0">${eb}${l1}</div>`
+  const l2 = s.titulo_destacado ? `<span style="font-family:Inter;font-weight:700;font-size:${fs}px;color:${NAVY};line-height:1.08">${esc(s.titulo_destacado)}</span>` : ''
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:29px;color:${INK};line-height:1.4;margin-top:22px">${esc(clampText(s.bajada, 150))}</span>` : ''
+  const items = (s.bullets || []).slice(0, 3).map(b =>
+    `<div style="display:flex;flex-direction:row;align-items:flex-start;gap:14px"><div style="display:flex;width:10px;height:10px;border-radius:5px;background:${GOLD};margin-top:11px;flex-shrink:0"></div><span style="font-family:Inter;font-weight:600;font-size:27px;color:${NAVY};line-height:1.3">${esc(clampText(b, 72))}</span></div>`).join('')
+  const bullets = items ? `<div style="display:flex;flex-direction:column;gap:14px;margin-top:24px">${items}</div>` : ''
+  const cta = ctaRow(s, false)
+  const bottom = `<div style="display:flex;flex-direction:column;flex:1;justify-content:flex-start;padding:52px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${l2}${bajada}${bullets}${cta}</div>`
+  const lg = logoImg(o.logoNavy, `bottom:50px;right:${PAD - 16}px`, 150)
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${claro}">${top}${bottom}${lg}</div>`
+  return { html, fotos: [] }
+}
+
+/** 10. CHECKLIST: cada item en su propia barra con filete dorado. */
+function checklist(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const bg = bgColor(s.fondo || 'navy')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const filaBg = oscuro ? '#1c4c7c' : WHITE
+  const eb = s.eyebrow ? eyebrowChip(s.eyebrow) : ''
+  const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, C.w - PAD * 2, 56) : ''
+  const rows = (s.bullets || []).slice(0, 5).map(b =>
+    `<div style="display:flex;flex-direction:row;align-items:stretch;background:${filaBg};border-radius:12px;overflow:hidden"><div style="display:flex;width:10px;background:${GOLD};flex-shrink:0"></div><div style="display:flex;flex:1;padding:26px"><span style="font-family:Inter;font-weight:600;font-size:28px;color:${col};line-height:1.28">${esc(clampText(b, 78))}</span></div></div>`).join('')
+  const lista = rows ? `<div style="display:flex;flex-direction:column;gap:16px;margin-top:36px">${rows}</div>` : ''
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:50px;right:${PAD - 16}px`, 140)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${tit}${lista}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos: [] }
+}
+
+/** 11. MOSAICO DE DATOS: grilla de 2×2 con cifras. */
+function mosaico_datos(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const bg = bgColor(s.fondo || 'crema')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const celdaBg = oscuro ? '#1c4c7c' : WHITE
+  const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, C.w - PAD * 2, 52) : ''
+  const ds = (s.datos || []).slice(0, 4)
+  const celdaW = Math.round((C.w - PAD * 2 - 18) / 2)
+  // Tablero en DAMERO: una de cada dos celdas va en dorado con el texto en navy.
+  // Cuatro cajitas idénticas se leían como una tabla; el damero le da ritmo.
+  const celda = (d: { valor: string; label: string }, i: number) => {
+    const inv = i % 3 === 0
+    const fondoC = inv ? GOLD : celdaBg
+    const valorC = inv ? NAVY : GOLD
+    const labelC = inv ? NAVY : col
+    return `<div style="display:flex;flex-direction:column;justify-content:center;width:${celdaW}px;flex:1;background:${fondoC};border-radius:16px;padding:0 28px"><span style="font-family:Inter;font-weight:700;font-size:${fitFont(d.valor, celdaW - 56, 78, 40)}px;color:${valorC};line-height:1.0">${esc(d.valor)}</span><span style="font-family:Inter;font-weight:600;font-size:24px;color:${labelC};line-height:1.25;margin-top:12px;opacity:${inv ? 0.82 : 1}">${esc(clampText(d.label, 46))}</span></div>`
+  }
+  const filas: string[] = []
+  for (let i = 0; i < ds.length; i += 2) {
+    filas.push(`<div style="display:flex;flex-direction:row;gap:18px;flex:1">${ds.slice(i, i + 2).map((d, j) => celda(d, i + j)).join('')}</div>`)
+  }
+  const grilla = filas.length ? `<div style="display:flex;flex-direction:column;gap:18px;flex:1;margin-top:38px">${filas.join('')}</div>` : ''
+  const pie = s.pie ? `<span style="font-family:Inter;font-weight:400;font-size:23px;color:${oscuro ? SOFT : INK};margin-top:24px">${esc(clampText(s.pie, 90))}</span>` : ''
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:50px;right:${PAD - 16}px`, 140)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;padding:70px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${tit}${grilla}${pie}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos: [] }
+}
+
+/** 12. TESTIMONIO: avatar redondo + cita. Prueba social CON cara. */
+function testimonio(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const fotos: FotoGrafico[] = []
+  const src = pedirFoto(fotos, s.foto, 'principal', 'retrato cálido de una mujer sonriendo suave abrazando a su perro en el living de su casa', '1:1')
+  const bg = bgColor(s.fondo || 'blanco')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  // Foto en cuadrado redondeado, NO en círculo con anillo: la foto redonda tipo
+  // foto de perfil se lee como homenaje (pedido del dueño). El círculo queda
+  // solo para `memorial_medallon`.
+  const d = 300
+  const avatar = `<div style="display:flex;width:${d}px;height:${d}px;overflow:hidden;border-radius:28px;flex-shrink:0"><img src="${src}" width="${d}" height="${d}" style="object-fit:cover;display:block" /></div>`
+  const comilla = `<div style="display:flex;font-family:Inter;font-weight:700;font-size:180px;color:${GOLD};line-height:0.75">“</div>`
+  const cabecera = `<div style="display:flex;flex-direction:row;align-items:center;gap:30px">${avatar}${comilla}</div>`
+  // Cita en grande: es EL contenido de la pieza. Con 52px máx quedaba un bloque
+  // chico flotando y medio lienzo vacío.
+  const frase = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2, 70, 38, 0.50)}px;color:${col};line-height:1.26;margin-top:44px">${esc(clampText(s.titulo, 220))}</span>` : ''
+  const autor = s.bajada ? `<span style="font-family:Inter;font-weight:600;font-size:29px;color:${oscuro ? SOFT : INK};margin-top:32px">— ${esc(clampText(s.bajada, 60))}</span>` : ''
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:50px;right:${PAD - 16}px`, 140)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:58px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${cabecera}${frase}${autor}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos }
+}
+
+/** 13. HORARIO: filas clave→valor (días, cobertura, plazos). */
+function horario(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const bg = bgColor(s.fondo || 'navy')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const linea = oscuro ? '#2a5c8d' : '#dfe6ee'
+  const eb = s.eyebrow ? eyebrowChip(s.eyebrow) : ''
+  const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, C.w - PAD * 2, 56) : ''
+  // Filas con flex:1 → la tabla se REPARTE a lo alto y llena el lienzo (con las
+  // filas apretadas quedaba media pieza vacía abajo).
+  // Cada valor en un CHIP dorado y las filas en franjas alternadas: se lee como
+  // un tablero de horarios, no como una lista de texto con guiones.
+  const franja = oscuro ? '#1a4675' : (bg === CREAM ? '#f3ede2' : '#f4f6f9')
+  const rows = (s.filas || []).slice(0, 5).map((f, i) =>
+    `<div style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:20px;flex:1;padding:0 22px;background:${i % 2 === 0 ? franja : 'transparent'};border-radius:12px"><span style="font-family:Inter;font-weight:600;font-size:29px;color:${col}">${esc(clampText(f.izq, 34))}</span><div style="display:flex;background:${GOLD};border-radius:8px;padding:9px 18px"><span style="font-family:Inter;font-weight:700;font-size:27px;color:${NAVY}">${esc(clampText(f.der, 26))}</span></div></div>`).join('')
+  const tabla = rows ? `<div style="display:flex;flex-direction:column;flex:1;margin-top:34px">${rows}</div>` : ''
+  const pie = s.pie ? `<span style="font-family:Inter;font-weight:400;font-size:24px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:26px">${esc(clampText(s.pie, 110))}</span>` : ''
+  const cta = ctaRow(s, oscuro)
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:50px;right:${PAD - 16}px`, 140)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;padding:70px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${tit}${tabla}${pie}${cta}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos: [] }
+}
+
+/** 14. OVERLAY: foto a sangre + tarjeta clara flotando encima. */
+function overlay(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const fotos: FotoGrafico[] = []
+  const src = pedirFoto(fotos, s.foto, 'principal', 'un perro golden retriever echado en la terraza de una casa al atardecer, luz cálida', '4:5', 'abajo')
+  const cardBg = s.fondo === 'navy' ? NAVY : s.fondo === 'blanco' ? WHITE : CREAM
+  const oscuro = cardBg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const cardW = C.w - PAD * 2
+  const eb = s.eyebrow ? `<div style="display:flex;align-self:flex-start;background:${GOLD};border-radius:8px;padding:8px 20px;margin-bottom:22px"><span style="font-family:Inter;font-weight:700;font-size:23px;color:${NAVY};letter-spacing:1px">${esc((s.eyebrow || '').toUpperCase())}</span></div>` : ''
+  const tit = (s.titulo || s.titulo_destacado) ? tituloBloque(s, col, cardW - 88, 52) : ''
+  const bajada = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:27px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:16px">${esc(clampText(s.bajada, 140))}</span>` : ''
+  const cta = ctaRow(s, oscuro)
+  // El logo va EN EL FLUJO de la tarjeta, no absoluto: antes había que reservarle
+  // 150px de padding muerto abajo y eso estiraba la tarjeta hasta media foto —
+  // le tapaba la cara al animal (lo reportó el dueño con un gato).
+  const lg = (oscuro ? o.logoBlanco : o.logoNavy)
+    ? `<div style="display:flex;justify-content:flex-end;margin-top:26px"><img src="${esc((oscuro ? o.logoBlanco : o.logoNavy) as string)}" width="120" /></div>`
+    : ''
+  const card = `<div style="display:flex;flex-direction:column;position:absolute;left:${PAD}px;bottom:${PAD}px;width:${cardW}px;background:${cardBg};border-radius:22px;padding:40px 44px 34px 44px">${eb}${tit}${bajada}${cta}${lg}</div>`
+  const html = `<div style="display:flex;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}"><img src="${src}" width="${C.w}" height="${C.h}" style="object-fit:cover;object-position:center 16%;display:block" />${card}</div>`
+  return { html, fotos }
+}
+
+/** 15. TIPOGRÁFICO: póster de una sola idea, la palabra manda. */
+function tipografico(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const bg = bgColor(s.fondo || 'navy')
+  const oscuro = bg === NAVY
+  const col = oscuro ? WHITE : NAVY
+  const arriba = s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:26px;color:${GOLD};letter-spacing:3px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''
+  const palabra = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2, 190, 64, 0.56)}px;color:${col};line-height:0.98">${esc(s.titulo)}</span>` : ''
+  const segunda = s.titulo_destacado ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo_destacado, C.w - PAD * 2, 190, 64, 0.56)}px;color:${GOLD};line-height:0.98">${esc(s.titulo_destacado)}</span>` : ''
+  const regla = `<div style="display:flex;width:110px;height:7px;background:${GOLD};border-radius:4px;margin-top:34px"></div>`
+  const abajo = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:30px;color:${oscuro ? SOFT : INK};line-height:1.4;margin-top:30px">${esc(clampText(s.bajada, 130))}</span>` : ''
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:52px;right:${PAD - 16}px`, 150)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;justify-content:center;padding:64px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${arriba}${palabra}${segunda}${regla}${abajo}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos: [] }
+}
+
+// ─── MEMORIAL: homenaje a UNA mascota por su nombre ───────────────────────────
+// Cinco estructuras distintas para lo mismo, porque es lo que más se publica y
+// era siempre la misma pieza. Reglas de marca que aplican acá sí o sí: la
+// mascota se ve VIVA y en calma (nunca enferma ni "ausente"), nada de urnas,
+// lápidas, velas, arcoíris ni símbolos religiosos. `titulo` = el nombre de la
+// mascota, `fechas` = sus años, `bajada` = la dedicatoria.
+
+/** Nombre + años, el bloque tipográfico que comparten las cinco. */
+function bloqueNombre(s: SlotsPlantilla, maxW: number, col: string, sub: string, fsMax: number, centrado = false): string {
+  const alinear = centrado ? 'align-items:center;text-align:center' : 'align-items:flex-start'
+  const nombre = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, maxW, fsMax, 40, 0.55)}px;color:${col};line-height:1.02">${esc(clampText(s.titulo, 26))}</span>` : ''
+  const fechas = s.fechas ? `<span style="font-family:Inter;font-weight:600;font-size:27px;letter-spacing:3px;color:${GOLD};margin-top:16px">${esc(clampText(s.fechas, 26))}</span>` : ''
+  const dedic = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:28px;color:${sub};line-height:1.45;margin-top:${s.fechas ? 20 : 16}px">${esc(clampText(s.bajada, 150))}</span>` : ''
+  return `<div style="display:flex;flex-direction:column;${alinear}">${nombre}${fechas}${dedic}</div>`
+}
+
+/** M1. PLACA: foto a sangre y una placa clara centrada con el nombre. */
+function memorial_placa(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const fotos: FotoGrafico[] = []
+  const src = pedirFoto(fotos, s.foto, 'principal', 'retrato cálido de un perro tranquilo mirando a cámara en el living de su casa, luz suave de ventana', '4:5', 'abajo')
+  const placaW = Math.round(C.w * 0.78)
+  const placa = `<div style="display:flex;flex-direction:column;align-items:center;position:absolute;left:${Math.round((C.w - placaW) / 2)}px;bottom:${Math.round(C.h * 0.07)}px;width:${placaW}px;background:${CREAM};border-radius:6px;padding:40px 40px">${s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:20px;letter-spacing:4px;color:${GOLD};margin-bottom:18px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''}${bloqueNombre(s, placaW - 80, NAVY, INK, 68, true)}</div>`
+  const velo = `<div style="display:flex;position:absolute;bottom:0;left:0;width:${C.w}px;height:${Math.round(C.h * 0.5)}px;background:linear-gradient(to bottom, rgba(20,60,100,0) 0%, rgba(20,60,100,0.55) 70%)"></div>`
+  const lg = logoImg(o.logoBlanco, `top:${PAD - 16}px;right:${PAD - 16}px`, 140)
+  const html = `<div style="display:flex;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}"><img src="${src}" width="${C.w}" height="${C.h}" style="object-fit:cover;object-position:center 18%;display:block" />${velo}${placa}${lg}</div>`
+  return { html, fotos }
+}
+
+/** M2. RETRATO: foto vertical a sangre a un lado, columna de homenaje al otro. */
+function memorial_retrato(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const fotos: FotoGrafico[] = []
+  const src = pedirFoto(fotos, s.foto, 'principal', 'retrato vertical de un gato sentado y sereno junto a una ventana, luz cálida lateral', '3:4')
+  const bg = bgColor(s.fondo || 'crema')
+  const oscuro = bg === NAVY
+  const fotoW = Math.round(C.w * 0.52)
+  const colW = C.w - fotoW
+  const marca = ghost(s.titulo || '', { size: Math.round(C.h * 0.26), color: oscuro ? WHITE : NAVY, opacidad: 0.06, bottom: Math.round(C.h * 0.04), left: fotoW - 40 })
+  const eb = s.eyebrow ? `<div style="display:flex;margin-bottom:26px"><span style="font-family:Inter;font-weight:700;font-size:19px;letter-spacing:4px;color:${GOLD}">${esc((s.eyebrow || '').toUpperCase())}</span></div>` : ''
+  const texto = `<div style="display:flex;flex-direction:column;justify-content:center;width:${colW}px;height:${C.h}px;padding:56px 48px 160px 48px">${eb}${bloqueNombre(s, colW - 96, oscuro ? WHITE : NAVY, oscuro ? SOFT : INK, 58)}</div>`
+  const foto = `<div style="display:flex;width:${fotoW}px;height:${C.h}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${fotoW}" height="${C.h}" style="object-fit:cover;display:block" /></div>`
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:46px;right:44px`, 128)
+  const html = `<div style="display:flex;flex-direction:row;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${foto}${marca}${texto}${lg}</div>`
+  return { html, fotos }
+}
+
+/** M3. MEDALLÓN: foto circular con anillo dorado sobre un fondo con su nombre de fondo. */
+function memorial_medallon(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const fotos: FotoGrafico[] = []
+  const src = pedirFoto(fotos, s.foto, 'principal', 'primer plano de la cara de un perro viejo de mirada tranquila, fondo de hogar desenfocado, luz cálida', '1:1')
+  const bg = bgColor(s.fondo || 'navy')
+  const oscuro = bg === NAVY
+  const d = Math.min(C.w - PAD * 2 - 80, Math.round(C.h * 0.40))
+  const marca = ghost(s.titulo || '', { size: Math.round(C.h * 0.34), color: oscuro ? WHITE : NAVY, opacidad: 0.07, top: Math.round(C.h * 0.10), left: -Math.round(C.w * 0.05) })
+  const medallon = `<div style="display:flex;align-items:center;justify-content:center;width:${d + 26}px;height:${d + 26}px;border-radius:${Math.round((d + 26) / 2)}px;background:${GOLD}"><img src="${src}" width="${d}" height="${d}" style="object-fit:cover;border-radius:${Math.round(d / 2)}px;display:block" /></div>`
+  const eb = s.eyebrow ? `<div style="display:flex;margin-bottom:30px"><span style="font-family:Inter;font-weight:700;font-size:20px;letter-spacing:4px;color:${GOLD}">${esc((s.eyebrow || '').toUpperCase())}</span></div>` : ''
+  const nombre = `<div style="display:flex;margin-top:44px">${bloqueNombre(s, C.w - PAD * 2, oscuro ? WHITE : NAVY, oscuro ? SOFT : INK, 66, true)}</div>`
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:44px;left:${Math.round(C.w / 2) - 68}px`, 136)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:56px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${medallon}${nombre}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${marca}${body}${lg}</div>`
+  return { html, fotos }
+}
+
+/** M4. CUADRO: foto con passe-partout blanco grueso, como un retrato colgado. */
+function memorial_cuadro(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const fotos: FotoGrafico[] = []
+  const src = pedirFoto(fotos, s.foto, 'principal', 'retrato de una mascota echada en su lugar favorito de la casa, luz natural suave de la tarde', '1:1')
+  const bg = bgColor(s.fondo || 'crema')
+  const oscuro = bg === NAVY
+  const marcoW = Math.round(C.w * 0.72)
+  const fotoLado = marcoW - 96
+  const cuadro = `<div style="display:flex;align-items:center;justify-content:center;width:${marcoW}px;background:${WHITE};padding:48px;border-radius:4px"><img src="${src}" width="${fotoLado}" height="${fotoLado}" style="object-fit:cover;display:block" /></div>`
+  const filete = `<div style="display:flex;width:90px;height:4px;background:${GOLD};border-radius:2px;margin-top:38px"></div>`
+  const nombre = `<div style="display:flex;margin-top:30px">${bloqueNombre(s, C.w - PAD * 2, oscuro ? WHITE : NAVY, oscuro ? SOFT : INK, 58, true)}</div>`
+  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:44px;right:${PAD - 16}px`, 128)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${cuadro}${filete}${nombre}</div>`
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
+  return { html, fotos }
+}
+
+/** M5. CINTA: foto arriba y una banda navy abajo con el nombre en dorado. */
+function memorial_cinta(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
+  const fotos: FotoGrafico[] = []
+  const src = pedirFoto(fotos, s.foto, 'principal', 'una mascota caminando por el jardín de su casa al atardecer, plano entero, luz dorada baja', '3:2')
+  const fotoH = Math.round(C.h * 0.58)
+  const bandaH = C.h - fotoH
+  const foto = `<div style="display:flex;width:${C.w}px;height:${fotoH}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${C.w}" height="${fotoH}" style="object-fit:cover;object-position:center 35%;display:block" /></div>`
+  // Ojo: satori NO recorta el desborde, así que un fantasma grande dentro de la
+  // banda se derrama sobre la foto. Se mantiene chico y anclado adentro.
+  const marca = ghost(s.fechas || '', { size: Math.round(bandaH * 0.44), color: WHITE, opacidad: 0.07, bottom: 24, right: PAD })
+  const eb = s.eyebrow ? `<div style="display:flex;margin-bottom:16px"><span style="font-family:Inter;font-weight:700;font-size:19px;letter-spacing:4px;color:${GOLD}">${esc((s.eyebrow || '').toUpperCase())}</span></div>` : ''
+  const nombre = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2 - 180, 76, 40, 0.55)}px;color:${GOLD};line-height:1.02">${esc(clampText(s.titulo, 24))}</span>` : ''
+  const fechas = s.fechas ? `<span style="font-family:Inter;font-weight:600;font-size:26px;letter-spacing:3px;color:${SOFT};margin-top:14px">${esc(clampText(s.fechas, 26))}</span>` : ''
+  const dedic = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:27px;color:${SOFT};line-height:1.42;margin-top:18px">${esc(clampText(s.bajada, 130))}</span>` : ''
+  const banda = `<div style="display:flex;flex-direction:column;justify-content:center;position:relative;width:${C.w}px;height:${bandaH}px;background:${NAVY};padding:0 ${PAD}px;flex-shrink:0">${marca}${eb}${nombre}${fechas}${dedic}</div>`
+  const lg = logoImg(o.logoBlanco, `bottom:44px;right:${PAD - 16}px`, 128)
+  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${foto}${banda}${lg}</div>`
+  return { html, fotos }
+}
+
 const BUILDERS: Record<NombrePlantilla, (s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla) => ResultadoPlantilla> = {
   portada, contenido, dato, foto, cierre, cita, split, numeros, marco,
+  revista, diptico, comparativa, timeline, collage, faq, precio, arco,
+  bicolor, checklist, mosaico_datos, testimonio, horario, overlay, tipografico,
+  memorial_placa, memorial_retrato, memorial_medallon, memorial_cuadro, memorial_cinta,
 }
 
 /** Construye el HTML on-brand de una plantilla + las fotos a generar. */

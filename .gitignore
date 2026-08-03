@@ -56,3 +56,6 @@ next-env.d.ts
 
 # Render de prueba de gráficos (no versionar)
 assets/*.png
+
+# Catálogo local de plantillas de marketing (scripts/preview-plantillas.ts)
+.preview-plantillas/
