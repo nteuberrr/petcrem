@@ -93,16 +93,33 @@ export default function Sidebar() {
   // Cerrar el menú al navegar en móvil
   useEffect(() => { setOpen(false) }, [pathname])
 
+  // Con el menú abierto en móvil, bloqueamos el scroll del fondo: si no, el dedo
+  // arrastra la página de atrás y al cerrar quedaba todo corrido.
+  useEffect(() => {
+    if (!open) return
+    const previo = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previo }
+  }, [open])
+
   return (
     <>
-      {/* Botón hamburguesa (solo móvil) */}
-      <button
-        aria-label="Abrir menú"
-        onClick={() => setOpen(true)}
-        className="md:hidden fixed top-3 left-3 z-30 w-10 h-10 rounded-lg bg-brand text-white flex items-center justify-center shadow-lg"
-      >
-        <Menu className="w-5 h-5" aria-hidden="true" />
-      </button>
+      {/* Barra superior (solo móvil). Es una BARRA opaca, no un botón flotante:
+          antes el botón iba `fixed` encima del contenido y al scrollear tapaba la
+          primera línea de cada página (el título quedaba comido). El `pt-16` del
+          <main> reserva su alto. */}
+      <header className="md:hidden fixed top-0 inset-x-0 z-20 h-14 bg-brand text-white flex items-center gap-2 px-2 shadow-md">
+        <button
+          aria-label="Abrir menú"
+          onClick={() => setOpen(true)}
+          className="w-11 h-11 rounded-lg hover:bg-white/15 flex items-center justify-center shrink-0"
+        >
+          <Menu className="w-6 h-6" aria-hidden="true" />
+        </button>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/logo-alma-animal.png" alt="" className="h-9 w-auto shrink-0" aria-hidden="true" />
+        <span className="font-semibold tracking-tight truncate">Alma Animal</span>
+      </header>
 
       {/* Overlay oscuro cuando el menú está abierto en móvil */}
       {open && (
@@ -114,26 +131,28 @@ export default function Sidebar() {
       )}
 
       <aside
-        className={`w-60 bg-gradient-to-b from-[#15436F] to-[#0B2845] text-white flex flex-col min-h-screen fixed left-0 top-0 z-40 transition-transform duration-200 shadow-xl ${
+        className={`w-60 bg-gradient-to-b from-[#15436F] to-[#0B2845] text-white flex flex-col h-dvh fixed left-0 top-0 z-40 transition-transform duration-200 shadow-xl ${
           open ? 'translate-x-0' : '-translate-x-full'
         } md:translate-x-0`}
       >
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-white/10">
+        {/* El botón de cerrar va absoluto (no en el flujo): como flex item le comía
+            ~44px al título y "Alma Animal" se partía en dos líneas en móvil. */}
+        <div className="relative flex items-center gap-3 px-4 py-4 border-b border-white/10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/logo-alma-animal.png" alt="Alma Animal" className="h-12 w-auto shrink-0" />
-          <Link href="/dashboard" className="block flex-1 hover:opacity-80 transition-opacity">
-            <h1 className="text-lg font-bold tracking-tight">Alma Animal</h1>
-            <p className="text-white/90 text-xs mt-0.5">Gestión crematorio</p>
+          <img src="/brand/logo-alma-animal.png" alt="Alma Animal" className="h-11 w-auto shrink-0" />
+          <Link href="/dashboard" className="block min-w-0 flex-1 hover:opacity-80 transition-opacity">
+            <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">Alma Animal</h1>
+            <p className="text-white/90 text-xs mt-0.5 whitespace-nowrap">Gestión crematorio</p>
           </Link>
           <button
             aria-label="Cerrar menú"
             onClick={() => setOpen(false)}
-            className="md:hidden w-8 h-8 rounded-md hover:bg-white/15 text-white/90 flex items-center justify-center"
+            className="md:hidden absolute right-1.5 top-1.5 w-8 h-8 rounded-md hover:bg-white/15 text-white/90 flex items-center justify-center"
           >
             <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
-        <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 min-h-0 py-4 px-3 space-y-0.5 overflow-y-auto overscroll-contain">
           {items.map(({ href, label, icon: Icon, color }) => {
             const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
             return (

@@ -48,6 +48,25 @@ textarea:focus {
   outline-color: #143C64;
 }
 
+/* iOS (Safari y los navegadores embebidos de WhatsApp/Instagram) hace ZOOM
+   automático al enfocar un input con letra menor a 16px, y NO vuelve al zoom
+   original: la app quedaba "corrida"/agrandada después de tocar un buscador o
+   un formulario. Forzamos 16px en los controles solo en móvil (el resto del
+   tamaño lo sigue mandando Tailwind en desktop). `text-size-adjust` evita el
+   inflado extra de tipografía del webview. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 /* Responsive: en móvil las tablas scrollean horizontalmente en vez de romper
    el ancho de la página (cubre todas las tablas del dashboard de una vez). */
 @media (max-width: 768px) {
