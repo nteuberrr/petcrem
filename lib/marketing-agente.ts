@@ -425,7 +425,7 @@ const TOOL_PREPARAR_VIDEO: Anthropic.Tool = {
       generar_prompt: { type: 'string', description: 'Prompt fotográfico detallado para GENERAR el fondo (fotorrealista, vertical, sin texto ni logo). Prohibido para instalaciones. Ignorado si diste fondo_codigo.' },
       metraje: {
         type: 'array', items: { type: 'string' },
-        description: 'METRAJE REAL: 1 o 2 escenas EN INGLÉS para filmar con Veo, que abren el montaje (ej. "a golden retriever running towards its owner in a park at golden hour"). Es lo que hace que el video se vea filmado y no una sucesión de fotos — usalo cuando el dueño pida un video "de verdad". Tarda 1-2 min por clip y tiene costo. PROHIBIDO para instalaciones.',
+        description: 'Escenas EN INGLÉS de METRAJE REAL a filmar con Veo (máx 2). NO hace falta pasarlo: por defecto ya se filma una escena que propongo yo a partir del guion, y eso es lo que hace que la pieza se vea filmada y no una sucesión de fotos. Pasalo SOLO si el dueño describe la toma que quiere. Para un video SIN metraje (solo fotos, más barato y rápido), pasá un array VACÍO. PROHIBIDO para instalaciones.',
       },
       grupo: { type: 'string', description: 'Grupo del banco: de dónde elegir el fondo, o en qué grupo guardar la foto generada (mascotas, personas, productos, instalaciones).' },
     },

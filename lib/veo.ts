@@ -13,7 +13,10 @@
 const API_VERSION = process.env.GEMINI_API_VERSION || 'v1beta'
 // Quality por defecto (pocos videos, prioridad calidad). Override con GEMINI_VIDEO_MODEL.
 // Opciones: veo-3.1-generate-preview (quality) | veo-3.1-fast-generate-preview | veo-3.1-lite-generate-preview
-export const VEO_MODEL = process.env.GEMINI_VIDEO_MODEL || 'veo-3.1-generate-preview'
+// `fast` por defecto: en un clip de 8 s de apoyo la calidad es indistinguible de
+// la versión "quality" y cuesta un tercio (US$1,20 vs US$3,20 por clip). Para
+// una pieza donde el metraje sea el protagonista, override con GEMINI_VIDEO_MODEL.
+export const VEO_MODEL = process.env.GEMINI_VIDEO_MODEL || 'veo-3.1-fast-generate-preview'
 import { registrarUsoFijo, costoVideo } from './uso-ia'
 
 const BASE = 'https://generativelanguage.googleapis.com'
@@ -48,12 +51,17 @@ export async function lanzarVideo(opts: LanzarVideoOpts): Promise<string> {
   if (opts.imagen) {
     instance.image = { inlineData: { mimeType: opts.imagen.mime, data: opts.imagen.data.toString('base64') } }
   }
+  // ⚠️ `durationSeconds` va como NÚMERO. Iba como string y la API rechazaba
+  // TODAS las llamadas ("The value type for `durationSeconds` needs to be a
+  // number"), así que Veo nunca llegó a generar nada — el banco de videos
+  // estaba vacío por esto, no por falta de uso.
+  const segs = Math.min(8, Math.max(4, parseInt(String(opts.durationSeconds ?? 8), 10) || 8))
   const body = {
     instances: [instance],
     parameters: {
       aspectRatio: opts.aspect || '16:9',
       resolution: opts.resolution || '1080p',
-      durationSeconds: opts.durationSeconds || '8',
+      durationSeconds: segs,
     },
   }
   const r = await fetch(`${BASE}/${API_VERSION}/models/${VEO_MODEL}:predictLongRunning`, {
@@ -66,7 +74,6 @@ export async function lanzarVideo(opts: LanzarVideoOpts): Promise<string> {
   if (!j?.name) throw new Error('Veo no devolvió el nombre de la operación')
   // El video se cobra por SEGUNDO de clip y es, por lejos, lo más caro de la app:
   // se registra al lanzar el job (una vez aceptado, se paga aunque no se descargue).
-  const segs = parseInt(String(body.parameters.durationSeconds), 10) || 8
   await registrarUsoFijo('video', VEO_MODEL, costoVideo(VEO_MODEL, segs), `${segs}s ${body.parameters.resolution}`)
   return j.name
 }

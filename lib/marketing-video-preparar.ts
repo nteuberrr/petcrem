@@ -143,11 +143,12 @@ export async function prepararVideo(a: PrepararVideoArgs): Promise<{ pendiente: 
   // 3.b) Metraje real: los clips de Veo abren el montaje (son lo que más
   //      "mueve") y las fotos completan. Si no llegan a tiempo, la pieza sale
   //      igual con fotos y los clips quedan en el banco.
-  const escenas = (a.metraje || []).map(s => String(s || '').trim()).filter(Boolean).slice(0, 2)
-  if (escenas.length) {
-    if ((a.grupo || '').trim().toLowerCase() === GRUPO_REAL) {
-      throw new Error('No se genera metraje de nuestras instalaciones: esas son fotos reales del banco.')
-    }
+  // Por DEFECTO se filma la escena que propuso el guion. Antes el metraje era
+  // opcional y el agente no lo pedía nunca: todas las piezas salían con puras
+  // fotos y el dueño veía "una foto con audio". Con `metraje: []` se apaga.
+  const pedidas = a.metraje === undefined ? [g.escena] : a.metraje
+  const escenas = pedidas.map(s => String(s || '').trim()).filter(Boolean).slice(0, 2)
+  if (escenas.length && (a.grupo || '').trim().toLowerCase() !== GRUPO_REAL) {
     const { clips, avisos: avisosClips } = await generarMetraje(
       escenas.map(prompt => ({ prompt, vertical: a.formato !== 'feed' })),
       { creadoPor: a.creadoPor },

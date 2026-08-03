@@ -22,6 +22,8 @@ export interface GuionGenerado {
   guion: string
   /** Título corto que se sobreimprime al inicio (máx ~38 caracteres). */
   titulo: string
+  /** Toma de apertura a FILMAR con Veo, en inglés (metraje real). */
+  escena: string
   /** Palabras estimadas / segundos estimados. */
   palabras: number
   segundos: number
@@ -86,9 +88,10 @@ ${MODALIDADES_SERVICIOS}
 
 ${REGLAS_INVIOLABLES}
 
-Responde SOLO con un JSON: {"titulo": "...", "guion": "..."}
+Responde SOLO con un JSON: {"titulo": "...", "guion": "...", "escena": "..."}
 - "titulo": máximo 38 caracteres, es el texto que se sobreimprime en pantalla al inicio. Una idea concreta, NUNCA el eslogan ni el nombre de la marca (esos ya van en el logo).
-- "guion": el texto corrido que dice la voz. Sin encabezados ni acotaciones de escena.`
+- "guion": el texto corrido que dice la voz. Sin encabezados ni acotaciones de escena.
+- "escena": EN INGLÉS, la toma de apertura que se va a FILMAR (8 segundos, vertical). Una escena real y simple con movimiento: una mascota, un tutor, un gesto cotidiano. Describe sujeto, acción, luz y cámara. NUNCA nuestras instalaciones, ni hornos, ni salas, ni nada del crematorio: eso se muestra solo con fotos reales. Nada de texto ni logos en la imagen. Ej.: "A golden retriever resting its head on its owner's lap on a sofa, soft window light, slow push-in, shallow depth of field".`
 
   const client = new Anthropic({ apiKey: key })
 
@@ -104,12 +107,13 @@ Responde SOLO con un JSON: {"titulo": "...", "guion": "..."}
     const texto = r.content.map(c => (c.type === 'text' ? c.text : '')).join('').trim()
     const json = texto.match(/\{[\s\S]*\}/)
     if (!json) throw new Error('El agente no devolvió un guion utilizable')
-    const parsed = JSON.parse(json[0]) as { titulo?: string; guion?: string }
+    const parsed = JSON.parse(json[0]) as { titulo?: string; guion?: string; escena?: string }
     return {
       guion: limpiarParaVoz(String(parsed.guion || '')),
       // Se recorta por PALABRA: un slice a lo bruto dejaba títulos como
       // "Tus cenizas listas en cuatro días hábi" quemados en el video.
       titulo: recortarPorPalabra(limpiarParaVoz(String(parsed.titulo || '')), 42),
+      escena: String(parsed.escena || '').trim(),
     }
   }
 
@@ -117,14 +121,14 @@ Responde SOLO con un JSON: {"titulo": "...", "guion": "..."}
   const revisar = (g: string, t: string) =>
     TERMINOS_PROHIBIDOS.filter(r => r.patron.test(g) || r.patron.test(t)).map(r => r.mensaje)
 
-  let { guion, titulo } = await pedir([])
+  let { guion, titulo, escena } = await pedir([])
   let rotas = revisar(guion, titulo)
   // Un aviso no alcanza: el texto termina QUEMADO en el video. Si rompió una
   // regla dura (voseo, clichés, "urna"…), se rehace inyectando el error.
   if (rotas.length) {
     const otro = await pedir(rotas)
     const rotasOtro = revisar(otro.guion, otro.titulo)
-    if (rotasOtro.length < rotas.length) { guion = otro.guion; titulo = otro.titulo; rotas = rotasOtro }
+    if (rotasOtro.length < rotas.length) { guion = otro.guion; titulo = otro.titulo; escena = otro.escena; rotas = rotasOtro }
   }
   if (!guion) throw new Error('El guion salió vacío')
   const avisos = rotas.length ? [`El guion sigue rompiendo reglas de marca: ${rotas.join(' ')}`] : []
@@ -132,5 +136,5 @@ Responde SOLO con un JSON: {"titulo": "...", "guion": "..."}
   const estimados = Math.round(palabras / PALABRAS_POR_SEGUNDO)
   if (estimados > segundos + 6) avisos.push(`El guion dura ~${estimados} s, más de los ${segundos} s pedidos. Acórtalo o sube la duración.`)
 
-  return { guion, titulo, palabras, segundos: estimados, avisos }
+  return { guion, titulo, escena, palabras, segundos: estimados, avisos }
 }
