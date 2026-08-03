@@ -82,9 +82,11 @@ const PRECIO_IMAGEN: Array<{ re: RegExp; usd: number }> = [
   { re: /./, usd: 0.04 },
 ]
 /** Video: USD por SEGUNDO de clip. */
+// Precios oficiales de Google por SEGUNDO de video a 1080p (verificados 2026-08-03
+// en ai.google.dev/gemini-api/docs/pricing; antes esta tabla sobrestimaba lite y fast).
 const PRECIO_VIDEO_SEG: Array<{ re: RegExp; usd: number }> = [
-  { re: /lite/i, usd: 0.10 },
-  { re: /fast/i, usd: 0.15 },
+  { re: /lite/i, usd: 0.08 },
+  { re: /fast/i, usd: 0.12 },
   { re: /./, usd: 0.40 },
 ]
 

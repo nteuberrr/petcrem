@@ -13,10 +13,12 @@
 const API_VERSION = process.env.GEMINI_API_VERSION || 'v1beta'
 // Quality por defecto (pocos videos, prioridad calidad). Override con GEMINI_VIDEO_MODEL.
 // Opciones: veo-3.1-generate-preview (quality) | veo-3.1-fast-generate-preview | veo-3.1-lite-generate-preview
-// `fast` por defecto: en un clip de 8 s de apoyo la calidad es indistinguible de
-// la versión "quality" y cuesta un tercio (US$1,20 vs US$3,20 por clip). Para
-// una pieza donde el metraje sea el protagonista, override con GEMINI_VIDEO_MODEL.
-export const VEO_MODEL = process.env.GEMINI_VIDEO_MODEL || 'veo-3.1-fast-generate-preview'
+// `lite` por defecto. Precios oficiales por segundo a 1080p: quality US$0,40 ·
+// fast US$0,12 · lite US$0,08. Nuestros clips son PLANOS DE APOYO de 6 s que van
+// bajo un velo navy, con texto encima y ~5 s en pantalla: ahí la diferencia de
+// modelo no se percibe y sí se percibe en la factura. Para una pieza donde el
+// metraje sea el protagonista, override con GEMINI_VIDEO_MODEL.
+export const VEO_MODEL = process.env.GEMINI_VIDEO_MODEL || 'veo-3.1-lite-generate-preview'
 import { registrarUsoFijo, costoVideo } from './uso-ia'
 
 const BASE = 'https://generativelanguage.googleapis.com'
