@@ -84,16 +84,21 @@ const TONOS = {
   emerald: 'bg-emerald-50 border-emerald-200 text-emerald-800',
 } as const
 
-/** Tarjetita de métrica de los resúmenes por operador. */
-function Metrica({ icon, label, valor, nota, tono }: {
-  icon: React.ReactNode; label: string; valor: string; nota?: string; tono: keyof typeof TONOS
+/**
+ * Tarjetita de métrica de los resúmenes por operador. `compacta` la achica para
+ * cuando entra en media pantalla (los totales de fichajes van al lado del
+ * formulario, no a lo ancho).
+ */
+function Metrica({ icon, label, valor, nota, tono, compacta }: {
+  icon: React.ReactNode; label: string; valor: string; nota?: string
+  tono: keyof typeof TONOS; compacta?: boolean
 }) {
   return (
-    <div className={`rounded-xl border p-3.5 ${TONOS[tono]}`}>
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide opacity-90">
-        {icon}{label}
+    <div className={`rounded-xl border min-w-0 ${compacta ? 'p-3' : 'p-3.5'} ${TONOS[tono]}`}>
+      <div className={`flex items-start gap-1.5 font-semibold uppercase tracking-wide opacity-90 ${compacta ? 'text-[10px] leading-tight' : 'text-[11px]'}`}>
+        <span className="shrink-0 mt-px">{icon}</span>{label}
       </div>
-      <p className="text-xl font-extrabold mt-1.5 text-gray-900">{valor}</p>
+      <p className={`font-extrabold mt-1.5 text-gray-900 ${compacta ? 'text-lg' : 'text-xl'}`}>{valor}</p>
       {nota && <p className="text-[11px] mt-0.5 opacity-90">{nota}</p>}
     </div>
   )
@@ -642,8 +647,12 @@ export default function AsistenciaPage() {
 
       {tab === 'fichajes' && <>
 
+      {/* Fila de arriba: fichar día a la izquierda y los totales por operador a
+          la DERECHA, aprovechando el hueco que dejaba el formulario (antes los
+          totales iban abajo, a lo ancho, y arriba quedaba media pantalla vacía). */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
       {/* Form fichaje (todos los roles) */}
-      <Card className="p-5 sm:p-6 max-w-3xl">
+      <Card className="p-5 sm:p-6">
         <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
           <h2 className="text-base font-bold text-brand">Fichar día</h2>
           <span className="text-xs font-semibold text-brand bg-brand/10 px-2.5 py-1 rounded-full">
@@ -704,6 +713,33 @@ export default function AsistenciaPage() {
         )}
       </Card>
 
+      {/* Totales por operador (solo admin) — columna derecha de la fila de arriba */}
+      {isAdmin && resumenPorOperador.length > 0 && (
+        <div className="space-y-4">
+          {resumenPorOperador.map(op => (
+            <Card key={op.usuario_id} className="p-5">
+              <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                <h3 className="text-base font-bold text-brand">{nombreVisible(op.usuario_nombre)}</h3>
+                <span className="text-[11px] font-medium text-gray-600 bg-gray-100 px-2.5 py-0.5 rounded-full">
+                  {op.registros} {op.registros === 1 ? 'fichaje' : 'fichajes'}
+                </span>
+              </div>
+              {/* compacto: estas tarjetas ahora viven en media pantalla */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Metrica compacta icon={<Clock className="w-4 h-4" aria-hidden="true" />} tono="brand"
+                  label="Horas normales" valor={fmtMinutos(op.minutos_normales)} />
+                <Metrica compacta icon={<Timer className="w-4 h-4" aria-hidden="true" />} tono="amber"
+                  label="Horas extra aprobadas" valor={fmtMinutos(op.minutos_extra_aprobado)}
+                  nota={op.minutos_extra_pendiente > 0 ? `+ ${fmtMinutos(op.minutos_extra_pendiente)} por aprobar` : undefined} />
+                <Metrica compacta icon={<Coins className="w-4 h-4" aria-hidden="true" />} tono="emerald"
+                  label="Costo extra estimado" valor={fmtPrecio(op.costo_extra)} />
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+      </div>
+
       {/* Filtros — todos los roles (el operador filtra sobre lo suyo) */}
       <Filtros
         isAdmin={isAdmin}
@@ -729,31 +765,6 @@ export default function AsistenciaPage() {
           </div>
         }
       />
-
-      {/* Totales por operador (solo admin) */}
-      {isAdmin && resumenPorOperador.length > 0 && (
-        <div className="space-y-4">
-          {resumenPorOperador.map(op => (
-            <Card key={op.usuario_id} className="p-5">
-              <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-                <h3 className="text-base font-bold text-brand">{nombreVisible(op.usuario_nombre)}</h3>
-                <span className="text-[11px] font-medium text-gray-600 bg-gray-100 px-2.5 py-0.5 rounded-full">
-                  {op.registros} {op.registros === 1 ? 'fichaje' : 'fichajes'}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Metrica icon={<Clock className="w-4 h-4" aria-hidden="true" />} tono="brand"
-                  label="Horas normales" valor={fmtMinutos(op.minutos_normales)} />
-                <Metrica icon={<Timer className="w-4 h-4" aria-hidden="true" />} tono="amber"
-                  label="Horas extra aprobadas" valor={fmtMinutos(op.minutos_extra_aprobado)}
-                  nota={op.minutos_extra_pendiente > 0 ? `+ ${fmtMinutos(op.minutos_extra_pendiente)} por aprobar` : undefined} />
-                <Metrica icon={<Coins className="w-4 h-4" aria-hidden="true" />} tono="emerald"
-                  label="Costo extra estimado" valor={fmtPrecio(op.costo_extra)} />
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
 
       {/* Tabla de registros — se ven 10 y el resto se scrollea DENTRO de la tarjeta */}
       <Card className="overflow-hidden">
