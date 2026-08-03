@@ -1,10 +1,11 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment, type ReactNode } from 'react'
-import { Ban, BarChart3, Bug, CircleCheck, ClipboardList, Folder, HeartHandshake, Images, Megaphone, Moon, Music, PencilLine, Target, Trash2, TrendingUp, Users, type LucideIcon , Search } from 'lucide-react'
+import { Ban, BarChart3, Bug, CircleCheck, Clapperboard, ClipboardList, Folder, HeartHandshake, Images, Megaphone, Moon, Music, PencilLine, Target, Trash2, TrendingUp, Users, type LucideIcon , Search } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatDate, formatDateTime, formatHoraDia } from '@/lib/dates'
 import CalendarioContent from '@/components/marketing/CalendarioContent'
-import BancoView, { BancoMiniPanel } from '@/components/marketing/BancoView'
+import BancoView from '@/components/marketing/BancoView'
+import VideoPanel from '@/components/marketing/VideoPanel'
 import { GmailIcon, FacebookIcon, InstagramIcon, AgenteIcon } from '@/components/marketing/BrandIcons'
 
 type Vet = {
@@ -143,7 +144,7 @@ function proxyImgs(html: string): string {
 const CATEGORIAS = ['prospecto', 'cliente', 'inactivo'] as const
 
 type Red = 'mail' | 'instagram' | 'facebook' | 'tiktok'
-type Vista = Red | 'calendario' | 'imagenes' | 'metricas' | 'embudo'
+type Vista = Red | 'calendario' | 'imagenes' | 'metricas' | 'embudo' | 'video'
 
 // Barra de accesos fija arriba, ordenada por el flujo de trabajo: se crea el
 // contenido con el Agente, se distribuye por Mailing, se paga con Publicidad y
@@ -154,6 +155,7 @@ const NAV: { key: Vista; label: string }[] = [
   { key: 'metricas', label: 'Publicidad' },
   { key: 'embudo', label: 'Embudo' },
   { key: 'imagenes', label: 'Banco' },
+  { key: 'video', label: 'Video' },
 ]
 
 function NavIcon({ k, className = 'w-6 h-6' }: { k: Vista; className?: string }) {
@@ -164,6 +166,7 @@ function NavIcon({ k, className = 'w-6 h-6' }: { k: Vista; className?: string })
   if (k === 'tiktok') return <Music className={className} aria-hidden="true" />
   if (k === 'metricas') return <Megaphone className={className} aria-hidden="true" />
   if (k === 'embudo') return <TrendingUp className={className} aria-hidden="true" />
+  if (k === 'video') return <Clapperboard className={className} aria-hidden="true" />
   return <Images className={className} aria-hidden="true" />
 }
 
@@ -195,9 +198,6 @@ function MetTh({ children, info, right, center }: { children: ReactNode; info?: 
 
 export default function CampanasPage() {
   const [vista, setVista] = useState<Vista>('calendario')
-  // Panel lateral del Banco "en paralelo": para ver los códigos de las imágenes sin
-  // salir del chat del agente.
-  const [bancoParalelo, setBancoParalelo] = useState(false)
   return (
     <div className="space-y-5">
       <div>
@@ -217,15 +217,6 @@ export default function CampanasPage() {
                   <NavIcon k={n.key} className="w-6 h-6" />
                   {n.label}
                 </button>
-                {n.key === 'imagenes' && (
-                  <button
-                    onClick={() => setBancoParalelo(v => !v)}
-                    title="Abrir el Banco en paralelo (ver los códigos de las imágenes sin salir del chat)"
-                    className={`shrink-0 w-9 px-0 rounded-xl text-base transition-all flex items-center justify-center border ${
-                      bancoParalelo ? 'bg-brand text-white border-brand' : 'text-gray-500 border-gray-300 hover:bg-gray-50 hover:text-brand'
-                    }`}
-                  >⧉</button>
-                )}
               </Fragment>
             )
           })}
@@ -237,19 +228,7 @@ export default function CampanasPage() {
       {vista === 'imagenes' && <BancoView />}
       {vista === 'metricas' && <MetricasPanel />}
       {vista === 'embudo' && <EmbudoSemanalPanel />}
-
-      {/* Panel lateral "abrir en paralelo": el Banco compacto, sin bloquear el chat. */}
-      {bancoParalelo && (
-        <div className="fixed top-0 right-0 h-full w-full sm:w-[380px] z-40 bg-white border-l border-gray-300 shadow-2xl flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-300 bg-brand text-white shrink-0">
-            <span className="font-semibold text-sm inline-flex items-center gap-1.5"><Images className="w-4 h-4" aria-hidden="true" /> Banco en paralelo</span>
-            <button onClick={() => setBancoParalelo(false)} title="Cerrar" aria-label="Cerrar" className="w-7 h-7 grid place-items-center rounded-lg hover:bg-white/15">✕</button>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <BancoMiniPanel />
-          </div>
-        </div>
-      )}
+      {vista === 'video' && <VideoPanel />}
     </div>
   )
 }

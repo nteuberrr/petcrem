@@ -16,6 +16,7 @@ import { LINKS_PUBLICOS } from './links-publicos'
 import { esLogo } from './marca-logo'
 import { registrarUso } from './uso-ia'
 import { generarPieza, editarImagenPieza, regenerarImagenPieza, setImagenesPieza, ajustarPiezaEmail } from './marketing-pieza'
+import { prepararVideo } from './marketing-video-preparar'
 import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
 import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, PLANTILLA_TOOL_DESC, SLOTS_TOOL_PROPS, familiaDe, type SlotsPlantilla } from './marketing-plantillas'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
@@ -406,6 +407,24 @@ const TOOL_AJUSTAR_EMAIL: Anthropic.Tool = {
       comentario: { type: 'string', description: 'Qué ajustar exactamente (ej. "agregá una tabla con los precios de cremación por peso, después de la sección de servicios").' },
     },
     required: ['id', 'comentario'],
+  },
+}
+
+const TOOL_PREPARAR_VIDEO: Anthropic.Tool = {
+  name: 'preparar_video',
+  description: 'Deja un VIDEO listo para publicar: escribe el guion de la locución, resuelve el fondo, genera la voz en off y la música, y lo deja pendiente en Marketing → Video, donde el dueño aprieta un botón y baja el MP4 (el archivo se arma en su navegador, por eso el último paso es suyo). Usalo cuando pida un video, un reel o una pieza con voz. El fondo se resuelve de tres formas, en este orden: fondo_codigo (una imagen o video concreto del banco) · generar_prompt (una foto NUEVA, fotorrealista) · grupo (elijo la mejor de ese grupo del banco). ⚠️ REGLA DURA: las fotos de NUESTRAS INSTALACIONES no se generan NUNCA — son las reales que sube el equipo. Si el video habla de nuestras instalaciones, nuestro horno o nuestras salas, buscá con consultar_banco_imagenes (grupo "instalaciones") y pasá su código en fondo_codigo. Para mascotas, personas o productos podés generar libremente con generar_prompt.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      tema: { type: 'string', description: 'De qué trata el video, en una frase (ej. "por qué la trazabilidad importa"). El guion lo escribo yo a partir de esto.' },
+      segundos: { type: 'number', description: 'Duración de la locución: entre 12 y 45. Por defecto 28.' },
+      clima: { type: 'string', description: 'Música de fondo: "tierna" (piano cálido, por defecto), "serena" (ambiental), "calida" (guitarra acústica) o "ninguna".' },
+      formato: { type: 'string', description: '"reel" (9:16, por defecto) o "feed" (4:5).' },
+      fondo_codigo: { type: 'string', description: 'Código del banco a usar de fondo (ej. "i-7", o el código de un video). OBLIGATORIO si el video habla de las instalaciones.' },
+      generar_prompt: { type: 'string', description: 'Prompt fotográfico detallado para GENERAR el fondo (fotorrealista, vertical, sin texto ni logo). Prohibido para instalaciones. Ignorado si diste fondo_codigo.' },
+      grupo: { type: 'string', description: 'Grupo del banco: de dónde elegir el fondo, o en qué grupo guardar la foto generada (mascotas, personas, productos, instalaciones).' },
+    },
+    required: ['tema'],
   },
 }
 
@@ -932,7 +951,7 @@ export async function generarRespuestaMarketing(
   // Reglas inviolables REPETIDAS al final (máxima saliencia; se validan además por código).
   system.push({ type: 'text', text: REGLAS_INVIOLABLES })
 
-  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AJUSTAR_EMAIL, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_PLANTILLA, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_RENTABILIDAD, TOOL_BITACORA, TOOL_EDITAR_IMG, TOOL_NUEVA_IMAGEN, TOOL_REUTILIZAR, TOOL_USAR_IMGS]
+  const tools = [TOOL_LISTAR, TOOL_PROPONER, TOOL_EDITAR_CAMPANA, TOOL_ELIMINAR_CAMPANA, TOOL_PRECIOS, TOOL_BANCO, TOOL_GENERAR, TOOL_AJUSTAR_EMAIL, TOOL_AUDITAR, TOOL_GENERAR_IMG, TOOL_DISENAR_PLANTILLA, TOOL_DISENAR_GRAFICO, TOOL_PUBLICAR, TOOL_PERFIL_FB, TOOL_METRICAS, TOOL_RENTABILIDAD, TOOL_BITACORA, TOOL_EDITAR_IMG, TOOL_NUEVA_IMAGEN, TOOL_REUTILIZAR, TOOL_USAR_IMGS, TOOL_PREPARAR_VIDEO]
   if (isGoogleAdsConfigurado()) {
     tools.push(
       TOOL_GADS_RESUMEN, TOOL_GADS_KEYWORDS, TOOL_GADS_TERMINOS, TOOL_GADS_IDEAS_KEYWORDS, TOOL_GADS_AUDITAR,
@@ -1057,6 +1076,36 @@ export async function generarRespuestaMarketing(
             ? (codigo ? `No encontré ninguna imagen con código "${inp.codigo}".` : 'No hay imágenes en el banco con ese filtro.')
             : lista.map(b => `${b.codigo || '#' + b.id} [${b.grupo || 'otro'}] ${b.descripcion || b.alt || '(sin descripción)'} — ${b.url}`).join('\n')
               + '\n\nSi le mostrás alguna al dueño, inclúyela con ![](URL) y nombrá su código.'
+        } else if (tu.name === 'preparar_video') {
+          const inp = tu.input as { tema?: string; segundos?: number; clima?: string; formato?: string; fondo_codigo?: string; generar_prompt?: string; grupo?: string }
+          const tema = String(inp.tema || '').trim()
+          if (!tema) resultText = 'Falta el tema del video.'
+          else {
+            try {
+              const { pendiente, avisos } = await prepararVideo({
+                tema,
+                segundos: Number(inp.segundos) || undefined,
+                clima: inp.clima,
+                formato: inp.formato === 'feed' ? 'feed' : 'reel',
+                fondo_codigo: inp.fondo_codigo,
+                generar_prompt: inp.generar_prompt,
+                grupo: inp.grupo,
+                creadoPor: opts.creadoPor,
+              })
+              cambios = true
+              resultText = (pendiente.video_url
+                ? `VIDEO LISTO: ${pendiente.video_url}\nMostráselo al dueño con ese link (es un MP4 descargable, ya publicable).\n`
+                : `Video PREPARADO (el MP4 no se pudo armar en el servidor): está en Marketing → Video para armarlo desde ahí.\n`)
+                + `Título en pantalla: "${pendiente.titulo}"\n`
+                + `Guion (${pendiente.duracion.toFixed(0)} s): ${pendiente.guion}\n`
+                + `Fondo: ${pendiente.fondo_codigo} (grupo ${pendiente.fondo_grupo}) · música: ${pendiente.clima || 'sin música'} · formato ${pendiente.formato}`
+                + (avisos.length ? `\n\nAvisos: ${avisos.join('; ')}` : '')
+            } catch (e) {
+              // Los guardarraíles (banco vacío, instalaciones sin foto real) llegan
+              // acá: se le devuelven al agente para que lo resuelva o lo diga.
+              resultText = `No pude preparar el video: ${e instanceof Error ? e.message : String(e)}`
+            }
+          }
         } else if (tu.name === 'generar_pieza') {
           const id = String((tu.input as { id?: string }).id || '')
           const r = await generarPieza(id, opts.creadoPor)
