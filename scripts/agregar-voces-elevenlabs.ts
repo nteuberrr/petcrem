@@ -25,15 +25,31 @@ const GUION_MUESTRA =
   'En Alma Animal la cremación se hace en nuestras propias instalaciones, con trazabilidad de principio a fin, ' +
   'y te devolvemos sus cenizas en cuatro días hábiles. Estamos todos los días, de nueve de la mañana a diez de la noche.'
 
+/**
+ * Busca una voz en la biblioteca pública. Hay que probar varias combinaciones
+ * de filtros: la página por defecto de `shared-voices` NO trae todo — las voces
+ * chilenas solo aparecen filtrando por acento y género.
+ */
 async function buscarEnBiblioteca(vozId: string, nombre: string) {
-  const url = new URL(`${API}/shared-voices`)
-  url.searchParams.set('language', 'es')
-  url.searchParams.set('page_size', '100')
-  const r = await fetch(url, { headers: H })
-  if (!r.ok) throw new Error(`shared-voices ${r.status}`)
-  const j = await r.json() as { voices?: Array<Record<string, unknown>> }
-  return (j.voices || []).find(v => v.voice_id === vozId)
-    || (j.voices || []).find(v => String(v.name || '').toLowerCase().startsWith(nombre.toLowerCase()))
+  const combos: Array<Record<string, string>> = [
+    { search: nombre },
+    { accent: 'chilean', gender: 'female' },
+    { accent: 'chilean' },
+    { accent: 'latin american', gender: 'female' },
+    {},
+  ]
+  for (const extra of combos) {
+    const url = new URL(`${API}/shared-voices`)
+    url.searchParams.set('language', 'es')
+    url.searchParams.set('page_size', '100')
+    for (const [k, v] of Object.entries(extra)) url.searchParams.set(k, v)
+    const r = await fetch(url, { headers: H })
+    if (!r.ok) continue
+    const j = await r.json() as { voices?: Array<Record<string, unknown>> }
+    const hit = (j.voices || []).find(v => v.voice_id === vozId)
+    if (hit) return hit
+  }
+  return null
 }
 
 async function main() {

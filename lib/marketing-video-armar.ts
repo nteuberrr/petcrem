@@ -16,8 +16,8 @@ export interface ArmarVideoArgs {
   guion: string
   palabras: PalabraTiempo[]
   duracion: number
-  fondoUrl: string
-  fondoTipo: 'imagen' | 'video'
+  /** Tomas del montaje, en orden. */
+  tomas: Array<{ url: string; tipo: 'imagen' | 'video' }>
   musicaUrl?: string
   locucionUrl: string
   nombre?: string
@@ -46,9 +46,11 @@ export function linkDescarga(urlR2: string): string {
 export async function armarVideo(a: ArmarVideoArgs): Promise<VideoArmado> {
   const dir = mkdtempSync(join(tmpdir(), 'alma-armar-'))
   try {
-    const extFondo = a.fondoTipo === 'video' ? 'mp4' : (a.fondoUrl.split('.').pop()?.split('?')[0] || 'jpg').slice(0, 4)
-    const [fondoPath, vozPath, musicaPath] = await Promise.all([
-      bajarA(a.fondoUrl, dir, `fondo.${extFondo}`),
+    const [tomas, vozPath, musicaPath] = await Promise.all([
+      Promise.all(a.tomas.map(async (t, i) => {
+        const ext = t.tipo === 'video' ? 'mp4' : (t.url.split('.').pop()?.split('?')[0] || 'jpg').slice(0, 4)
+        return { path: await bajarA(t.url, dir, `toma${i}.${ext}`), tipo: t.tipo }
+      })),
       bajarA(a.locucionUrl, dir, 'voz.mp3'),
       a.musicaUrl ? bajarA(a.musicaUrl, dir, 'musica.mp3') : Promise.resolve(undefined),
     ])
@@ -58,8 +60,7 @@ export async function armarVideo(a: ArmarVideoArgs): Promise<VideoArmado> {
       titulo: a.titulo,
       palabras: a.palabras,
       duracionAudio: a.duracion,
-      fondoPath,
-      fondoTipo: a.fondoTipo,
+      tomas,
       vozPath,
       musicaPath,
     })

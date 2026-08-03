@@ -45,4 +45,18 @@ export const TERMINOS_PROHIBIDOS: ReglaCopy[] = [
   { patron: /\bISO\b/, mensaje: 'No menciones "ISO": decí solo "horno certificado".' },
   { patron: /cada cremaci[óo]n es individual|todas las cremaciones son individuales/i, mensaje: '"Cremación Individual" es solo el nombre de una modalidad, no una garantía general.' },
   { patron: /\burnas?\b/i, mensaje: 'Vocabulario de marca: decí "ánfora", no "urna".' },
+  // VOSEO: la regla ya estaba escrita ("español neutro de Chile, NUNCA voseo"),
+  // pero el modelo la desobedecía igual — salió un video con el título "Sabés
+  // exactamente qué pasa con tu mascota". Como toda regla binaria de marca, se
+  // valida por código. Lista explícita para no marcar falsos positivos:
+  // "estás", "vas" o "está" son tuteo correcto y NO deben caer acá.
+  {
+    patron: /\b(sabés|tenés|querés|podés|debés|hacés|ponés|venís|decís|vivís|sentís|elegís|escribís|seguís|preferís|conocés|entendés|aprendés|creés|comés|sos)\b/i,
+    mensaje: 'Voseo argentino prohibido: usá tuteo neutro (sabes, tienes, quieres, puedes, eres…).',
+  },
+  {
+    patron: /\b(mirá|decí|poné|andá|vení|escribí|elegí|dejá|llamá|contá|buscá|tomá|mandá|fijate|acordate|quedate|acercate|escribinos|contanos|llamanos|escuchá|pensá)\b/i,
+    mensaje: 'Imperativo voseante prohibido: usá el tuteo neutro (mira, di, pon, ven, escribe, elige…).',
+  },
+  { patron: /\bvos\b/i, mensaje: 'No uses "vos": el tratamiento es tuteo neutro ("tú").' },
 ]

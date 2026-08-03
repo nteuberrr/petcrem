@@ -91,30 +91,43 @@ Responde SOLO con un JSON: {"titulo": "...", "guion": "..."}
 - "guion": el texto corrido que dice la voz. Sin encabezados ni acotaciones de escena.`
 
   const client = new Anthropic({ apiKey: key })
-  const r = await client.messages.create({
-    model: MODELO,
-    max_tokens: 1200,
-    system: sys,
-    messages: [{ role: 'user', content: `Tema del video: ${args.tema}` }],
-  })
 
-  const texto = r.content.map(c => (c.type === 'text' ? c.text : '')).join('').trim()
-  const json = texto.match(/\{[\s\S]*\}/)
-  if (!json) throw new Error('El agente no devolvió un guion utilizable')
-  const parsed = JSON.parse(json[0]) as { titulo?: string; guion?: string }
-
-  const guion = limpiarParaVoz(String(parsed.guion || ''))
-  // Se recorta por PALABRA: un slice a lo bruto dejaba títulos como
-  // "Tus cenizas listas en cuatro días hábi" quemados en el video.
-  const titulo = recortarPorPalabra(limpiarParaVoz(String(parsed.titulo || '')), 42)
-  if (!guion) throw new Error('El guion salió vacío')
-
-  // Mismo linter de marca que las piezas gráficas: si se coló un término
-  // prohibido, se avisa en vez de dejarlo pasar a una pieza pública.
-  const avisos: string[] = []
-  for (const regla of TERMINOS_PROHIBIDOS) {
-    if (regla.patron.test(guion) || regla.patron.test(titulo)) avisos.push(regla.mensaje)
+  /** Pide un guion; `correcciones` reinyecta lo que falló en el intento previo. */
+  const pedir = async (correcciones: string[]) => {
+    const mensaje = correcciones.length
+      ? `Tema del video: ${args.tema}\n\nEl intento anterior ROMPIÓ estas reglas. Reescribilo corrigiéndolas:\n${correcciones.map(c => `- ${c}`).join('\n')}`
+      : `Tema del video: ${args.tema}`
+    const r = await client.messages.create({
+      model: MODELO, max_tokens: 1200, system: sys,
+      messages: [{ role: 'user', content: mensaje }],
+    })
+    const texto = r.content.map(c => (c.type === 'text' ? c.text : '')).join('').trim()
+    const json = texto.match(/\{[\s\S]*\}/)
+    if (!json) throw new Error('El agente no devolvió un guion utilizable')
+    const parsed = JSON.parse(json[0]) as { titulo?: string; guion?: string }
+    return {
+      guion: limpiarParaVoz(String(parsed.guion || '')),
+      // Se recorta por PALABRA: un slice a lo bruto dejaba títulos como
+      // "Tus cenizas listas en cuatro días hábi" quemados en el video.
+      titulo: recortarPorPalabra(limpiarParaVoz(String(parsed.titulo || '')), 42),
+    }
   }
+
+  /** Reglas de marca rotas (mismo linter que las piezas gráficas). */
+  const revisar = (g: string, t: string) =>
+    TERMINOS_PROHIBIDOS.filter(r => r.patron.test(g) || r.patron.test(t)).map(r => r.mensaje)
+
+  let { guion, titulo } = await pedir([])
+  let rotas = revisar(guion, titulo)
+  // Un aviso no alcanza: el texto termina QUEMADO en el video. Si rompió una
+  // regla dura (voseo, clichés, "urna"…), se rehace inyectando el error.
+  if (rotas.length) {
+    const otro = await pedir(rotas)
+    const rotasOtro = revisar(otro.guion, otro.titulo)
+    if (rotasOtro.length < rotas.length) { guion = otro.guion; titulo = otro.titulo; rotas = rotasOtro }
+  }
+  if (!guion) throw new Error('El guion salió vacío')
+  const avisos = rotas.length ? [`El guion sigue rompiendo reglas de marca: ${rotas.join(' ')}`] : []
   const palabras = guion.split(/\s+/).filter(Boolean).length
   const estimados = Math.round(palabras / PALABRAS_POR_SEGUNDO)
   if (estimados > segundos + 6) avisos.push(`El guion dura ~${estimados} s, más de los ${segundos} s pedidos. Acórtalo o sube la duración.`)

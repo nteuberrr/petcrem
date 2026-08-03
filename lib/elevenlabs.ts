@@ -27,25 +27,40 @@ export interface Voz {
 }
 
 /**
- * Voces habilitadas. Femeninas latinoamericanas de perfil narrativo cálido:
- * es el registro que pide una marca de duelo — cercano, contenido, sin
- * dramatismo. Se prefirió neutralidad latina antes que acento chileno marcado
- * para que sirva a todo el público (decisión del dueño, 2026-08-02).
+ * Voces habilitadas: femeninas CHILENAS de perfil narrativo cálido.
+ *
+ * Primero se habían puesto voces "latinas neutras" (Lucy, Carito), pero al
+ * escuchar la pieza sonaban rioplatenses — para una marca de Santiago eso
+ * desentona. La biblioteca tiene voces chilenas y son las que quedaron.
  */
 export const VOCES: Voz[] = [
   {
-    id: 'Bh4tkGuEEIADxUACafG5',
-    nombre: 'Lucy',
-    describe: 'Femenina, mediana edad, latina cálida — narradora serena',
+    id: 'prblQcKOdF08ozhxP2mk',
+    nombre: 'Ángela',
+    describe: 'Chilena, mediana edad — cálida, calmada, la que mejor calza',
     publicOwnerId: '',
-    nombreBiblioteca: 'Lucy',
+    nombreBiblioteca: 'Angela',
   },
   {
-    id: 'NNuHMQa2acKEytgZ6uvw',
-    nombre: 'Carito',
-    describe: 'Femenina, joven, latina — íntima y suave',
+    id: 'Fd38GRHtJllY0CuguAy9',
+    nombre: 'Victoria',
+    describe: 'Chilena, joven — narradora clara',
     publicOwnerId: '',
-    nombreBiblioteca: 'Carito',
+    nombreBiblioteca: 'Victoria',
+  },
+  {
+    id: '6Gr4AVmTax1pMJO0lHRK',
+    nombre: 'Catalina',
+    describe: 'Chilena, joven — conversacional y cercana',
+    publicOwnerId: '',
+    nombreBiblioteca: 'Catalina',
+  },
+  {
+    id: 'lLsDvdl6OjtZfLJPM2HA',
+    nombre: 'Olivia',
+    describe: 'Chilena, mediana edad — sobria, tono corporativo',
+    publicOwnerId: '',
+    nombreBiblioteca: 'Olivia Pro',
   },
 ]
 

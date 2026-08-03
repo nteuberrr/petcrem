@@ -4,7 +4,7 @@ import ffmpegPath from 'ffmpeg-static'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, readdirSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { FORMATOS, dibujarCuadro, duracionTotal, type FormatoVideo, type PalabraTiempo } from './video-marca'
+import { FORMATOS, FUNDIDO, dibujarCuadro, duracionTotal, planificarTomas, type FormatoVideo, type PalabraTiempo } from './video-marca'
 
 /**
  * Arma el MP4 EN EL SERVIDOR, para que el agente pueda entregar el video
@@ -38,9 +38,8 @@ export interface SpecVideo {
   titulo: string
   palabras: PalabraTiempo[]
   duracionAudio: number
-  /** Fondo: imagen o video, ya descargado a disco. */
-  fondoPath: string
-  fondoTipo: 'imagen' | 'video'
+  /** Tomas del montaje, ya descargadas a disco y en orden. */
+  tomas: Array<{ path: string; tipo: 'imagen' | 'video' }>
   /** Locución en disco (obligatoria: sin voz no hay pieza). */
   vozPath: string
   /** Cama musical en disco (opcional). */
@@ -131,22 +130,32 @@ export async function renderizarVideo(spec: SpecVideo): Promise<Buffer> {
   const dir = mkdtempSync(join(tmpdir(), 'alma-video-'))
 
   try {
-    // ── Fondo ──────────────────────────────────────────────────────────────
-    let imagenFija: Image | null = null
-    let cuadrosFondo: string[] = []
-    if (spec.fondoTipo === 'video') {
-      const dirF = join(dir, 'fondo')
-      mkdirSync(dirF, { recursive: true })
-      cuadrosFondo = await extraerCuadros(spec.fondoPath, dirF, total)
-      if (cuadrosFondo.length === 0) throw new Error('No pude extraer cuadros del video de fondo')
-    } else {
-      imagenFija = await loadImage(spec.fondoPath)
+    // ── Tomas ──────────────────────────────────────────────────────────────
+    // Cada toma es una imagen fija o, si es un clip de Veo, la secuencia de
+    // cuadros que ffmpeg extrae para poder dibujarla igual que una foto.
+    type TomaCargada = { tipo: 'imagen'; img: Image } | { tipo: 'video'; cuadros: string[] }
+    const tomas: TomaCargada[] = []
+    for (let i = 0; i < spec.tomas.length; i++) {
+      const t = spec.tomas[i]
+      if (t.tipo === 'video') {
+        const dirF = join(dir, `toma${i}`)
+        mkdirSync(dirF, { recursive: true })
+        const cuadros = await extraerCuadros(t.path, dirF, total)
+        if (cuadros.length === 0) throw new Error(`No pude extraer cuadros de la toma ${i + 1}`)
+        tomas.push({ tipo: 'video', cuadros })
+      } else {
+        tomas.push({ tipo: 'imagen', img: await loadImage(t.path) })
+      }
     }
+    if (tomas.length === 0) throw new Error('El video no tiene ninguna toma')
+
     const logoPath = join(process.cwd(), 'public', 'brand', 'logo-alma-animal.png')
     const logo = existsSync(logoPath) ? await loadImage(logoPath) : null
 
     const cv = createCanvas(w, h)
     const ctx = cv.getContext('2d')
+    const plan = planificarTomas(tomas.length, total)
+    const ultimaDeVideo: Array<Image | undefined> = new Array(tomas.length)
 
     // ── Audio ──────────────────────────────────────────────────────────────
     const args = [
@@ -184,13 +193,24 @@ export async function renderizarVideo(spec: SpecVideo): Promise<Buffer> {
       for (let i = 0; i < cuadros; i++) {
         if (abortado()) return
         const t = i / FPS
-        if (cuadrosFondo.length) {
-          const idx = Math.min(cuadrosFondo.length - 1, i)
-          imagenFija = await loadImage(cuadrosFondo[idx])
+        // Las tomas de video avanzan cuadro a cuadro; las fotos son fijas. Solo
+        // se decodifica el PNG de una toma de video MIENTRAS está en pantalla.
+        const cargadas: Image[] = []
+        for (let k = 0; k < tomas.length; k++) {
+          const tm = tomas[k]
+          if (tm.tipo === 'imagen') { cargadas.push(tm.img); continue }
+          const { desde, hasta } = plan[k]
+          if (t >= desde - FUNDIDO && t <= hasta) {
+            // El clip avanza desde SU propio inicio, no desde el del video: si
+            // no, una toma que entra al segundo 10 arrancaría por su cuadro 300.
+            const local = Math.max(0, Math.round((t - desde) * FPS))
+            ultimaDeVideo[k] = await loadImage(tm.cuadros[Math.min(tm.cuadros.length - 1, local)])
+          }
+          cargadas.push(ultimaDeVideo[k] ?? await loadImage(tm.cuadros[0]))
         }
         dibujarCuadro(ctx as unknown as CanvasRenderingContext2D, {
           formato: spec.formato,
-          fondo: { tipo: 'imagen', el: imagenFija as unknown as HTMLImageElement },
+          tomas: cargadas.map(img => ({ tipo: 'imagen' as const, el: img as unknown as HTMLImageElement })),
           logo: logo as unknown as HTMLImageElement | null,
           titulo: spec.titulo,
           palabras: spec.palabras,

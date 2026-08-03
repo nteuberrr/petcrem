@@ -423,6 +423,10 @@ const TOOL_PREPARAR_VIDEO: Anthropic.Tool = {
       formato: { type: 'string', description: '"reel" (9:16, por defecto) o "feed" (4:5).' },
       fondo_codigo: { type: 'string', description: 'Código del banco a usar de fondo (ej. "i-7", o el código de un video). OBLIGATORIO si el video habla de las instalaciones.' },
       generar_prompt: { type: 'string', description: 'Prompt fotográfico detallado para GENERAR el fondo (fotorrealista, vertical, sin texto ni logo). Prohibido para instalaciones. Ignorado si diste fondo_codigo.' },
+      metraje: {
+        type: 'array', items: { type: 'string' },
+        description: 'METRAJE REAL: 1 o 2 escenas EN INGLÉS para filmar con Veo, que abren el montaje (ej. "a golden retriever running towards its owner in a park at golden hour"). Es lo que hace que el video se vea filmado y no una sucesión de fotos — usalo cuando el dueño pida un video "de verdad". Tarda 1-2 min por clip y tiene costo. PROHIBIDO para instalaciones.',
+      },
       grupo: { type: 'string', description: 'Grupo del banco: de dónde elegir el fondo, o en qué grupo guardar la foto generada (mascotas, personas, productos, instalaciones).' },
     },
     required: ['tema'],
@@ -1078,7 +1082,7 @@ export async function generarRespuestaMarketing(
             : lista.map(b => `${b.codigo || '#' + b.id} [${b.grupo || 'otro'}] ${b.descripcion || b.alt || '(sin descripción)'} — ${b.url}`).join('\n')
               + '\n\nSi le mostrás alguna al dueño, inclúyela con ![](URL) y nombrá su código.'
         } else if (tu.name === 'preparar_video') {
-          const inp = tu.input as { tema?: string; segundos?: number; clima?: string; formato?: string; fondo_codigo?: string; generar_prompt?: string; grupo?: string }
+          const inp = tu.input as { tema?: string; segundos?: number; clima?: string; formato?: string; fondo_codigo?: string; generar_prompt?: string; grupo?: string; metraje?: string[] }
           const tema = String(inp.tema || '').trim()
           if (!tema) resultText = 'Falta el tema del video.'
           else {
@@ -1090,6 +1094,7 @@ export async function generarRespuestaMarketing(
                 formato: inp.formato === 'feed' ? 'feed' : 'reel',
                 fondo_codigo: inp.fondo_codigo,
                 generar_prompt: inp.generar_prompt,
+                metraje: Array.isArray(inp.metraje) ? inp.metraje : undefined,
                 grupo: inp.grupo,
                 creadoPor: opts.creadoPor,
               })

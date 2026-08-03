@@ -20,8 +20,11 @@ export async function POST(req: NextRequest) {
   }
   try {
     const b = await req.json().catch(() => ({}))
-    if (!b.locucion_url || !b.fondo_url) {
-      return NextResponse.json({ error: 'Faltan el fondo y la locución.' }, { status: 400 })
+    const tomas = (Array.isArray(b.tomas) ? b.tomas : [])
+      .filter((t: { url?: string }) => t && t.url)
+      .map((t: { url: string; tipo?: string }) => ({ url: String(t.url), tipo: t.tipo === 'video' ? 'video' as const : 'imagen' as const }))
+    if (!b.locucion_url || tomas.length === 0) {
+      return NextResponse.json({ error: 'Faltan las tomas y la locución.' }, { status: 400 })
     }
     const out = await armarVideo({
       formato: b.formato === 'feed' ? 'feed' : 'reel',
@@ -29,8 +32,7 @@ export async function POST(req: NextRequest) {
       guion: String(b.guion || ''),
       palabras: Array.isArray(b.palabras) ? b.palabras : [],
       duracion: Number(b.duracion) || 0,
-      fondoUrl: String(b.fondo_url),
-      fondoTipo: b.fondo_tipo === 'video' ? 'video' : 'imagen',
+      tomas,
       musicaUrl: b.musica_url ? String(b.musica_url) : undefined,
       locucionUrl: String(b.locucion_url),
       nombre: String(b.titulo || ''),

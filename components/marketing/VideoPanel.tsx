@@ -1,10 +1,10 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Download, Film, Images, Loader2, Mic, Music, Sparkles, Video } from 'lucide-react'
+import { ChevronDown, Download, Film, Images, Loader2, Mic, Music, Sparkles, Video } from 'lucide-react'
 import { Card, Button } from '@/components/ui/kit'
 import {
   FORMATOS, dibujarCuadro, duracionTotal, formatoGrabacion,
-  type Fondo, type FormatoVideo, type PalabraTiempo,
+  type Toma, type FormatoVideo, type PalabraTiempo,
 } from '@/lib/video-marca'
 
 /**
@@ -24,6 +24,7 @@ type VideoPendiente = {
   locucion_url: string; duracion: number; palabras: PalabraTiempo[]
   musica_url: string; clima: string
   fondo_url: string; fondo_tipo: 'imagen' | 'video'; fondo_codigo: string; fondo_grupo: string
+  tomas?: Array<{ url: string; tipo: 'imagen' | 'video' }>
   formato: FormatoVideo; creado: string
   /** MP4 ya armado por el servidor (vacío si hay que armarlo acá). */
   video_url?: string
@@ -56,7 +57,9 @@ export default function VideoPanel() {
   const [sinLocucion, setSinLocucion] = useState(false)
 
   const [grupo, setGrupo] = useState('')
-  const [fondoSel, setFondoSel] = useState<{ tipo: 'imagen' | 'video'; url: string } | null>(null)
+  // El montaje: varias tomas en orden. Con una sola, la pieza se ve como una
+  // foto con audio — que fue justo el problema de la primera versión.
+  const [tomasSel, setTomasSel] = useState<Array<{ tipo: 'imagen' | 'video'; url: string }>>([])
   const [formato, setFormato] = useState<FormatoVideo>('reel')
   const [tema, setTema] = useState('')
   const [segundos, setSegundos] = useState(28)
@@ -70,6 +73,7 @@ export default function VideoPanel() {
   const [musica, setMusica] = useState<{ url: string; reusada: boolean } | null>(null)
   const [musicando, setMusicando] = useState(false)
   const [pendientes, setPendientes] = useState<VideoPendiente[]>([])
+  const [bandejaAbierta, setBandejaAbierta] = useState(false)
   const [escribiendo, setEscribiendo] = useState(false)
   const [locutando, setLocutando] = useState(false)
   const [grabando, setGrabando] = useState(false)
@@ -79,10 +83,10 @@ export default function VideoPanel() {
   const [listo, setListo] = useState<{ url: string; descarga?: string; ext: string; esMp4: boolean } | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const fondoRef = useRef<Fondo | null>(null)
-  // Ref aparte para CONTROLAR la reproducción del fondo cuando es video (el
+  const tomasRef = useRef<Toma[]>([])
+  // Ref aparte para CONTROLAR la reproducción de las tomas que son video (el
   // compilador de React no deja mutar algo sacado de una unión en un ref).
-  const fondoVideoRef = useRef<HTMLVideoElement | null>(null)
+  const tomasVideoRef = useRef<HTMLVideoElement[]>([])
   // El logo y el fondo van en estado (no solo en ref) para que al terminar de
   // cargarse se vuelva a pintar la vista previa.
   const [logo, setLogo] = useState<HTMLImageElement | null>(null)
@@ -145,7 +149,8 @@ export default function VideoPanel() {
     setAudio({ url: p.locucion_url, palabras: p.palabras || [], duracion: p.duracion })
     setMusica(p.musica_url ? { url: p.musica_url, reusada: true } : null)
     setClimaSel(p.clima || 'tierna')
-    setFondoSel({ tipo: p.fondo_tipo, url: p.fondo_url })
+    // Los pendientes viejos traen un solo fondo; los nuevos, el montaje completo.
+    setTomasSel(p.tomas?.length ? p.tomas : [{ tipo: p.fondo_tipo, url: p.fondo_url }])
     setAvisos([])
     setListo(null)
     // Se rearman los elementos de audio con las pistas nuevas.
@@ -153,6 +158,16 @@ export default function VideoPanel() {
     audioConectadoRef.current = false
     musicaRef.current = null
     musicaGainRef.current = null
+  }
+
+  /** Suma una toma al final del montaje (o la quita si ya estaba). */
+  function agregarToma(tipo: 'imagen' | 'video', url: string) {
+    setTomasSel(prev => (prev.some(t => t.url === url) ? prev.filter(t => t.url !== url) : [...prev, { tipo, url }]))
+    setListo(null)
+  }
+  function quitarToma(i: number) {
+    setTomasSel(prev => prev.filter((_, k) => k !== i))
+    setListo(null)
   }
 
   async function descartarPendiente(id: string) {
@@ -163,13 +178,13 @@ export default function VideoPanel() {
   /** Dibuja el cuadro del segundo `t` (vista previa y grabación usan lo mismo). */
   const pintar = useCallback((t: number) => {
     const cv = canvasRef.current
-    const f = fondoRef.current
-    if (!cv || !f) return
+    const tomas = tomasRef.current
+    if (!cv || tomas.length === 0) return
     const ctx = cv.getContext('2d')
     if (!ctx) return
     dibujarCuadro(ctx, {
       formato,
-      fondo: f,
+      tomas,
       logo,
       titulo,
       palabras: audio?.palabras || [],
@@ -181,38 +196,38 @@ export default function VideoPanel() {
   // Repinta cuando cambia algo que se ve: fondo cargado, formato, título, voz…
   useEffect(() => { pintar(0.8) }, [pintar, fondoListo])
 
-  // ── Cargar el fondo elegido ───────────────────────────────────────────────
+  // ── Cargar las tomas elegidas ────────────────────────────────────────────
   useEffect(() => {
-    if (!fondoSel) { fondoRef.current = null; fondoVideoRef.current = null; return }
     let cancelado = false
-    const url = porNuestroOrigen(fondoSel.url)
-    if (fondoSel.tipo === 'imagen') {
-      const img = new Image()
-      img.onload = () => {
-        if (cancelado) return
-        fondoRef.current = { tipo: 'imagen', el: img }
-        fondoVideoRef.current = null
-        setFondoListo(n => n + 1)
-      }
-      img.onerror = () => setError('No se pudo cargar la imagen elegida.')
-      img.src = url
-    } else {
-      const v = document.createElement('video')
-      v.src = url
-      v.muted = true
-      v.loop = true
-      v.playsInline = true
-      v.onloadeddata = () => {
-        if (cancelado) return
-        fondoRef.current = { tipo: 'video', el: v }
-        fondoVideoRef.current = v
-        void v.play().catch(() => {})
-        setFondoListo(n => n + 1)
-      }
-      v.onerror = () => setError('No se pudo cargar el video elegido.')
+    tomasRef.current = []
+    tomasVideoRef.current = []
+
+    const cargar = async () => {
+      if (tomasSel.length === 0) { setFondoListo(n => n + 1); return }
+      const cargadas = await Promise.all(tomasSel.map(t => new Promise<Toma | null>(res => {
+        const url = porNuestroOrigen(t.url)
+        if (t.tipo === 'imagen') {
+          const img = new Image()
+          img.onload = () => res({ tipo: 'imagen', el: img })
+          img.onerror = () => res(null)
+          img.src = url
+        } else {
+          const v = document.createElement('video')
+          v.src = url; v.muted = true; v.loop = true; v.playsInline = true
+          v.onloadeddata = () => { void v.play().catch(() => {}); res({ tipo: 'video', el: v }) }
+          v.onerror = () => res(null)
+        }
+      })))
+      if (cancelado) return
+      const ok = cargadas.filter((x): x is Toma => x !== null)
+      if (ok.length < tomasSel.length) setError('Alguna toma no se pudo cargar.')
+      tomasRef.current = ok
+      tomasVideoRef.current = ok.filter(x => x.tipo === 'video').map(x => x.el as HTMLVideoElement)
+      setFondoListo(n => n + 1)
     }
+    void cargar()
     return () => { cancelado = true }
-  }, [fondoSel])
+  }, [tomasSel])
 
   // ── Guion ────────────────────────────────────────────────────────────────
   async function escribirGuion() {
@@ -342,7 +357,7 @@ export default function VideoPanel() {
    * depender del navegador). Si falla, queda el armado local de abajo.
    */
   async function armarEnServidor() {
-    if (!fondoSel || !audio || grabando) return
+    if (tomasSel.length === 0 || !audio || grabando) return
     setGrabando(true); setError(''); setListo(null); setProgreso(0)
     try {
       const r = await fetch('/api/marketing/video', {
@@ -350,7 +365,7 @@ export default function VideoPanel() {
         body: JSON.stringify({
           formato, titulo, guion,
           palabras: audio.palabras, duracion: audio.duracion,
-          fondo_url: fondoSel.url, fondo_tipo: fondoSel.tipo,
+          tomas: tomasSel,
           musica_url: musica?.url || '', locucion_url: audio.url,
         }),
       })
@@ -365,7 +380,7 @@ export default function VideoPanel() {
   // ── Armado del MP4 en el navegador (respaldo) ────────────────────────────
   async function armarVideo() {
     const cv = canvasRef.current
-    if (!cv || !fondoRef.current || grabando) return
+    if (!cv || tomasRef.current.length === 0 || grabando) return
     const fmt = formatoGrabacion()
     if (!fmt) { setError('Este navegador no puede grabar video. Usa Chrome o Edge.'); return }
 
@@ -420,8 +435,8 @@ export default function VideoPanel() {
         await mus.play().catch(() => {})
       }
       if (el) { el.currentTime = 0; await el.play().catch(() => {}) }
-      const fondoVid = fondoVideoRef.current
-      if (fondoVid) { fondoVid.currentTime = 0; void fondoVid.play().catch(() => {}) }
+      const videos = tomasVideoRef.current
+      for (const v of videos) { v.currentTime = 0; void v.play().catch(() => {}) }
 
       // La grabación es en tiempo real: se dibuja contra el reloj, no contra
       // un contador de cuadros, para que audio y video no se desfasen.
@@ -440,7 +455,7 @@ export default function VideoPanel() {
       rec.stop()
       if (el) el.pause()
       if (mus) mus.pause()
-      if (fondoVid) fondoVid.pause()
+      for (const v of videos) v.pause()
       await terminado
 
       const blob = new Blob(trozos, { type: fmt.mime })
@@ -453,7 +468,7 @@ export default function VideoPanel() {
   useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }, [])
 
   const dims = FORMATOS[formato]
-  const puedeArmar = !!fondoSel && !!guion.trim() && !grabando
+  const puedeArmar = tomasSel.length > 0 && !!guion.trim() && !grabando
   const imagenesFiltradas = grupo ? imagenes.filter(i => (i.grupo || 'otro') === grupo) : imagenes
 
   return (
@@ -466,13 +481,19 @@ export default function VideoPanel() {
       {error && <Card className="border-red-300 bg-red-50 p-4 text-sm text-red-700">{error}</Card>}
 
       {/* Bandeja del agente: pedís el video en el chat y acá aparece listo. */}
+      {/* Bandeja plegable: con varios videos la lista empujaba todo el armador
+          hacia abajo. Arranca cerrada y se abre cuando hace falta. */}
       {pendientes.length > 0 && (
         <Card className="border-gold/60 bg-gold/5 p-4">
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-brand">
-            <Sparkles className="h-4 w-4 text-gold" aria-hidden="true" />
-            El agente dejó {pendientes.length} {pendientes.length === 1 ? 'video preparado' : 'videos preparados'}
-          </h3>
-          <ul className="space-y-2">
+          <button type="button" onClick={() => setBandejaAbierta(v => !v)}
+            className="flex w-full items-center gap-1.5 text-left text-sm font-bold text-brand">
+            <Sparkles className="h-4 w-4 shrink-0 text-gold" aria-hidden="true" />
+            <span className="flex-1">
+              El agente dejó {pendientes.length} {pendientes.length === 1 ? 'video preparado' : 'videos preparados'}
+            </span>
+            <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${bandejaAbierta ? 'rotate-180' : ''}`} aria-hidden="true" />
+          </button>
+          <ul className={`space-y-2 ${bandejaAbierta ? 'mt-2' : 'hidden'}`}>
             {pendientes.map(p => (
               <li key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-300 bg-white px-3 py-2">
                 <span className="min-w-0 flex-1">
@@ -505,10 +526,33 @@ export default function VideoPanel() {
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* ── Columna de trabajo ── */}
         <div className="min-w-0 space-y-4">
-          {/* 1. Fondo */}
+          {/* 1. Tomas */}
           <Card className="p-4">
-            <h3 className="mb-1 text-sm font-bold text-brand">1 · Fondo</h3>
-            <p className="mb-3 text-xs text-gray-600">Una foto del banco (se le aplica un zoom lento) o un video ya generado con Veo.</p>
+            <h3 className="mb-1 text-sm font-bold text-brand">1 · Tomas del montaje</h3>
+            <p className="mb-3 text-xs text-gray-600">
+              Elegí <b>varias</b> en el orden que quieras: cada una entra con fundido y con su propio movimiento.
+              Con una sola foto la pieza se ve como una foto con audio, no como un video.
+            </p>
+
+            {tomasSel.length > 0 && (
+              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 p-2">
+                {tomasSel.map((t, i) => (
+                  <button key={`${t.url}${i}`} type="button" onClick={() => quitarToma(i)}
+                    title="Quitar de la secuencia"
+                    className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 border-gold">
+                    {t.tipo === 'imagen'
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={porNuestroOrigen(t.url)} alt="" className="h-full w-full object-cover" />
+                      : <span className="flex h-full w-full items-center justify-center bg-gray-900 text-white"><Film className="h-5 w-5" aria-hidden="true" /></span>}
+                    <span className="absolute left-0 top-0 rounded-br bg-brand px-1 text-[10px] font-bold text-white">{i + 1}</span>
+                    <span className="absolute inset-0 hidden items-center justify-center bg-red-600/70 text-xs font-bold text-white group-hover:flex">Quitar</span>
+                  </button>
+                ))}
+                <span className="text-[11px] text-gray-500">
+                  {tomasSel.length} {tomasSel.length === 1 ? 'toma' : 'tomas'} · ~{(duracionTotal(audio?.duracion || segundos) / tomasSel.length).toFixed(1)} s cada una
+                </span>
+              </div>
+            )}
 
             <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -529,14 +573,18 @@ export default function VideoPanel() {
               </div>
             </div>
             <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-              {imagenesFiltradas.slice(0, 60).map(i => (
-                <button key={i.id} type="button" onClick={() => { setFondoSel({ tipo: 'imagen', url: i.url }); setListo(null) }}
-                  title={i.descripcion || i.codigo}
-                  className={`h-20 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition-all ${fondoSel?.url === i.url ? 'border-gold ring-2 ring-gold/40' : 'border-gray-300 hover:border-brand'}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={porNuestroOrigen(i.url)} alt="" className="h-full w-full object-cover" />
-                </button>
-              ))}
+              {imagenesFiltradas.slice(0, 60).map(i => {
+                const n = tomasSel.findIndex(t => t.url === i.url) + 1
+                return (
+                  <button key={i.id} type="button" onClick={() => agregarToma('imagen', i.url)}
+                    title={i.descripcion || i.codigo}
+                    className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition-all ${n ? 'border-gold ring-2 ring-gold/40' : 'border-gray-300 hover:border-brand'}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={porNuestroOrigen(i.url)} alt="" className="h-full w-full object-cover" />
+                    {n > 0 && <span className="absolute left-0 top-0 rounded-br bg-brand px-1 text-[10px] font-bold text-white">{n}</span>}
+                  </button>
+                )
+              })}
               {imagenesFiltradas.length === 0 && (
                 <p className="text-xs text-gray-400">
                   {imagenes.length === 0 ? 'El banco de imágenes está vacío.' : 'No hay imágenes en esta categoría.'}
@@ -548,13 +596,17 @@ export default function VideoPanel() {
               <Video className="h-3.5 w-3.5" aria-hidden="true" /> Videos
             </p>
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {videos.slice(0, 24).map(v => (
-                <button key={v.id} type="button" onClick={() => { setFondoSel({ tipo: 'video', url: v.url }); setListo(null) }}
-                  title={v.descripcion || v.codigo}
-                  className={`flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border-2 bg-gray-900 text-white transition-all ${fondoSel?.url === v.url ? 'border-gold ring-2 ring-gold/40' : 'border-gray-300 hover:border-brand'}`}>
-                  <Film className="h-6 w-6" aria-hidden="true" />
-                </button>
-              ))}
+              {videos.slice(0, 24).map(v => {
+                const n = tomasSel.findIndex(t => t.url === v.url) + 1
+                return (
+                  <button key={v.id} type="button" onClick={() => agregarToma('video', v.url)}
+                    title={v.descripcion || v.codigo}
+                    className={`relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border-2 bg-gray-900 text-white transition-all ${n ? 'border-gold ring-2 ring-gold/40' : 'border-gray-300 hover:border-brand'}`}>
+                    <Film className="h-6 w-6" aria-hidden="true" />
+                    {n > 0 && <span className="absolute left-0 top-0 rounded-br bg-brand px-1 text-[10px] font-bold text-white">{n}</span>}
+                  </button>
+                )
+              })}
               {videos.length === 0 && <p className="text-xs text-gray-400">Todavía no hay videos generados.</p>}
             </div>
           </Card>
@@ -662,10 +714,10 @@ export default function VideoPanel() {
                 style={{ aspectRatio: `${dims.w} / ${dims.h}` }} />
             </div>
 
-            {!fondoSel && <p className="mt-2 text-center text-xs text-gray-500">Elige un fondo para ver la pieza.</p>}
+            {tomasSel.length === 0 && <p className="mt-2 text-center text-xs text-gray-500">Elegí las tomas para ver la pieza.</p>}
 
             <div className="mt-3 flex gap-2">
-              <Button type="button" variant="ghost" onClick={reproducir} disabled={!fondoSel || grabando}>
+              <Button type="button" variant="ghost" onClick={reproducir} disabled={tomasSel.length === 0 || grabando}>
                 Reproducir
               </Button>
               <Button type="button" onClick={armarEnServidor} disabled={!puedeArmar || !audio} className="flex-1">

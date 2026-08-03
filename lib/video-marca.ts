@@ -40,18 +40,38 @@ export const FORMATOS: Record<FormatoVideo, { w: number; h: number; label: strin
 export interface PalabraTiempo { palabra: string; desde: number; hasta: number }
 
 /**
- * Fondo de la pieza: una foto del banco o un video ya generado con Veo. Si es
- * video no se le aplica Ken Burns — ya tiene su propio movimiento y sumarle otro
- * lo deja mareado.
+ * Una TOMA de la pieza: una foto del banco o un clip ya generado con Veo.
+ *
+ * La pieza es un MONTAJE, no una foto con audio: varias tomas encadenadas con
+ * fundido y con movimiento propio cada una. Con una sola toma y un zoom sutil
+ * el resultado no se lee como video — pasó en la primera versión.
  */
-export type Fondo =
+export type Toma =
   | { tipo: 'imagen'; el: HTMLImageElement }
   | { tipo: 'video'; el: HTMLVideoElement }
 
+/** Cuánto dura el fundido entre tomas. */
+export const FUNDIDO = 0.7
+
+/**
+ * Reparte `n` tomas a lo largo de la pieza, solapándolas para el fundido.
+ * Cada toma dura lo mismo y ninguna baja de ~2,2 s (menos que eso se ve nervioso).
+ */
+export function planificarTomas(n: number, total: number): Array<{ desde: number; hasta: number }> {
+  const cant = Math.max(1, n)
+  if (cant === 1) return [{ desde: 0, hasta: total }]
+  const dur = Math.max(2.2, (total + (cant - 1) * FUNDIDO) / cant)
+  const paso = dur - FUNDIDO
+  return Array.from({ length: cant }, (_, i) => ({
+    desde: i * paso,
+    hasta: Math.min(total, i * paso + dur),
+  }))
+}
+
 export interface OpcionesVideo {
   formato: FormatoVideo
-  /** Fondo ya cargado (mismo origen, para no ensuciar el canvas). */
-  fondo: Fondo
+  /** Tomas ya cargadas (mismo origen, para no ensuciar el canvas). */
+  tomas: Toma[]
   /** Logo de marca sobre fondo oscuro, ya cargado. */
   logo: HTMLImageElement | null
   titulo: string
@@ -118,26 +138,38 @@ export function dibujarCuadro(ctx: CanvasRenderingContext2D, o: OpcionesVideo, t
   ctx.fillStyle = NAVY
   ctx.fillRect(0, 0, w, h)
 
-  // ── Fondo ────────────────────────────────────────────────────────────────
-  // Foto: Ken Burns lentísimo. Video de Veo: se deja tal cual (ya tiene su
-  // propio movimiento; encimarle un zoom lo deja mareado).
-  const avance = Math.min(1, t / total)
-  const esVideo = o.fondo.tipo === 'video'
-  const src = o.fondo.el
-  // `naturalWidth` en el navegador, `width` en el canvas de Node (@napi-rs/canvas):
-  // esta misma función dibuja la vista previa Y el MP4 del servidor.
-  const dim = src as unknown as { naturalWidth?: number; width?: number; naturalHeight?: number; height?: number }
-  const fw = esVideo ? (src as HTMLVideoElement).videoWidth : (dim.naturalWidth || dim.width || 0)
-  const fh = esVideo ? (src as HTMLVideoElement).videoHeight : (dim.naturalHeight || dim.height || 0)
-  if (fw > 0 && fh > 0) {
-    const escala = esVideo ? 1 : 1.0 + 0.07 * avance
+  // ── Montaje de tomas ─────────────────────────────────────────────────────
+  // Cada toma tiene su propio movimiento (zoom alternado in/out + paneo suave)
+  // y entra con fundido sobre la anterior. Un clip de Veo no lleva zoom: ya se
+  // mueve solo y encimarle otro movimiento lo deja mareado.
+  const plan = planificarTomas(o.tomas.length, total)
+  o.tomas.forEach((toma, i) => {
+    const { desde, hasta } = plan[i]
+    if (t < desde - 0.01 || t > hasta) return
+    const esVideo = toma.tipo === 'video'
+    const src = toma.el
+    // `naturalWidth` en el navegador, `width` en el canvas de Node
+    // (@napi-rs/canvas): esta función dibuja la vista previa Y el MP4.
+    const dim = src as unknown as { naturalWidth?: number; width?: number; naturalHeight?: number; height?: number }
+    const fw = esVideo ? (src as HTMLVideoElement).videoWidth : (dim.naturalWidth || dim.width || 0)
+    const fh = esVideo ? (src as HTMLVideoElement).videoHeight : (dim.naturalHeight || dim.height || 0)
+    if (fw <= 0 || fh <= 0) return
+
+    const p = Math.min(1, Math.max(0, (t - desde) / Math.max(0.1, hasta - desde)))
+    // Las tomas pares acercan y las impares alejan: el corte se nota y la pieza
+    // deja de parecer una foto quieta.
+    const acerca = i % 2 === 0
+    const escala = esVideo ? 1 : (acerca ? 1.04 + 0.12 * p : 1.16 - 0.12 * p)
     const rel = Math.max(w / fw, h / fh) * escala
     const iw = fw * rel
     const ih = fh * rel
-    // Deriva vertical mínima: da vida sin que se note el movimiento.
-    const dy = (h - ih) / 2 - (esVideo ? 0 : h * 0.015 * avance)
-    ctx.drawImage(src, (w - iw) / 2, dy, iw, ih)
-  }
+    const paneo = esVideo ? 0 : (acerca ? 1 : -1) * h * 0.03 * (p - 0.5)
+    const alfa = i === 0 ? 1 : Math.min(1, (t - desde) / FUNDIDO)
+
+    ctx.globalAlpha = alfa
+    ctx.drawImage(src, (w - iw) / 2, (h - ih) / 2 + paneo, iw, ih)
+    ctx.globalAlpha = 1
+  })
 
   // Velo de marca: baja el contraste de la foto y unifica la paleta.
   ctx.fillStyle = 'rgba(20, 60, 100, 0.30)'
@@ -152,8 +184,11 @@ export function dibujarCuadro(ctx: CanvasRenderingContext2D, o: OpcionesVideo, t
 
   // ── Título ───────────────────────────────────────────────────────────────
   const tituloIn = suave((t - 0.6) / 0.9)
-  const finTitulo = Math.max(0, o.duracionAudio - CIERRE * 0.2)
-  const tituloOut = 1 - suave((t - finTitulo) / 0.6)
+  // El título es una PLACA de apertura, no un rótulo permanente: se va a los
+  // ~7 s. Quedándose toda la pieza competía con los subtítulos y, con montaje,
+  // dejaba la sensación de que nada cambiaba.
+  const finTitulo = Math.min(7, Math.max(3.5, o.duracionAudio - 2))
+  const tituloOut = 1 - suave((t - finTitulo) / 0.7)
   const alfaTitulo = Math.min(tituloIn, tituloOut)
   if (alfaTitulo > 0.01 && o.titulo) {
     const size = Math.round(w * 0.072)

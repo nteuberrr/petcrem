@@ -28,11 +28,14 @@ export interface VideoPendiente {
   /** URL de la cama musical (vacío = sin música). */
   musica_url: string
   clima: string
-  /** Fondo elegido del banco. */
+  /** Primera toma (compatibilidad con los pendientes viejos). */
   fondo_url: string
   fondo_tipo: 'imagen' | 'video'
+  /** Códigos de todas las tomas, separados por coma. */
   fondo_codigo: string
   fondo_grupo: string
+  /** Montaje completo, en orden. */
+  tomas: Array<{ url: string; tipo: 'imagen' | 'video' }>
   formato: 'reel' | 'feed'
   /** MP4 ya armado en el servidor (vacío si el render falló y hay que armarlo a mano). */
   video_url: string

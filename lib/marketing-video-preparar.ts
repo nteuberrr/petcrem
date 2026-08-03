@@ -6,6 +6,7 @@ import { generarLocucion, generarMusica, CLIMAS, VOZ_POR_DEFECTO } from './eleve
 import { getFromR2, uploadToR2 } from './cloudflare-r2'
 import { agregarPendiente, type VideoPendiente } from './marketing-video-pendientes'
 import { armarVideo } from './marketing-video-armar'
+import { generarMetraje } from './marketing-metraje'
 
 /**
  * Deja un video PREPARADO para que el dueño solo apriete "Armar video".
@@ -51,6 +52,12 @@ export interface PrepararVideoArgs {
    * Prohibido para instalaciones (ver la regla dura de arriba).
    */
   generar_prompt?: string
+  /**
+   * Escenas de METRAJE REAL a generar con Veo (en inglés), que se intercalan
+   * con las fotos. Ej.: "a golden retriever running towards its owner in a
+   * park". Prohibido para instalaciones.
+   */
+  metraje?: string[]
   creadoPor?: string
 }
 
@@ -67,7 +74,12 @@ export async function prepararVideo(a: PrepararVideoArgs): Promise<{ pendiente: 
   // 2) Fondo: SIEMPRE del banco.
   const [imgs, vids] = await Promise.all([listarImagenes(), listarVideos()])
   const codigo = (a.fondo_codigo || '').trim().toLowerCase()
-  let fondo: { url: string; tipo: 'imagen' | 'video'; codigo: string; grupo: string } | null = null
+  type Toma = { url: string; tipo: 'imagen' | 'video'; codigo: string; grupo: string }
+  let fondo: Toma | null = null
+  // Tomas siguientes del montaje (la primera es `fondo`).
+  const tomasExtra: Toma[] = []
+  // Una toma cada ~5 s: suficiente para que se lea como video sin marear.
+  const tomasPedidas = Math.min(6, Math.max(2, Math.round((a.segundos || 28) / 5)))
 
   if (codigo) {
     const img = imgs.find(i => (i.codigo || '').toLowerCase() === codigo)
@@ -107,6 +119,10 @@ export async function prepararVideo(a: PrepararVideoArgs): Promise<{ pendiente: 
     // Se prefiere una destacada con estrella: es la que el equipo eligió como buena.
     const elegida = candidatas.find(i => i.favorita) || candidatas[0]
     fondo = { url: elegida.url, tipo: 'imagen', codigo: elegida.codigo, grupo: elegida.grupo || 'otro' }
+    // El resto del MONTAJE: más fotos del mismo grupo. Con una sola toma la
+    // pieza se ve como una foto con audio, no como un video.
+    const extras = candidatas.filter(i => i.url !== elegida.url).slice(0, Math.max(0, tomasPedidas - 1))
+    for (const e of extras) tomasExtra.push({ url: e.url, tipo: 'imagen', codigo: e.codigo, grupo: e.grupo || 'otro' })
   }
 
   // 3) Guardarraíl: si el guion habla de nuestras instalaciones, la foto tiene
@@ -122,6 +138,28 @@ export async function prepararVideo(a: PrepararVideoArgs): Promise<{ pendiente: 
     const real = hay.find(i => i.favorita) || hay[0]
     fondo = { url: real.url, tipo: 'imagen', codigo: real.codigo, grupo: GRUPO_REAL }
     avisos.push(`El guion habla de nuestras instalaciones, así que usé la foto real ${real.codigo} del banco (grupo instalaciones) en vez de la que estaba elegida.`)
+  }
+
+  // 3.b) Metraje real: los clips de Veo abren el montaje (son lo que más
+  //      "mueve") y las fotos completan. Si no llegan a tiempo, la pieza sale
+  //      igual con fotos y los clips quedan en el banco.
+  const escenas = (a.metraje || []).map(s => String(s || '').trim()).filter(Boolean).slice(0, 2)
+  if (escenas.length) {
+    if ((a.grupo || '').trim().toLowerCase() === GRUPO_REAL) {
+      throw new Error('No se genera metraje de nuestras instalaciones: esas son fotos reales del banco.')
+    }
+    const { clips, avisos: avisosClips } = await generarMetraje(
+      escenas.map(prompt => ({ prompt, vertical: a.formato !== 'feed' })),
+      { creadoPor: a.creadoPor },
+    )
+    avisos.push(...avisosClips)
+    if (clips.length) {
+      // El primer clip pasa a ser la toma de apertura.
+      const comoTomas = clips.map(c => ({ url: c.url, tipo: 'video' as const, codigo: c.codigo, grupo: 'metraje' }))
+      tomasExtra.unshift(fondo, ...comoTomas.slice(1))
+      fondo = comoTomas[0]
+      avisos.push(`Metraje real: ${clips.map(c => c.codigo).join(', ')} (quedaron en el banco de videos).`)
+    }
   }
 
   // 4) Locución.
@@ -157,8 +195,7 @@ export async function prepararVideo(a: PrepararVideoArgs): Promise<{ pendiente: 
       guion: g.guion,
       palabras: loc.palabras,
       duracion: loc.duracion,
-      fondoUrl: fondo.url,
-      fondoTipo: fondo.tipo,
+      tomas: [fondo, ...tomasExtra].map(t => ({ url: t.url, tipo: t.tipo })),
       musicaUrl,
       locucionUrl,
       nombre: g.titulo,
@@ -179,8 +216,9 @@ export async function prepararVideo(a: PrepararVideoArgs): Promise<{ pendiente: 
     clima: climaFinal?.key || '',
     fondo_url: fondo.url,
     fondo_tipo: fondo.tipo,
-    fondo_codigo: fondo.codigo,
+    fondo_codigo: [fondo, ...tomasExtra].map(t => t.codigo).filter(Boolean).join(', '),
     fondo_grupo: fondo.grupo,
+    tomas: [fondo, ...tomasExtra].map(t => ({ url: t.url, tipo: t.tipo })),
     formato: a.formato === 'feed' ? 'feed' : 'reel',
     video_url: videoUrl,
     creado_por: a.creadoPor || '',
