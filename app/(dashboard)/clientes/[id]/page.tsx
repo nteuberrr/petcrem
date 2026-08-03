@@ -18,7 +18,7 @@ import { aplicaReglaAuto, cremacionLlevaRecargoFueraHorario } from '@/lib/adicio
 import { retiroPendiente, ahoraEnChile } from '@/lib/ficha-retiro'
 import { esAdmin } from '@/lib/roles'
 import { pidioVideo } from '@/lib/video-solicitado'
-import { datosEtiqueta, formatearTelefono, ETIQUETA_MM } from '@/lib/etiqueta-datos'
+import { datosEtiqueta, formatearTelefono, ETIQUETA_PT, L } from '@/lib/etiqueta-datos'
 
 type Certificado = {
   id: string
@@ -2251,41 +2251,50 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       <Modal open={etiquetaOpen} onClose={() => setEtiquetaOpen(false)} title="Etiqueta de despacho" size="xl">
         {(() => {
           const d = datosEtiqueta(cliente as unknown as Record<string, unknown>)
-          const PX = 5.6 // px por mm en la vista previa
+          // Escala de la vista previa: 2 px por punto PDF. Todas las medidas salen
+          // de las MISMAS constantes que dibuja el generador (lib/etiqueta-datos),
+          // así lo que se ve acá es exactamente lo que se imprime.
+          const S = 2
+          const pt = (n: number) => n * S
+          // El generador achica los valores cuando la dirección se va a dos líneas
+          // (ver el bucle de encogido en lib/etiqueta-despacho). Acá no se puede
+          // medir texto, así que se aproxima por largo: ~45 caracteres es una línea.
+          const e = d.direccion.length > 45 ? 0.84 : 1
+          const campos = [
+            { rotulo: 'MASCOTA', valor: d.nombre_mascota, size: L.mascota * e, peso: 'font-bold', lineas: 1 },
+            { rotulo: 'TUTOR', valor: d.nombre_tutor, size: L.tutor * e, peso: 'font-semibold', lineas: 1 },
+            { rotulo: 'DIRECCIÓN', valor: d.direccion, size: L.direccion * e, peso: 'font-semibold', lineas: 2 },
+            { rotulo: 'TELÉFONO', valor: formatearTelefono(d.telefono), size: L.telefono * e, peso: 'font-semibold', lineas: 1 },
+          ]
           return (
             <div className="space-y-4">
               <div className="flex justify-center">
                 <div
-                  className="bg-white text-black border-2 border-gray-400 shadow-md overflow-hidden"
-                  style={{ width: ETIQUETA_MM.ancho * PX, height: ETIQUETA_MM.alto * PX, padding: 6 * PX / 2.4 }}
+                  className="flex flex-col bg-white text-black border-2 border-gray-400 shadow-md overflow-hidden"
+                  style={{ width: pt(ETIQUETA_PT.ancho), height: pt(ETIQUETA_PT.alto), padding: pt(L.margen) }}
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center justify-between" style={{ gap: pt(8) }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/certificates/logo_alma_animal.png" alt="Alma Animal"
-                      className="h-6 w-auto grayscale contrast-200" />
-                    <div className="text-right leading-none">
-                      <p className="font-bold tracking-tight" style={{ fontSize: 17 }}>{d.codigo || '—'}</p>
-                      <p className="text-gray-500 mt-0.5" style={{ fontSize: 7 }}>CÓDIGO</p>
+                      className="w-auto grayscale contrast-200 shrink-0"
+                      style={{ height: pt(L.logoAlto), maxWidth: pt(L.logoAnchoMax) }} />
+                    <div className="text-right leading-none min-w-0">
+                      <p className="font-bold tracking-tight truncate" style={{ fontSize: pt(L.codigo) }}>{d.codigo || '—'}</p>
+                      <p className="text-gray-500" style={{ fontSize: pt(L.codigoRotulo), marginTop: pt(1) }}>CÓDIGO</p>
                     </div>
                   </div>
-                  <div className="border-t-2 border-black my-1.5" />
-                  <div className="space-y-1.5 leading-tight">
-                    <div>
-                      <p className="text-gray-500" style={{ fontSize: 7 }}>MASCOTA</p>
-                      <p className="font-bold truncate" style={{ fontSize: 13 }}>{d.nombre_mascota || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500" style={{ fontSize: 7 }}>TUTOR</p>
-                      <p className="font-semibold truncate" style={{ fontSize: 11 }}>{d.nombre_tutor || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500" style={{ fontSize: 7 }}>DIRECCIÓN</p>
-                      <p className="font-semibold line-clamp-2" style={{ fontSize: 9 }}>{d.direccion || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500" style={{ fontSize: 7 }}>TELÉFONO</p>
-                      <p className="font-semibold" style={{ fontSize: 11 }}>{formatearTelefono(d.telefono) || '—'}</p>
-                    </div>
+                  <div className="border-t-2 border-black" style={{ marginTop: pt(L.reglaGap), marginBottom: pt(L.trasRegla) }} />
+                  {/* justify-between reparte el sobrante igual que el generador */}
+                  <div className="flex flex-1 flex-col justify-between">
+                    {campos.map(c => (
+                      <div key={c.rotulo} className="leading-none">
+                        <p className="text-gray-500" style={{ fontSize: pt(L.rotulo) }}>{c.rotulo}</p>
+                        <p className={`${c.peso} ${c.lineas > 1 ? 'line-clamp-2' : 'truncate'}`}
+                          style={{ fontSize: pt(c.size), marginTop: pt(L.rotuloGap), lineHeight: 1.05 }}>
+                          {c.valor || '—'}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>

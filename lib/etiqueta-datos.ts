@@ -7,6 +7,36 @@
 /** Etiqueta de despacho: 80 mm de ancho × 50 mm de alto (se imprime vertical). */
 export const ETIQUETA_MM = { ancho: 80, alto: 50 }
 
+/** 1 mm en puntos PDF. */
+export const MM = 72 / 25.4
+/** Lienzo de la etiqueta en puntos: 226,8 × 141,7. */
+export const ETIQUETA_PT = { ancho: ETIQUETA_MM.ancho * MM, alto: ETIQUETA_MM.alto * MM }
+
+/**
+ * Medidas del contenido, en PUNTOS PDF. Fuente única: el generador dibuja con
+ * estos números y la vista previa del navegador los multiplica por su escala
+ * (px por punto). Antes la vista previa usaba los puntos como si fueran píxeles
+ * y se veía a mitad de tamaño, con media etiqueta vacía.
+ */
+export const L = {
+  margen: 6,
+  logoAlto: 32,        // el logo (706×807, casi cuadrado) manda el alto de la cabecera
+  logoAnchoMax: 120,
+  codigo: 25,          // código de servicio: el dato que se lee de lejos
+  codigoLargo: 19,     // si no entra a 25 pt
+  codigoRotulo: 6,
+  rotulo: 6,           // "MASCOTA", "TUTOR"…
+  rotuloGap: 2,        // entre el rótulo y su valor
+  reglaGap: 4,         // entre la cabecera y la línea divisoria
+  trasRegla: 5,        // entre la línea y el primer campo
+  interlineado: 2,     // entre líneas de un mismo valor
+  huecoMin: 2,         // separación mínima entre campos
+  mascota: 15,
+  tutor: 12,
+  direccion: 9.5,
+  telefono: 12,
+} as const
+
 export interface EtiquetaDespachoData {
   codigo: string
   nombre_mascota: string
