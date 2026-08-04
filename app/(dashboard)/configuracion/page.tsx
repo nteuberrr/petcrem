@@ -13,12 +13,13 @@ import ConsumoIA from '@/components/ConsumoIA'
 import AvisosConfig from '@/components/AvisosConfig'
 import DescuentosConvenios from '@/components/DescuentosConvenios'
 import PerfilesEditor from '@/components/PerfilesEditor'
+import EtiquetasImprimir from '@/components/EtiquetasImprimir'
 import { fmtPrecio, fmtNumero } from '@/lib/format'
 import { formatDate, formatHora } from '@/lib/dates'
 import { esAdmin, esAdminTotal, ROL_LABEL, LABEL_ADMIN } from '@/lib/roles'
 import { comunasDeServicio, etiquetaRegla } from '@/lib/adicionales-auto'
 
-const TABS = ['Precios', 'Artículos', 'Descuentos', 'Descuentos Convenios', 'Jornada', 'Configuración Avanzada'] as const
+const TABS = ['Precios', 'Artículos', 'Descuentos', 'Descuentos Convenios', 'Jornada', 'Etiquetas', 'Configuración Avanzada'] as const
 type Tab = typeof TABS[number]
 type PrecioSubTab = 'general' | 'convenio' | 'especial'
 type ArticuloTab = 'servicios' | 'bodega' | 'otros'
@@ -1109,6 +1110,10 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
 
       {/* Comisiones por derivación: SOLO el dueño (define pagos y escribe costo en el EERR). */}
       {tab === 'Descuentos Convenios' && isAdminTotal && <DescuentosConvenios />}
+
+      {/* Etiquetas en blanco (ficha de retiro 100×150, sticker del logo 60×60).
+          La de despacho de una mascota se imprime desde su ficha, no acá. */}
+      {tab === 'Etiquetas' && <EtiquetasImprimir />}
 
       {tab === 'Jornada' && (
         <div className="space-y-6 max-w-3xl">

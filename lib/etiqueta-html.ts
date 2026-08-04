@@ -32,8 +32,17 @@ const mm = (pt: number) => `${(pt / MM).toFixed(2)}mm`
 const BASE_PT = 10
 const em = (pt: number) => `${(pt / BASE_PT).toFixed(3)}em`
 
-export function etiquetaHtml(d: EtiquetaDespachoData, opts?: { logoUrl?: string }): string {
-  const logo = opts?.logoUrl || '/certificates/logo_alma_animal.png'
+/**
+ * `ajustar` (por defecto sí) aplica la corrección de posición de la impresora.
+ * La VISTA PREVIA lo pasa en `false`: compensa un defecto del hardware, no es
+ * parte del diseño, y en pantalla solo se vería como una etiqueta descuadrada.
+ */
+export function etiquetaHtml(d: EtiquetaDespachoData, opts?: { logoUrl?: string; ajustar?: boolean }): string {
+  // Logo horizontal recortado y en negro puro: el lockup ancho aprovecha mejor
+  // la cabecera de la etiqueta que el vertical. Lo genera
+  // [scripts/preparar-logo-etiqueta.ts](scripts/preparar-logo-etiqueta.ts).
+  const logo = opts?.logoUrl || '/brand/logo-etiqueta.png'
+  const ajuste = opts?.ajustar === false ? { x: 0, y: 0 } : AJUSTE
   const codigo = (d.codigo || '—').toUpperCase()
   // El código es lo que se lee de lejos; si es largo no debe comerse al logo.
   const codigoPt = codigo.length > 9 ? L.codigoLargo : L.codigo
@@ -62,7 +71,7 @@ export function etiquetaHtml(d: EtiquetaDespachoData, opts?: { logoUrl?: string 
     color: #000; background: #fff;
     /* El padding izquierdo/superior lleva la corrección de la impresora (AJUSTE):
        imprime corrida a la izquierda y sin esto se come la primera letra. */
-    padding: ${mm(L.margen + AJUSTE.y)} ${mm(L.margen)} ${mm(L.margen)} ${mm(L.margen + AJUSTE.x)};
+    padding: ${mm(L.margen + ajuste.y)} ${mm(L.margen)} ${mm(L.margen)} ${mm(L.margen + ajuste.x)};
     display: flex; flex-direction: column; overflow: hidden;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }

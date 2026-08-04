@@ -20,6 +20,7 @@ import { esAdmin } from '@/lib/roles'
 import { pidioVideo } from '@/lib/video-solicitado'
 import { datosEtiqueta } from '@/lib/etiqueta-datos'
 import { etiquetaHtml } from '@/lib/etiqueta-html'
+import { imprimirHtml } from '@/lib/imprimir-html'
 
 type Certificado = {
   id: string
@@ -804,24 +805,16 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
    * sale sola en la impresora predeterminada; si no, aparece el diálogo del
    * navegador — eso último no se puede evitar desde una web.
    */
-  const imprimirEtiqueta = () => {
+  const imprimirEtiqueta = async () => {
     if (!cliente || imprimiendoEtiqueta) return
     setImprimiendoEtiqueta(true)
     try {
-      const iframe = document.createElement('iframe')
-      iframe.setAttribute('aria-hidden', 'true')
-      // Fuera de pantalla pero con el tamaño real: así el ajuste automático de
-      // texto mide sobre la etiqueta de verdad y no sobre una caja de 1 px.
-      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:80mm;height:50mm;border:0'
-      iframe.onload = () => {
-        iframe.contentWindow?.focus()
-        iframe.contentWindow?.print()
-        setTimeout(() => iframe.remove(), 120000)
-      }
-      iframe.srcdoc = etiquetaHtml(datosEtiqueta(cliente as unknown as Record<string, unknown>), {
-        logoUrl: `${window.location.origin}/certificates/logo_alma_animal.png`,
-      })
-      document.body.appendChild(iframe)
+      await imprimirHtml(
+        etiquetaHtml(datosEtiqueta(cliente as unknown as Record<string, unknown>), {
+          logoUrl: `${window.location.origin}/brand/logo-etiqueta.png`,
+        }),
+        { ancho: 80, alto: 50 },
+      )
       setEtiquetaOpen(false)
       mostrarGuardado('Etiqueta enviada a la impresora')
     } catch (e) {
@@ -2319,7 +2312,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   style={{ width: ancho * Z, height: alto * Z }}>
                   <iframe
                     title="Vista previa de la etiqueta"
-                    srcDoc={etiquetaHtml(d)}
+                    srcDoc={etiquetaHtml(d, { ajustar: false })}
                     className="border-0 block"
                     style={{ width: ancho, height: alto, transform: `scale(${Z})`, transformOrigin: 'top left' }}
                   />

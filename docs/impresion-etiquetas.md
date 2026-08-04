@@ -65,6 +65,57 @@ powershell -ExecutionPolicy Bypass -File scripts\diagnostico-impresora.ps1
 powershell -ExecutionPolicy Bypass -File scripts\diagnostico-impresora.ps1 -Aplicar
 ```
 
+## El tamaño de papel se ajusta solo (ayudante de impresión)
+
+Hay tres formatos de etiqueta y **cada uno necesita su tamaño de papel puesto en
+la impresora**. Un navegador no puede tocar el driver, así que de eso se encarga
+un ayudante que corre en el mismo PC:
+
+```powershell
+# Instalar: arranca ahora y queda arrancando con Windows
+powershell -ExecutionPolicy Bypass -File scripts\ayudante-impresion.ps1 -Instalar
+
+# Sacarlo
+powershell -ExecutionPolicy Bypass -File scripts\ayudante-impresion.ps1 -Desinstalar
+```
+
+Con eso, cada vez que se imprime desde la app, el papel queda en el tamaño de esa
+etiqueta antes de mandar el trabajo — incluido el caso importante: **volver solo a
+80 × 50 al imprimir una etiqueta de despacho**, aunque antes se hayan impreso
+fichas. Sin el ayudante todo sigue funcionando; solo hay que poner el papel a
+mano (ver abajo).
+
+Cómo está hecho: escucha en `127.0.0.1:47811` (nadie de la red llega), solo
+responde a las páginas de Alma Animal, y lo único que sabe hacer es cambiar el
+tamaño de papel de la impresora predeterminada. La app lo llama desde
+[lib/imprimir-html.ts](../lib/imprimir-html.ts) con un tiempo de espera corto: si
+no está, imprime igual.
+
+Si el tamaño no existe en el driver (hoy pasa con el 60 × 60 del sticker), la app
+lo avisa en pantalla en vez de imprimir mal en silencio.
+
+## Cambiar el papel a mano
+
+Sirve si no se instaló el ayudante, o para dejarlo puesto antes de una tanda:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\papel.ps1 80x50     # despacho
+powershell -ExecutionPolicy Bypass -File scripts\papel.ps1 100x150   # ficha de retiro
+powershell -ExecutionPolicy Bypass -File scripts\papel.ps1 60x60     # sticker del logo
+powershell -ExecutionPolicy Bypass -File scripts\papel.ps1           # muestra el actual
+```
+
+Para no escribirlo nunca más, `scripts\papel.ps1 -Accesos` deja los tres como
+accesos directos en el Escritorio: doble clic al que corresponda y listo.
+
+Si no se cambia, la etiqueta sale mal de forma llamativa: mandarle un diseño de
+100 × 150 a un papel de 80 × 50 hace que Windows lo **gire y lo achique a la
+mitad**, y queda un bloque chico de tinta en una esquina.
+
+**Ojo con el sticker de 60 × 60:** el driver GD985 no trae ese tamaño (tiene 40,
+48, 72, 76, 80, 94, 100 y 108 de ancho, ninguno de 60). Hay que crearlo una vez a
+mano como tamaño personalizado en las preferencias de la impresora.
+
 (En el equipo del crematorio el papel estaba en **48 × 60 mm**; ahí estaba el
 problema.) El script escribe el DEVMODE del driver: no hay cmdlet para esto,
 `Set-PrintConfiguration -PaperSize` solo acepta tamaños estándar tipo A4 o Letter,

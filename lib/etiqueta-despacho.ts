@@ -44,7 +44,8 @@ export async function generarEtiquetaDespacho(data: EtiquetaDespachoData): Promi
   // limpia en una impresora térmica en blanco y negro.
   const codigo = (data.codigo || '—').toUpperCase()
   let codSize = codigo.length > 9 ? L.codigoLargo : L.codigo
-  const logoPath = join(process.cwd(), 'public', 'certificates', 'logo_alma_animal.png')
+  // El mismo logo horizontal en negro que usa el HTML que se imprime.
+  const logoPath = join(process.cwd(), 'public', 'brand', 'logo-etiqueta.png')
   const logo = existsSync(logoPath) ? await doc.embedPng(readFileSync(logoPath)) : null
   const logoH = logo ? Math.min(L.logoAlto, (L.logoAnchoMax / logo.width) * logo.height) : 0
   const logoW = logo ? (logo.width / logo.height) * logoH : 0
