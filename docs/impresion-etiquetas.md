@@ -91,8 +91,10 @@ tamaño de papel de la impresora predeterminada. La app lo llama desde
 [lib/imprimir-html.ts](../lib/imprimir-html.ts) con un tiempo de espera corto: si
 no está, imprime igual.
 
-Si el tamaño no existe en el driver (hoy pasa con el 60 × 60 del sticker), la app
-lo avisa en pantalla en vez de imprimir mal en silencio.
+Si el driver no trae un tamaño, **se crea solo** como formulario de Windows
+(`AddForm`) y recién ahí se aplica — así se resolvió el 60 × 60 del sticker, que
+el GD985 no traía. Si aun así no se puede, la app lo avisa en pantalla en vez de
+imprimir mal en silencio.
 
 ## Cambiar el papel a mano
 
@@ -106,15 +108,16 @@ powershell -ExecutionPolicy Bypass -File scripts\papel.ps1           # muestra e
 ```
 
 Para no escribirlo nunca más, `scripts\papel.ps1 -Accesos` deja los tres como
-accesos directos en el Escritorio: doble clic al que corresponda y listo.
+accesos directos en el Escritorio: doble clic al que corresponda y listo. (Con el
+ayudante instalado esto casi no hace falta: se hace desde la propia página.)
 
 Si no se cambia, la etiqueta sale mal de forma llamativa: mandarle un diseño de
 100 × 150 a un papel de 80 × 50 hace que Windows lo **gire y lo achique a la
 mitad**, y queda un bloque chico de tinta en una esquina.
 
-**Ojo con el sticker de 60 × 60:** el driver GD985 no trae ese tamaño (tiene 40,
-48, 72, 76, 80, 94, 100 y 108 de ancho, ninguno de 60). Hay que crearlo una vez a
-mano como tamaño personalizado en las preferencias de la impresora.
+**Sobre el 60 × 60 del sticker:** el driver GD985 no lo traía (tiene 40, 48, 72,
+76, 80, 94, 100 y 108 de ancho, ninguno de 60). Ya está creado como formulario de
+Windows, y si algún día falta se vuelve a crear solo al pedirlo.
 
 (En el equipo del crematorio el papel estaba en **48 × 60 mm**; ahí estaba el
 problema.) El script escribe el DEVMODE del driver: no hay cmdlet para esto,

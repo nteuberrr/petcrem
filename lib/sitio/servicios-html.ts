@@ -53,6 +53,12 @@ export function renderServiciosWeb(servicios: Serv[], desdePorSlug: Record<strin
   const pub = serviciosPublicados(servicios)
   if (pub.length === 0) return ''
   const css = '<style>'
+    // Envoltorio OBLIGATORIO: el contenedor de Webflow donde se inyecta esto
+    // (`.top-margin`) es display:flex. Mientras la grilla era su único hijo no se
+    // notaba, pero al sumar la franja Express quedaron como DOS COLUMNAS: la
+    // grilla apretada a 82 px y el Express al lado (roto en móvil, 2026-08-03).
+    // Con un solo hijo a lo ancho, da igual si el padre es flex o block.
+    + '.aa-serv-wrap{display:block;width:100%;flex:1 1 100%;min-width:0}'
     + '.aa-serv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:24px;margin-top:8px}'
     + '.aa-serv-card{display:flex;flex-direction:column;background:#fff;border:1px solid #e6e0d6;border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(20,60,100,.06);text-decoration:none;transition:transform .15s ease,box-shadow .15s ease}'
     + '.aa-serv-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(20,60,100,.14)}'
@@ -83,7 +89,11 @@ export function renderServiciosWeb(servicios: Serv[], desdePorSlug: Record<strin
     + '<small>Un adicional para quien necesita las cenizas antes. Escríbenos y lo coordinamos.</small></div>'
     + `<a class="aa-express-chip" href="${esc(waLink('Hola, estoy interesado en el servicio de cremación express'))}" target="_blank" rel="noopener">Lo quiero por WhatsApp</a>`
     + '</div>'
-  return css + `<div class="aa-serv-grid">${pub.map(s => tarjeta(s, desdePorSlug[s.slug])).join('')}</div>` + express
+  return css
+    + '<div class="aa-serv-wrap">'
+    + `<div class="aa-serv-grid">${pub.map(s => tarjeta(s, desdePorSlug[s.slug])).join('')}</div>`
+    + express
+    + '</div>'
 }
 
 /**

@@ -48,13 +48,16 @@ export const FORMATOS: Record<FormatoEtiqueta, {
     ancho: 60,
     alto: 60,
     /**
-     * Medido en papel, desde el logo CENTRADO en la hoja: 3,4 mm a la izquierda
-     * y 5,5 mm hacia abajo. Negativo = izquierda / arriba.
-     * El de abajo se topa antes de llegar (el logo ya roza el borde inferior):
-     * el script lo corre hasta donde da sin achicarlo. Bajarlo más obliga a
-     * achicar el logo, y eso se descartó.
+     * Vuelto a la corrección base (2026-08-03). Los valores anteriores
+     * (−3,4 / +5,5) se habían calibrado imprimiendo cuando el driver NO tenía
+     * el papel de 60 × 60 y el sticker salía sobre un tamaño que no era el
+     * suyo: compensaban ese desajuste, no el de la impresora. Ya creado el
+     * 60 × 60 real, se arranca de cero y se recalibra con una impresión.
+     *
+     * Negativo = izquierda / arriba. El script de abajo topa el movimiento
+     * contra el borde, así que nunca corta ni achica el logo.
      */
-    ajuste: { x: -3.4, y: 5.5 },
+    ajuste: { x: AJUSTE.x / MM, y: AJUSTE.y / MM },
   },
 }
 

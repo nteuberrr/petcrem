@@ -67,6 +67,49 @@ public static class Papel {
 '@
 }
 
+# Cuando el driver no trae un tamaño (el GD985 no tiene 60 × 60, por ejemplo),
+# se crea como FORMULARIO de Windows y ahí aparece en su lista. También sin
+# cmdlet: AddForm de winspool. Las medidas van en micras (milésimas de mm).
+if (-not ([System.Management.Automation.PSTypeName]'Formularios').Type) {
+  Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+[StructLayout(LayoutKind.Sequential)] public struct SIZEL { public int cx, cy; }
+[StructLayout(LayoutKind.Sequential)] public struct RECTL { public int left, top, right, bottom; }
+[StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+public struct FORM_INFO_1 {
+  public uint Flags;
+  [MarshalAs(UnmanagedType.LPWStr)] public string pName;
+  public SIZEL Size;
+  public RECTL ImageableArea;
+}
+public static class Formularios {
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern bool OpenPrinter(string src, out IntPtr h, IntPtr pd);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool ClosePrinter(IntPtr h);
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern bool AddForm(IntPtr h, uint level, ref FORM_INFO_1 form);
+  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern bool DeleteForm(IntPtr h, string name);
+
+  public static string Crear(string printer, string nombre, int anchoMm, int altoMm) {
+    IntPtr h;
+    if (!OpenPrinter(printer, out h, IntPtr.Zero)) return "OpenPrinter fallo (" + Marshal.GetLastWin32Error() + ")";
+    try {
+      var f = new FORM_INFO_1();
+      f.Flags = 0;                    // FORM_USER
+      f.pName = nombre;
+      f.Size = new SIZEL { cx = anchoMm * 1000, cy = altoMm * 1000 };
+      f.ImageableArea = new RECTL { left = 0, top = 0, right = anchoMm * 1000, bottom = altoMm * 1000 };
+      DeleteForm(h, nombre);          // por si quedó a medias de un intento anterior
+      if (!AddForm(h, 1, ref f)) return "AddForm fallo (" + Marshal.GetLastWin32Error() + ")";
+      return "OK";
+    } finally { ClosePrinter(h); }
+  }
+}
+'@
+}
+
 # Centésimas de pulgada -> mm (así reporta PrinterSettings).
 function ConvertTo-Mm([double]$centesimas) { [math]::Round($centesimas * 0.254, 1) }
 
@@ -107,13 +150,27 @@ function Get-PapelesDisponibles([string]$impresora) {
   la etiqueta y la parte en dos.
 #>
 function Set-Papel([string]$impresora, [double]$ancho, [double]$alto) {
+  $buscar = { param($lista) $lista | Where-Object { [math]::Abs($_.Ancho - $ancho) -le 2 -and [math]::Abs($_.Alto - $alto) -le 2 } | Select-Object -First 1 }
   $medias = Get-PapelesDisponibles $impresora
-  $destino = $medias | Where-Object { [math]::Abs($_.Ancho - $ancho) -le 2 -and [math]::Abs($_.Alto - $alto) -le 2 } | Select-Object -First 1
+  $destino = & $buscar $medias
+
+  # Si el driver no lo trae, se crea como formulario de Windows y se reintenta.
+  # Así el 60 × 60 del sticker (que el GD985 no tiene) queda disponible sin que
+  # nadie tenga que armarlo a mano en las preferencias de la impresora.
+  $creado = $false
   if (-not $destino) {
-    return [pscustomobject]@{ ok = $false; error = "El driver no ofrece un papel de $ancho x $alto mm"; disponibles = $medias }
+    $r = [Formularios]::Crear($impresora, "$([int]$ancho)mm x $([int]$alto)mm", [int]$ancho, [int]$alto)
+    if ($r -eq 'OK') {
+      $medias = Get-PapelesDisponibles $impresora
+      $destino = & $buscar $medias
+      $creado = $true
+    }
+  }
+  if (-not $destino) {
+    return [pscustomobject]@{ ok = $false; error = "El driver no ofrece un papel de $ancho x $alto mm y no se pudo crear"; disponibles = $medias }
   }
   $actual = Get-PapelActual $impresora
-  if ($actual.Nombre -eq $destino.Nombre -and -not $actual.Horizontal) {
+  if (-not $creado -and $actual.Nombre -eq $destino.Nombre -and -not $actual.Horizontal) {
     return [pscustomobject]@{ ok = $true; yaEstaba = $true; papel = $destino.Nombre; ancho = $destino.Ancho; alto = $destino.Alto }
   }
   $r = [Papel]::Fijar($impresora, [int16]$destino.Kind, [int16]1)
@@ -121,7 +178,7 @@ function Set-Papel([string]$impresora, [double]$ancho, [double]$alto) {
   if ([math]::Abs($ahora.Ancho - $ancho) -le 2 -and [math]::Abs($ahora.Alto - $alto) -le 2) {
     # $r distinto de OK = no se pudo dejar para TODO el equipo (pide admin), pero
     # el default del usuario sí quedó, que es el que usa Chrome.
-    return [pscustomobject]@{ ok = $true; yaEstaba = $false; papel = $ahora.Nombre; ancho = $ahora.Ancho; alto = $ahora.Alto; soloUsuario = ($r -ne 'OK') }
+    return [pscustomobject]@{ ok = $true; yaEstaba = $false; creado = $creado; papel = $ahora.Nombre; ancho = $ahora.Ancho; alto = $ahora.Alto; soloUsuario = ($r -ne 'OK') }
   }
   [pscustomobject]@{ ok = $false; error = $r }
 }

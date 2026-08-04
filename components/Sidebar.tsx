@@ -39,6 +39,8 @@ export default function Sidebar() {
   const role = session?.user?.role ?? 'operador'
   const initials = userName.slice(0, 2).toUpperCase()
   const [open, setOpen] = useState(false)
+  // Barra superior de móvil escondida (se esconde al bajar, vuelve al subir).
+  const [barraOculta, setBarraOculta] = useState(false)
   // Módulos permitidos para este usuario (dinámico). null = cargando.
   const [allowed, setAllowed] = useState<Set<string> | null>(null)
   // Solicitudes de retiro del bot pendientes (badge en "Mensajes"). Se refresca solo.
@@ -102,13 +104,35 @@ export default function Sidebar() {
     return () => { document.body.style.overflow = previo }
   }, [open])
 
+  // La barra de móvil se esconde al bajar y vuelve al subir. Si se queda fija,
+  // TAPA el contenido que pasa por debajo (en /mensajes no se notaba porque el
+  // inbox scrollea en su propio contenedor y la página no se mueve). Así nada
+  // queda tapado y el menú sigue estando a un gesto de distancia.
+  useEffect(() => {
+    let ultimo = window.scrollY
+    const alScrollear = () => {
+      const y = window.scrollY
+      if (y <= 64) setBarraOculta(false)               // arriba del todo: siempre visible
+      else if (y > ultimo + 4) setBarraOculta(true)    // bajando: se va
+      else if (y < ultimo - 4) setBarraOculta(false)   // subiendo: vuelve
+      ultimo = y
+    }
+    window.addEventListener('scroll', alScrollear, { passive: true })
+    return () => window.removeEventListener('scroll', alScrollear)
+  }, [])
+
+  // Al cambiar de sección se arranca arriba: la barra tiene que estar visible.
+  useEffect(() => { setBarraOculta(false) }, [pathname])
+
   return (
     <>
       {/* Barra superior (solo móvil). Es una BARRA opaca, no un botón flotante:
           antes el botón iba `fixed` encima del contenido y al scrollear tapaba la
           primera línea de cada página (el título quedaba comido). El `pt-16` del
           <main> reserva su alto. */}
-      <header className="md:hidden fixed top-0 inset-x-0 z-20 h-14 bg-brand text-white flex items-center gap-2 px-2 shadow-md">
+      <header className={`md:hidden fixed top-0 inset-x-0 z-20 h-14 bg-brand text-white flex items-center gap-2 px-2 shadow-md transition-transform duration-200 ${
+        barraOculta && !open ? '-translate-y-full' : 'translate-y-0'
+      }`}>
         <button
           aria-label="Abrir menú"
           onClick={() => setOpen(true)}
