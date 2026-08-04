@@ -79,6 +79,60 @@ html {
   }
 }
 
+/* HISTORIALES EN EL TELÉFONO: la tabla se convierte en tarjetas apiladas.
+   Con 9 o 10 columnas, leer de lado es inmanejable (reporte del dueño
+   2026-08-03 sobre el historial de ciclos). Cada fila pasa a ser una tarjeta y
+   cada celda una línea «RÓTULO … valor», sacando el rótulo del atributo
+   `data-label` de la celda — por eso hay que ponerlo en cada `<td>`.
+
+   Se aplica SOLO a las tablas marcadas con `.tabla-historial`; el resto sigue
+   con el scroll horizontal de arriba. Las celdas SIN `data-label` (acciones,
+   filas expandidas con `colSpan`) ocupan la línea completa. */
+@media (max-width: 768px) {
+  main table.tabla-historial {
+    display: block;
+    min-width: 0 !important;
+    white-space: normal;
+    overflow: visible;
+  }
+  .tabla-historial thead { display: none }
+  .tabla-historial tbody { display: block }
+  .tabla-historial tbody tr {
+    display: block;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 12px;
+    margin: 0 0 10px;
+    padding: 6px 12px;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  }
+  .tabla-historial tbody td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    width: auto !important;
+    padding: 5px 0 !important;
+    border: 0 !important;
+    white-space: normal !important;
+    text-align: right;
+  }
+  .tabla-historial tbody td::before {
+    content: attr(data-label);
+    flex: none;
+    text-align: left;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: #6b7280;
+  }
+  .tabla-historial tbody td:not([data-label])::before,
+  .tabla-historial tbody td[data-label='']::before { content: none }
+  .tabla-historial tbody td:not([data-label]),
+  .tabla-historial tbody td[data-label=''] { display: block; text-align: left }
+}
+
 /* Accesibilidad (WCAG 2.3.3): si el usuario pidió menos movimiento en su sistema,
    neutralizamos animaciones/transiciones en toda la app (transiciones de hover,
    spinners, etc.) sin tener que tocar cada componente. */

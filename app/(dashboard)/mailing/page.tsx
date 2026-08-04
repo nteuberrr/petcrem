@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment, type ReactNode } from 'react'
 import { Ban, BarChart3, Bug, CircleCheck, Clapperboard, ClipboardList, Folder, HeartHandshake, Images, Megaphone, Moon, Music, PencilLine, Target, Trash2, TrendingUp, Users, type LucideIcon , Search } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { PageHeader } from '@/components/ui/kit'
 import { formatDate, formatDateTime, formatHoraDia } from '@/lib/dates'
 import CalendarioContent from '@/components/marketing/CalendarioContent'
 import BancoView from '@/components/marketing/BancoView'
@@ -201,8 +202,10 @@ export default function CampanasPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Marketing</h1>
-        <p className="text-sm text-gray-500">Planifica con el agente, envía mailing, gestiona la publicidad y el banco de imágenes desde un solo lugar.</p>
+        <PageHeader
+          title="Marketing"
+          subtitle="Planifica con el agente, envía mailing, gestiona la publicidad y el banco de imágenes desde un solo lugar."
+        />
         <div className="flex gap-1.5 bg-white border border-gray-300 rounded-2xl p-2 shadow-md overflow-x-auto mt-3">
           {NAV.map(n => {
             const active = vista === n.key

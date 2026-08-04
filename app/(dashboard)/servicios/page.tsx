@@ -897,7 +897,10 @@ function ServiciosEutanasiasContenido() {
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
-      <div className="mb-4 pl-14 md:pl-0">
+      {/* Sin `pl-14`: ese hueco le hacía sitio al botón hamburguesa flotante que
+          ya no existe (ahora hay una barra superior propia), y solo dejaba el
+          título corrido a la derecha en el teléfono. */}
+      <div className="mb-4">
         <PageHeader
           title="Eutanasias"
           subtitle="Convenio de eutanasias a domicilio: cotizaciones, veterinarios participantes y precios."

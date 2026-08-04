@@ -8,7 +8,7 @@ import { TablaScroll, THEAD_STICKY, HistorialPie } from '@/components/ui/TablaSc
 import VehiculoTab from '@/components/VehiculoTab'
 import DespachosTab from '@/components/DespachosTab'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { Tabs } from '@/components/ui/kit'
+import { PageHeader, Tabs } from '@/components/ui/kit'
 import { ChevronDown, ChevronUp, Flame, Fuel, Package, Pencil, Search, Trash2, TrendingUp, Truck } from 'lucide-react'
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
@@ -339,10 +339,7 @@ export default function OperacionesPage() {
 
   return (
     <div className="max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold text-brand tracking-tight">Operaciones</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Ciclos de cremación y control de petróleo</p>
-      </div>
+      <PageHeader title="Operaciones" subtitle="Ciclos de cremación y control de petróleo" />
 
       {/* Sub-tabs */}
       <Tabs
@@ -497,7 +494,10 @@ export default function OperacionesPage() {
           <div className="p-8 text-center text-gray-400 text-sm">Sin ciclos registrados</div>
         ) : (
           <TablaScroll>
-            <table className="w-full text-sm min-w-[720px]">
+            {/* `tabla-historial`: en el teléfono cada fila se convierte en una
+                tarjeta apilada (ver globals.css). Los rótulos salen del
+                `data-label` de cada celda, así que hay que mantenerlos. */}
+            <table className="w-full text-sm min-w-[720px] tabla-historial">
               <thead className={THEAD_STICKY}>
                 <tr>
                   {['N°', 'Fecha', 'Masc.', 'L. inicio', 'L. fin', 'L. usados', 'Lt/kg', 'Lt/masc.', 'Temp.', ''].map((h, i) => (
@@ -516,15 +516,15 @@ export default function OperacionesPage() {
                   return (
                     <Fragment key={ciclo.id}>
                       <tr className="hover:bg-gray-50">
-                        <td className="px-3 py-3 font-semibold text-gray-900 cursor-pointer whitespace-nowrap" onClick={() => toggleExpandir(ciclo)}>{ciclo.numero_ciclo}</td>
-                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtFecha(ciclo.fecha)}</td>
-                        <td className="px-3 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(ciclo.mascotas_ids.length)}</td>
-                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(lInicio, 0)} L</td>
-                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(lFin, 0)} L</td>
-                        <td className="px-3 py-3 font-medium text-gray-900 whitespace-nowrap cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(litrosUsados, 0)} L</td>
-                        <td className="px-3 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{pesoTotal > 0 ? fmtNumero(ltPorKg, 1) : '—'}</td>
-                        <td className="px-3 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{ciclo.mascotas_ids.length > 0 ? fmtNumero(ltPorMascota, 1) : '—'}</td>
-                        <td className="px-3 py-3 text-gray-700 whitespace-nowrap cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{ciclo.temperatura_camara ? `${ciclo.temperatura_camara}°C` : '—'}</td>
+                        <td data-label="N°" className="px-3 py-3 font-semibold text-gray-900 cursor-pointer whitespace-nowrap" onClick={() => toggleExpandir(ciclo)}>{ciclo.numero_ciclo}</td>
+                        <td data-label="Fecha" className="px-3 py-3 text-gray-700 whitespace-nowrap cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtFecha(ciclo.fecha)}</td>
+                        <td data-label="Mascotas" className="px-3 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(ciclo.mascotas_ids.length)}</td>
+                        <td data-label="L. inicio" className="px-3 py-3 text-gray-700 whitespace-nowrap cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(lInicio, 0)} L</td>
+                        <td data-label="L. fin" className="px-3 py-3 text-gray-700 whitespace-nowrap cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(lFin, 0)} L</td>
+                        <td data-label="L. usados" className="px-3 py-3 font-medium text-gray-900 whitespace-nowrap cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{fmtNumero(litrosUsados, 0)} L</td>
+                        <td data-label="Lt/kg" className="px-3 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{pesoTotal > 0 ? fmtNumero(ltPorKg, 1) : '—'}</td>
+                        <td data-label="Lt/masc." className="px-3 py-3 text-gray-700 cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{ciclo.mascotas_ids.length > 0 ? fmtNumero(ltPorMascota, 1) : '—'}</td>
+                        <td data-label="Temp." className="px-3 py-3 text-gray-700 whitespace-nowrap cursor-pointer" onClick={() => toggleExpandir(ciclo)}>{ciclo.temperatura_camara ? `${ciclo.temperatura_camara}°C` : '—'}</td>
                         <td className="px-3 py-3">
                           <div className="flex items-center justify-end gap-1">
                             <button onClick={(e) => { e.stopPropagation(); abrirEditarCiclo(ciclo) }}

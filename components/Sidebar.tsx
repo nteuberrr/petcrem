@@ -109,6 +109,14 @@ export default function Sidebar() {
   // inbox scrollea en su propio contenedor y la página no se mueve). Así nada
   // queda tapado y el menú sigue estando a un gesto de distancia.
   useEffect(() => {
+    // El navegador RESTAURA el scroll al recargar o al reabrir la pestaña: la
+    // página abría a media altura, con la barra visible tapando el contenido de
+    // ahí ("se ve mal alineado al entrar, y bien al volver a entrar", porque
+    // navegando dentro de la app el scroll sí vuelve a 0). Arrancamos siempre
+    // arriba, que además es lo que uno espera al abrir una sección.
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+    if (window.scrollY > 64) window.scrollTo(0, 0)
+
     let ultimo = window.scrollY
     const alScrollear = () => {
       const y = window.scrollY

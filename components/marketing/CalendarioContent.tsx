@@ -242,7 +242,14 @@ export default function CalendarioContent({ canalInicial }: { canalInicial?: str
   }, [])
 
   useEffect(() => { cargar() }, [cargar])
-  useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs, pensando])
+  // Baja el chat a lo último SIN mover la página: `scrollIntoView` arrastra
+  // también a los ancestros, así que al cargar los mensajes guardados dejaba
+  // Marketing abierto a media altura y con la cabecera fuera de pantalla en el
+  // teléfono. Se scrollea solo el contenedor del chat.
+  useEffect(() => {
+    const caja = chatEnd.current?.parentElement
+    if (caja) caja.scrollTop = caja.scrollHeight
+  }, [msgs, pensando])
   // Cargar el chat guardado al montar (una vez); después persistir cada cambio.
   useEffect(() => {
     try { const s = localStorage.getItem(chatKey); if (s) setMsgs(JSON.parse(s)) } catch { /* ignore */ }
