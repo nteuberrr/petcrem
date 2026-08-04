@@ -1,6 +1,6 @@
 'use client'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronRight, CreditCard, Landmark, Link2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, CreditCard, Landmark, Link2 } from 'lucide-react'
 import { Card, Button } from '@/components/ui/kit'
 import { TablaScroll, THEAD_STICKY } from '@/components/ui/TablaScroll'
 import { TableSkeleton } from '@/components/ui/Skeleton'
@@ -237,28 +237,10 @@ export default function VentasPosTab() {
             ))}
           </div>
 
-          {/* ── Fichas sin fecha ──────────────────────────────────────── */}
-          {data.sin_fecha.length > 0 && (
-            <Card className="p-4 border-amber-300 bg-amber-50">
-              <div className="flex gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-amber-900">
-                    {data.sin_fecha.length} venta{data.sin_fecha.length === 1 ? '' : 's'} sin fecha de pago
-                  </p>
-                  <p className="text-xs text-amber-800 mt-0.5">
-                    En todo el histórico, no solo en este rango: no tienen fecha de pago ni documento
-                    emitido, así que no se pueden asignar a un día ni al abono. La fecha se completa en
-                    la ficha, junto a la forma de pago.
-                  </p>
-                  <p className="text-xs text-amber-800 mt-1.5 break-words">
-                    {data.sin_fecha.slice(0, 12).map(v => v.codigo).join(' · ')}
-                    {data.sin_fecha.length > 12 && ` · y ${data.sin_fecha.length - 12} más`}
-                  </p>
-                </div>
-              </div>
-            </Card>
-          )}
+          {/* Las ventas sin fecha de pago ni documento no se pueden fechar, así que
+              no entran en ningún día. La API las sigue devolviendo en `sin_fecha`
+              (las usa scripts/verificar-ventas-pos.ts), pero acá NO se muestran:
+              son histórico y el dueño no las quiere a la vista (2026-08-04). */}
 
           {/* ── Día por día ───────────────────────────────────────────── */}
           <Card className="overflow-hidden">
