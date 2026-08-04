@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtLitros, fmtPrecio, fmtFecha, fmtKg } from '@/lib/format'
-import { formatDateForSheet } from '@/lib/dates'
+import { formatDateForSheet, todayISO } from '@/lib/dates'
 import { parsePeso } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { anforaPremiumIncluida, servicioIncluyeAnforaPremium, repartirAnforasPremium } from '@/lib/anforas-premium'
@@ -116,6 +116,8 @@ type ClienteDetalle = {
   notas: string
   tipo_pago: string
   estado_pago: string
+  /** ISO. Día en que se cobró (lo cuadra Facturación → Ventas POS). */
+  fecha_pago?: string
   precio_total?: string
   boleta_id?: string
   omitir_evaluacion?: string
@@ -285,6 +287,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       fecha_retiro: formatDateForSheet(d.fecha_retiro) || d.fecha_retiro || '',
       fecha_defuncion: formatDateForSheet(d.fecha_defuncion) || d.fecha_defuncion || '',
       fecha_nacimiento: formatDateForSheet(d.fecha_nacimiento) || d.fecha_nacimiento || '',
+      fecha_pago: formatDateForSheet(d.fecha_pago) || d.fecha_pago || '',
       fecha_creacion: formatDateForSheet(d.fecha_creacion) || d.fecha_creacion || '',
     })
   }, [id])
@@ -300,6 +303,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           fecha_retiro: formatDateForSheet(d.fecha_retiro) || d.fecha_retiro || '',
           fecha_defuncion: formatDateForSheet(d.fecha_defuncion) || d.fecha_defuncion || '',
           fecha_nacimiento: formatDateForSheet(d.fecha_nacimiento) || d.fecha_nacimiento || '',
+          fecha_pago: formatDateForSheet(d.fecha_pago) || d.fecha_pago || '',
           fecha_creacion: formatDateForSheet(d.fecha_creacion) || d.fecha_creacion || '',
         }
         setCliente(normalized)
@@ -701,6 +705,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         fecha_retiro: formatDateForSheet(updated.fecha_retiro) || updated.fecha_retiro || '',
         fecha_defuncion: formatDateForSheet(updated.fecha_defuncion) || updated.fecha_defuncion || '',
         fecha_nacimiento: formatDateForSheet(updated.fecha_nacimiento) || updated.fecha_nacimiento || '',
+        fecha_pago: formatDateForSheet(updated.fecha_pago) || updated.fecha_pago || '',
         fecha_creacion: formatDateForSheet(updated.fecha_creacion) || updated.fecha_creacion || '',
       }
       setCliente(norm)
@@ -1786,7 +1791,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         {/* Pago */}
         <div className="mt-5 pt-5 border-t-2 border-gray-300">
           <p className="text-sm font-bold text-gray-900 mb-3">Pago</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <div>
               <label className="text-xs font-semibold text-gray-700">
                 Tipo de pago <span className="text-red-500">*</span>
@@ -1813,13 +1818,34 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               <select
                 value={form.estado_pago ?? 'pendiente'}
                 required
-                onChange={e => setForm(f => ({ ...f, estado_pago: e.target.value }))}
+                // Al marcarla pagada proponemos hoy como fecha de cobro (se puede
+                // corregir): es el dato con el que Ventas POS arma el día y cuadra
+                // el abono de Haulmer, y si queda vacío la venta no se puede fechar.
+                onChange={e => setForm(f => ({
+                  ...f,
+                  estado_pago: e.target.value,
+                  fecha_pago: e.target.value === 'pagado' && !f.fecha_pago ? todayISO() : f.fecha_pago,
+                }))}
                 className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
               >
                 <option value="pendiente">Pendiente de pago</option>
                 <option value="parcial">Pago parcial</option>
                 <option value="pagado">Pagado</option>
               </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Fecha de pago</label>
+              <input
+                type="date"
+                value={form.fecha_pago ?? ''}
+                onChange={e => setForm(f => ({ ...f, fecha_pago: e.target.value }))}
+                className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${
+                  form.estado_pago === 'pagado' && !form.fecha_pago ? 'border-amber-400 bg-amber-50' : 'border-gray-300'
+                }`}
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Día en que se cobró. Con POS o link de pago es la que cuadra el abono de Haulmer.
+              </p>
             </div>
           </div>
 

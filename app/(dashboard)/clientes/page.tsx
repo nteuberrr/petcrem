@@ -97,6 +97,7 @@ const FORM_DEFAULT = {
   veterinaria_id: '',
   tipo_pago: '',
   estado_pago: 'pendiente',
+  fecha_pago: '',
   origen: '',
 }
 
@@ -1324,12 +1325,28 @@ export default function ClientesPage() {
               <label className="text-xs font-semibold text-gray-700">
                 Estado de pago <span className="text-red-500">*</span>
               </label>
-              <select required value={form.estado_pago} onChange={e => setForm(f => ({ ...f, estado_pago: e.target.value }))}
+              {/* Al marcarla pagada proponemos hoy como fecha de cobro: es con la que
+                  Facturación → Ventas POS arma el día y cuadra el abono de Haulmer. */}
+              <select required value={form.estado_pago}
+                onChange={e => setForm(f => ({
+                  ...f,
+                  estado_pago: e.target.value,
+                  fecha_pago: e.target.value === 'pagado' && !f.fecha_pago ? todayISO() : f.fecha_pago,
+                }))}
                 className="mt-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                 <option value="pendiente">Pendiente de pago</option>
                 <option value="parcial">Pago parcial</option>
                 <option value="pagado">Pagado</option>
               </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-700">Fecha de pago</label>
+              <input type="date" value={form.fecha_pago}
+                onChange={e => setForm(f => ({ ...f, fecha_pago: e.target.value }))}
+                className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${
+                  form.estado_pago === 'pagado' && !form.fecha_pago ? 'border-amber-400 bg-amber-50' : 'border-gray-300'
+                }`} />
+              <p className="text-[11px] text-gray-500 mt-1">Día en que se cobró (POS y link: cuadra el abono).</p>
             </div>
             {/* Origen: con esto sabemos cuánto cuesta de verdad traer un cliente por
                 canal (inversión del canal ÷ fichas de ese canal). Las fichas que nacen

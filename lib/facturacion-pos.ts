@@ -1,0 +1,275 @@
+import { getSheetData, ensureSheet, ensureColumns, appendRow, updateRow } from './datastore'
+import { formatDateForSheet } from './dates'
+import { agregarDiasHabiles, isoFecha } from './dias-habiles'
+import { calcularPrecioFicha, type Tramo } from './ficha-precio'
+
+/**
+ * VENTAS POS — lo que el procesador de pagos (TUU/Haulmer) nos tiene que abonar.
+ *
+ * Entran solo las ventas cobradas con MÁQUINA o LINK DE PAGO y marcadas como
+ * pagadas: transferencia y efectivo no pagan comisión, así que no son parte del
+ * abono. De cada venta se descuenta la comisión del contrato:
+ *
+ *     comisión neta  = fija + variable % × total cobrado (bruto, con IVA)
+ *     comisión bruta = comisión neta × (1 + IVA)
+ *     liquidado      = total cobrado − comisión bruta
+ *
+ * El día de la venta lo manda `clientes.fecha_pago` (cuándo se cobró de verdad).
+ * Las fichas viejas no la tienen todavía, así que como respaldo se usa la fecha
+ * de emisión del documento — esas filas van marcadas con `fecha_estimada` para
+ * que no se lean como dato duro.
+ *
+ * Haulmer abona al DÍA HÁBIL SIGUIENTE, así que lo del viernes, sábado y domingo
+ * llega junto el lunes. Eso lo resuelve `agregarDiasHabiles(dia, 1)`, que además
+ * salta los feriados.
+ */
+
+const SHEET_CONFIG = 'config_pos'
+const CONFIG_COLS = ['id', 'comision_fija', 'comision_variable', 'iva', 'fecha_actualizacion']
+
+/** Contrato vigente a ago-2026: $65 por transacción + 0,79% del total, + IVA. */
+export const CONFIG_POS_DEFAULT: ConfigPos = { comision_fija: 65, comision_variable: 0.79, iva: 19 }
+
+/** Formas de pago que pasan por el procesador (las demás no tienen comisión). */
+const PAGOS_CON_COMISION = new Set(['pos', 'link'])
+
+export interface ConfigPos {
+  /** Pesos fijos por transacción (neto). */
+  comision_fija: number
+  /** Porcentaje sobre el total cobrado (neto). */
+  comision_variable: number
+  /** IVA que se le suma a la comisión, en porcentaje. */
+  iva: number
+}
+
+export interface VentaPos {
+  id: string
+  codigo: string
+  nombre_mascota: string
+  /** ISO. Fecha de retiro de la ficha (referencia, no es la del cobro). */
+  fecha_retiro: string
+  /** ISO. Emisión de la boleta/factura ('' si aún no se emite). */
+  fecha_boleta: string
+  folio: string
+  tipo_pago: 'pos' | 'link'
+  /** Lo que pasó por la máquina: total cobrado con IVA. */
+  bruto: number
+  comision_neta: number
+  comision_iva: number
+  comision_bruta: number
+  /** Lo que Haulmer debería abonar por esta venta. */
+  liquidado: number
+  /** true si el día salió del documento porque la ficha no tiene fecha de pago. */
+  fecha_estimada: boolean
+}
+
+export interface DiaPos {
+  /** ISO del día de cobro. */
+  fecha: string
+  /** ISO del día hábil siguiente: cuándo lo abona Haulmer. */
+  fecha_abono: string
+  ventas: VentaPos[]
+  bruto: number
+  comision_neta: number
+  comision_bruta: number
+  /** Total que debería llegar por este día. */
+  liquidado: number
+}
+
+/** Redondeo a peso: los montos en CLP no llevan decimales. */
+function clp(n: number): number {
+  return Math.round(n)
+}
+
+function num(v: unknown, porDefecto = 0): number {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : porDefecto
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(',', '.'))
+    return Number.isFinite(n) ? n : porDefecto
+  }
+  return porDefecto
+}
+
+export interface ComisionCalculada {
+  comision_neta: number
+  comision_iva: number
+  comision_bruta: number
+  liquidado: number
+}
+
+/**
+ * Comisión de UNA transacción. El fijo y el porcentaje son netos y el IVA se
+ * aplica sobre la suma de los dos, que es como lo cobra el procesador.
+ */
+export function calcularComision(bruto: number, cfg: ConfigPos): ComisionCalculada {
+  const neta = clp(cfg.comision_fija + (bruto * cfg.comision_variable) / 100)
+  const bruta = clp(neta * (1 + cfg.iva / 100))
+  return {
+    comision_neta: neta,
+    comision_iva: bruta - neta,
+    comision_bruta: bruta,
+    liquidado: bruto - bruta,
+  }
+}
+
+/** Lee la configuración de comisiones (los valores del contrato si no hay fila). */
+export async function getConfigPos(): Promise<ConfigPos> {
+  try {
+    const rows = await getSheetData(SHEET_CONFIG)
+    const row = rows.find(r => String(r.id) === '1') ?? rows[0]
+    if (!row) return { ...CONFIG_POS_DEFAULT }
+    return {
+      comision_fija: num(row.comision_fija, CONFIG_POS_DEFAULT.comision_fija),
+      comision_variable: num(row.comision_variable, CONFIG_POS_DEFAULT.comision_variable),
+      iva: num(row.iva, CONFIG_POS_DEFAULT.iva),
+    }
+  } catch {
+    return { ...CONFIG_POS_DEFAULT }
+  }
+}
+
+/** Persiste la configuración (fila única id=1). */
+export async function setConfigPos(cfg: ConfigPos, hoyISO: string): Promise<void> {
+  await ensureSheet(SHEET_CONFIG)
+  await ensureColumns(SHEET_CONFIG, CONFIG_COLS)
+  const campos = {
+    comision_fija: String(Math.max(0, cfg.comision_fija)),
+    comision_variable: String(Math.max(0, cfg.comision_variable)),
+    iva: String(Math.max(0, cfg.iva)),
+    fecha_actualizacion: hoyISO,
+  }
+  const rows = await getSheetData(SHEET_CONFIG)
+  const idx = rows.findIndex(r => String(r.id) === '1')
+  if (idx === -1) await appendRow(SHEET_CONFIG, { id: '1', ...campos })
+  else await updateRow(SHEET_CONFIG, idx, { ...rows[idx], ...campos })
+}
+
+/** Documento tributario de la ficha, sea boleta al tutor o factura al vet. */
+interface DocMin { fecha_emision: string; folio: string; monto_total: number }
+
+async function mapaDocumentos(): Promise<Map<string, DocMin>> {
+  const docs = await getSheetData('documentos_tributarios')
+  const m = new Map<string, DocMin>()
+  for (const d of docs) {
+    // Los anulados no se cobraron: no aportan ni monto ni fecha.
+    if (String(d.estado || '') === 'anulado') continue
+    m.set(String(d.id), {
+      fecha_emision: formatDateForSheet(d.fecha_emision) || '',
+      folio: String(d.folio || ''),
+      monto_total: parseInt(String(d.monto_total || '0'), 10) || 0,
+    })
+  }
+  return m
+}
+
+async function cargarTablas(): Promise<{ g: Tramo[]; c: Tramo[] }> {
+  const [generales, convenio] = await Promise.all([
+    getSheetData('precios_generales'),
+    getSheetData('precios_convenio'),
+  ])
+  return { g: generales as unknown as Tramo[], c: convenio as unknown as Tramo[] }
+}
+
+export interface FiltrosPos {
+  /** ISO inclusive. */
+  desde?: string
+  /** ISO inclusive. */
+  hasta?: string
+}
+
+export interface ResumenPos {
+  config: ConfigPos
+  dias: DiaPos[]
+  /** Ventas que no se pueden fechar: sin fecha de pago y sin documento emitido. */
+  sin_fecha: VentaPos[]
+  totales: { ventas: number; bruto: number; comision_bruta: number; liquidado: number }
+}
+
+/**
+ * Arma el resumen día por día. `hoyISO` entra por parámetro para que la función
+ * no dependa del reloj (mismo criterio que el motor de remuneraciones).
+ */
+export async function resumenVentasPos(f: FiltrosPos = {}): Promise<ResumenPos> {
+  const [clientes, tablas, docs, config] = await Promise.all([
+    getSheetData('clientes'),
+    cargarTablas(),
+    mapaDocumentos(),
+    getConfigPos(),
+  ])
+
+  const conFecha: VentaPos[] = []
+  const sinFecha: VentaPos[] = []
+  const porDia = new Map<string, VentaPos[]>()
+
+  for (const c of clientes) {
+    const tipo = String(c.tipo_pago || '').trim().toLowerCase()
+    if (!PAGOS_CON_COMISION.has(tipo)) continue
+    if (String(c.estado_pago || '').trim().toLowerCase() !== 'pagado') continue
+    // Un borrador no es una venta todavía.
+    if (String(c.estado || '') === 'borrador' || !String(c.codigo || '').trim()) continue
+
+    // El documento puede colgar de la boleta al tutor o de la factura al vet.
+    const docId = String(c.boleta_id || '').trim() || String(c.factura_vet_id || '').trim()
+    const doc = docId ? docs.get(docId) ?? null : null
+
+    // Monto: manda el documento emitido (es el hecho tributario y ya no cambia);
+    // si no hay, el precio congelado de la ficha. Mismo criterio que Ventas.
+    const precio = calcularPrecioFicha(c, undefined, { generales: tablas.g, convenio: tablas.c, especialesDeVet: [] })
+    const bruto = doc && doc.monto_total > 0 ? doc.monto_total : precio.total
+    if (bruto <= 0) continue
+
+    const fechaPago = formatDateForSheet(c.fecha_pago) || ''
+    const fechaDoc = doc?.fecha_emision || ''
+    const dia = fechaPago || fechaDoc
+
+    const venta: VentaPos = {
+      id: String(c.id),
+      codigo: String(c.codigo || ''),
+      nombre_mascota: String(c.nombre_mascota || ''),
+      fecha_retiro: formatDateForSheet(c.fecha_retiro) || '',
+      fecha_boleta: fechaDoc,
+      folio: doc?.folio || '',
+      tipo_pago: tipo === 'link' ? 'link' : 'pos',
+      bruto,
+      ...calcularComision(bruto, config),
+      fecha_estimada: !fechaPago && !!fechaDoc,
+    }
+
+    if (!dia) { sinFecha.push(venta); continue }
+    if (f.desde && dia < f.desde) continue
+    if (f.hasta && dia > f.hasta) continue
+    conFecha.push(venta)
+    const arr = porDia.get(dia)
+    if (arr) arr.push(venta); else porDia.set(dia, [venta])
+  }
+
+  const dias: DiaPos[] = [...porDia.entries()]
+    .map(([fecha, ventas]) => {
+      ventas.sort((a, b) => a.codigo.localeCompare(b.codigo))
+      const [y, m, d] = fecha.split('-').map(Number)
+      return {
+        fecha,
+        fecha_abono: isoFecha(agregarDiasHabiles(new Date(y, m - 1, d, 12, 0, 0), 1)),
+        ventas,
+        bruto: ventas.reduce((s, v) => s + v.bruto, 0),
+        comision_neta: ventas.reduce((s, v) => s + v.comision_neta, 0),
+        comision_bruta: ventas.reduce((s, v) => s + v.comision_bruta, 0),
+        liquidado: ventas.reduce((s, v) => s + v.liquidado, 0),
+      }
+    })
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))   // más reciente primero
+
+  sinFecha.sort((a, b) => a.codigo.localeCompare(b.codigo))
+
+  return {
+    config,
+    dias,
+    sin_fecha: sinFecha,
+    totales: {
+      ventas: conFecha.length,
+      bruto: conFecha.reduce((s, v) => s + v.bruto, 0),
+      comision_bruta: conFecha.reduce((s, v) => s + v.comision_bruta, 0),
+      liquidado: conFecha.reduce((s, v) => s + v.liquidado, 0),
+    },
+  }
+}

@@ -36,6 +36,8 @@ const ClienteSchema = z.object({
   codigo_servicio: z.enum(['CI', 'CP', 'SD']),
   tipo_pago: z.string().min(1, 'Tipo de pago requerido'),
   estado_pago: z.string().min(1, 'Estado de pago requerido'),
+  /** ISO. Día en que se cobró; lo usa Facturación → Ventas POS para cuadrar el abono. */
+  fecha_pago: z.string().optional(),
   veterinaria_id: z.string().optional(),
   /** Por dónde llegó el cliente (lib/origen-cliente). Opcional: '' = sin registrar. */
   origen: z.string().optional(),
@@ -130,7 +132,7 @@ export async function POST(req: NextRequest) {
       'veterinaria_id', 'adicionales', 'tipo_precios',
       'peso_declarado', 'peso_ingreso', 'despacho_id',
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
-      'fecha_defuncion', 'fecha_nacimiento', 'depto', 'notas', 'tipo_pago', 'estado_pago', 'origen',
+      'fecha_defuncion', 'fecha_nacimiento', 'depto', 'notas', 'tipo_pago', 'estado_pago', 'fecha_pago', 'origen',
       'precio_servicio', 'precio_adicionales', 'precio_total', 'hora_retiro',
       'greda_descontada',
     ])
@@ -204,6 +206,7 @@ export async function POST(req: NextRequest) {
       precio_total: snapshot.precio_total,
       tipo_pago: data.tipo_pago,
       estado_pago: estadoPagoFinal,
+      fecha_pago: data.fecha_pago ?? '',
       fecha_creacion: now,
       greda_descontada: SIN_GREDA, // se resuelve tras el insert (abajo)
     }

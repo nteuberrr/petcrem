@@ -19,7 +19,10 @@ export const SHEETS: Record<string, string[]> = {
     'veterinaria_id', 'tipo_precios', 'adicionales',
     'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
     'precio_servicio', 'precio_adicionales', 'precio_total',
-    'notas', 'tipo_pago', 'estado_pago',
+    // fecha_pago (ISO): el día en que la venta se cobró de verdad. Es la fecha con
+    // la que Ventas POS arma cada día y calcula el abono de Haulmer (día hábil
+    // siguiente); sin ella no hay forma de cuadrar contra la liquidación.
+    'notas', 'tipo_pago', 'estado_pago', 'fecha_pago',
     // Si 'TRUE', el correo de entrega va SIN el pedido de evaluación (clientes conflictivos).
     'omitir_evaluacion',
     // JSON array de URLs (R2) de fotos que el tutor sube desde /subir-foto para
@@ -337,6 +340,11 @@ export const SHEETS: Record<string, string[]> = {
   // consulta_vet + consulta_alma = consulta cobrada cuando NO se realiza (total al cliente).
   // recargo_fuera_horario = recargo al cliente si el servicio es fuera de horario (finde/feriado/≥18:00).
   config_eutanasia: ['id', 'fijo', 'consulta_vet', 'consulta_alma', 'recargo_fuera_horario'],
+  // Comisión del procesador de pagos (TUU/Haulmer) que descuenta del abono de las
+  // ventas por POS y link de pago. Fila única id=1; la edita Facturación → Ventas POS.
+  // comision_fija = pesos por transacción · comision_variable = % del total cobrado
+  // · iva = % que se le suma a esa comisión. Los tres son NETOS.
+  config_pos: ['id', 'comision_fija', 'comision_variable', 'iva', 'fecha_actualizacion'],
   // Cotizaciones de eutanasia que ingresa el admin desde /servicios.
   // - estado: creada | enviada | aceptada | realizada | no_realizada | cancelada
   // - vet_id_asignado: vacío hasta que un vet acepta; luego queda fijo.

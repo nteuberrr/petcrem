@@ -1,15 +1,16 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { PageHeader, Card, Button, Tabs } from '@/components/ui/kit'
-import { FileText, Hospital, Receipt, Undo2 } from 'lucide-react'
+import { CreditCard, FileText, Hospital, Receipt, Undo2 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { TableSkeleton } from '@/components/ui/Skeleton'
 import { fmtPrecio, fmtFecha, fmtKg } from '@/lib/format'
 import ManualModal from '@/components/facturacion/ManualModal'
 import FacturarVetsModal from '@/components/facturacion/FacturarVetsModal'
+import VentasPosTab from '@/components/facturacion/VentasPosTab'
 
-export type TipoTab = '39' | '33' | '61'
+export type TipoTab = '39' | '33' | '61' | 'pos'
 
 export interface DocResumen {
   id: string
@@ -81,6 +82,7 @@ const TABS: { key: TipoTab; label: ReactNode }[] = [
   { key: '39', label: <><Receipt className="w-4 h-4" aria-hidden="true" /> Boletas</> },
   { key: '33', label: <><FileText className="w-4 h-4" aria-hidden="true" /> Facturas</> },
   { key: '61', label: <><Undo2 className="w-4 h-4" aria-hidden="true" /> Notas de Crédito</> },
+  { key: 'pos', label: <><CreditCard className="w-4 h-4" aria-hidden="true" /> Ventas POS</> },
 ]
 
 export default function FacturacionPage() {
@@ -107,6 +109,7 @@ export default function FacturacionPage() {
       {tab === '39' && <BoletasTab />}
       {tab === '33' && <FacturasTab onAbrirLote={() => setShowVets(true)} />}
       {tab === '61' && <NotasCreditoTab />}
+      {tab === 'pos' && <VentasPosTab />}
 
       {showManual && <ManualModal onClose={() => setShowManual(false)} onEmitido={() => setShowManual(false)} />}
       {showVets && <FacturarVetsModal onClose={() => setShowVets(false)} onEmitido={() => setShowVets(false)} />}
