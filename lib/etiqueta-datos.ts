@@ -4,7 +4,7 @@
  * para que la vista previa del navegador use exactamente lo mismo que se imprime.
  */
 
-/** Etiqueta de despacho: 80 mm de ancho × 50 mm de alto (se imprime vertical). */
+/** Etiqueta de despacho: 80 mm de ancho × 50 mm de alto, horizontal (así se imprime). */
 export const ETIQUETA_MM = { ancho: 80, alto: 50 }
 
 /** 1 mm en puntos PDF. */

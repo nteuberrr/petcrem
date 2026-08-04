@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import {
   FolderOpen, Folder, FileText, RefreshCw, Mail, Clapperboard, Camera,
-  PawPrint, Video, Flame, Image, Stethoscope, Save, Tag,
+  PawPrint, Video, Flame, Image, Stethoscope, Save, Printer, Eye,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -196,14 +196,16 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [pagandoCobroId, setPagandoCobroId] = useState('')
   // Pago parcial: monto abonado por el tutor (el resto queda como saldo pendiente).
   const [abono, setAbono] = useState('')
-  // Toast centrado "Cambios guardados correctamente" (se auto-oculta a los 3s).
+  // Toast centrado (se auto-oculta a los 3s). Por defecto "Cambios guardados".
   const [toastOk, setToastOk] = useState(false)
+  const [toastMsg, setToastMsg] = useState('Cambios guardados correctamente')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Menú "Documentos" (certificados + archivos).
   const [docsOpen, setDocsOpen] = useState(false)
   const docsMenuRef = useRef<HTMLDivElement>(null)
   // Vista previa de la etiqueta de despacho (80 × 50 mm).
   const [etiquetaOpen, setEtiquetaOpen] = useState(false)
+  const [imprimiendoEtiqueta, setImprimiendoEtiqueta] = useState(false)
   // Viñeta de confirmación para adjuntar el video del servicio al correo del certificado.
   const [confirmVideoOpen, setConfirmVideoOpen] = useState(false)
   const certInputRef = useRef<HTMLInputElement>(null)
@@ -623,7 +625,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   }
 
   // Muestra el toast centrado y lo oculta a los 3s (reinicia el timer si ya estaba).
-  function mostrarGuardado() {
+  function mostrarGuardado(msg = 'Cambios guardados correctamente') {
+    setToastMsg(msg)
     setToastOk(true)
     if (toastTimer.current) clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToastOk(false), 3000)
@@ -785,6 +788,49 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       else alert('No se pudo confirmar el pago.')
     } finally {
       setPagandoCobroId('')
+    }
+  }
+
+  /**
+   * Manda la etiqueta a la impresora en UN clic: descarga el PDF, lo carga en un
+   * iframe oculto y llama a print(). No abre una pestaña con el PDF ni pide nada.
+   *
+   * Si el navegador corre con impresión directa (Chrome/Edge con `--kiosk-printing`,
+   * ver [docs/impresion-etiquetas.md](docs/impresion-etiquetas.md)) la etiqueta sale
+   * sola en la impresora predeterminada. Si no, el navegador muestra su diálogo —
+   * es un bloqueo del navegador, no algo que la app pueda saltarse desde la web.
+   */
+  const imprimirEtiqueta = async () => {
+    if (!cliente || imprimiendoEtiqueta) return
+    setImprimiendoEtiqueta(true)
+    const url = `/api/clientes/${cliente.id}/etiqueta`
+    try {
+      const r = await fetch(url, { cache: 'no-store' })
+      if (!r.ok) throw new Error('No se pudo generar la etiqueta')
+      const blobUrl = URL.createObjectURL(await r.blob())
+      const iframe = document.createElement('iframe')
+      iframe.setAttribute('aria-hidden', 'true')
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0'
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow?.focus()
+          iframe.contentWindow?.print()
+        } catch {
+          window.open(blobUrl, '_blank', 'noopener')
+        }
+        // Con diálogo el print() bloquea; con impresión directa vuelve al toque.
+        // En los dos casos hay que esperar antes de soltar el iframe y el blob.
+        setTimeout(() => { iframe.remove(); URL.revokeObjectURL(blobUrl) }, 120000)
+      }
+      iframe.src = blobUrl
+      document.body.appendChild(iframe)
+      setEtiquetaOpen(false)
+      mostrarGuardado('Etiqueta enviada a la impresora')
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo imprimir la etiqueta')
+      window.open(url, '_blank', 'noopener')
+    } finally {
+      setImprimiendoEtiqueta(false)
     }
   }
 
@@ -962,7 +1008,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
           <div className="pointer-events-auto flex items-center gap-3 rounded-2xl bg-white border-2 border-emerald-300 shadow-xl px-6 py-4 animate-in fade-in zoom-in-95 duration-200">
             <span className="flex items-center justify-center w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 text-lg">✓</span>
-            <p className="text-sm font-semibold text-gray-900">Cambios guardados correctamente</p>
+            <p className="text-sm font-semibold text-gray-900">{toastMsg}</p>
           </div>
         </div>
       )}
@@ -1056,14 +1102,28 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   {reenviandoIngreso ? '⌛ Enviando…' : '✉️ Reenviar correo de ingreso'}
                 </button>
                 {/* Etiqueta para la impresora térmica (80 × 50 mm). Va al lado de
-                    Documentos porque se imprime en el momento de despachar. */}
-                <button
-                  onClick={() => setEtiquetaOpen(true)}
-                  title="Ver e imprimir la etiqueta de despacho (80 × 50 mm)"
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 whitespace-nowrap border border-gray-300 bg-white text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <Tag className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Etiqueta de despacho
-                </button>
+                    Documentos porque se imprime en el momento de despachar.
+                    Un clic = a la impresora: no abre el PDF ni la vista previa.
+                    La lupa de al lado queda para revisarla antes, si hace falta. */}
+                <div className="w-full sm:w-auto inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden divide-x divide-gray-300">
+                  <button
+                    onClick={imprimirEtiqueta}
+                    disabled={imprimiendoEtiqueta}
+                    title="Imprimir la etiqueta de despacho (80 × 50 mm)"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 whitespace-nowrap text-gray-700 hover:text-brand hover:bg-brand/5 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Printer className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    {imprimiendoEtiqueta ? 'Imprimiendo…' : 'Imprimir etiqueta'}
+                  </button>
+                  <button
+                    onClick={() => setEtiquetaOpen(true)}
+                    title="Ver la etiqueta antes de imprimir"
+                    aria-label="Ver la etiqueta antes de imprimir"
+                    className="inline-flex items-center justify-center text-gray-500 hover:text-brand hover:bg-brand/5 px-2.5 py-2 transition-colors"
+                  >
+                    <Eye className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  </button>
+                </div>
               <div className="relative w-full sm:w-auto sm:shrink-0" ref={docsMenuRef}>
                 {/* Inputs ocultos: compartidos por el menú y el botón de evidencia del peso. */}
                 <input
@@ -2246,8 +2306,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
       </Modal>
 
-      {/* Etiqueta de despacho: se ve horizontal (se lee mejor) y se imprime
-          vertical, que es como entra en el rollo de 80 × 50 mm. */}
+      {/* Etiqueta de despacho horizontal (80 × 50 mm): se ve igual que como sale
+          impresa, y "Imprimir" manda el PDF directo al diálogo de la impresora. */}
       <Modal open={etiquetaOpen} onClose={() => setEtiquetaOpen(false)} title="Etiqueta de despacho" size="xl">
         {(() => {
           const d = datosEtiqueta(cliente as unknown as Record<string, unknown>)
@@ -2300,8 +2360,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               </div>
 
               <p className="text-[11px] text-gray-500 text-center">
-                80 × 50 mm. El PDF sale <b>vertical</b> (girado 90°), que es como entra en la impresora
-                térmica de etiquetas: al imprimir, elegí tamaño real / 100 % (sin «ajustar a la página»).
+                80 × 50 mm, horizontal. «Imprimir» la manda derecho a la impresora.
+                Si aparece el diálogo del navegador, elegí tamaño real / 100 % (sin «ajustar a la página»).
               </p>
 
               <div className="flex gap-2">
@@ -2309,11 +2369,17 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                   className="flex-1 px-4 py-2 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-50">
                   Cerrar
                 </button>
-                <a href={`/api/clientes/${cliente.id}/etiqueta`} target="_blank" rel="noopener"
-                  className="flex-1 px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold text-center">
-                  Abrir PDF para imprimir
-                </a>
+                <button type="button" onClick={imprimirEtiqueta} disabled={imprimiendoEtiqueta}
+                  className="flex-1 px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold text-center inline-flex items-center justify-center gap-2 disabled:opacity-60">
+                  <Printer className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  {imprimiendoEtiqueta ? 'Preparando…' : 'Imprimir etiqueta'}
+                </button>
               </div>
+              <p className="text-[11px] text-gray-400 text-center">
+                ¿No se abrió el diálogo?{' '}
+                <a href={`/api/clientes/${cliente.id}/etiqueta`} target="_blank" rel="noopener"
+                  className="text-brand-soft hover:underline">Abrir el PDF</a>
+              </p>
             </div>
           )
         })()}

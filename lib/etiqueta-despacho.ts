@@ -1,4 +1,4 @@
-import { PDFDocument, degrees, rgb } from 'pdf-lib'
+import { PDFDocument, rgb } from 'pdf-lib'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { embedBrandFonts, fitText, wrapText } from './pdf-brand'
@@ -10,12 +10,11 @@ export type { EtiquetaDespachoData } from './etiqueta-datos'
 /**
  * Etiqueta de despacho para impresora térmica de etiquetas.
  *
- * El rollo es de 80 × 50 mm con el lado de 80 mm en el sentido del avance del
- * papel, así que la etiqueta se IMPRIME VERTICAL (50 de ancho × 80 de alto) pero
- * el contenido se lee A LO ANCHO. Por eso el contenido se dibuja en una página
- * apaisada de 80 × 50 mm y se marca con /Rotate 90: el visor y la impresora la
- * sacan vertical con el texto girado, sin que haya que calcular coordenadas
- * rotadas a mano. En la app la vista previa es HTML y va horizontal (se lee mejor).
+ * La etiqueta es HORIZONTAL: 80 mm de ancho × 50 mm de alto, y así se imprime.
+ * La página del PDF sale apaisada con el contenido derecho (sin /Rotate), que es
+ * como se lee y como entra en el rollo. La vista previa de la app usa las mismas
+ * constantes de [lib/etiqueta-datos.ts](etiqueta-datos.ts), así que muestra
+ * exactamente lo que sale impreso.
  */
 
 const W = ETIQUETA_PT.ancho   // 226.77 pt
@@ -32,8 +31,6 @@ export async function generarEtiquetaDespacho(data: EtiquetaDespachoData): Promi
 
   const f = await embedBrandFonts(doc)
   const page = doc.addPage([W, H])
-  // El contenido va apaisado, el papel sale vertical.
-  page.setRotation(degrees(90))
 
   const M = L.margen
   const maxW = W - M * 2

@@ -7,8 +7,9 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Etiqueta de despacho de una ficha, lista para la impresora térmica (80 × 50 mm,
- * se imprime vertical). Va `inline` para que se abra en el visor y se pueda
- * mandar a imprimir directo. La vista previa horizontal de la app es HTML.
+ * horizontal). Va `inline` porque la ficha la carga en un iframe oculto y llama a
+ * `print()` directo: el usuario ve el diálogo de impresión con su impresora, sin
+ * pasar por una pestaña con el PDF.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
