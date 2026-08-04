@@ -18,7 +18,8 @@ import { aplicaReglaAuto, cremacionLlevaRecargoFueraHorario } from '@/lib/adicio
 import { retiroPendiente, ahoraEnChile } from '@/lib/ficha-retiro'
 import { esAdmin } from '@/lib/roles'
 import { pidioVideo } from '@/lib/video-solicitado'
-import { datosEtiqueta, formatearTelefono, ETIQUETA_PT, L } from '@/lib/etiqueta-datos'
+import { datosEtiqueta } from '@/lib/etiqueta-datos'
+import { etiquetaHtml } from '@/lib/etiqueta-html'
 
 type Certificado = {
   id: string
@@ -792,43 +793,39 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   }
 
   /**
-   * Manda la etiqueta a la impresora en UN clic: descarga el PDF, lo carga en un
-   * iframe oculto y llama a print(). No abre una pestaña con el PDF ni pide nada.
+   * Manda la etiqueta a la impresora en UN clic. Imprime HTML, no el PDF: mandar
+   * el PDF obliga al navegador a abrirlo en su visor y, si el equipo tiene
+   * «descargar los PDF en vez de abrirlos», en vez de imprimir queda un archivo
+   * para guardar. Con HTML no hay visor de por medio y el `@page` de
+   * [lib/etiqueta-html.ts](lib/etiqueta-html.ts) le declara a la impresora el
+   * papel de 80 × 50 mm horizontal, así no la gira ni la reescala.
    *
-   * Si el navegador corre con impresión directa (Chrome/Edge con `--kiosk-printing`,
-   * ver [docs/impresion-etiquetas.md](docs/impresion-etiquetas.md)) la etiqueta sale
-   * sola en la impresora predeterminada. Si no, el navegador muestra su diálogo —
-   * es un bloqueo del navegador, no algo que la app pueda saltarse desde la web.
+   * Con `--kiosk-printing` (ver [docs/impresion-etiquetas.md](docs/impresion-etiquetas.md))
+   * sale sola en la impresora predeterminada; si no, aparece el diálogo del
+   * navegador — eso último no se puede evitar desde una web.
    */
-  const imprimirEtiqueta = async () => {
+  const imprimirEtiqueta = () => {
     if (!cliente || imprimiendoEtiqueta) return
     setImprimiendoEtiqueta(true)
-    const url = `/api/clientes/${cliente.id}/etiqueta`
     try {
-      const r = await fetch(url, { cache: 'no-store' })
-      if (!r.ok) throw new Error('No se pudo generar la etiqueta')
-      const blobUrl = URL.createObjectURL(await r.blob())
       const iframe = document.createElement('iframe')
       iframe.setAttribute('aria-hidden', 'true')
-      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0'
+      // Fuera de pantalla pero con el tamaño real: así el ajuste automático de
+      // texto mide sobre la etiqueta de verdad y no sobre una caja de 1 px.
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:80mm;height:50mm;border:0'
       iframe.onload = () => {
-        try {
-          iframe.contentWindow?.focus()
-          iframe.contentWindow?.print()
-        } catch {
-          window.open(blobUrl, '_blank', 'noopener')
-        }
-        // Con diálogo el print() bloquea; con impresión directa vuelve al toque.
-        // En los dos casos hay que esperar antes de soltar el iframe y el blob.
-        setTimeout(() => { iframe.remove(); URL.revokeObjectURL(blobUrl) }, 120000)
+        iframe.contentWindow?.focus()
+        iframe.contentWindow?.print()
+        setTimeout(() => iframe.remove(), 120000)
       }
-      iframe.src = blobUrl
+      iframe.srcdoc = etiquetaHtml(datosEtiqueta(cliente as unknown as Record<string, unknown>), {
+        logoUrl: `${window.location.origin}/certificates/logo_alma_animal.png`,
+      })
       document.body.appendChild(iframe)
       setEtiquetaOpen(false)
       mostrarGuardado('Etiqueta enviada a la impresora')
     } catch (e) {
       alert(e instanceof Error ? e.message : 'No se pudo imprimir la etiqueta')
-      window.open(url, '_blank', 'noopener')
     } finally {
       setImprimiendoEtiqueta(false)
     }
@@ -2306,62 +2303,33 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
       </Modal>
 
-      {/* Etiqueta de despacho horizontal (80 × 50 mm): se ve igual que como sale
-          impresa, y "Imprimir" manda el PDF directo al diálogo de la impresora. */}
+      {/* Etiqueta de despacho horizontal (80 × 50 mm). La vista previa es EL MISMO
+          documento que se imprime (lib/etiqueta-html), solo agrandado: lo que se
+          ve acá es exactamente lo que sale de la impresora. */}
       <Modal open={etiquetaOpen} onClose={() => setEtiquetaOpen(false)} title="Etiqueta de despacho" size="xl">
         {(() => {
           const d = datosEtiqueta(cliente as unknown as Record<string, unknown>)
-          // Escala de la vista previa: 2 px por punto PDF. Todas las medidas salen
-          // de las MISMAS constantes que dibuja el generador (lib/etiqueta-datos),
-          // así lo que se ve acá es exactamente lo que se imprime.
-          const S = 2
-          const pt = (n: number) => n * S
-          // El generador achica los valores cuando la dirección se va a dos líneas
-          // (ver el bucle de encogido en lib/etiqueta-despacho). Acá no se puede
-          // medir texto, así que se aproxima por largo: ~45 caracteres es una línea.
-          const e = d.direccion.length > 45 ? 0.84 : 1
-          const campos = [
-            { rotulo: 'MASCOTA', valor: d.nombre_mascota, size: L.mascota * e, peso: 'font-bold', lineas: 1 },
-            { rotulo: 'TUTOR', valor: d.nombre_tutor, size: L.tutor * e, peso: 'font-semibold', lineas: 1 },
-            { rotulo: 'DIRECCIÓN', valor: d.direccion, size: L.direccion * e, peso: 'font-semibold', lineas: 2 },
-            { rotulo: 'TELÉFONO', valor: formatearTelefono(d.telefono), size: L.telefono * e, peso: 'font-semibold', lineas: 1 },
-          ]
+          // 80 × 50 mm ≈ 302 × 189 px a 96 dpi; ×1.6 se lee cómodo en pantalla.
+          const Z = 1.6
+          const ancho = 80 * (96 / 25.4), alto = 50 * (96 / 25.4)
           return (
             <div className="space-y-4">
               <div className="flex justify-center">
-                <div
-                  className="flex flex-col bg-white text-black border-2 border-gray-400 shadow-md overflow-hidden"
-                  style={{ width: pt(ETIQUETA_PT.ancho), height: pt(ETIQUETA_PT.alto), padding: pt(L.margen) }}
-                >
-                  <div className="flex items-center justify-between" style={{ gap: pt(8) }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/certificates/logo_alma_animal.png" alt="Alma Animal"
-                      className="w-auto grayscale contrast-200 shrink-0"
-                      style={{ height: pt(L.logoAlto), maxWidth: pt(L.logoAnchoMax) }} />
-                    <div className="text-right leading-none min-w-0">
-                      <p className="font-bold tracking-tight truncate" style={{ fontSize: pt(L.codigo) }}>{d.codigo || '—'}</p>
-                      <p className="text-gray-500" style={{ fontSize: pt(L.codigoRotulo), marginTop: pt(1) }}>CÓDIGO</p>
-                    </div>
-                  </div>
-                  <div className="border-t-2 border-black" style={{ marginTop: pt(L.reglaGap), marginBottom: pt(L.trasRegla) }} />
-                  {/* justify-between reparte el sobrante igual que el generador */}
-                  <div className="flex flex-1 flex-col justify-between">
-                    {campos.map(c => (
-                      <div key={c.rotulo} className="leading-none">
-                        <p className="text-gray-500" style={{ fontSize: pt(L.rotulo) }}>{c.rotulo}</p>
-                        <p className={`${c.peso} ${c.lineas > 1 ? 'line-clamp-2' : 'truncate'}`}
-                          style={{ fontSize: pt(c.size), marginTop: pt(L.rotuloGap), lineHeight: 1.05 }}>
-                          {c.valor || '—'}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                <div className="border-2 border-gray-400 shadow-md bg-white overflow-hidden"
+                  style={{ width: ancho * Z, height: alto * Z }}>
+                  <iframe
+                    title="Vista previa de la etiqueta"
+                    srcDoc={etiquetaHtml(d)}
+                    className="border-0 block"
+                    style={{ width: ancho, height: alto, transform: `scale(${Z})`, transformOrigin: 'top left' }}
+                  />
                 </div>
               </div>
 
               <p className="text-[11px] text-gray-500 text-center">
                 80 × 50 mm, horizontal. «Imprimir» la manda derecho a la impresora.
-                Si aparece el diálogo del navegador, elegí tamaño real / 100 % (sin «ajustar a la página»).
+                Si sale girada o partida en dos etiquetas, el tamaño de papel de la impresora
+                no está en 80 × 50 mm (ver <b>docs/impresion-etiquetas.md</b>).
               </p>
 
               <div className="flex gap-2">

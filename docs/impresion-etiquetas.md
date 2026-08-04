@@ -36,8 +36,24 @@ abierto con la opción `--kiosk-printing`, que imprime en la impresora
    que Windows administre mi impresora predeterminada» (si no, Windows la cambia
    sola a la última que se usó).
 
-4. En las propiedades de la impresora, dejar el papel en **80 × 50 mm** y la
-   escala en **100 % / tamaño real** (nunca «ajustar a la página»).
+4. **El paso que más se pasa por alto:** dejar el **tamaño de papel de la
+   impresora en 80 × 50 mm** (80 de ancho, 50 de alto). Va en *Impresoras y
+   escáneres → la impresora → Preferencias de impresión → Tamaño de papel*; si
+   no existe ese tamaño, se crea con «Personalizado / Definir tamaño». Y la
+   escala en **100 % / tamaño real**, nunca «ajustar a la página».
+
+## Si la etiqueta sale girada o partida en dos
+
+Es el tamaño de papel del **driver**, no la app. Cuando el driver dice que el
+papel es 50 × 80 (vertical) y la etiqueta viene de 80 × 50 (horizontal), Windows
+la **gira 90° para que le calce** — y como los 80 mm quedan en el sentido del
+avance del rollo (que da 50 mm por etiqueta), el contenido se estira sobre 1,6
+etiquetas: la primera queda con medio texto de costado y la siguiente con el
+resto.
+
+La app manda el trabajo declarando `@page { size: 80mm 50mm }`, o sea el papel
+correcto y horizontal. Corrigiendo el tamaño en las preferencias de la impresora
+(punto 4) sale una etiqueta por etiqueta, derecha.
 
 Desde ahí, **usar siempre ese acceso directo** para trabajar: un clic en
 «Imprimir etiqueta» y la etiqueta sale.
