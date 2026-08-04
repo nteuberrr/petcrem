@@ -11,12 +11,12 @@ import { Modal } from '@/components/ui/Modal'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtLitros, fmtPrecio, fmtFecha, fmtKg } from '@/lib/format'
 import { formatDateForSheet, todayISO } from '@/lib/dates'
-import { parsePeso } from '@/lib/numbers'
+import { parsePeso, parseDecimal } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { anforaPremiumIncluida, servicioIncluyeAnforaPremium, repartirAnforasPremium } from '@/lib/anforas-premium'
 import { aplicaReglaAuto, cremacionLlevaRecargoFueraHorario } from '@/lib/adicionales-auto'
 import { retiroPendiente, ahoraEnChile } from '@/lib/ficha-retiro'
-import { esAdmin } from '@/lib/roles'
+import { esAdmin, esAdminTotal } from '@/lib/roles'
 import { pidioVideo } from '@/lib/video-solicitado'
 import { datosEtiqueta } from '@/lib/etiqueta-datos'
 import { etiquetaHtml } from '@/lib/etiqueta-html'
@@ -118,6 +118,11 @@ type ClienteDetalle = {
   estado_pago: string
   /** ISO. Día en que se cobró (lo cuadra Facturación → Ventas POS). */
   fecha_pago?: string
+  /** Rebaja manual del total que solo hace el dueño (positivo = resta). */
+  ajuste_admin?: string
+  ajuste_admin_motivo?: string
+  ajuste_admin_por?: string
+  ajuste_admin_fecha?: string
   precio_total?: string
   boleta_id?: string
   omitir_evaluacion?: string
@@ -176,6 +181,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const router = useRouter()
   const { data: session } = useSession()
   const isAdmin = esAdmin((session?.user as { role?: string })?.role)
+  // El AJUSTE de precio es exclusivo del dueño (rol `admin`), no de admin2.
+  const esDueno = esAdminTotal((session?.user as { role?: string })?.role)
   const [cliente, setCliente] = useState<ClienteDetalle | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -898,7 +905,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     : descuentoElegido.tipo === 'fijo'
       ? Math.min(descuentoValorNum, subtotalServicio)
       : Math.round((subtotalServicio * descuentoValorNum) / 100)
-  const totalServicio = Math.max(0, subtotalServicio - montoDescuento)
+  // Ajuste manual del dueño: se resta al final, sobre el total ya descontado.
+  const ajusteAdmin = Math.round(parseDecimal(String(form.ajuste_admin ?? '')) ?? 0)
+  const totalServicio = Math.max(0, subtotalServicio - montoDescuento - ajusteAdmin)
 
   // Cuando aplica un precio de convenio o especial, mostramos también el
   // precio normal (tabla de precios generales) para tener a la vista cuánto
@@ -2220,6 +2229,68 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               </div>
             )}
           </div>
+
+          {/* AJUSTE ADMIN — rebaja manual sobre el total, solo del dueño.
+              El editor lo ve únicamente él; la LÍNEA del ajuste la ve cualquiera
+              que abra la ficha, porque si no el total no cuadraría con la tabla
+              de precios y parecería un error. */}
+          {esDueno && (
+            <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Ajuste admin</p>
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Solo tú</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+                <div>
+                  <label className="text-[11px] text-gray-600">Monto a descontar</label>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <span className="text-sm text-gray-500">−$</span>
+                    <input
+                      type="number"
+                      step={1}
+                      value={form.ajuste_admin ?? ''}
+                      onChange={e => setForm(f => ({ ...f, ajuste_admin: e.target.value }))}
+                      placeholder="0"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                    />
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-[11px] text-gray-600">Motivo (opcional)</label>
+                  <input
+                    type="text"
+                    value={form.ajuste_admin_motivo ?? ''}
+                    onChange={e => setForm(f => ({ ...f, ajuste_admin_motivo: e.target.value }))}
+                    placeholder="Por qué se ajustó el precio"
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1.5">
+                Se resta del total y queda en la boleta. Deja 0 para quitarlo; un monto negativo lo sube.
+              </p>
+            </div>
+          )}
+
+          {ajusteAdmin !== 0 && (
+            <div className="flex items-start justify-between gap-3 mt-3 pt-3 border-t border-gray-200">
+              <div className="min-w-0">
+                <p className="text-sm text-gray-700">
+                  Ajuste admin
+                  {form.ajuste_admin_motivo ? <span className="text-gray-400 ml-1">({form.ajuste_admin_motivo})</span> : null}
+                </p>
+                {cliente?.ajuste_admin_por && (
+                  <p className="text-[11px] text-gray-400">
+                    {cliente.ajuste_admin_por}
+                    {cliente.ajuste_admin_fecha ? ` · ${fmtFecha(cliente.ajuste_admin_fecha)}` : ''}
+                  </p>
+                )}
+              </div>
+              <span className={`font-semibold shrink-0 ${ajusteAdmin > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                {ajusteAdmin > 0 ? '− ' : '+ '}{fmtPrecio(Math.abs(ajusteAdmin))}
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between pt-3 mt-2 border-t-2 border-gray-300">
             <p className="text-base font-bold text-gray-900">Total{(cliente?.eutanasia?.valor_cliente ?? 0) > 0 ? ' cremación (boleta)' : ''}</p>

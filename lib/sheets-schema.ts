@@ -19,6 +19,12 @@ export const SHEETS: Record<string, string[]> = {
     'veterinaria_id', 'tipo_precios', 'adicionales',
     'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
     'precio_servicio', 'precio_adicionales', 'precio_total',
+    // AJUSTE ADMIN: rebaja manual sobre el total, SOLO del dueño (rol admin). Es un
+    // monto positivo que se RESTA del total (un negativo lo sube). Va aparte del
+    // `descuento_*`, que sale del catálogo de convenios y solo toca la cremación:
+    // este es una decisión puntual sobre el precio final. Se guarda quién y cuándo
+    // porque cambia lo que se factura.
+    'ajuste_admin', 'ajuste_admin_motivo', 'ajuste_admin_por', 'ajuste_admin_fecha',
     // fecha_pago (ISO): el día en que la venta se cobró de verdad. Es la fecha con
     // la que Ventas POS arma cada día y calcula el abono de Haulmer (día hábil
     // siguiente); sin ella no hay forma de cuadrar contra la liquidación.

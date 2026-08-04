@@ -5,14 +5,14 @@ import { getSheetData, updateById, updateByIdIf, ensureColumns, deleteRow } from
 import { ajustarStock, ajustarStockAdicionales } from '@/lib/stock'
 import { gredaEsperada, aplicarCambioGreda } from '@/lib/greda-stock'
 import { parseDecimal } from '@/lib/numbers'
-import { formatDateForSheet } from '@/lib/dates'
+import { formatDateForSheet, todayISO } from '@/lib/dates'
 import { yaFueRetirada } from '@/lib/ficha-retiro'
 import { ahoraChile } from '@/lib/agenda'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-mailer'
 import { capitalizarNombre } from '@/lib/nombres'
-import { esAdmin } from '@/lib/roles'
+import { esAdmin, esAdminTotal } from '@/lib/roles'
 import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
 import { dispararCobroAdicional, cobrosPendientesPorCliente, cobrosPorCliente, sincronizarSaldoParcial, cerrarSaldoParcial } from '@/lib/cobros'
 import { excluirIncluidos } from '@/lib/anforas-premium'
@@ -101,6 +101,7 @@ export async function PATCH(
       'veterinaria_id', 'adicionales', 'tipo_precios',
       'descuento_id', 'descuento_nombre', 'descuento_tipo', 'descuento_valor', 'descuento_monto',
       'fecha_defuncion', 'fecha_nacimiento', 'depto', 'notas', 'tipo_pago', 'estado_pago', 'fecha_pago',
+      'ajuste_admin', 'ajuste_admin_motivo', 'ajuste_admin_por', 'ajuste_admin_fecha',
       'peso_declarado', 'peso_ingreso', 'despacho_id',
       'precio_servicio', 'precio_adicionales', 'precio_total', 'boleta_id', 'hora_retiro',
       'greda_descontada',
@@ -146,6 +147,46 @@ export async function PATCH(
     for (const k of CAMPOS_SISTEMA) delete normalizedBody[k]
     // Banderas de control del request (no son columnas de la ficha).
     delete normalizedBody.avisar_cambio
+
+    // ── AJUSTE ADMIN ────────────────────────────────────────────────────────
+    // Rebaja manual sobre el TOTAL, exclusiva del dueño (rol `admin`). Como la
+    // ficha reenvía TODO el formulario en cada Guardar, esconder el campo en la
+    // UI no alcanza: se compara contra lo guardado y solo se exige el permiso
+    // cuando el valor realmente CAMBIA (si viene igual, es el eco del form de
+    // cualquier usuario y se deja pasar). El autor y la fecha los escribe el
+    // servidor, nunca el formulario: es plata que se deja de cobrar.
+    delete normalizedBody.ajuste_admin_por
+    delete normalizedBody.ajuste_admin_fecha
+    const ajusteGuardado = parseDecimal(String(rows[idx].ajuste_admin ?? '')) ?? 0
+    const motivoGuardado = String(rows[idx].ajuste_admin_motivo ?? '')
+    const ajustePedido = normalizedBody.ajuste_admin === undefined
+      ? ajusteGuardado
+      : Math.round(parseDecimal(String(normalizedBody.ajuste_admin ?? '')) ?? 0)
+    const motivoPedido = normalizedBody.ajuste_admin_motivo === undefined
+      ? motivoGuardado
+      : String(normalizedBody.ajuste_admin_motivo ?? '')
+
+    if (ajustePedido !== ajusteGuardado || motivoPedido !== motivoGuardado) {
+      const session = await getServerSession(authOptions)
+      const usuario = session?.user as { role?: string; name?: string; email?: string } | undefined
+      if (!esAdminTotal(usuario?.role)) {
+        return NextResponse.json(
+          { error: 'Solo el administrador puede ajustar el precio de una ficha' },
+          { status: 403 },
+        )
+      }
+      // Ajuste en 0 = se quitó: se limpia todo el bloque para no dejar rastro
+      // de un motivo/autor que ya no corresponde a ningún descuento.
+      const sinAjuste = ajustePedido === 0
+      normalizedBody.ajuste_admin = sinAjuste ? '' : String(ajustePedido)
+      normalizedBody.ajuste_admin_motivo = sinAjuste ? '' : motivoPedido
+      normalizedBody.ajuste_admin_por = sinAjuste ? '' : (usuario?.name || usuario?.email || '')
+      normalizedBody.ajuste_admin_fecha = sinAjuste ? '' : todayISO()
+    } else {
+      // Sin cambios: que el eco del formulario no reescriba el bloque.
+      delete normalizedBody.ajuste_admin
+      delete normalizedBody.ajuste_admin_motivo
+    }
     for (const k of ['peso_declarado', 'peso_ingreso']) {
       if (normalizedBody[k] !== undefined && normalizedBody[k] !== '') {
         const n = parseDecimal(normalizedBody[k])
@@ -178,6 +219,7 @@ export async function PATCH(
       adicionales: adicionalesSnap,
       descuento_tipo: candidate.descuento_tipo ? String(candidate.descuento_tipo) : undefined,
       descuento_valor: candidate.descuento_valor as number | string | undefined,
+      ajuste_admin: candidate.ajuste_admin as number | string | undefined,
     })
 
     const updated = {

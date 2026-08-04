@@ -24,6 +24,8 @@ export interface PrecioFichaCalculado {
   servicio: number
   adicionales: number
   descuento: number
+  /** Rebaja manual del dueño (positivo = restó del total). Ya viene aplicada en `total`. */
+  ajuste: number
   total: number
   adicionalesLabel: string
 }
@@ -50,6 +52,9 @@ export function calcularPrecioFicha(
   const snapServ = parseDecimalOr0(c.precio_servicio)
   const snapAdi = parseDecimalOr0(c.precio_adicionales)
   const snapDesc = parseDecimalOr0(c.descuento_monto)
+  // Ajuste manual del dueño: ya viene DENTRO del total congelado; se expone
+  // aparte solo para poder mostrarlo desglosado.
+  const snapAjuste = parseDecimalOr0(c.ajuste_admin)
   let items: AdicionalItem[] = []
   try { items = JSON.parse(c.adicionales || '[]') } catch { items = [] }
   const adicionalesLabel = items
@@ -64,7 +69,7 @@ export function calcularPrecioFicha(
   // de crear la ficha— se corrigieron por dato, recomputando su snapshot al tier
   // correcto; ver reconciliación 2026-07-17.)
   if (snapTotal > 0 || snapServ > 0 || snapAdi > 0) {
-    return { servicio: snapServ, adicionales: snapAdi, descuento: snapDesc, total: snapTotal, adicionalesLabel }
+    return { servicio: snapServ, adicionales: snapAdi, descuento: snapDesc, ajuste: snapAjuste, total: snapTotal, adicionalesLabel }
   }
 
   // Legacy SIN snapshot: recomputar en vivo con el tier que corresponde. Ficha de
@@ -93,7 +98,8 @@ export function calcularPrecioFicha(
     servicio: Math.round(servicio),
     adicionales: Math.round(adi),
     descuento: Math.round(descuento),
-    total: Math.round(Math.max(0, servicio + adi - descuento)),
+    ajuste: Math.round(snapAjuste),
+    total: Math.round(Math.max(0, servicio + adi - descuento - snapAjuste)),
     adicionalesLabel,
   }
 }

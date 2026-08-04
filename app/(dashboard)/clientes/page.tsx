@@ -33,6 +33,8 @@ type Cliente = {
   fotos_cuadro?: string; videos_servicio?: string; video_solicitado?: string
   correo_diferencia_fecha?: string
   precio_servicio?: string; precio_adicionales?: string; precio_total?: string
+  /** Rebaja manual del total hecha por el dueño (positivo = resta). */
+  ajuste_admin?: string; ajuste_admin_motivo?: string
   /** Valor a cobrar de la eutanasia a domicilio asociada (fuera de boleta); lo agrega el GET de la lista. */
   eutanasia_valor?: string
   /** Estimación EN VIVO del valor a cobrar (fichas sin precio congelado: las que
@@ -669,6 +671,16 @@ export default function ClientesPage() {
     })
     const desc = intCLP(c.descuento_monto)
     if (desc > 0) lineas.push({ nombre: `Descuento${c.descuento_nombre ? ` (${c.descuento_nombre})` : ''}`, valor: `−${fmtPrecio(desc)}`, verde: true })
+    // Ajuste manual del dueño: ya está DENTRO de `precio_total`, pero sin la línea
+    // el desglose no sumaría el total y parecería un error de cálculo.
+    const ajuste = intCLP(c.ajuste_admin)
+    if (ajuste !== 0) {
+      lineas.push({
+        nombre: `Ajuste admin${c.ajuste_admin_motivo ? ` (${c.ajuste_admin_motivo})` : ''}`,
+        valor: ajuste > 0 ? `−${fmtPrecio(ajuste)}` : `+${fmtPrecio(-ajuste)}`,
+        verde: ajuste > 0,
+      })
+    }
     // Eutanasia a domicilio asociada: se COBRA junto al retiro (el Total pasa a
     // ser el total a cobrar), pero va fuera de la boleta.
     const eutanasia = intCLP(c.eutanasia_valor)

@@ -61,6 +61,10 @@ create table if not exists "clientes" (
   "precio_servicio" text not null default '',
   "precio_adicionales" text not null default '',
   "precio_total" text not null default '',
+  "ajuste_admin" text not null default '',
+  "ajuste_admin_motivo" text not null default '',
+  "ajuste_admin_por" text not null default '',
+  "ajuste_admin_fecha" text not null default '',
   "notas" text not null default '',
   "tipo_pago" text not null default '',
   "estado_pago" text not null default '',
@@ -1233,5 +1237,12 @@ create table if not exists "config_pos" (
 insert into "config_pos" ("id", "comision_fija", "comision_variable", "iva")
 select 1, '65', '0.79', '19'
 where not exists (select 1 from "config_pos");
+
+-- clientes.ajuste_admin (2026-08-04): rebaja manual del total que solo puede hacer
+-- el dueño (rol admin). Monto positivo = se resta del total.
+alter table "clientes" add column if not exists "ajuste_admin" text not null default '';
+alter table "clientes" add column if not exists "ajuste_admin_motivo" text not null default '';
+alter table "clientes" add column if not exists "ajuste_admin_por" text not null default '';
+alter table "clientes" add column if not exists "ajuste_admin_fecha" text not null default '';
 
 notify pgrst, 'reload schema';

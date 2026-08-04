@@ -67,6 +67,8 @@ export interface PrecioSnapshot {
   precio_adicionales: number
   precio_total: number
   descuento_monto: number
+  /** Rebaja manual del dueño ya aplicada al total (positivo = restó). */
+  ajuste_admin: number
   tipo_precios_efectivo: 'general' | 'convenio' | 'especial'
 }
 
@@ -79,6 +81,13 @@ export interface SnapshotInput {
   adicionales: AdicionalItem[]
   descuento_tipo?: string  // 'fijo' | 'variable'
   descuento_valor?: number | string
+  /**
+   * AJUSTE ADMIN: rebaja manual sobre el TOTAL, decidida por el dueño para una
+   * ficha puntual. Positivo = resta (un negativo sube el total). Va después del
+   * descuento de convenio y sobre el total, no solo sobre la cremación: es una
+   * corrección del precio final, no una tarifa.
+   */
+  ajuste_admin?: number | string
 }
 
 export async function calcularSnapshotFicha(input: SnapshotInput): Promise<PrecioSnapshot> {
@@ -152,13 +161,16 @@ export async function calcularSnapshotFicha(input: SnapshotInput): Promise<Preci
     }
   }
 
-  const precio_total = Math.max(0, subtotal - descuento_monto)
+  // 6) Ajuste manual del dueño, al final y sobre el total ya descontado.
+  const ajuste_admin = Math.round(num(input.ajuste_admin))
+  const precio_total = Math.max(0, subtotal - descuento_monto - ajuste_admin)
 
   return {
     precio_servicio: Math.round(precio_servicio),
     precio_adicionales: Math.round(precio_adicionales),
     precio_total: Math.round(precio_total),
     descuento_monto: Math.round(descuento_monto),
+    ajuste_admin,
     tipo_precios_efectivo: tipo,
   }
 }
@@ -180,6 +192,7 @@ export function leerSnapshotFicha(cliente: Record<string, string>): PrecioSnapsh
     precio_adicionales: pa,
     precio_total: pt,
     descuento_monto: dm,
+    ajuste_admin: num(cliente.ajuste_admin),
     tipo_precios_efectivo: (cliente.tipo_precios as 'general' | 'convenio' | 'especial') || 'general',
   }
 }
