@@ -59,6 +59,15 @@ html {
   text-size-adjust: 100%;
 }
 
+/* Red de seguridad para la barra fija de móvil: al cambiar de sección Next.js a
+   veces no puede hacer un scroll simple al tope y llama a `scrollIntoView()`
+   sobre el contenido nuevo, que lo pegaría al borde del viewport (o sea, DEBAJO
+   de la barra). `scroll-padding-top` corre ese tope hacia abajo. Vale también
+   para cualquier `scrollIntoView`/ancla de la app. */
+@media (max-width: 767px) {
+  html { scroll-padding-top: 5rem }
+}
+
 @media (max-width: 767px) {
   input:not([type="checkbox"]):not([type="radio"]),
   select,
@@ -79,15 +88,20 @@ html {
   }
 }
 
-/* HISTORIALES EN EL TELÉFONO: la tabla se convierte en tarjetas apiladas.
-   Con 9 o 10 columnas, leer de lado es inmanejable (reporte del dueño
-   2026-08-03 sobre el historial de ciclos). Cada fila pasa a ser una tarjeta y
-   cada celda una línea «RÓTULO … valor», sacando el rótulo del atributo
-   `data-label` de la celda — por eso hay que ponerlo en cada `<td>`.
+/* HISTORIALES EN EL TELÉFONO: RESUMEN + TOCAR PARA VER TODO.
+   Con 9 o 10 columnas, leer la tabla de lado es inmanejable, y apilar TODAS las
+   celdas deja una tarjeta gigante por fila (las dos versiones las rechazó el
+   dueño, 2026-08-03/04). Así que cada fila queda como una línea compacta con los
+   campos que la identifican, y al tocarla se despliega el resto con su rótulo.
 
-   Se aplica SOLO a las tablas marcadas con `.tabla-historial`; el resto sigue
-   con el scroll horizontal de arriba. Las celdas SIN `data-label` (acciones,
-   filas expandidas con `colSpan`) ocupan la línea completa. */
+   Los atributos los pone `TablaScroll` (components/ui/TablaScroll.tsx):
+     data-fila="resumen" | "ampliacion"   → tarjeta, o continuación que despliega
+                                            la propia página (celda con colSpan)
+     data-ver="siempre" | "detalle"       → celda de la línea compacta, o del detalle
+     data-label="…"                       → rótulo, copiado de la cabecera
+     data-abierta="1"                     → la fila está desplegada
+   Se aplica SOLO a las tablas con `.tabla-historial`; el resto sigue con el
+   scroll horizontal de arriba. */
 @media (max-width: 768px) {
   main table.tabla-historial {
     display: block;
@@ -97,27 +111,74 @@ html {
   }
   .tabla-historial thead { display: none }
   .tabla-historial tbody { display: block }
-  .tabla-historial tbody tr {
+
+  /* La tarjeta. El hueco de la derecha es para la flecha. */
+  .tabla-historial tbody tr[data-fila='resumen'] {
     display: block;
+    position: relative;
     background: #fff;
     border: 1px solid #d1d5db;
     border-radius: 12px;
-    margin: 0 0 10px;
-    padding: 6px 12px;
+    margin: 0 0 8px;
+    padding: 11px 40px 11px 13px;
     box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
   }
+  .tabla-historial tbody tr[data-fila='resumen']::after {
+    content: '';
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid #9ca3af;
+    border-bottom: 2px solid #9ca3af;
+    transform: rotate(45deg);
+    transition: transform .15s;
+  }
+  .tabla-historial tbody tr[data-abierta='1']::after {
+    top: 18px;
+    transform: rotate(-135deg);
+  }
+
   .tabla-historial tbody td {
+    width: auto !important;
+    border: 0 !important;
+    white-space: normal !important;
+  }
+
+  /* Línea compacta: los primeros campos, uno al lado del otro y sin rótulo
+     (son los que identifican la fila: número, fecha, operador…). */
+  .tabla-historial tbody td[data-ver='siempre'] {
+    display: inline-block;
+    vertical-align: baseline;
+    padding: 0 !important;
+    font-size: 14px;
+    color: #111827;
+    font-weight: 600;
+  }
+  .tabla-historial tbody td[data-ver='siempre']::before { content: none }
+  .tabla-historial tbody td[data-ver='siempre'] ~ td[data-ver='siempre'] {
+    margin-left: 10px;
+    font-weight: 400;
+    color: #6b7280;
+  }
+
+  /* El detalle aparece solo con la fila abierta. */
+  .tabla-historial tbody td[data-ver='detalle'] { display: none }
+  .tabla-historial tbody tr[data-abierta='1'] td[data-ver='detalle'] {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 14px;
-    width: auto !important;
     padding: 5px 0 !important;
-    border: 0 !important;
-    white-space: normal !important;
     text-align: right;
   }
-  .tabla-historial tbody td::before {
+  .tabla-historial tbody tr[data-abierta='1'] td[data-ver='siempre'] + td[data-ver='detalle'] {
+    margin-top: 9px;
+    padding-top: 10px !important;
+    border-top: 1px solid #f3f4f6 !important;
+  }
+  .tabla-historial tbody td[data-ver='detalle']::before {
     content: attr(data-label);
     flex: none;
     text-align: left;
@@ -127,10 +188,23 @@ html {
     text-transform: uppercase;
     color: #6b7280;
   }
-  .tabla-historial tbody td:not([data-label])::before,
+  /* Celdas sin rótulo (los botones de acción): a lo ancho y alineadas a la izquierda. */
   .tabla-historial tbody td[data-label='']::before { content: none }
-  .tabla-historial tbody td:not([data-label]),
-  .tabla-historial tbody td[data-label=''] { display: block; text-align: left }
+  .tabla-historial tbody tr[data-abierta='1'] td[data-ver='detalle'][data-label=''] {
+    display: block;
+    text-align: left;
+  }
+
+  /* Continuación que despliega la propia página (celda con colSpan): se pega
+     debajo de su tarjeta en vez de simular una fila nueva. */
+  .tabla-historial tbody tr[data-fila='ampliacion'] { display: block; margin: -6px 0 8px }
+  .tabla-historial tbody tr[data-fila='ampliacion'] td {
+    display: block;
+    background: #f9fafb;
+    border: 1px solid #d1d5db !important;
+    border-top: 0 !important;
+    border-radius: 0 0 12px 12px;
+  }
 }
 
 /* Accesibilidad (WCAG 2.3.3): si el usuario pidió menos movimiento en su sistema,

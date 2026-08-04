@@ -631,7 +631,9 @@ export default function DespachosTab() {
         {despachos.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">Sin recorridos registrados</div>
         ) : (
-          <TablaScroll>
+          // En el teléfono la línea compacta muestra N° de recorrido y fecha
+          // (el N° global no dice nada sin el resto).
+          <TablaScroll resumen={[1, 2]}>
           <table className="w-full text-sm min-w-[680px]">
             <thead className={THEAD_STICKY}>
               <tr>
