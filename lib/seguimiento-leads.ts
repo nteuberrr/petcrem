@@ -144,6 +144,9 @@ export async function enviarSeguimientosPendientes(opts: { maxEnvios?: number } 
     const historial: TurnoMensaje[] = conTexto.map(m => ({
       rol: m.direccion === 'entrante' ? 'cliente' : 'nosotros',
       texto: (m.cuerpo && m.cuerpo.trim()) ? m.cuerpo : `[${m.tipo}]`,
+      // Con el ts, cada mensaje del cliente le llega al modelo fechado: así un
+      // "hoy" de días atrás no se lee como si fuera de ahora.
+      ts: m.ts,
     }))
 
     let texto = ''

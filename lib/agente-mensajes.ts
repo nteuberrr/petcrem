@@ -668,16 +668,47 @@ const TOOL_ADICIONAL: Anthropic.Tool = {
   },
 }
 
+/**
+ * Sello de fecha/hora de un mensaje, en hora de Chile: "[martes 04-08-2026 12:19]".
+ * Lleva el día de la semana escrito porque el error que arregla es justamente de
+ * día de la semana.
+ */
+function selloFecha(ts?: string): string {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = new Intl.DateTimeFormat('es-CL', {
+    timeZone: 'America/Santiago',
+    weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d)
+  const v = (t: string) => p.find(x => x.type === t)?.value ?? ''
+  return `[${v('weekday')} ${v('day')}-${v('month')}-${v('year')} ${v('hour')}:${v('minute')}]`
+}
+
 /** Mapea el historial a mensajes de Anthropic, fusionando turnos consecutivos
- *  del mismo rol y asegurando que empiece por 'user'. */
+ *  del mismo rol y asegurando que empiece por 'user'.
+ *
+ *  Cada mensaje DEL CLIENTE va con su fecha y hora al principio. Sin eso el
+ *  historial es una masa de texto sin tiempo y el modelo no tiene forma de saber
+ *  que un "hoy", un "domingo" o un "te esperamos a las 16:15" son de días atrás:
+ *  los repetía como si fueran de ahora (caso Pricy/José, 04-08-2026 — el martes
+ *  seguía diciendo "el retiro es hoy (domingo)" sobre un retiro del domingo 02).
+ *
+ *  El sello va SOLO en los mensajes del cliente, nunca en los nuestros: si
+ *  nuestros propios turnos aparecieran con el prefijo, el modelo lo copiaría en
+ *  la respuesta que le manda al cliente.
+ */
 function construirMensajes(historial: TurnoMensaje[]): Anthropic.MessageParam[] {
   const out: Anthropic.MessageParam[] = []
   for (const t of historial) {
     if (!t.texto?.trim()) continue
     const role = t.rol === 'cliente' ? 'user' : 'assistant'
+    const sello = role === 'user' ? selloFecha(t.ts) : ''
+    const texto = sello ? `${sello} ${t.texto}` : t.texto
     const last = out[out.length - 1]
-    if (last && last.role === role) last.content = `${last.content}\n${t.texto}`
-    else out.push({ role, content: t.texto })
+    if (last && last.role === role) last.content = `${last.content}\n${texto}`
+    else out.push({ role, content: texto })
   }
   while (out.length && out[0].role === 'assistant') out.shift()
   return out
@@ -827,6 +858,9 @@ REGLAS DE FECHA (duras):
 - MADRUGADA / TEMPRANO ≠ "hoy ya no se puede" (regla dura — este es el error del caso Jean): que sea de noche o de madrugada NO significa que el día de HOY ya pasó. La ventana de retiros de HOY es 09:00–21:10; si esa ventana todavía está por delante (p. ej. son las 02:00 y aún no son las 21:10 de hoy), ENTONCES SÍ se puede retirar HOY — ofrécelo. Solo se salta al día siguiente cuando la ventana de HOY ya cerró (después de las 21:10). Nunca ofrezcas "mañana" si el retiro de HOY todavía es posible, y nunca digas "no alcanzamos hoy" solo porque en este instante sea de madrugada. "No alcanzamos AHORA (es de noche)" es distinto de "no se puede HOY".
 - FERIADOS: si un día de la tabla está marcado como FERIADO (aunque sea día de semana), cuenta como fin de semana → el recargo de fuera de horario aplica TODO el día, no solo desde las 18:00. Cuando el retiro caiga en un feriado, avísale el recargo al cotizar y súmalo al total (igual que un fin de semana). Si el cliente pregunta "¿trabajan el feriado?", sí trabajamos, solo aclara que ese día lleva el recargo de fuera de horario.
 - NUNCA inventes ni adivines la fecha, el año, el día de la semana ni la hora; ante ambigüedad, confírmala contra la tabla antes de agendar.
+- EL HISTORIAL ESTÁ FECHADO: cada mensaje del cliente empieza con su fecha y hora reales entre corchetes, así: "[martes 04-08-2026 12:19]". Eso es un dato del sistema, NO parte del mensaje: nunca lo repitas ni escribas corchetes así en tu respuesta.
+- UN "HOY" DEL HISTORIAL NO ES HOY (regla dura — este es el error del caso Pricy/José): "hoy", "mañana", "ahora", "en un rato", un día de la semana o una hora dichos en mensajes ANTERIORES se refieren al día EN QUE SE ESCRIBIERON (mira su sello de fecha), no al día de hoy. Antes de repetir cualquiera de esas palabras, mira el sello del mensaje donde aparecieron y compáralo con "Hoy es" de arriba. Si la conversación se retomó otro día, el "hoy" viejo YA PASÓ.
+- RETIRO YA PASADO: si el retiro se agendó para una fecha ANTERIOR a hoy, ese retiro YA OCURRIÓ. No digas "te esperamos hoy", "nos vemos en un rato" ni repitas su hora como si estuviera por venir: la mascota ya está con nosotros y lo que sigue es el proceso de cremación y entrega. Cuando el cliente pregunte por los plazos, cuéntalos desde la fecha REAL del retiro, no desde hoy.
 - DÍA DE LA SEMANA (regla dura): jamás deduzcas de memoria qué día de la semana es una fecha. Solo nombra el día si lo LEÍSTE en la tabla de arriba, o si una herramienta te lo devolvió pegado a la fecha (las herramientas ya te dan "jueves 30-07-2026"). Si no lo tienes, escribe solo la fecha ("el 30 de julio") — decir el número sin el día NUNCA es un error; decir el día equivocado sí. (Caso real: la herramienta devolvió "30-07-2026", le dijimos a la clienta "miércoles 30 de julio" y era jueves 30; el equipo tuvo que corregirnos delante de ella.)
 - Nunca mezcles el día de una fecha con el número de otra (ej.: la fecha era viernes 24 y escribimos "viernes 25"). Copia día + número + mes juntos, tal cual salen de la tabla o de la herramienta.
 - PALABRAS RELATIVAS DEL HISTORIAL: un "hoy" / "mañana" / "esta tarde" que el cliente (o tú) escribió en un mensaje de un DÍA ANTERIOR ya venció y NO se recalcula contra la tabla de hoy. Resuelve el día SOLO con lo que el cliente pidió en su ÚLTIMO mensaje. (Caso real: una clienta escribió de noche "mañana les aviso", al día siguiente pidió el servicio "Hoy, 9:00", y agendamos para el día siguiente porque arrastramos ese "mañana" viejo.)
