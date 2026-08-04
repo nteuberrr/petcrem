@@ -1285,6 +1285,16 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     {montoDescuento > 0 && (
                       <LineaValor label="Descuento" sub={descuentoElegido?.nombre} valor={`− ${fmtPrecio(montoDescuento)}`} tono="verde" />
                     )}
+                    {/* El ajuste del dueño va DENTRO del valor a cobrar: sin esta
+                        línea el desglose no sumaba el total y parecía un error. */}
+                    {ajusteAdmin !== 0 && (
+                      <LineaValor
+                        label="Ajuste admin"
+                        sub={form.ajuste_admin_motivo || undefined}
+                        valor={ajusteAdmin > 0 ? `− ${fmtPrecio(ajusteAdmin)}` : `+ ${fmtPrecio(-ajusteAdmin)}`}
+                        tono={ajusteAdmin > 0 ? 'verde' : undefined}
+                      />
+                    )}
                     {eutanasiaValorHeader > 0 && (
                       <LineaValor label="Eutanasia a domicilio" sub="se cobra fuera de la boleta" valor={fmtPrecio(eutanasiaValorHeader)} />
                     )}
