@@ -44,16 +44,35 @@ abierto con la opción `--kiosk-printing`, que imprime en la impresora
 
 ## Si la etiqueta sale girada o partida en dos
 
-Es el tamaño de papel del **driver**, no la app. Cuando el driver dice que el
-papel es 50 × 80 (vertical) y la etiqueta viene de 80 × 50 (horizontal), Windows
-la **gira 90° para que le calce** — y como los 80 mm quedan en el sentido del
-avance del rollo (que da 50 mm por etiqueta), el contenido se estira sobre 1,6
-etiquetas: la primera queda con medio texto de costado y la siguiente con el
-resto.
+Es el **tamaño de papel** del driver, no la app y **no la orientación**. Cambiar
+vertical/horizontal no arregla nada: la orientación solo gira el contenido dentro
+de la hoja, mientras que el largo que la impresora avanza por etiqueta lo define
+el tamaño de papel. Si el papel no mide 80 × 50, Windows gira la etiqueta para
+que le calce y el contenido se estira sobre más de una etiqueta — sale la mitad
+del texto de costado en una y el resto en la siguiente.
 
-La app manda el trabajo declarando `@page { size: 80mm 50mm }`, o sea el papel
-correcto y horizontal. Corrigiendo el tamaño en las preferencias de la impresora
-(punto 4) sale una etiqueta por etiqueta, derecha.
+**Ojo con la orientación:** el papel `80mm x 50mm` ya es 80 de ancho por 50 de
+alto, así que la etiqueta horizontal corresponde a orientación **vertical**.
+Poner «horizontal» ahí es justamente lo que la gira.
+
+Para verlo y arreglarlo:
+
+```powershell
+# Solo diagnostica: qué papel tiene puesto y cuáles ofrece el driver
+powershell -ExecutionPolicy Bypass -File scripts\diagnostico-impresora.ps1
+
+# Además lo deja en 80 × 50 mm vertical
+powershell -ExecutionPolicy Bypass -File scripts\diagnostico-impresora.ps1 -Aplicar
+```
+
+(En el equipo del crematorio el papel estaba en **48 × 60 mm**; ahí estaba el
+problema.) El script escribe el DEVMODE del driver: no hay cmdlet para esto,
+`Set-PrintConfiguration -PaperSize` solo acepta tamaños estándar tipo A4 o Letter,
+no los del driver de etiquetas. Deja el valor para el usuario actual, que es el
+que después lee Chrome; con permisos de administrador lo deja para todo el equipo.
+
+Del lado de la app, el trabajo de impresión ya declara `@page { size: 80mm 50mm }`,
+o sea el papel correcto — pero si el driver no tiene ese tamaño puesto, manda él.
 
 Desde ahí, **usar siempre ese acceso directo** para trabajar: un clic en
 «Imprimir etiqueta» y la etiqueta sale.

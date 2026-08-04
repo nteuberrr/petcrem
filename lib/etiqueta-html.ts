@@ -1,4 +1,4 @@
-import { L, MM, formatearTelefono, type EtiquetaDespachoData } from './etiqueta-datos'
+import { AJUSTE, L, MM, formatearTelefono, type EtiquetaDespachoData } from './etiqueta-datos'
 
 /**
  * Etiqueta de despacho como documento HTML de 80 × 50 mm, listo para imprimir.
@@ -60,7 +60,9 @@ export function etiquetaHtml(d: EtiquetaDespachoData, opts?: { logoUrl?: string 
     font-family: system-ui, -apple-system, "Segoe UI", Arial, Helvetica, sans-serif;
     /* Térmica: negro puro. Un gris claro se dithera y sale sucio. */
     color: #000; background: #fff;
-    padding: ${mm(L.margen)};
+    /* El padding izquierdo/superior lleva la corrección de la impresora (AJUSTE):
+       imprime corrida a la izquierda y sin esto se come la primera letra. */
+    padding: ${mm(L.margen + AJUSTE.y)} ${mm(L.margen)} ${mm(L.margen)} ${mm(L.margen + AJUSTE.x)};
     display: flex; flex-direction: column; overflow: hidden;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }

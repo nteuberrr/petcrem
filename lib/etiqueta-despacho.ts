@@ -2,7 +2,7 @@ import { PDFDocument, rgb } from 'pdf-lib'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { embedBrandFonts, fitText, wrapText } from './pdf-brand'
-import { ETIQUETA_PT, L, formatearTelefono, type EtiquetaDespachoData } from './etiqueta-datos'
+import { AJUSTE, ETIQUETA_PT, L, formatearTelefono, type EtiquetaDespachoData } from './etiqueta-datos'
 
 export { datosEtiqueta, ETIQUETA_MM, ETIQUETA_PT, L, formatearTelefono } from './etiqueta-datos'
 export type { EtiquetaDespachoData } from './etiqueta-datos'
@@ -32,9 +32,12 @@ export async function generarEtiquetaDespacho(data: EtiquetaDespachoData): Promi
   const f = await embedBrandFonts(doc)
   const page = doc.addPage([W, H])
 
-  const M = L.margen
-  const maxW = W - M * 2
-  const topY = H - M
+  // Márgenes: el izquierdo (y el techo) llevan la corrección de la impresora,
+  // que estampa la etiqueta corrida — ver AJUSTE en etiqueta-datos.
+  const M = L.margen + AJUSTE.x   // izquierdo
+  const MD = L.margen             // derecho e inferior
+  const maxW = W - M - MD
+  const topY = H - L.margen - AJUSTE.y
 
   // ── Cabecera: logo monocromo + código de servicio ──────────────────────────
   // Es la versión de un solo color del logo (la misma del certificado): sale
@@ -47,7 +50,7 @@ export async function generarEtiquetaDespacho(data: EtiquetaDespachoData): Promi
   const logoW = logo ? (logo.width / logo.height) * logoH : 0
 
   // El código nunca se come al logo: si no cabe al lado, se achica.
-  const anchoCodigo = W - M * 2 - logoW - 8
+  const anchoCodigo = maxW - logoW - 8
   while (codSize > 10 && f.bold.widthOfTextAtSize(codigo, codSize) > anchoCodigo) codSize -= 0.5
 
   const cabeceraH = Math.max(logoH, codSize + L.codigoRotulo + 1)
@@ -56,14 +59,14 @@ export async function generarEtiquetaDespacho(data: EtiquetaDespachoData): Promi
     page.drawImage(logo, { x: M, y: cabeceraBase + (cabeceraH - logoH) / 2, width: logoW, height: logoH })
   }
   const codW = f.bold.widthOfTextAtSize(codigo, codSize)
-  page.drawText(codigo, { x: W - M - codW, y: cabeceraBase + L.codigoRotulo + 1, size: codSize, font: f.bold, color: NEGRO })
+  page.drawText(codigo, { x: W - MD - codW, y: cabeceraBase + L.codigoRotulo + 1, size: codSize, font: f.bold, color: NEGRO })
   page.drawText('CÓDIGO', {
-    x: W - M - f.regular.widthOfTextAtSize('CÓDIGO', L.codigoRotulo),
+    x: W - MD - f.regular.widthOfTextAtSize('CÓDIGO', L.codigoRotulo),
     y: cabeceraBase, size: L.codigoRotulo, font: f.regular, color: GRIS,
   })
 
   const reglaY = cabeceraBase - L.reglaGap
-  page.drawLine({ start: { x: M, y: reglaY }, end: { x: W - M, y: reglaY }, thickness: 1, color: NEGRO })
+  page.drawLine({ start: { x: M, y: reglaY }, end: { x: W - MD, y: reglaY }, thickness: 1, color: NEGRO })
 
   // ── Datos: ocupan TODO lo que queda ────────────────────────────────────────
   // Se mide cuánto pesa cada campo (con sus líneas reales) y el espacio sobrante
@@ -84,7 +87,7 @@ export async function generarEtiquetaDespacho(data: EtiquetaDespachoData): Promi
     return { ...c, size, lineas, alto }
   })
 
-  const disponible = reglaY - L.trasRegla - M
+  const disponible = reglaY - L.trasRegla - MD
   const minimo = L.huecoMin * (base.length - 1)
   const cabe = (cs: Array<{ alto: number }>) => cs.reduce((s, c) => s + c.alto, 0) + minimo <= disponible
 

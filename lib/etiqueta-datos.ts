@@ -37,6 +37,20 @@ export const L = {
   telefono: 12,
 } as const
 
+/**
+ * Corrección de posición de la impresora, en PUNTOS PDF (ver `MM` arriba).
+ *
+ * La GD-41 estampa la etiqueta ~5 mm corrida hacia la izquierda: sin esto, la
+ * primera letra de cada línea sale cortada por el borde del papel. Se compensa
+ * desplazando TODO el contenido hacia la derecha; el ancho útil se achica lo
+ * mismo, así no se sale por el otro lado.
+ *
+ * Es el único lugar donde se ajusta: lo usan el HTML que se imprime y el PDF.
+ * Si se cambia de impresora y la etiqueta sale corrida para el otro lado, subir
+ * o bajar `x` acá (en mm × MM) y listo.
+ */
+export const AJUSTE = { x: 5 * MM, y: 0 }
+
 export interface EtiquetaDespachoData {
   codigo: string
   nombre_mascota: string
