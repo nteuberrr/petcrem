@@ -31,6 +31,8 @@ export interface LineaEstimada {
   monto: number
   /** Va incluida en el servicio (ánfora premium del CP) → monto 0. */
   incluido?: boolean
+  /** Rebaja manual del dueño: la UI la pinta en ROJO, no en verde como el descuento. */
+  ajuste?: boolean
 }
 
 export interface EstimacionFicha {
@@ -193,6 +195,7 @@ export async function crearEstimadorFichas(): Promise<(row: Fila) => EstimacionF
       lineas.push({
         nombre: `Ajuste admin${row.ajuste_admin_motivo ? ` (${row.ajuste_admin_motivo})` : ''}`,
         monto: -ajuste,
+        ajuste: true,
       })
     }
 

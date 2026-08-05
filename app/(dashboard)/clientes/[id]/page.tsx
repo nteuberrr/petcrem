@@ -1286,13 +1286,16 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                       <LineaValor label="Descuento" sub={descuentoElegido?.nombre} valor={`− ${fmtPrecio(montoDescuento)}`} tono="verde" />
                     )}
                     {/* El ajuste del dueño va DENTRO del valor a cobrar: sin esta
-                        línea el desglose no sumaba el total y parecía un error. */}
+                        línea el desglose no sumaba el total y parecía un error.
+                        En ROJO, no en verde (el verde es del descuento de convenio):
+                        es plata que se deja de cobrar y tiene que saltar a la vista,
+                        igual que en el bloque de edición de más abajo. */}
                     {ajusteAdmin !== 0 && (
                       <LineaValor
                         label="Ajuste admin"
                         sub={form.ajuste_admin_motivo || undefined}
                         valor={ajusteAdmin > 0 ? `− ${fmtPrecio(ajusteAdmin)}` : `+ ${fmtPrecio(-ajusteAdmin)}`}
-                        tono={ajusteAdmin > 0 ? 'verde' : undefined}
+                        tono={ajusteAdmin > 0 ? 'rojo' : undefined}
                       />
                     )}
                     {eutanasiaValorHeader > 0 && (
@@ -2674,7 +2677,7 @@ function InfoField({ label, value }: { label: string; value: string }) {
  * Una línea del desglose de la cabecera: concepto (con su aclaración chica) a la
  * izquierda, monto a la derecha, alineados por la línea de puntos del medio.
  */
-function LineaValor({ label, sub, valor, tono }: { label: string; sub?: string; valor: string; tono?: 'verde' }) {
+function LineaValor({ label, sub, valor, tono }: { label: string; sub?: string; valor: string; tono?: 'verde' | 'rojo' }) {
   return (
     <div className="flex items-baseline gap-2 text-sm">
       <span className="shrink-0 text-gray-700">
@@ -2682,7 +2685,7 @@ function LineaValor({ label, sub, valor, tono }: { label: string; sub?: string; 
         {sub && <span className="text-gray-400"> · {sub}</span>}
       </span>
       <span className="min-w-4 flex-1 translate-y-[-3px] border-b border-dotted border-gray-300" aria-hidden="true" />
-      <span className={`shrink-0 font-semibold ${tono === 'verde' ? 'text-emerald-700' : 'text-gray-900'}`}>{valor}</span>
+      <span className={`shrink-0 font-semibold ${tono === 'verde' ? 'text-emerald-700' : tono === 'rojo' ? 'text-red-600' : 'text-gray-900'}`}>{valor}</span>
     </div>
   )
 }

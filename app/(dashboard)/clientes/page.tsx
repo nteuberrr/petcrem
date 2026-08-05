@@ -55,6 +55,11 @@ type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
 
 const NOMBRE_MODALIDAD: Record<string, string> = { CI: 'Cremación Individual', CP: 'Cremación Premium', SD: 'Cremación Sin Devolución' }
+/** Línea del desglose de la tarjeta. `tono`: verde = a favor del tutor (descuento
+ *  de convenio, ánfora incluida); rojo = ajuste manual del dueño, plata que se
+ *  deja de cobrar y no debe confundirse con una tarifa acordada. */
+type LineaResumen = { nombre: string; valor: string; tono?: 'verde' | 'rojo' }
+type ResumenServicio = { lineas: LineaResumen[]; total: number; estimado?: boolean; nota?: string }
 const intCLP = (v: unknown) => parseInt(String(v ?? '').replace(/[^\d-]/g, ''), 10) || 0
 type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string }
 type TramoEspecial = Tramo & { veterinaria_id: string }
@@ -648,12 +653,12 @@ export default function ClientesPage() {
   // Si la ficha todavía no tiene precio congelado (las que nacen de un
   // agendamiento y siguen "por ingresar"), se muestra la ESTIMACIÓN en vivo que
   // calcula el GET, marcada como tal — así toda ficha muestra su valor a cobrar.
-  function resumenServicio(c: Cliente): { lineas: { nombre: string; valor: string; verde?: boolean }[]; total: number; estimado?: boolean; nota?: string } | null {
+  function resumenServicio(c: Cliente): ResumenServicio | null {
     const servicioPrecio = intCLP(c.precio_servicio)
     const total = intCLP(c.precio_total)
     if (servicioPrecio <= 0 && total <= 0) return resumenEstimado(c)
     const cs = (c.codigo_servicio || 'CI').toUpperCase()
-    const lineas: { nombre: string; valor: string; verde?: boolean }[] = [
+    const lineas: LineaResumen[] = [
       { nombre: NOMBRE_MODALIDAD[cs] || 'Cremación', valor: fmtPrecio(servicioPrecio) },
     ]
     let items: AdicionalItem[] = []
@@ -667,18 +672,20 @@ export default function ClientesPage() {
       const valor = incluidaTotal ? 'Incluido'
         : r.qtyIncluida > 0 ? `${r.qtyIncluida} incluida · ${fmtPrecio(monto)}`
         : fmtPrecio(monto)
-      lineas.push({ nombre: `${a.nombre}${a.qty > 1 ? ` ×${a.qty}` : ''}`, valor, verde: incluidaTotal })
+      lineas.push({ nombre: `${a.nombre}${a.qty > 1 ? ` ×${a.qty}` : ''}`, valor, tono: incluidaTotal ? 'verde' : undefined })
     })
     const desc = intCLP(c.descuento_monto)
-    if (desc > 0) lineas.push({ nombre: `Descuento${c.descuento_nombre ? ` (${c.descuento_nombre})` : ''}`, valor: `−${fmtPrecio(desc)}`, verde: true })
+    if (desc > 0) lineas.push({ nombre: `Descuento${c.descuento_nombre ? ` (${c.descuento_nombre})` : ''}`, valor: `−${fmtPrecio(desc)}`, tono: 'verde' })
     // Ajuste manual del dueño: ya está DENTRO de `precio_total`, pero sin la línea
-    // el desglose no sumaría el total y parecería un error de cálculo.
+    // el desglose no sumaría el total y parecería un error de cálculo. Va en ROJO:
+    // el verde es del descuento de convenio (una tarifa acordada), mientras que
+    // esto es plata que se deja de cobrar a mano y tiene que saltar a la vista.
     const ajuste = intCLP(c.ajuste_admin)
     if (ajuste !== 0) {
       lineas.push({
         nombre: `Ajuste admin${c.ajuste_admin_motivo ? ` (${c.ajuste_admin_motivo})` : ''}`,
         valor: ajuste > 0 ? `−${fmtPrecio(ajuste)}` : `+${fmtPrecio(-ajuste)}`,
-        verde: ajuste > 0,
+        tono: ajuste > 0 ? 'rojo' : undefined,
       })
     }
     // Eutanasia a domicilio asociada: se COBRA junto al retiro (el Total pasa a
@@ -693,27 +700,27 @@ export default function ClientesPage() {
    * del GET (`precio_estimado_*`). Devuelve null solo si no se pudo estimar
    * (p. ej. la ficha todavía no tiene peso): ahí la tarjeta avisa qué falta.
    */
-  function resumenEstimado(c: Cliente): { lineas: { nombre: string; valor: string; verde?: boolean }[]; total: number; estimado: boolean; nota?: string } | null {
+  function resumenEstimado(c: Cliente): (ResumenServicio & { estimado: boolean }) | null {
     if (String(c.precio_estimado || '').toUpperCase() !== 'TRUE') return null
     const eutanasia = intCLP(c.eutanasia_valor)
     const faltaPeso = String(c.precio_estimado_falta_peso || '').toUpperCase() === 'TRUE'
     if (faltaPeso && eutanasia <= 0) {
       return { lineas: [{ nombre: 'Falta el peso para calcular', valor: '—' }], total: 0, estimado: true, nota: 'Falta el peso' }
     }
-    let lineasEst: { nombre: string; monto: number; incluido?: boolean }[] = []
+    let lineasEst: { nombre: string; monto: number; incluido?: boolean; ajuste?: boolean }[] = []
     try {
       const arr = JSON.parse(c.precio_estimado_lineas || '[]')
       if (Array.isArray(arr)) lineasEst = arr
     } catch { /* sin desglose: queda solo el total */ }
-    // Las rebajas (descuento de convenio, ajuste del dueño) vienen con monto
-    // NEGATIVO: se muestran como "−$X" en verde, igual que en el desglose de una
-    // ficha con precio congelado. Sin esto salían como "$-20.000".
-    const lineas = lineasEst.map(l => ({
+    // Las rebajas vienen con monto NEGATIVO: se muestran como "−$X", igual que en
+    // el desglose de una ficha con precio congelado (antes salían "$-20.000").
+    // El descuento de convenio va en verde; el ajuste del dueño, en rojo.
+    const lineas: LineaResumen[] = lineasEst.map(l => ({
       nombre: l.nombre,
       valor: l.incluido ? 'Incluido' : l.monto < 0 ? `−${fmtPrecio(-l.monto)}` : fmtPrecio(l.monto),
-      verde: l.incluido || l.monto < 0,
+      tono: l.ajuste ? 'rojo' : (l.incluido || l.monto < 0) ? 'verde' : undefined,
     }))
-    if (eutanasia > 0) lineas.push({ nombre: 'Eutanasia a domicilio (fuera de boleta)', valor: fmtPrecio(eutanasia), verde: false })
+    if (eutanasia > 0) lineas.push({ nombre: 'Eutanasia a domicilio (fuera de boleta)', valor: fmtPrecio(eutanasia) })
     const nota = String(c.precio_estimado_modalidad_asumida || '').toUpperCase() === 'TRUE'
       ? 'Falta la modalidad (estimado como Individual)'
       : faltaPeso ? 'Falta el peso de la mascota' : undefined
@@ -1090,8 +1097,8 @@ export default function ClientesPage() {
                     <div className="space-y-1">
                       {resumen.lineas.map((l, i) => (
                         <div key={i} className="flex justify-between gap-2 text-[11px] leading-tight">
-                          <span className={`truncate ${l.verde ? 'text-emerald-700' : 'text-gray-600'}`} title={l.nombre}>{l.nombre}</span>
-                          <span className={`shrink-0 font-semibold ${l.verde ? 'text-emerald-700' : 'text-gray-800'}`}>{l.valor}</span>
+                          <span className={`truncate ${l.tono === 'verde' ? 'text-emerald-700' : l.tono === 'rojo' ? 'text-red-600' : 'text-gray-600'}`} title={l.nombre}>{l.nombre}</span>
+                          <span className={`shrink-0 font-semibold ${l.tono === 'verde' ? 'text-emerald-700' : l.tono === 'rojo' ? 'text-red-600' : 'text-gray-800'}`}>{l.valor}</span>
                         </div>
                       ))}
                       <div className="flex justify-between gap-2 text-xs pt-1 mt-1 border-t border-gray-200">
