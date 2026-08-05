@@ -433,6 +433,11 @@ export default function MensajesView() {
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={m.media_url} alt="" className="rounded-md max-w-full max-h-56" />
                         </a>
+                      ) : m.tipo === 'sticker' ? (
+                        // Chico y sin marco, como se ve en WhatsApp. El .webp animado
+                        // se anima solo en un <img>, no hace falta nada más.
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={m.media_url} alt="Sticker" className="w-28 h-28 object-contain" />
                       ) : m.tipo === 'video' ? (
                         <video src={m.media_url} controls className="rounded-md max-w-full max-h-56" />
                       ) : m.tipo === 'audio' ? (

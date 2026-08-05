@@ -414,6 +414,10 @@ export function tipoInterno(metaType: string): string {
   switch (metaType) {
     case 'text': return 'texto'
     case 'image': return 'imagen'
+    // Sticker: tipo propio (no 'imagen') para que el inbox lo dibuje chico y sin
+    // marco, como en WhatsApp. Ya venía cayendo en el `default` con este mismo
+    // valor; queda explícito porque ahora el webhook sí le descarga la media.
+    case 'sticker': return 'sticker'
     case 'audio':
     case 'voice': return 'audio'
     case 'document': return 'documento'

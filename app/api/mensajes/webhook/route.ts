@@ -80,7 +80,7 @@ async function autoResponder(conv: Conversacion, contacto: Contacto, miMsgId?: n
   // Un mensaje ENTRANTE sin texto (imagen/audio/documento) igual debe llegarle al
   // agente como un turno, o el agente quedaría mudo cuando el cliente manda solo una
   // foto (pasaba: mandaban la foto de la mascota al chat y no respondía nada).
-  const NOMBRE_TIPO: Record<string, string> = { imagen: 'una imagen', audio: 'un audio de voz', video: 'un video', documento: 'un documento' }
+  const NOMBRE_TIPO: Record<string, string> = { imagen: 'una imagen', audio: 'un audio de voz', video: 'un video', documento: 'un documento', sticker: 'un sticker' }
   const historial = msgsFrescos
     .map(m => {
       let texto = (m.cuerpo ?? '').toString().trim()
@@ -197,6 +197,8 @@ interface MetaMsg {
   to?: string
   text?: { body: string }
   image?: { id: string; caption?: string; mime_type?: string }
+  /** Sticker: media descargable como cualquier otra (image/webp, a veces animado). */
+  sticker?: { id: string; mime_type?: string; animated?: boolean }
   audio?: { id: string; mime_type?: string }
   voice?: { id: string; mime_type?: string }
   video?: { id: string; caption?: string; mime_type?: string }
@@ -317,7 +319,11 @@ async function procesarEntrante(value: Record<string, unknown>, msg: MetaMsg) {
   const tipo = tipoInterno(msg.type)
   let cuerpo: string | null = null
   let mediaUrl: string | null = null
-  const mediaObj = (msg.image || msg.audio || msg.voice || msg.video || msg.document) as { id?: string; caption?: string } | undefined
+  // El STICKER entra acá como cualquier otra media: Meta lo entrega como un
+  // media id descargable (image/webp, a veces animado) y EXT ya lo contempla.
+  // Antes caía al `else` de abajo y se guardaba como el texto "[sticker]": en el
+  // inbox no se veía nada y el agente leía literalmente "[sticker]".
+  const mediaObj = (msg.image || msg.sticker || msg.audio || msg.voice || msg.video || msg.document) as { id?: string; caption?: string } | undefined
 
   if (msg.type === 'text') {
     cuerpo = msg.text?.body ?? ''
@@ -386,7 +392,7 @@ async function procesarEcho(echo: MetaMsg) {
   let cuerpo: string | null = null
   if (echo.type === 'text') cuerpo = echo.text?.body ?? ''
   else {
-    const mediaObj = (echo.image || echo.audio || echo.voice || echo.video || echo.document) as { caption?: string } | undefined
+    const mediaObj = (echo.image || echo.sticker || echo.audio || echo.voice || echo.video || echo.document) as { caption?: string } | undefined
     cuerpo = mediaObj?.caption ?? `[${tipo}]`
   }
 
