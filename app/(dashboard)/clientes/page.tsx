@@ -705,10 +705,13 @@ export default function ClientesPage() {
       const arr = JSON.parse(c.precio_estimado_lineas || '[]')
       if (Array.isArray(arr)) lineasEst = arr
     } catch { /* sin desglose: queda solo el total */ }
+    // Las rebajas (descuento de convenio, ajuste del dueño) vienen con monto
+    // NEGATIVO: se muestran como "−$X" en verde, igual que en el desglose de una
+    // ficha con precio congelado. Sin esto salían como "$-20.000".
     const lineas = lineasEst.map(l => ({
       nombre: l.nombre,
-      valor: l.incluido ? 'Incluido' : fmtPrecio(l.monto),
-      verde: l.incluido,
+      valor: l.incluido ? 'Incluido' : l.monto < 0 ? `−${fmtPrecio(-l.monto)}` : fmtPrecio(l.monto),
+      verde: l.incluido || l.monto < 0,
     }))
     if (eutanasia > 0) lineas.push({ nombre: 'Eutanasia a domicilio (fuera de boleta)', valor: fmtPrecio(eutanasia), verde: false })
     const nota = String(c.precio_estimado_modalidad_asumida || '').toUpperCase() === 'TRUE'
@@ -1052,12 +1055,23 @@ export default function ClientesPage() {
                   <FolderOpen className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Completa la ficha para registrarla
                 </p>
               )}
-              {c.estado !== 'borrador' && c.estado_pago !== 'pagado' && (() => {
+              {/* Lo que falta cobrar. Antes esto se gateaba con `estado_pago !== 'pagado'`,
+                  así que una ficha PAGADA con un cobro abierto (diferencia de peso o
+                  adicional) no mostraba nada: aparecía en el filtro "Pago pendiente"
+                  pero la tarjeta salía muda — caso Peluchín, $10.000 de diferencia
+                  invisibles. Ahora manda `montoPendiente`, que ya suma servicio impago
+                  + cobros abiertos, y el monto se muestra SIEMPRE. */}
+              {c.estado !== 'borrador' && (() => {
                 const pend = montoPendiente(c)
+                const tieneCobro = idsConCobroPendiente.has(String(c.id))
+                if (c.estado_pago === 'pagado' && !tieneCobro) return null
+                const rotulo = c.estado_pago === 'pagado' ? 'Cobro pendiente'
+                  : c.estado_pago === 'parcial' ? 'Saldo pendiente'
+                  : 'Pago pendiente'
                 return (
                   <p className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 flex items-center justify-between gap-2">
-                    <span>⚠ {c.estado_pago === 'parcial' ? 'Saldo pendiente' : 'Pago pendiente'}</span>
-                    {pend > 0 && <span className="font-bold whitespace-nowrap">{fmtPrecio(pend)}</span>}
+                    <span>⚠ {rotulo}</span>
+                    <span className="font-bold whitespace-nowrap">{pend > 0 ? fmtPrecio(pend) : 'sin monto'}</span>
                   </p>
                 )
               })()}
@@ -1351,15 +1365,10 @@ export default function ClientesPage() {
                 <option value="pagado">Pagado</option>
               </select>
             </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Fecha de pago</label>
-              <input type="date" value={form.fecha_pago}
-                onChange={e => setForm(f => ({ ...f, fecha_pago: e.target.value }))}
-                className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${
-                  form.estado_pago === 'pagado' && !form.fecha_pago ? 'border-amber-400 bg-amber-50' : 'border-gray-300'
-                }`} />
-              <p className="text-[11px] text-gray-500 mt-1">Día en que se cobró (POS y link: cuadra el abono).</p>
-            </div>
+            {/* La FECHA DE PAGO no se muestra (decisión del dueño): se guarda sola
+                —hoy al marcar la ficha pagada, y el servidor la sella si llegara
+                vacía— porque Facturación → Ventas POS la necesita para armar el
+                día y cuadrar el abono de Haulmer. Sigue viajando en el form. */}
             {/* Origen: con esto sabemos cuánto cuesta de verdad traer un cliente por
                 canal (inversión del canal ÷ fichas de ese canal). Las fichas que nacen
                 del agente de WhatsApp ya vienen marcadas solas. */}

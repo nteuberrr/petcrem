@@ -289,6 +289,15 @@ export async function PATCH(
       } catch (e) { console.warn('[clientes PATCH] greda no resuelta (se mantiene la previa):', e) }
     }
 
+    // FECHA DE PAGO: el campo ya NO se muestra en la ficha (decisión del dueño,
+    // solo se guarda como dato), así que el servidor la sella acá —después de
+    // todas las transiciones de estado_pago, incluida la de un parcial cuyo
+    // abono cubrió el total. Sin día, Facturación → Ventas POS no puede cuadrar
+    // la venta con el abono de Haulmer y la ficha cae en `sin_fecha`.
+    if (String(updated.estado_pago || '').toLowerCase() === 'pagado' && !String(updated.fecha_pago || '').trim()) {
+      updated.fecha_pago = todayISO()
+    }
+
     // Escribir. generarCodigo hace max+1 (no atómico): dos registros simultáneos
     // de la misma especie podrían generar el mismo código. Si existe el índice
     // único de `clientes.codigo` (ver supabase/schema-principal.sql), el segundo

@@ -185,11 +185,22 @@ export async function crearEstimadorFichas(): Promise<(row: Fila) => EstimacionF
     })
     if (descuento > 0) lineas.push({ nombre: `Descuento${row.descuento_nombre ? ` (${row.descuento_nombre})` : ''}`, monto: -Math.round(descuento) })
 
+    // Ajuste manual del dueño: va al final, sobre el total ya descontado (misma
+    // regla que calcularSnapshotFicha). Sin esta línea la ficha sin snapshot
+    // mostraba el precio de lista, ignorando una rebaja ya acordada con el tutor.
+    const ajuste = Math.round(numTramo(row.ajuste_admin))
+    if (ajuste !== 0) {
+      lineas.push({
+        nombre: `Ajuste admin${row.ajuste_admin_motivo ? ` (${row.ajuste_admin_motivo})` : ''}`,
+        monto: -ajuste,
+      })
+    }
+
     return {
       servicio: Math.round(servicio),
       adicionales: Math.round(adicionales),
       descuento: Math.round(descuento),
-      total: Math.max(0, Math.round(servicio + adicionales - descuento)),
+      total: Math.max(0, Math.round(servicio + adicionales - descuento - ajuste)),
       lineas,
       codigo_servicio: codigo,
       modalidad_asumida: !codigoFicha,

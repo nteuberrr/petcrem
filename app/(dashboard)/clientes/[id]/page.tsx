@@ -1852,20 +1852,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 <option value="pagado">Pagado</option>
               </select>
             </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Fecha de pago</label>
-              <input
-                type="date"
-                value={form.fecha_pago ?? ''}
-                onChange={e => setForm(f => ({ ...f, fecha_pago: e.target.value }))}
-                className={`mt-1 w-full border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand ${
-                  form.estado_pago === 'pagado' && !form.fecha_pago ? 'border-amber-400 bg-amber-50' : 'border-gray-300'
-                }`}
-              />
-              <p className="text-[11px] text-gray-500 mt-1">
-                Día en que se cobró. Con POS o link de pago es la que cuadra el abono de Haulmer.
-              </p>
-            </div>
+            {/* La FECHA DE PAGO no se muestra (decisión del dueño): se guarda sola
+                —hoy al marcar la ficha pagada, y el servidor la sella si llegara
+                vacía— porque Facturación → Ventas POS la necesita para armar el
+                día y cuadrar el abono de Haulmer. Sigue viajando en el form. */}
           </div>
 
           {/* Pago parcial: box para indicar cuánto abonó → queda un saldo pendiente.
