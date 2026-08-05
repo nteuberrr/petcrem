@@ -47,8 +47,17 @@ export default function AddressAutocomplete({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const justSelectedRef = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  // ¿El usuario ESCRIBIÓ en este campo? Solo entonces se busca en Google.
+  // Antes el efecto corría con cualquier cambio de `value`, incluido el del
+  // MONTAJE: al abrir una ficha con dirección guardada, cada campo de dirección
+  // disparaba una búsqueda y desplegaba su lista de sugerencias sin que nadie lo
+  // tocara — la vista quedaba sucia, como si el cursor estuviera en la casilla.
+  // De paso evita cobros de Places por direcciones que solo se estaban mostrando.
+  const escribioRef = useRef(false)
 
   useEffect(() => {
+    // Un valor puesto por el código (carga de la ficha, prefill) no busca nada.
+    if (!escribioRef.current) return
     // No buscar si acabamos de seleccionar (evita reabrir el dropdown)
     if (justSelectedRef.current) {
       justSelectedRef.current = false
@@ -132,7 +141,7 @@ export default function AddressAutocomplete({
       <input
         type="text"
         value={value}
-        onChange={e => onChange(e.target.value)}
+        onChange={e => { escribioRef.current = true; onChange(e.target.value) }}
         onKeyDown={onKeyDown}
         onFocus={() => { if (sugs.length > 0) setOpen(true) }}
         placeholder={placeholder}

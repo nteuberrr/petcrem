@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
+import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { todayISO } from '@/lib/dates'
 import { esComunaNoCubierta } from '@/lib/cobertura'
 
@@ -79,7 +80,34 @@ export default function NuevaSolicitudModal({
     return () => { cancelado = true; clearTimeout(t) }
   }, [open, fecha_retiro, hora_retiro])
 
-  function cerrar() { setError(''); setAviso(null); setChoque(null); onClose() }
+  // ── Dirección con Google ────────────────────────────────────────────────
+  // La dirección se busca en Maps (igual que en la ficha) y, al elegir una
+  // sugerencia, la COMUNA se completa sola desde el detalle del lugar: escrita a
+  // mano se colaban variantes ("Sn Bernardo", "La florida") que después no
+  // calzaban con el recargo por distancia ni con la cobertura, que hacen match
+  // por nombre. Igual queda editable.
+  const [comunaAuto, setComunaAuto] = useState(false)
+  const [comunaAviso, setComunaAviso] = useState('')
+
+  async function alElegirDireccion(place: { text: string; placeId: string }) {
+    if (!place.placeId) return
+    setComunaAviso('')
+    try {
+      const r = await fetch(`/api/eutanasias/place-details?placeId=${encodeURIComponent(place.placeId)}`)
+      const j = await r.json()
+      if (j?.ok && j.comuna) {
+        setForm(f => ({ ...f, comuna: j.comuna }))
+        setComunaAuto(true)
+        if (!j.comuna_canonica) setComunaAviso('Esa comuna no está en nuestra lista oficial; revísala.')
+      } else {
+        setComunaAviso('No pudimos detectar la comuna desde la dirección. Escríbela a mano.')
+      }
+    } catch {
+      setComunaAviso('No pudimos detectar la comuna. Escríbela a mano.')
+    }
+  }
+
+  function cerrar() { setError(''); setAviso(null); setChoque(null); setComunaAuto(false); setComunaAviso(''); onClose() }
 
   async function submit(e: React.SyntheticEvent, forzar = false) {
     e.preventDefault()
@@ -140,11 +168,21 @@ export default function NuevaSolicitudModal({
           </div>
           <div className="sm:col-span-2">
             <label className={label}>Dirección de retiro <span className="text-red-500">*</span></label>
-            <input required value={form.direccion} onChange={e => setForm(f => ({ ...f, direccion: e.target.value }))} className={input} />
+            <AddressAutocomplete
+              value={form.direccion}
+              onChange={v => { setForm(f => ({ ...f, direccion: v })); if (comunaAuto) { setComunaAuto(false); setComunaAviso('') } }}
+              onSelectPlace={alElegirDireccion}
+              required
+              placeholder="Empieza a escribir la dirección…"
+              className={input}
+            />
+            <p className="mt-1 text-[11px] text-gray-500">Al elegir una sugerencia de Google se completa sola la comuna.</p>
           </div>
           <div>
             <label className={label}>Comuna <span className="text-red-500">*</span></label>
-            <input required value={form.comuna} onChange={e => setForm(f => ({ ...f, comuna: e.target.value }))} className={input} />
+            <input required value={form.comuna} onChange={e => { setForm(f => ({ ...f, comuna: e.target.value })); setComunaAuto(false); setComunaAviso('') }} className={input} />
+            {comunaAuto && <p className="mt-1 text-[11px] text-emerald-700">Detectada desde la dirección.</p>}
+            {comunaAviso && <p className="mt-1 text-xs text-amber-700">{comunaAviso}</p>}
             {esComunaNoCubierta(form.comuna) && (
               <p className="mt-1 text-xs text-amber-700">⚠️ Fuera de cobertura de retiro a domicilio.</p>
             )}

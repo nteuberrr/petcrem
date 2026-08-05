@@ -88,6 +88,7 @@ REGLAS DURAS
 - Las TARIFAS VIGENTES son SOLO de cremación. NO las uses para cotizar una eutanasia a domicilio (la eutanasia tiene otro precio, que se entrega por separado).
 - No prometas nada que no esté en esta información.
 - Para ESCALAR a un humano, llama a la herramienta "escalar_a_humano" (no escribas JSON). Escala si: el cliente está molesto o hace un reclamo; pide hablar con una persona; es un tema sensible, legal o de pago/transferencia que no puedes resolver; algo se sale del flujo de cremación/eutanasia; o hace una SOLICITUD ESPECIAL o de POSTVENTA fuera de lo estándar (personalizar/modificar el servicio con algo que NO está en el catálogo, un pedido raro, o dudas después de la entrega). Ante la duda de si es "especial", escala. Aun así, envía una línea breve y cálida avisando que un miembro del equipo le responderá a la brevedad. OJO: agregar un PRODUCTO ADICIONAL del catálogo NO es motivo para escalar — eso lo resuelves tú con el flujo de "agregar_adicional" (confirmar precio → agregar). Solo escala si el cliente pide algo que no está en la lista de productos. TAMPOCO escales cuando pregunten cuándo o a qué hora se hace la ENTREGA de las cenizas: eso lo respondes tú (ver SEGUIMIENTO / ESTADO DE LA MASCOTA).
+- TODO lo que escribas es un mensaje que le llega TAL CUAL al cliente por WhatsApp, y va SIEMPRE en español de Chile. Nunca escribas en inglés ni en otro idioma (salvo que el cliente escriba en otro idioma). Y NUNCA narres lo que vas a hacer antes de hacerlo: nada de "Let me send you the photos", "Voy a enviarte las fotos", "Déjame consultar". Si tienes que usar una herramienta, úsala y punto; el cliente solo debe leer la respuesta.
 - ENVÍOS REALES (catálogo / PDF / fotos): NUNCA digas que "te envié", "te acabo de mandar" o "ahí tienes" el catálogo, un PDF, una foto o un documento si NO llamaste su herramienta (enviar_catalogo o enviar_fotos) en ESTE MISMO turno. Enviar de verdad = llamar la herramienta; escribir que lo enviaste NO lo envía. Si el cliente pide el catálogo, DEBES llamar "enviar_catalogo" (y recién con su resultado confirmas el envío); si por algún motivo no puedes, dile con naturalidad que el equipo se lo hará llegar — pero no afirmes que ya se lo enviaste.
 - Una sola respuesta por turno.
 
@@ -669,6 +670,31 @@ const TOOL_ADICIONAL: Anthropic.Tool = {
 }
 
 /**
+ * Quita la NARRACIÓN EN INGLÉS del modelo: las frases con las que anuncia lo
+ * que va a hacer antes de llamar una herramienta ("Let me also send those
+ * reference photos:"). Salen en el mismo turno que el tool_use, así que se
+ * colaban tal cual al cliente, en inglés (reporte del dueño, 04-08-2026).
+ *
+ * Solo INGLÉS a propósito: en español el mismo patrón se come frases legítimas
+ * ("Voy a enviarte el link de pago"), y una narración en español al menos se lee
+ * natural. Esa la ataja la regla del prompt, no este filtro.
+ *
+ * Se filtra por LÍNEA para no perder el resto del mensaje: en la misma ronda en
+ * que llama a `enviar_fotos` el modelo suele escribir la cotización con los
+ * precios, y eso sí tiene que llegar.
+ */
+const NARRACION = /^\s*(let me\b|let's\b|i'?ll\b|i will\b|i'?m going to\b|i'?m about to\b|now (i|let)\b|first,? (let|i)\b|okay,? (let|i)\b|here'?s what\b|i need to\b|i should\b|i'?ll go ahead\b)/i
+
+export function limpiarNarracion(texto: string): string {
+  return texto
+    .split('\n')
+    .filter(l => !NARRACION.test(l))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
  * Sello de fecha/hora de un mensaje, en hora de Chile: "[martes 04-08-2026 12:19]".
  * Lleva el día de la semana escrito porque el error que arregla es justamente de
  * día de la semana.
@@ -1063,7 +1089,8 @@ ${cfg.instrucciones.trim()}`,
     const res = await getClient().messages.create({ model: MODEL, max_tokens: 700, system, messages: convo, tools })
     await registrarUso('bot-inbox', MODEL, res.usage, opts.ctx?.canal || '')
 
-    const texto = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
+    const crudo = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()
+    const texto = limpiarNarracion(crudo)
     if (texto && texto !== textos[textos.length - 1]) textos.push(texto)
 
     if (res.stop_reason !== 'tool_use') break
