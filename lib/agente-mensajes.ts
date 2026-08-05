@@ -876,23 +876,37 @@ ${dispo.map((d, i) => {
 
 CALENDARIO DE LOS PRÓXIMOS DÍAS (día de la semana → fecha exacta). Usa SIEMPRE esta tabla para resolver "este jueves", "el viernes", "mañana", etc. NUNCA calcules tú los días de la semana ni sumes días de memoria — LÉELOS de acá:
 ${tabla}
-
-REGLAS DE FECHA (duras):
-- Cuando el cliente mencione un día de la semana o una fecha relativa, toma la fecha EXACTA de la tabla de arriba. Pasa las fechas a las herramientas como YYYY-MM-DD y las horas como HH:MM (24h).
-- Si el cliente AFIRMA una fecha (ej.: "es jueves 16") y esa fecha COINCIDE con la tabla, acéptala sin discutir. Solo corrígelo si NO coincide con la tabla, y hazlo mostrándole la fecha correcta de la tabla. (Nos pasó con una clienta: le insistimos que "el jueves era 17" cuando en la tabla era jueves 16 — el error fue nuestro. No repitas eso.)
-- Para "lo antes posible"/"ahora"/"en un rato"/"hoy", NO calcules tú la hora: usa el "PRÓXIMO RETIRO POSIBLE" ya calculado de arriba, tal cual (fecha + hora).
-- MADRUGADA / TEMPRANO ≠ "hoy ya no se puede" (regla dura — este es el error del caso Jean): que sea de noche o de madrugada NO significa que el día de HOY ya pasó. La ventana de retiros de HOY es 09:00–21:10; si esa ventana todavía está por delante (p. ej. son las 02:00 y aún no son las 21:10 de hoy), ENTONCES SÍ se puede retirar HOY — ofrécelo. Solo se salta al día siguiente cuando la ventana de HOY ya cerró (después de las 21:10). Nunca ofrezcas "mañana" si el retiro de HOY todavía es posible, y nunca digas "no alcanzamos hoy" solo porque en este instante sea de madrugada. "No alcanzamos AHORA (es de noche)" es distinto de "no se puede HOY".
-- FERIADOS: si un día de la tabla está marcado como FERIADO (aunque sea día de semana), cuenta como fin de semana → el recargo de fuera de horario aplica TODO el día, no solo desde las 18:00. Cuando el retiro caiga en un feriado, avísale el recargo al cotizar y súmalo al total (igual que un fin de semana). Si el cliente pregunta "¿trabajan el feriado?", sí trabajamos, solo aclara que ese día lleva el recargo de fuera de horario.
-- NUNCA inventes ni adivines la fecha, el año, el día de la semana ni la hora; ante ambigüedad, confírmala contra la tabla antes de agendar.
-- EL HISTORIAL ESTÁ FECHADO: cada mensaje del cliente empieza con su fecha y hora reales entre corchetes, así: "[martes 04-08-2026 12:19]". Eso es un dato del sistema, NO parte del mensaje: nunca lo repitas ni escribas corchetes así en tu respuesta.
-- UN "HOY" DEL HISTORIAL NO ES HOY (regla dura — este es el error del caso Pricy/José): "hoy", "mañana", "ahora", "en un rato", un día de la semana o una hora dichos en mensajes ANTERIORES se refieren al día EN QUE SE ESCRIBIERON (mira su sello de fecha), no al día de hoy. Antes de repetir cualquiera de esas palabras, mira el sello del mensaje donde aparecieron y compáralo con "Hoy es" de arriba. Si la conversación se retomó otro día, el "hoy" viejo YA PASÓ.
-- RETIRO YA PASADO: si el retiro se agendó para una fecha ANTERIOR a hoy, ese retiro YA OCURRIÓ. No digas "te esperamos hoy", "nos vemos en un rato" ni repitas su hora como si estuviera por venir: la mascota ya está con nosotros y lo que sigue es el proceso de cremación y entrega. Cuando el cliente pregunte por los plazos, cuéntalos desde la fecha REAL del retiro, no desde hoy.
-- DÍA DE LA SEMANA (regla dura): jamás deduzcas de memoria qué día de la semana es una fecha. Solo nombra el día si lo LEÍSTE en la tabla de arriba, o si una herramienta te lo devolvió pegado a la fecha (las herramientas ya te dan "jueves 30-07-2026"). Si no lo tienes, escribe solo la fecha ("el 30 de julio") — decir el número sin el día NUNCA es un error; decir el día equivocado sí. (Caso real: la herramienta devolvió "30-07-2026", le dijimos a la clienta "miércoles 30 de julio" y era jueves 30; el equipo tuvo que corregirnos delante de ella.)
-- Nunca mezcles el día de una fecha con el número de otra (ej.: la fecha era viernes 24 y escribimos "viernes 25"). Copia día + número + mes juntos, tal cual salen de la tabla o de la herramienta.
-- PALABRAS RELATIVAS DEL HISTORIAL: un "hoy" / "mañana" / "esta tarde" que el cliente (o tú) escribió en un mensaje de un DÍA ANTERIOR ya venció y NO se recalcula contra la tabla de hoy. Resuelve el día SOLO con lo que el cliente pidió en su ÚLTIMO mensaje. (Caso real: una clienta escribió de noche "mañana les aviso", al día siguiente pidió el servicio "Hoy, 9:00", y agendamos para el día siguiente porque arrastramos ese "mañana" viejo.)
-- Antes de llamar cualquier herramienta que agende, verifica una vez más: la fecha que vas a pasar tiene que ser la que el cliente pidió en su último mensaje, leída de la tabla. Si tú mismo le ofreciste "hoy" en el chat, la fecha es la de HOY.
-ESTA TABLA ES LA VERDAD VIGENTE aunque en el historial (tuyo o del cliente) se haya mencionado otra fecha/día — algo dicho pasada la medianoche puede haber quedado desactualizado. Antes de reutilizar una fecha del historial, verifícala contra la tabla.${seccionBloqueos}`
+${seccionBloqueos}`
 }
+
+/**
+ * Reglas duras de fecha. Son ESTÁTICAS (no dependen del día), así que viajan en
+ * el PREFIJO CACHEADO en vez de pagarse enteras en cada mensaje — a diferencia
+ * del bloque FECHA Y HORA, que cambia a cada minuto y no se puede cachear.
+ *
+ * Por eso las referencias son POR NOMBRE ("el CALENDARIO", "el bloque FECHA Y
+ * HORA ACTUAL") y NO posicionales ("la tabla de arriba"): estas reglas van ANTES
+ * de esos bloques en el prompt. Si alguna vez se reordena, mantener las
+ * referencias por nombre.
+ *
+ * Cada regla acá nació de un incidente real con un cliente (casos Jean, Pricy,
+ * Anita, entre otros). No las resumas ni las borres para ahorrar tokens.
+ */
+const REGLAS_FECHA = `REGLAS DE FECHA (duras). Se aplican al bloque "FECHA Y HORA ACTUAL" y al "CALENDARIO DE LOS PRÓXIMOS DÍAS", que vienen MÁS ABAJO con los datos reales de hoy:
+- Cuando el cliente mencione un día de la semana o una fecha relativa, toma la fecha EXACTA del CALENDARIO. Pasa las fechas a las herramientas como YYYY-MM-DD y las horas como HH:MM (24h).
+- Si el cliente AFIRMA una fecha (ej.: "es jueves 16") y esa fecha COINCIDE con el CALENDARIO, acéptala sin discutir. Solo corrígelo si NO coincide con el CALENDARIO, y hazlo mostrándole la fecha correcta del CALENDARIO. (Nos pasó con una clienta: le insistimos que "el jueves era 17" cuando en el CALENDARIO era jueves 16 — el error fue nuestro. No repitas eso.)
+- Para "lo antes posible"/"ahora"/"en un rato"/"hoy", NO calcules tú la hora: usa el "PRÓXIMO RETIRO POSIBLE" ya calculado en el bloque FECHA Y HORA ACTUAL, tal cual (fecha + hora).
+- MADRUGADA / TEMPRANO ≠ "hoy ya no se puede" (regla dura — este es el error del caso Jean): que sea de noche o de madrugada NO significa que el día de HOY ya pasó. La ventana de retiros de HOY es 09:00–21:10; si esa ventana todavía está por delante (p. ej. son las 02:00 y aún no son las 21:10 de hoy), ENTONCES SÍ se puede retirar HOY — ofrécelo. Solo se salta al día siguiente cuando la ventana de HOY ya cerró (después de las 21:10). Nunca ofrezcas "mañana" si el retiro de HOY todavía es posible, y nunca digas "no alcanzamos hoy" solo porque en este instante sea de madrugada. "No alcanzamos AHORA (es de noche)" es distinto de "no se puede HOY".
+- FERIADOS: si un día del CALENDARIO está marcado como FERIADO (aunque sea día de semana), cuenta como fin de semana → el recargo de fuera de horario aplica TODO el día, no solo desde las 18:00. Cuando el retiro caiga en un feriado, avísale el recargo al cotizar y súmalo al total (igual que un fin de semana). Si el cliente pregunta "¿trabajan el feriado?", sí trabajamos, solo aclara que ese día lleva el recargo de fuera de horario.
+- NUNCA inventes ni adivines la fecha, el año, el día de la semana ni la hora; ante ambigüedad, confírmala contra el CALENDARIO antes de agendar.
+- EL HISTORIAL ESTÁ FECHADO: cada mensaje del cliente empieza con su fecha y hora reales entre corchetes, así: "[martes 04-08-2026 12:19]". Eso es un dato del sistema, NO parte del mensaje: nunca lo repitas ni escribas corchetes así en tu respuesta.
+- UN "HOY" DEL HISTORIAL NO ES HOY (regla dura — este es el error del caso Pricy/José): "hoy", "mañana", "ahora", "en un rato", un día de la semana o una hora dichos en mensajes ANTERIORES se refieren al día EN QUE SE ESCRIBIERON (mira su sello de fecha), no al día de hoy. Antes de repetir cualquiera de esas palabras, mira el sello del mensaje donde aparecieron y compáralo con el "Hoy es" del bloque FECHA Y HORA ACTUAL. Si la conversación se retomó otro día, el "hoy" viejo YA PASÓ.
+- RETIRO YA PASADO: si el retiro se agendó para una fecha ANTERIOR a hoy, ese retiro YA OCURRIÓ. No digas "te esperamos hoy", "nos vemos en un rato" ni repitas su hora como si estuviera por venir: la mascota ya está con nosotros y lo que sigue es el proceso de cremación y entrega. Cuando el cliente pregunte por los plazos, cuéntalos desde la fecha REAL del retiro, no desde hoy.
+- DÍA DE LA SEMANA (regla dura): jamás deduzcas de memoria qué día de la semana es una fecha. Solo nombra el día si lo LEÍSTE en el CALENDARIO, o si una herramienta te lo devolvió pegado a la fecha (las herramientas ya te dan "jueves 30-07-2026"). Si no lo tienes, escribe solo la fecha ("el 30 de julio") — decir el número sin el día NUNCA es un error; decir el día equivocado sí. (Caso real: la herramienta devolvió "30-07-2026", le dijimos a la clienta "miércoles 30 de julio" y era jueves 30; el equipo tuvo que corregirnos delante de ella.)
+- Nunca mezcles el día de una fecha con el número de otra (ej.: la fecha era viernes 24 y escribimos "viernes 25"). Copia día + número + mes juntos, tal cual salen del CALENDARIO o de la herramienta.
+- PALABRAS RELATIVAS DEL HISTORIAL: un "hoy" / "mañana" / "esta tarde" que el cliente (o tú) escribió en un mensaje de un DÍA ANTERIOR ya venció y NO se recalcula contra el CALENDARIO de hoy. Resuelve el día SOLO con lo que el cliente pidió en su ÚLTIMO mensaje. (Caso real: una clienta escribió de noche "mañana les aviso", al día siguiente pidió el servicio "Hoy, 9:00", y agendamos para el día siguiente porque arrastramos ese "mañana" viejo.)
+- Antes de llamar cualquier herramienta que agende, verifica una vez más: la fecha que vas a pasar tiene que ser la que el cliente pidió en su último mensaje, leída del CALENDARIO. Si tú mismo le ofreciste "hoy" en el chat, la fecha es la de HOY.
+EL CALENDARIO ES LA VERDAD VIGENTE aunque en el historial (tuyo o del cliente) se haya mencionado otra fecha/día — algo dicho pasada la medianoche puede haber quedado desactualizado. Antes de reutilizar una fecha del historial, verifícala contra el CALENDARIO.`
 
 /** Limpia el texto final del modelo (quita fences y desarma JSON heredado). */
 function limpiarTexto(text: string): string {
@@ -1011,14 +1025,21 @@ export async function generarRespuesta(
 
   // Bloque base + tarifas + recargos: cacheado (estable). Ajustes del operador/calibración: sin caché (cambian seguido).
   //
-  // TTL de 1 HORA (no los 5 min por defecto): el prefijo cacheado (tools + guion
-  // base + tarifas) son ~13k tokens y los mensajes llegan repartidos a lo largo
-  // del día (~60-90 diarios), así que con 5 minutos la caché casi siempre vencía
-  // y se pagaba la ESCRITURA completa (1,25×) en cada respuesta. Con 1 hora se
-  // escribe una vez por hora activa (2×) y el resto son lecturas a 1/10 del
-  // precio: baja ~60% el costo del bot, que es la línea más grande de la cuenta.
-  const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${BASE}\n\n${DIFERENCIADORES}\n\n${tarifas}${recargos ? `\n\n${recargos}` : ''}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
+  // TTL de 1 HORA (no los 5 min por defecto): el prefijo cacheado son ~22k tokens
+  // y los mensajes llegan repartidos a lo largo del día (~110 diarios), así que
+  // con 5 minutos la caché casi siempre vencía y se pagaba la ESCRITURA completa
+  // (1,25×) en cada respuesta. Con 1 hora se escribe una vez por hora activa (2×)
+  // y el resto son lecturas a 1/10 del precio.
+  // ORDEN: primero TODO lo estable (se cachea junto en un solo prefijo), después
+  // lo dinámico. La marca de caché va en el ÚLTIMO bloque estable, no en el
+  // primero: así el prefijo cacheado cubre también productos, express, descuentos,
+  // transferencia y el banco de fotos (~3.000 tokens que antes se pagaban enteros
+  // en CADA llamada a $3/M, cuando leerlos de caché cuesta $0,30/M).
+  const estables: string[] = [
+    `${BASE}\n\n${DIFERENCIADORES}\n\n${tarifas}${recargos ? `\n\n${recargos}` : ''}`,
+    // Las reglas de fecha no cambian con el día → van cacheadas. Los DATOS de
+    // fecha (hoy, hora, calendario, disponibilidad) van abajo, sin caché.
+    REGLAS_FECHA,
   ]
   const ajustes = [
     cfg?.instrucciones?.trim() && `INSTRUCCIONES Y DATOS VIGENTES DEL EQUIPO — trátalos como la VERDAD ACTUAL del negocio, no como una nota aparte.
@@ -1028,17 +1049,29 @@ Lo siguiente lo definió el equipo y REEMPLAZA cualquier dato del guion base con
 ${cfg.instrucciones.trim()}`,
     cfg?.calibracion?.trim() && `GUÍA DE ESTILO APRENDIDA DE CONVERSACIONES REALES (orienta tono y respuestas; no contradice los precios ni las reglas duras):\n${cfg.calibracion.trim()}`,
   ].filter(Boolean).join('\n\n')
-  if (ajustes) system.push({ type: 'text', text: ajustes })
-  // Fecha actual (dinámica, sin caché) → para resolver "mañana", "el viernes", etc.
-  system.push({ type: 'text', text: bloqueFechaChile(bloqueos, dispo) })
+  if (ajustes) estables.push(ajustes)
   // Productos adicionales disponibles (para ofrecer/cotizar/agregar).
-  if (productos) system.push({ type: 'text', text: productos })
+  if (productos) estables.push(productos)
   // Servicio Express (entrega en 2 días hábiles): qué es y cuándo ofrecerlo.
-  if (express) system.push({ type: 'text', text: express })
+  if (express) estables.push(express)
   // Descuentos/convenios vigentes (para responder "¿tienen descuentos?" sin inventar).
-  if (descuentos) system.push({ type: 'text', text: descuentos })
+  if (descuentos) estables.push(descuentos)
   // Datos bancarios, para dárselos al cliente que los pide.
-  if (transferencia) system.push({ type: 'text', text: transferencia })
+  if (transferencia) estables.push(transferencia)
+  // Fotos que el equipo habilitó para WhatsApp → el agente puede enviarlas.
+  const bloqueFotos = bloqueImagenesWhatsapp(imgsWa)
+  if (bloqueFotos) estables.push(bloqueFotos)
+
+  // El prefijo estable, con la marca de caché en el último bloque.
+  const system: Anthropic.TextBlockParam[] = estables.map((text, i) => (
+    i === estables.length - 1
+      ? { type: 'text' as const, text, cache_control: { type: 'ephemeral' as const, ttl: '1h' as const } }
+      : { type: 'text' as const, text }
+  ))
+
+  // ── De acá para abajo, lo que cambia en cada llamada (nunca se cachea) ──
+  // Fecha actual (dinámica) → para resolver "mañana", "el viernes", etc.
+  system.push({ type: 'text', text: bloqueFechaChile(bloqueos, dispo) })
   // Si el cliente ya tiene una ficha de retiro en proceso (borrador visible en
   // /clientes), evita que el agente registre otra.
   if (opts.ctx?.waId) {
@@ -1055,9 +1088,6 @@ ${cfg.instrucciones.trim()}`,
 - No prometas enviar links ni botones por Instagram.`,
     })
   }
-  // Fotos que el equipo habilitó para WhatsApp → el agente puede enviarlas.
-  const bloqueFotos = bloqueImagenesWhatsapp(imgsWa)
-  if (bloqueFotos) system.push({ type: 'text', text: bloqueFotos })
 
   const tools: Anthropic.Tool[] = [TOOL_ESCALAR]
   if (opts.handlers?.solicitarRetiro) tools.push(TOOL_RETIRO)
