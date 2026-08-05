@@ -7,6 +7,7 @@ import { Toggle } from '@/components/ui/Toggle'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
+import ComunaPicker from '@/components/ui/ComunaPicker'
 import AgentesPanel from '@/components/AgentesPanel'
 import CorreosConfig from '@/components/CorreosConfig'
 import ConsumoIA from '@/components/ConsumoIA'
@@ -1553,12 +1554,24 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
             </select>
             <p className="mt-1 text-[11px] text-gray-500">Se pre-carga solo en los adicionales de la ficha cuando aplica; siempre se puede desmarcar.</p>
           </div>
+          {/* Comunas con recargo por distancia. Va con el selector de comunas (chips
+              + autocomplete) y no con un campo de texto libre: el match se hace por
+              NOMBRE, así que un typo dejaba de cobrar el recargo sin avisar. Esta
+              lista es la ÚNICA fuente: de acá la leen el bot de WhatsApp, la página
+              pública (precios y servicios) y el catálogo PDF. */}
           {otroForm.auto_regla === 'distancia' && (
             <div>
-              <label className="text-xs font-medium text-gray-700">Comunas con recargo (separadas por coma)</label>
-              <input value={otroForm.comunas} onChange={e => setOtroForm(f => ({ ...f, comunas: e.target.value }))}
-                placeholder="Lampa, Buin, Colina, Calera de Tango, Paine"
-                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              <label className="text-xs font-medium text-gray-700">Comunas con recargo</label>
+              <div className="mt-1">
+                <ComunaPicker
+                  value={otroForm.comunas.split(',').map(c => c.trim()).filter(Boolean)}
+                  onChange={arr => setOtroForm(f => ({ ...f, comunas: arr.join(', ') }))}
+                  placeholder="Buscar comuna…"
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-gray-500">
+                Agrega o quita las que quieras. El cambio se aplica solo en la ficha, en el bot de WhatsApp y en la página web.
+              </p>
             </div>
           )}
           <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">{editingOtro ? 'Guardar cambios' : 'Guardar'}</button>
