@@ -1220,7 +1220,10 @@ function memorial_diptico(s: SlotsPlantilla, C: { w: number; h: number }, o: Opc
   const nombre = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2 - 170, 68, 38, 0.55)}px;color:${GOLD};line-height:1.02">${esc(clampText(s.titulo, 22))}</span>` : ''
   const fechas = s.fechas ? `<span style="font-family:Inter;font-weight:600;font-size:24px;letter-spacing:3px;color:${SOFT};margin-top:12px">${esc(clampText(s.fechas, 26))}</span>` : ''
   const banda = `<div style="display:flex;flex-direction:column;justify-content:center;width:${C.w}px;height:${bandaH}px;background:${NAVY};padding:0 ${PAD}px;flex-shrink:0">${nombre}${fechas}</div>`
-  const lg = logoMemorial(o, C, { sobreFoto: true })
+  // La esquina superior derecha SIEMPRE es el bloque crema (la foto va a la
+  // izquierda), así que el logo va navy y sin velo: acá el contraste está
+  // garantizado y el velo solo ensuciaba un fondo plano.
+  const lg = logoMemorial(o, C, { claro: true })
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${CREAM}">${arriba}${banda}${lg}</div>`
   return { html, fotos }
 }
