@@ -231,6 +231,18 @@ export interface AgendaItem {
   clienteId?: string
   /** Eutanasia: hora del servicio de eutanasia (referencia). */
   horaEutanasia?: string
+  /**
+   * Hora (HH:MM) en que NUESTRO chofer queda ocupado por este agendamiento — lo
+   * único que bloquea la agenda. Es distinta de `hora`, que es lo que se MUESTRA:
+   *  - retiro de cremación → la misma hora
+   *  - eutanasia CON cremación → la hora del retiro; mientras el vet no la
+   *    informe, la proyección (procedimiento + 30 min), que es cuando el chofer
+   *    va a pasar de verdad
+   *  - eutanasia SIN cremación → vacía: la hace un vet de la red, no ocupa nada
+   * La eutanasia en sí NUNCA ocupa: puede superponerse con un retiro de
+   * cremación (decisión del dueño 2026-08-05), porque son dos personas distintas.
+   */
+  horaOcupa?: string
   /** Eutanasia: true si aún no llega la hora de retiro del veterinario. */
   esperandoHoraVet?: boolean
   /** Eutanasia SIN cremación: solo recordatorio (etiqueta gris), NO bloquea la agenda. */
@@ -322,6 +334,7 @@ export async function listarAgenda(
       tipo: 'retiro',
       fecha,
       hora: min != null ? fmtMin(min) : '',
+      horaOcupa: min != null ? fmtMin(min) : '',
       bloque: bloqueDe(min),
       estado: estado === 'confirmada' ? 'confirmada' : 'pendiente',
       mascota: r.nombre_mascota || '',
@@ -383,11 +396,16 @@ export async function listarAgenda(
     // agendada cuando el vet informa la hora). Mientras no la informe, el bloque
     // se muestra en la hora de la eutanasia, en amarillo.
     const min = horaMin(tieneRetiro ? horaRetiro : c.hora_servicio)
+    // Lo que ocupa al chofer es el RETIRO. Mientras el vet no informe la hora, se
+    // PROYECTA (procedimiento + 30 min): antes se ocupaba la hora de la eutanasia,
+    // media hora antes de que el chofer estuviera realmente comprometido.
+    const minOcupa = tieneRetiro ? horaMin(horaRetiro) : horaMin(horaRetiroDeEutanasia(c.hora_servicio || ''))
     out.push({
       id: `e${c.id}`,
       tipo: 'eutanasia',
       fecha,
       hora: min != null ? fmtMin(min) : '',
+      horaOcupa: minOcupa != null ? fmtMin(minOcupa) : '',
       bloque: bloqueDe(min),
       // Verde (confirmada) si ya sabemos la hora de retiro O si la eutanasia ya se realizó.
       estado: (tieneRetiro || realizada) ? 'confirmada' : 'pendiente',
@@ -422,10 +440,10 @@ async function ocupadosDe(fechaISO: string, excluirId?: string): Promise<number[
   const out: number[] = []
   for (const it of items) {
     if (excluirId && it.id === excluirId) continue
-    // Las eutanasias SIN cremación no ocupan slot: el chofer no pasa a retirar,
-    // así que su horario queda libre para agendar otros retiros.
-    if (it.tipo === 'eutanasia' && it.sinCremacion) continue
-    const min = horaMin(it.hora)
+    // Manda `horaOcupa`: la hora en que el CHOFER queda comprometido. La eutanasia
+    // sin cremación la deja vacía (no hay retiro) y la eutanasia con cremación la
+    // pone en su retiro, no en el procedimiento.
+    const min = horaMin(it.horaOcupa)
     if (min != null) out.push(min)
   }
   return out
@@ -521,9 +539,8 @@ export async function disponibilidadProximosDias(dias = 2): Promise<Disponibilid
   ])
   const ocupados = new Map<string, number[]>()
   for (const it of items) {
-    // Mismo criterio que ocupadosDe: la eutanasia sin cremación no ocupa slot.
-    if (it.tipo === 'eutanasia' && it.sinCremacion) continue
-    const min = horaMin(it.hora)
+    // Mismo criterio que ocupadosDe: solo ocupa la hora del chofer (`horaOcupa`).
+    const min = horaMin(it.horaOcupa)
     if (min == null) continue
     ocupados.set(it.fecha, [...(ocupados.get(it.fecha) || []), min])
   }
@@ -554,8 +571,10 @@ export async function conflictosEnAgenda(
   const items = await listarAgenda(fecha, fecha)
   return items.filter(it => {
     if (excluirId && it.id === excluirId) return false
-    if (it.tipo === 'eutanasia' && it.sinCremacion) return false
-    const m = horaMin(it.hora)
+    // Se compara contra `horaOcupa` (la hora del CHOFER), no contra la que se
+    // muestra: si no, una eutanasia con cremación "chocaba" a la hora del
+    // procedimiento, que es del veterinario y no compromete nuestra ruta.
+    const m = horaMin(it.horaOcupa)
     return m != null && min > m - SEP_ANTES && min < m + SEP_DESPUES
   })
 }
@@ -584,8 +603,9 @@ export interface EvalSlot {
 export async function horaLibreEnFranja(fechaRaw: string, franja: 'AM' | 'PM'): Promise<{ hora: string | null; libresFranja: string[] }> {
   const fecha = formatDateForSheet(fechaRaw) || String(fechaRaw || '').trim()
   const { iso: hoy, min: ahora } = ahoraChile()
-  const [ocupados, bloqueos] = await Promise.all([ocupadosDe(fecha), listarBloqueos(fecha, fecha)])
-  const libres = horasLibres(fecha, hoy, ahora, ocupados, rangosDelDia(bloqueos, fecha),
+  // La eutanasia NO mira la agenda (ver evaluarHoraEutanasia): la presta un vet de
+  // la red, así que se puede superponer con nuestros retiros y con los bloqueos.
+  const libres = horasLibres(fecha, hoy, ahora, [], [],
     { tope: MIN_CIERRE_ATENCION, buffer: BUFFER_EUTANASIA_MIN })
   const libresFranja = libres.filter(h => {
     const hh = parseInt(h, 10)
@@ -605,15 +625,19 @@ export async function horaLibreEnFranja(fechaRaw: string, franja: 'AM' | 'PM'): 
  * (decisión del dueño 2026-07-28, caso Gasparín: pidió las 21:00 y el sistema la
  * agendó a las 17:30): se respeta dentro del horario de atención 09:00–22:00 —el
  * mismo que el bot le promete— y solo se rechaza si de verdad no se puede:
- * fecha pasada, hora inválida, agenda bloqueada por el equipo o choque con otra
- * reserva. NO aplica el corte de las 21:10 ni el buffer de la próxima hora.
+ * fecha pasada u hora inválida. NO aplica el corte de las 21:10 ni el buffer de
+ * la próxima hora.
+ *
+ * NO MIRA LA AGENDA (dueño 2026-08-05): la eutanasia SE PUEDE SUPERPONER con los
+ * retiros de cremación y con los bloqueos manuales, porque la hace un veterinario
+ * de la red y no compromete a nuestro chofer. Lo que sí compite por la agenda es
+ * el RETIRO que viene después cuando el servicio incluye cremación — eso lo
+ * resuelve `retiroTrasEutanasia`, que corre el retiro al primer hueco hábil.
  */
 export async function evaluarHoraEutanasia(fechaRaw: string, horaRaw: string): Promise<EvalSlot> {
   const fecha = formatDateForSheet(fechaRaw) || String(fechaRaw || '').trim()
   const { iso: hoy, min: ahora } = ahoraChile()
-  const [ocupados, bloqueos] = await Promise.all([ocupadosDe(fecha), listarBloqueos(fecha, fecha)])
-  const rangos = rangosDelDia(bloqueos, fecha)
-  const libres = horasLibres(fecha, hoy, ahora, ocupados, rangos,
+  const libres = horasLibres(fecha, hoy, ahora, [], [],
     { tope: MIN_CIERRE_ATENCION, buffer: BUFFER_EUTANASIA_MIN })
 
   if (!fecha) return { ok: false, motivo: 'No indicaste una fecha válida.', libres }
@@ -635,15 +659,91 @@ export async function evaluarHoraEutanasia(fechaRaw: string, horaRaw: string): P
     }
   }
 
-  const bloq = bloqueadoEn(min, rangos)
-  if (bloq) {
-    const franja = bloq.ini <= 0 && bloq.fin >= 24 * 60 ? 'todo ese día' : `de ${fmtMin(bloq.ini)} a ${fmtMin(bloq.fin)}`
-    return { ok: false, motivo: `El horario de las ${fmtMin(min)} del ${fecha} no está disponible: tenemos la agenda cerrada ${franja}.`, libres }
-  }
-  if (choca(min, ocupados))
-    return { ok: false, motivo: `El horario de las ${fmtMin(min)} del ${fecha} no está disponible: queda muy pegado a otro servicio ya agendado (dejamos al menos 30 minutos antes y 45 después).`, libres }
-
   return { ok: true, libres }
+}
+
+/** Resultado de calcular el retiro que sigue a una eutanasia CON cremación. */
+export interface RetiroTrasEutanasia {
+  /** Hora final del retiro (HH:MM) — la que se agenda y se le dice al cliente. */
+  hora: string
+  /** Hora "natural": procedimiento + 30 min, antes de mirar la agenda. */
+  base: string
+  /** true si hubo que correrlo porque la hora natural estaba tomada. */
+  desplazado: boolean
+  /** Explicación corta y apta para el cliente (solo si `desplazado`). */
+  motivo?: string
+  /** No quedó ningún hueco hábil ese día: se deja la base y lo resuelve el equipo. */
+  sinHueco?: boolean
+}
+
+/**
+ * Hora del RETIRO que sigue a una eutanasia con cremación.
+ *
+ * Lo natural es procedimiento + 30 min, pero esa media hora es NUESTRA y compite
+ * con el resto de la ruta del chofer. Si está topada por otro retiro (o por un
+ * bloqueo manual), se corre al primer horario hábil LIBRE posterior en vez de
+ * encimarse: antes se guardaba igual y el cruce solo se avisaba al equipo, que
+ * quedaba con una ruta imposible (28-07: dos eutanasias a 30 min de retiros ya
+ * agendados). Al cliente se le dice la hora final, no la teórica.
+ *
+ * Nunca se adelanta: el chofer no puede pasar antes de que el vet termine.
+ *
+ * `excluirAgendaId` saca de la cuenta la propia reserva (id de AgendaItem, p. ej.
+ * `e12`) al reprogramarla: si no, se bloquearía a sí misma.
+ */
+export async function retiroTrasEutanasia(
+  fechaRaw: string,
+  horaServicio: string,
+  opts: { excluirAgendaId?: string } = {},
+): Promise<RetiroTrasEutanasia> {
+  const fecha = formatDateForSheet(fechaRaw) || String(fechaRaw || '').trim()
+  const base = horaRetiroDeEutanasia(horaServicio) || String(horaServicio || '').trim()
+  if (!fecha || horaMin(base) == null) return { hora: base, base, desplazado: false }
+
+  const [ocupados, bloqueos] = await Promise.all([
+    ocupadosDe(fecha, opts.excluirAgendaId).catch(() => [] as number[]),
+    listarBloqueos(fecha, fecha).catch(() => [] as BloqueoAgenda[]),
+  ])
+  return calcularRetiroTrasEutanasia(base, ocupados, rangosDelDia(bloqueos, fecha))
+}
+
+/**
+ * Núcleo PURO de `retiroTrasEutanasia` (sin datastore ni reloj), para poder
+ * verificarlo: `npx tsx scripts/verificar-retiro-eutanasia.ts`.
+ *
+ * `base` = hora natural del retiro (procedimiento + 30 min). Devuelve esa misma
+ * hora si está libre, o el primer horario hábil LIBRE posterior. Nunca antes:
+ * el chofer no puede pasar mientras el veterinario está trabajando.
+ */
+export function calcularRetiroTrasEutanasia(
+  base: string,
+  ocupados: number[],
+  rangos: RangoBloqueado[] = [],
+): RetiroTrasEutanasia {
+  const baseMin = horaMin(base)
+  if (baseMin == null) return { hora: base, base, desplazado: false }
+  const libre = (m: number) => !choca(m, ocupados) && !bloqueadoEn(m, rangos)
+  if (libre(baseMin)) return { hora: base, base, desplazado: false }
+
+  // Candidatos POSTERIORES: la grilla habitual, el final de cada bloqueo y el
+  // "justo después" de cada reserva (reserva + 45), que es el primer minuto en
+  // que el chofer vuelve a estar libre. Se toma el más temprano que sirva.
+  const candidatos = new Set<number>([MIN_ULTIMO])
+  for (let m = MIN_APERTURA; m <= MIN_ULTIMO; m += SEPARACION_MIN) candidatos.add(m)
+  for (const o of ocupados) candidatos.add(o + SEP_DESPUES)
+  for (const r of rangos) candidatos.add(r.fin)
+
+  const hueco = [...candidatos]
+    .filter(m => m > baseMin && m <= MIN_ULTIMO && libre(m))
+    .sort((a, b) => a - b)[0]
+
+  if (hueco == null) return { hora: base, base, desplazado: false, sinHueco: true }
+  return {
+    hora: fmtMin(hueco),
+    base,
+    desplazado: true,
+    motivo: `A las ${base} ya tenemos otro retiro en esa franja, así que el retiro queda a las ${fmtMin(hueco)}.`,
+  }
 }
 
 /**

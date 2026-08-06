@@ -7,9 +7,9 @@ import { agregarDiasHabiles, isoFecha, tieneExpress, EXPRESS_DIAS } from './dias
 import { fmtPrecio } from './format'
 import { precioClienteEutanasia, getConsultaEutanasia, getRecargoFueraHorario, recargoEutanasiaPara } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
-import { sincronizarFichaDeEutanasia, horaRetiroDeEutanasia } from './eutanasia-sync'
+import { sincronizarFichaDeEutanasia } from './eutanasia-sync'
 import { enviarVetCambioFechaEutanasia } from './eutanasia-mailer'
-import { evaluarSlotRetiro, evaluarHoraEutanasia, horaLibreEnFranja, ahoraChile } from './agenda'
+import { evaluarSlotRetiro, evaluarHoraEutanasia, horaLibreEnFranja, ahoraChile, retiroTrasEutanasia, type RetiroTrasEutanasia } from './agenda'
 import { yaFueRetirada } from './ficha-retiro'
 import { capitalizarNombre } from './nombres'
 import { calcularSnapshotFicha } from './price-calculator'
@@ -378,7 +378,11 @@ async function reprogramarEutanasia(a: AccionReprogramar, tel9: string): Promise
   const patch: Record<string, string> = { fecha_servicio: a.fecha, hora_servicio: a.hora }
   // La hora del retiro del crematorio sigue a la del procedimiento, pero solo si
   // el vet ya la había informado (si está en blanco, se define cuando coordine).
-  if (propia.hora_retiro_crematorio) patch.hora_retiro_crematorio = horaRetiroDeEutanasia(a.hora) || a.hora
+  let retiroReprog: RetiroTrasEutanasia | null = null
+  if (propia.hora_retiro_crematorio) {
+    retiroReprog = await retiroTrasEutanasia(a.fecha, a.hora, { excluirAgendaId: `e${propia.id}` })
+    patch.hora_retiro_crematorio = retiroReprog.hora
+  }
   await updateByIdIf('cotizaciones_eutanasia', propia.id, {}, patch)
   await sincronizarFichaDeEutanasia({ ...propia, ...patch })
 
@@ -406,7 +410,14 @@ async function reprogramarEutanasia(a: AccionReprogramar, tel9: string): Promise
       (propia.vet_nombre_asignado ? `Vet asignado: ${propia.vet_nombre_asignado} (le avisamos por correo)` : '⚠ Sin vet asignado todavía'))
   } catch (e) { console.warn('[agente-acciones] aviso admin eutanasia reprogramada falló:', e) }
 
-  return `Listo, la eutanasia quedó reprogramada para el ${formatDateConDia(a.fecha)} a las ${a.hora}. ` +
+  // Si el retiro tuvo que correrse (su media hora estaba topada), el cliente
+  // tiene que enterarse ACÁ mismo: es nuestra hora, no la del veterinario.
+  const notaRetiro = retiroReprog
+    ? retiroReprog.desplazado
+      ? ` OJO, díselo: nosotros pasamos a retirar a las ${retiroReprog.hora} (no a las ${retiroReprog.base}), porque a esa hora ya teníamos otro retiro comprometido y la tomamos en el primer horario libre después del procedimiento.`
+      : ` Nosotros pasamos a retirar a las ${retiroReprog.hora}: díselo también.`
+    : ''
+  return `Listo, la eutanasia quedó reprogramada para el ${formatDateConDia(a.fecha)} a las ${a.hora}.${notaRetiro} ` +
     `Confírmaselo al cliente con calidez${propia.vet_nombre_asignado ? ' y dile que ya le avisamos al veterinario asignado' : ' y dile que el equipo está coordinando al veterinario'}.`
 }
 
@@ -865,12 +876,28 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
   // exactamente la que se registró (nunca otra).
   const horaTxt = ` Quedó registrada para el ${formatDateConDia(a.fecha)} a las ${hora} hrs: confírmale esa MISMA fecha y hora al cliente (el día de la semana ya viene resuelto acá, no lo cambies).`
 
+  // RETIRO: solo si la eutanasia viene CON cremación. La eutanasia la hace el vet
+  // (por eso puede superponerse con nuestra agenda), pero el retiro es nuestro y
+  // compite con la ruta del chofer. Si su media hora está topada, se corre al
+  // primer hueco hábil y el cliente tiene que saberlo AHORA, no enterarse el día
+  // del servicio (dueño 2026-08-05). Es una estimación: la hora definitiva la fija
+  // el veterinario al coordinar con la familia.
+  let retiroTxt = ''
+  if (!sinCremacion) {
+    try {
+      const r = await retiroTrasEutanasia(a.fecha, hora)
+      retiroTxt = r.desplazado
+        ? ` IMPORTANTE, díselo al cliente: normalmente pasamos a retirar 30 minutos después del procedimiento (a las ${r.base}), pero a esa hora ya tenemos otro retiro comprometido, así que pasaríamos a las ${r.hora}. Explícaselo como lo que es —tenemos un tope de horario y lo tomamos en el primer horario libre después del procedimiento—, sin dramatizarlo, y aclara que la hora definitiva la confirma el veterinario al coordinar con él.`
+        : ` Pasamos a retirar a las ${r.hora} (30 minutos después del procedimiento): coméntaselo al cliente, aclarando que la hora definitiva la confirma el veterinario al coordinar.`
+    } catch (e) { console.warn('[agente-acciones] no se pudo proyectar el retiro:', e) }
+  }
+
   if (res.matched === 0) {
     return `Registré la solicitud de eutanasia (N° ${res.id}) pero ahora mismo no hay veterinarios disponibles para ${res.comunaCanon} en esa fecha/franja. ` +
-      `Dile al cliente que su solicitud quedó INGRESADA y que el equipo lo contactará a la brevedad para coordinar.${horaTxt}${precioTxt}`
+      `Dile al cliente que su solicitud quedó INGRESADA y que el equipo lo contactará a la brevedad para coordinar.${horaTxt}${retiroTxt}${precioTxt}`
   }
   return `Solicitud de eutanasia registrada (N° ${res.id}) y enviada a ${res.enviados} veterinario${res.enviados === 1 ? '' : 's'} de nuestra red en ${res.comunaCanon}. ` +
-    `Dile al cliente que su solicitud quedó INGRESADA y que nos pondremos en contacto por este mismo medio apenas un veterinario confirme su disponibilidad.${horaTxt}${precioTxt}`
+    `Dile al cliente que su solicitud quedó INGRESADA y que nos pondremos en contacto por este mismo medio apenas un veterinario confirme su disponibilidad.${horaTxt}${retiroTxt}${precioTxt}`
 }
 
 /**

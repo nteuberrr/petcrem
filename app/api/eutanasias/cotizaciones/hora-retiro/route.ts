@@ -3,7 +3,7 @@ import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
 import { isWhatsappConfigured, avisarAdminsWhatsapp, enviarTextoWhatsapp } from '@/lib/whatsapp'
 import { formatDate, formatDateForSheet } from '@/lib/dates'
-import { horaRetiroDeEutanasia, fueraDeVentanaRetiro, conflictosEnAgenda, describirConflictos } from '@/lib/agenda'
+import { retiroTrasEutanasia, fueraDeVentanaRetiro, conflictosEnAgenda, describirConflictos } from '@/lib/agenda'
 import { esFueraDeHorario } from '@/lib/adicionales-auto'
 import { recargoEutanasiaPara, getRecargoFueraHorario } from '@/lib/eutanasia-precios'
 import { esFeriado, nombreFeriado } from '@/lib/feriados'
@@ -57,7 +57,11 @@ export async function POST(req: NextRequest) {
     const horaAnterior = (c.hora_servicio || '').trim()
     // Nuestro RETIRO se agenda 30 min después del procedimiento (dueño 2026-07-28):
     // el vet informa la hora de la eutanasia y el chofer pasa a buscarla enseguida.
-    const horaRetiro = horaRetiroDeEutanasia(hora) || hora
+    // Si esa media hora ya está topada por otro retiro, se corre al primer hueco
+    // hábil (dueño 2026-08-05) — antes se guardaba encimada y la ruta del chofer
+    // quedaba imposible. `e{id}` se excluye para que no se bloquee a sí misma.
+    const retiro = await retiroTrasEutanasia(c.fecha_servicio, hora, { excluirAgendaId: `e${c.id}` })
+    const horaRetiro = retiro.hora
     await updateByIdIf(SHEET_COTI, c.id, {}, { hora_servicio: hora, hora_retiro_crematorio: horaRetiro })
 
     // La ficha de cremación queda con esa misma hora de retiro (nace del
@@ -94,15 +98,21 @@ export async function POST(req: NextRequest) {
           `Vet: ${c.vet_nombre_asignado || '—'}\n` +
           `Eutanasia: ${formatDate(c.fecha_servicio)} *${hora}*` +
           (horaAnterior && horaAnterior !== hora ? ` (antes ${horaAnterior})` : '') + '\n' +
-          `*Retiro agendado a las ${horaRetiro}* (30 min después) · ${c.direccion}, ${c.comuna}` +
+          `*Retiro agendado a las ${horaRetiro}*` +
+          (retiro.desplazado ? ` (corrido: a las ${retiro.base} la agenda estaba topada)` : ' (30 min después)') +
+          ` · ${c.direccion}, ${c.comuna}` +
+          (retiro.sinHueco ? `\n⚠ No quedaba ningún horario libre después de las ${retiro.base}: quedó encimado, revisa la ruta.` : '') +
           (fueraDeVentanaRetiro(horaRetiro) ? '\n⚠ El retiro queda fuera de la ventana habitual (hasta las 21:10): coordínalo a mano.' : '') +
           alertaChoque)
       } catch (e) { console.warn('[hora-retiro] aviso admin falló:', e) }
     }
 
-    // Si la hora coordinada cae FUERA DE HORARIO y la ficha lleva cremación, le
-    // avisamos al CLIENTE del cambio de hora + el recargo de $ por fuera de horario,
-    // para que no se sorprenda al cobrar (caso: eutanasia reprogramada a las 19:30).
+    // Aviso al CLIENTE (solo si la ficha lleva cremación: sin ella no hay retiro).
+    // Se manda UN solo mensaje que cubre los dos motivos, para no escribirle dos
+    // veces seguidas:
+    //   · el RETIRO se corrió porque su media hora estaba topada — el tutor tiene
+    //     que saber a qué hora pasamos de verdad, no la teórica (dueño 2026-08-05)
+    //   · aparece el recargo por fuera de horario, para que no sorprenda al cobrar
     try {
       const sinCremacion = (c.tipo_servicio_cremacion || '').toUpperCase() === 'NINGUNA'
       const waCliente = (c.cliente_wa_id || c.cliente_telefono || '').replace(/\D/g, '')
@@ -115,24 +125,33 @@ export async function POST(req: NextRequest) {
         recargoEutanasiaPara(c.fecha_servicio, horaEut, montoRecargo) > 0 || esFueraDeHorario(c.fecha_servicio, horaRet)
       const recargoAntes = llevaRecargo(horaAnterior, (c.hora_retiro_crematorio || '').trim())
       const recargoAhora = llevaRecargo(hora, horaRetiro)
-      if (!sinCremacion && waCliente && !recargoAntes && recargoAhora && isWhatsappConfigured()) {
-        const otros = await getSheetData('otros_servicios').catch(() => [])
-        const fh = otros.find(s => (s.auto_regla || '') === 'fuera_horario' && String(s.activo || '').toUpperCase() === 'TRUE')
-        const monto = fh ? (parseInt(fh.precio, 10) || 0) : 10000
+      const avisaRecargo = !recargoAntes && recargoAhora
+      if (!sinCremacion && waCliente && (avisaRecargo || retiro.desplazado) && isWhatsappConfigured()) {
         const tutor = (c.cliente_nombre || '').trim().split(/\s+/)[0] || '👋'
         const mascota = c.mascota_nombre && c.mascota_nombre !== 'No Especificado' ? c.mascota_nombre : 'tu mascota'
-        const dSem = new Date(`${c.fecha_servicio}T12:00:00`).getDay()
-        const motivo = esFeriado(c.fecha_servicio) ? `por ser feriado (${nombreFeriado(c.fecha_servicio)})`
-          : (dSem === 0 || dSem === 6) ? 'por ser fin de semana'
-          : 'por ser después de las 18:00'
-        const msg =
-          `Hola ${tutor}, la veterinaria nos informó que la hora del servicio de ${mascota} quedó coordinada para las ${hora} hrs (pasamos a retirarla a las ${horaRetiro} hrs). ` +
-          `Por ese horario se suma un recargo de ${fmtPrecio(monto)} por fuera de horario (${motivo}), una sola vez ` +
-          `(queda especificado en nuestra web). Te lo comentamos para que no sea una sorpresa al momento del cobro. ` +
-          `Cualquier duda, quedamos atentos por aquí 🐾 — Crematorio Alma Animal`
+
+        let msg = `Hola ${tutor}, la veterinaria nos informó que la hora del servicio de ${mascota} quedó coordinada para las ${hora} hrs. `
+        msg += retiro.desplazado
+          // El "por qué" importa: si no, suena a que llegamos tarde por desidia.
+          ? `Nosotros pasamos a retirarla a las ${horaRetiro} hrs — a las ${retiro.base} ya teníamos otro retiro comprometido, así que la tomamos en el primer horario libre después del procedimiento. `
+          : `Nosotros pasamos a retirarla a las ${horaRetiro} hrs. `
+
+        if (avisaRecargo) {
+          const otros = await getSheetData('otros_servicios').catch(() => [])
+          const fh = otros.find(s => (s.auto_regla || '') === 'fuera_horario' && String(s.activo || '').toUpperCase() === 'TRUE')
+          const monto = fh ? (parseInt(fh.precio, 10) || 0) : 10000
+          const dSem = new Date(`${c.fecha_servicio}T12:00:00`).getDay()
+          const motivo = esFeriado(c.fecha_servicio) ? `por ser feriado (${nombreFeriado(c.fecha_servicio)})`
+            : (dSem === 0 || dSem === 6) ? 'por ser fin de semana'
+            : 'por ser después de las 18:00'
+          msg += `Por ese horario se suma un recargo de ${fmtPrecio(monto)} por fuera de horario (${motivo}), una sola vez ` +
+            `(queda especificado en nuestra web). Te lo comentamos para que no sea una sorpresa al momento del cobro. `
+        }
+
+        msg += `Cualquier duda, quedamos atentos por aquí 🐾 — Crematorio Alma Animal`
         await enviarTextoWhatsapp(waCliente, msg)
       }
-    } catch (e) { console.warn('[hora-retiro] aviso fuera de horario al cliente falló:', e) }
+    } catch (e) { console.warn('[hora-retiro] aviso al cliente falló:', e) }
 
     return NextResponse.json({ ok: true, hora, hora_retiro: horaRetiro, mascota_nombre: c.mascota_nombre })
   } catch (e) {

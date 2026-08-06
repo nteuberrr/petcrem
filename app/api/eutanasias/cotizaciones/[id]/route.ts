@@ -9,6 +9,7 @@ import { formatDate } from '@/lib/dates'
 import { crearClienteBorrador } from '@/lib/cliente-borrador'
 import { camposResultado, efectosResultado, esResultado, cancelarEutanasiaConservandoFicha } from '@/lib/eutanasia-resultado'
 import { sincronizarFichaDeEutanasia, horaRetiroDeEutanasia } from '@/lib/eutanasia-sync'
+import { retiroTrasEutanasia } from '@/lib/agenda'
 
 const SHEET = 'cotizaciones_eutanasia'
 
@@ -199,7 +200,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // sigue (procedimiento + 30 min) — pero solo si el vet ya la había informado:
     // mientras esté en blanco, la agenda muestra la hora del servicio a propósito.
     if (partial.hora_servicio && partial.hora_servicio !== rows[idx].hora_servicio && rows[idx].hora_retiro_crematorio) {
-      partial.hora_retiro_crematorio = horaRetiroDeEutanasia(partial.hora_servicio) || partial.hora_servicio
+      // Si esa media hora está topada por otro retiro, se corre al primer hueco
+      // hábil (misma regla que el link del vet y el bot): la hora del retiro es
+      // nuestra y tiene que caber en la ruta del chofer.
+      const r = await retiroTrasEutanasia(
+        partial.fecha_servicio || rows[idx].fecha_servicio,
+        partial.hora_servicio,
+        { excluirAgendaId: `e${id}` },
+      ).catch(() => null)
+      partial.hora_retiro_crematorio = r?.hora || horaRetiroDeEutanasia(partial.hora_servicio) || partial.hora_servicio
     }
 
     const updated = { ...rows[idx], ...partial }
