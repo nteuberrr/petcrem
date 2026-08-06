@@ -957,6 +957,27 @@ function tipografico(s: SlotsPlantilla, C: { w: number; h: number }, o: Opciones
 // mascota, `fechas` = sus años, `bajada` = la dedicatoria.
 
 /** Nombre + años, el bloque tipográfico que comparten las cinco. */
+/**
+ * Logo de los MEMORIALES: SIEMPRE arriba a la derecha (decisión del dueño
+ * 2026-08-06). Antes cada plantilla lo ponía donde le convenía —abajo al centro,
+ * abajo a la derecha, arriba a la izquierda— y eso hacía dos cosas malas: el
+ * homenaje se veía distinto en cada pieza, y el logo de abajo obligaba a
+ * reservarle 200 px (ZONA_LOGO) que le robaban altura a la foto.
+ *
+ * CONTRASTE: sobre una foto no se puede saber qué hay detrás (la mitad de las
+ * fotos son claras y el logo blanco desaparecía). Cuando va sobre foto se dibuja
+ * un velo suave en la esquina, así el blanco se lee sobre cualquier imagen.
+ * Sobre un fondo plano se usa la variante que contrasta con ese color.
+ */
+function logoMemorial(o: OpcionesPlantilla, C: { w: number; h: number }, opts: { sobreFoto?: boolean; claro?: boolean } = {}): string {
+  const url = opts.sobreFoto || !opts.claro ? o.logoBlanco : o.logoNavy
+  if (!url) return ''
+  const velo = opts.sobreFoto
+    ? `<div style="display:flex;position:absolute;top:0;right:0;width:${Math.round(C.w * 0.42)}px;height:${Math.round(C.h * 0.16)}px;background:linear-gradient(to bottom left, rgba(20,60,100,0.55) 0%, rgba(20,60,100,0) 72%)"></div>`
+    : ''
+  return `${velo}<img src="${esc(url)}" width="138" style="position:absolute;top:${PAD - 12}px;right:${PAD - 12}px" />`
+}
+
 function bloqueNombre(s: SlotsPlantilla, maxW: number, col: string, sub: string, fsMax: number, centrado = false): string {
   const alinear = centrado ? 'align-items:center;text-align:center' : 'align-items:flex-start'
   const nombre = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, maxW, fsMax, 40, 0.55)}px;color:${col};line-height:1.02">${esc(clampText(s.titulo, 26))}</span>` : ''
@@ -972,7 +993,7 @@ function memorial_placa(s: SlotsPlantilla, C: { w: number; h: number }, o: Opcio
   const placaW = Math.round(C.w * 0.78)
   const placa = `<div style="display:flex;flex-direction:column;align-items:center;position:absolute;left:${Math.round((C.w - placaW) / 2)}px;bottom:${Math.round(C.h * 0.07)}px;width:${placaW}px;background:${CREAM};border-radius:6px;padding:40px 40px">${s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:20px;letter-spacing:4px;color:${GOLD};margin-bottom:18px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''}${bloqueNombre(s, placaW - 80, NAVY, INK, 68, true)}</div>`
   const velo = `<div style="display:flex;position:absolute;bottom:0;left:0;width:${C.w}px;height:${Math.round(C.h * 0.5)}px;background:linear-gradient(to bottom, rgba(20,60,100,0) 0%, rgba(20,60,100,0.55) 70%)"></div>`
-  const lg = logoImg(o.logoBlanco, `top:${PAD - 16}px;right:${PAD - 16}px`, 140)
+  const lg = logoMemorial(o, C, { sobreFoto: true })
   const html = `<div style="display:flex;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}"><img src="${src}" width="${C.w}" height="${C.h}" style="object-fit:cover;object-position:center 18%;display:block" />${velo}${placa}${lg}</div>`
   return { html, fotos }
 }
@@ -989,7 +1010,7 @@ function memorial_retrato(s: SlotsPlantilla, C: { w: number; h: number }, o: Opc
   const eb = s.eyebrow ? `<div style="display:flex;margin-bottom:26px"><span style="font-family:Inter;font-weight:700;font-size:19px;letter-spacing:4px;color:${GOLD}">${esc((s.eyebrow || '').toUpperCase())}</span></div>` : ''
   const texto = `<div style="display:flex;flex-direction:column;justify-content:center;width:${colW}px;height:${C.h}px;padding:56px 48px 160px 48px">${eb}${bloqueNombre(s, colW - 96, oscuro ? WHITE : NAVY, oscuro ? SOFT : INK, 58)}</div>`
   const foto = `<div style="display:flex;width:${fotoW}px;height:${C.h}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${fotoW}" height="${C.h}" style="object-fit:cover;display:block" /></div>`
-  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:46px;right:44px`, 128)
+  const lg = logoMemorial(o, C, { claro: !oscuro })
   const html = `<div style="display:flex;flex-direction:row;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${foto}${marca}${texto}${lg}</div>`
   return { html, fotos }
 }
@@ -1000,13 +1021,13 @@ function memorial_medallon(s: SlotsPlantilla, C: { w: number; h: number }, o: Op
   const src = pedirFoto(fotos, s.foto, 'principal', 'primer plano de la cara de un perro viejo de mirada tranquila, fondo de hogar desenfocado, luz cálida', '1:1')
   const bg = bgColor(s.fondo || 'navy')
   const oscuro = bg === NAVY
-  const d = Math.min(C.w - PAD * 2 - 80, Math.round(C.h * 0.40))
+  const d = Math.min(C.w - PAD * 2, Math.round(C.h * 0.50))
   const marca = ghost(s.titulo || '', { size: Math.round(C.h * 0.34), color: oscuro ? WHITE : NAVY, opacidad: 0.07, top: Math.round(C.h * 0.10), left: -Math.round(C.w * 0.05) })
   const medallon = `<div style="display:flex;align-items:center;justify-content:center;width:${d + 26}px;height:${d + 26}px;border-radius:${Math.round((d + 26) / 2)}px;background:${GOLD}"><img src="${src}" width="${d}" height="${d}" style="object-fit:cover;border-radius:${Math.round(d / 2)}px;display:block" /></div>`
   const eb = s.eyebrow ? `<div style="display:flex;margin-bottom:30px"><span style="font-family:Inter;font-weight:700;font-size:20px;letter-spacing:4px;color:${GOLD}">${esc((s.eyebrow || '').toUpperCase())}</span></div>` : ''
   const nombre = `<div style="display:flex;margin-top:44px">${bloqueNombre(s, C.w - PAD * 2, oscuro ? WHITE : NAVY, oscuro ? SOFT : INK, 66, true)}</div>`
-  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:44px;left:${Math.round(C.w / 2) - 68}px`, 136)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:56px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${medallon}${nombre}</div>`
+  const lg = logoMemorial(o, C, { claro: !oscuro })
+  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${eb}${medallon}${nombre}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${marca}${body}${lg}</div>`
   return { html, fotos }
 }
@@ -1022,8 +1043,8 @@ function memorial_cuadro(s: SlotsPlantilla, C: { w: number; h: number }, o: Opci
   const cuadro = `<div style="display:flex;align-items:center;justify-content:center;width:${marcoW}px;background:${WHITE};padding:48px;border-radius:4px"><img src="${src}" width="${fotoLado}" height="${fotoLado}" style="object-fit:cover;display:block" /></div>`
   const filete = `<div style="display:flex;width:90px;height:4px;background:${GOLD};border-radius:2px;margin-top:38px"></div>`
   const nombre = `<div style="display:flex;margin-top:30px">${bloqueNombre(s, C.w - PAD * 2, oscuro ? WHITE : NAVY, oscuro ? SOFT : INK, 58, true)}</div>`
-  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:44px;right:${PAD - 16}px`, 128)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${cuadro}${filete}${nombre}</div>`
+  const lg = logoMemorial(o, C, { claro: !oscuro })
+  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${cuadro}${filete}${nombre}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
   return { html, fotos }
 }
@@ -1043,7 +1064,7 @@ function memorial_cinta(s: SlotsPlantilla, C: { w: number; h: number }, o: Opcio
   const fechas = s.fechas ? `<span style="font-family:Inter;font-weight:600;font-size:26px;letter-spacing:3px;color:${SOFT};margin-top:14px">${esc(clampText(s.fechas, 26))}</span>` : ''
   const dedic = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:27px;color:${SOFT};line-height:1.42;margin-top:18px">${esc(clampText(s.bajada, 130))}</span>` : ''
   const banda = `<div style="display:flex;flex-direction:column;justify-content:center;position:relative;width:${C.w}px;height:${bandaH}px;background:${NAVY};padding:0 ${PAD}px;flex-shrink:0">${marca}${eb}${nombre}${fechas}${dedic}</div>`
-  const lg = logoImg(o.logoBlanco, `bottom:44px;right:${PAD - 16}px`, 128)
+  const lg = logoMemorial(o, C, { sobreFoto: true })
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${foto}${banda}${lg}</div>`
   return { html, fotos }
 }
@@ -1059,7 +1080,7 @@ function memorial_horizonte(s: SlotsPlantilla, C: { w: number; h: number }, o: O
   const izq = `<div style="display:flex;flex-direction:column;justify-content:center;flex:1">${s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:18px;letter-spacing:4px;color:${GOLD};margin-bottom:12px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''}${s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w * 0.55, 72, 40, 0.55)}px;color:${NAVY};line-height:1.02">${esc(clampText(s.titulo, 22))}</span>` : ''}</div>`
   const der = s.fechas ? `<div style="display:flex;flex-direction:column;justify-content:center;align-items:flex-end;width:${Math.round(C.w * 0.3)}px"><span style="font-family:Inter;font-weight:600;font-size:25px;letter-spacing:3px;color:${INK};text-align:right">${esc(clampText(s.fechas, 26))}</span></div>` : ''
   const franja = `<div style="display:flex;flex-direction:row;width:${C.w}px;height:${franjaH}px;background:${CREAM};padding:0 ${PAD}px;flex-shrink:0">${izq}${der}</div>`
-  const lg = logoImg(o.logoBlanco, `top:${PAD - 16}px;left:${PAD - 16}px`, 132)
+  const lg = logoMemorial(o, C, { sobreFoto: true })
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${CREAM}">${foto}${franja}${filete}${lg}</div>`
   return { html, fotos }
 }
@@ -1074,8 +1095,8 @@ function memorial_polaroid(s: SlotsPlantilla, C: { w: number; h: number }, o: Op
   const pie = `<div style="display:flex;flex-direction:column;align-items:center;width:${fotoLado}px;margin-top:26px">${s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, fotoLado, 52, 32, 0.55)}px;color:${NAVY};line-height:1.05">${esc(clampText(s.titulo, 20))}</span>` : ''}${s.fechas ? `<span style="font-family:Inter;font-weight:600;font-size:22px;letter-spacing:3px;color:${GOLD};margin-top:10px">${esc(clampText(s.fechas, 26))}</span>` : ''}</div>`
   const card = `<div style="display:flex;flex-direction:column;align-items:center;width:${cardW}px;background:${WHITE};padding:32px 32px 44px 32px;border-radius:4px"><img src="${src}" width="${fotoLado}" height="${fotoLado}" style="object-fit:cover;display:block" />${pie}</div>`
   const dedic = s.bajada ? `<div style="display:flex;width:${Math.round(C.w * 0.78)}px;margin-top:44px"><span style="font-family:Inter;font-weight:400;font-size:27px;color:${SOFT};line-height:1.45;text-align:center">${esc(clampText(s.bajada, 130))}</span></div>` : ''
-  const lg = logoImg(o.logoBlanco, `bottom:44px;left:${Math.round(C.w / 2) - 66}px`, 132)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:56px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${card}${dedic}</div>`
+  const lg = logoMemorial(o, C)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${card}${dedic}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${marca}${body}${lg}</div>`
   return { html, fotos }
 }
@@ -1089,7 +1110,7 @@ function memorial_orla(s: SlotsPlantilla, C: { w: number; h: number }, o: Opcion
   const orla = `<div style="display:flex;position:absolute;top:${m}px;left:${m}px;width:${C.w - m * 2 - 4}px;height:${C.h - m * 2 - 4}px;border:2px solid ${GOLD};border-radius:3px"></div>`
   const placaW = Math.round(C.w * 0.7)
   const placa = `<div style="display:flex;flex-direction:column;align-items:center;position:absolute;left:${Math.round((C.w - placaW) / 2)}px;bottom:${Math.round(C.h * 0.10)}px;width:${placaW}px;background:${NAVY};border-radius:4px;padding:34px 36px">${bloqueNombre(s, placaW - 72, WHITE, SOFT, 60, true)}</div>`
-  const lg = logoImg(o.logoBlanco, `top:${PAD}px;right:${PAD}px`, 128)
+  const lg = logoMemorial(o, C, { sobreFoto: true })
   const html = `<div style="display:flex;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}"><img src="${src}" width="${C.w}" height="${C.h}" style="object-fit:cover;object-position:center 22%;display:block" />${velo}${orla}${placa}${lg}</div>`
   return { html, fotos }
 }
@@ -1100,7 +1121,7 @@ function memorial_susurro(s: SlotsPlantilla, C: { w: number; h: number }, o: Opc
   const src = pedirFoto(fotos, s.foto, 'principal', 'primer plano de la cara de una mascota, mirada dulce, fondo claro desenfocado', '1:1')
   const bg = bgColor(s.fondo || 'crema')
   const oscuro = bg === NAVY
-  const d = Math.round(Math.min(C.w * 0.30, C.h * 0.20))
+  const d = Math.round(Math.min(C.w * 0.52, C.h * 0.34))
   const medallon = `<div style="display:flex;align-items:center;justify-content:center;width:${d + 16}px;height:${d + 16}px;border-radius:${Math.round((d + 16) / 2)}px;background:${GOLD}"><img src="${src}" width="${d}" height="${d}" style="object-fit:cover;border-radius:${Math.round(d / 2)}px;display:block" /></div>`
   const frase = s.bajada
     ? `<span style="font-family:Inter;font-weight:400;font-size:${fitFont(s.bajada, C.w - PAD * 2, 54, 30, 0.42)}px;color:${oscuro ? WHITE : NAVY};line-height:1.34;text-align:center">${esc(clampText(s.bajada, 160))}</span>`
@@ -1108,8 +1129,8 @@ function memorial_susurro(s: SlotsPlantilla, C: { w: number; h: number }, o: Opc
   const filete = `<div style="display:flex;width:80px;height:3px;background:${GOLD};border-radius:2px;margin:36px 0"></div>`
   const nombre = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2, 54, 32, 0.55)}px;color:${oscuro ? WHITE : NAVY};line-height:1.05;text-align:center">${esc(clampText(s.titulo, 24))}</span>` : ''
   const fechas = s.fechas ? `<span style="font-family:Inter;font-weight:600;font-size:24px;letter-spacing:3px;color:${GOLD};margin-top:12px">${esc(clampText(s.fechas, 26))}</span>` : ''
-  const lg = logoImg(oscuro ? o.logoBlanco : o.logoNavy, `bottom:44px;left:${Math.round(C.w / 2) - 66}px`, 132)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${medallon}<div style="display:flex;margin-top:40px">${frase}</div>${filete}${nombre}${fechas}</div>`
+  const lg = logoMemorial(o, C, { claro: !oscuro })
+  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${medallon}<div style="display:flex;margin-top:40px">${frase}</div>${filete}${nombre}${fechas}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
   return { html, fotos }
 }
@@ -1120,10 +1141,10 @@ function memorial_estela(s: SlotsPlantilla, C: { w: number; h: number }, o: Opci
   const src = pedirFoto(fotos, s.foto, 'principal', 'una mascota descansando junto a la puerta de su casa, plano medio, luz natural cálida', '3:4')
   const bandaW = Math.round(C.w * 0.40)
   const fotoW = C.w - bandaW
-  const banda = `<div style="display:flex;flex-direction:column;justify-content:center;width:${bandaW}px;height:${C.h}px;background:${NAVY};padding:48px 40px ${ZONA_LOGO}px 40px;flex-shrink:0">${s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:18px;letter-spacing:4px;color:${GOLD};margin-bottom:20px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''}${bloqueNombre(s, bandaW - 80, WHITE, SOFT, 62)}</div>`
+  const banda = `<div style="display:flex;flex-direction:column;justify-content:center;width:${bandaW}px;height:${C.h}px;background:${NAVY};padding:48px 40px 64px 40px;flex-shrink:0">${s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:18px;letter-spacing:4px;color:${GOLD};margin-bottom:20px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''}${bloqueNombre(s, bandaW - 80, WHITE, SOFT, 62)}</div>`
   const foto = `<div style="display:flex;width:${fotoW}px;height:${C.h}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${fotoW}" height="${C.h}" style="object-fit:cover;display:block" /></div>`
   const filete = `<div style="display:flex;position:absolute;top:0;left:${bandaW - 5}px;width:5px;height:${C.h}px;background:${GOLD}"></div>`
-  const lg = logoImg(o.logoBlanco, `bottom:46px;left:40px`, 126)
+  const lg = logoMemorial(o, C, { sobreFoto: true })
   const html = `<div style="display:flex;flex-direction:row;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${banda}${foto}${filete}${lg}</div>`
   return { html, fotos }
 }
@@ -1137,8 +1158,8 @@ function memorial_alba(s: SlotsPlantilla, C: { w: number; h: number }, o: Opcion
   const arco = `<div style="display:flex;width:${arcoW}px;height:${arcoH}px;overflow:hidden;border-radius:${Math.round(arcoW / 2)}px ${Math.round(arcoW / 2)}px 8px 8px"><img src="${src}" width="${arcoW}" height="${arcoH}" style="object-fit:cover;display:block" /></div>`
   const fondo = `<div style="display:flex;position:absolute;top:0;left:0;width:${C.w}px;height:${C.h}px;background:linear-gradient(to bottom, ${CREAM} 0%, #f6e6c8 100%)"></div>`
   const nombre = `<div style="display:flex;margin-top:44px">${bloqueNombre(s, C.w - PAD * 2, NAVY, INK, 62, true)}</div>`
-  const lg = logoImg(o.logoNavy, `bottom:44px;left:${Math.round(C.w / 2) - 66}px`, 132)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${arco}${nombre}</div>`
+  const lg = logoMemorial(o, C, { claro: true })
+  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${arco}${nombre}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${CREAM}">${fondo}${body}${lg}</div>`
   return { html, fotos }
 }
@@ -1148,29 +1169,41 @@ function memorial_carta(s: SlotsPlantilla, C: { w: number; h: number }, o: Opcio
   const fotos: FotoGrafico[] = []
   const src = pedirFoto(fotos, s.foto, 'principal', 'retrato cálido de una mascota en su casa, mirada serena, fondo hogareño desenfocado', '1:1')
   const cardW = Math.round(C.w * 0.80)
-  const d = Math.round(Math.min(cardW * 0.34, C.h * 0.18))
+  const d = Math.round(Math.min(cardW * 0.56, C.h * 0.30))
   const medallon = `<div style="display:flex;align-items:center;justify-content:center;width:${d + 14}px;height:${d + 14}px;border-radius:${Math.round((d + 14) / 2)}px;background:${GOLD}"><img src="${src}" width="${d}" height="${d}" style="object-fit:cover;border-radius:${Math.round(d / 2)}px;display:block" /></div>`
   const nombre = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, cardW - 110, 56, 34, 0.55)}px;color:${NAVY};line-height:1.05;text-align:center;margin-top:28px">${esc(clampText(s.titulo, 22))}</span>` : ''
   const fechas = s.fechas ? `<span style="font-family:Inter;font-weight:600;font-size:23px;letter-spacing:3px;color:${GOLD};margin-top:12px">${esc(clampText(s.fechas, 26))}</span>` : ''
   const filete = `<div style="display:flex;width:70px;height:3px;background:${GOLD};border-radius:2px;margin:26px 0"></div>`
   const dedic = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:28px;color:${INK};line-height:1.5;text-align:center">${esc(clampText(s.bajada, 170))}</span>` : ''
   const card = `<div style="display:flex;flex-direction:column;align-items:center;width:${cardW}px;background:${CREAM};border:2px solid ${GOLD};border-radius:8px;padding:48px 55px">${medallon}${nombre}${fechas}${filete}${dedic}</div>`
-  const lg = logoImg(o.logoBlanco, `bottom:44px;left:${Math.round(C.w / 2) - 66}px`, 132)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:56px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${card}</div>`
+  const lg = logoMemorial(o, C)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${card}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${body}${lg}</div>`
   return { html, fotos }
 }
 
-/** M13. SILUETA: foto a sangre bajo un velo navy parejo y el nombre gigante centrado encima. */
+/**
+ * M13. SILUETA: foto a sangre bajo un velo navy y el nombre GIGANTE abajo a la
+ * izquierda. Antes iba centrado en la mitad de la pieza, justo encima de la cara
+ * de la mascota (el dueño lo rebotó con el caso "Maya"): bajarlo a la esquina
+ * despeja el retrato y deja el nombre más grande todavía, anclado en una
+ * diagonal de lectura natural (logo arriba a la derecha → nombre abajo a la
+ * izquierda).
+ */
 function memorial_silueta(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
   const fotos: FotoGrafico[] = []
-  const src = pedirFoto(fotos, s.foto, 'principal', 'una mascota recortada contra la luz de una ventana, atmósfera serena y cálida, plano medio', '4:5')
-  const velo = `<div style="display:flex;position:absolute;top:0;left:0;width:${C.w}px;height:${C.h}px;background:linear-gradient(to bottom, rgba(20,60,100,0.55) 0%, rgba(20,60,100,0.78) 100%)"></div>`
-  const eb = s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:19px;letter-spacing:5px;color:${GOLD};margin-bottom:24px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''
-  const filete = `<div style="display:flex;width:90px;height:3px;background:${GOLD};border-radius:2px;margin-top:30px"></div>`
-  const centro = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;position:absolute;top:0;left:0;width:${C.w}px;height:${C.h}px;padding:${PAD}px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${eb}${bloqueNombre(s, C.w - PAD * 2, WHITE, SOFT, 96, true)}${filete}</div>`
-  const lg = logoImg(o.logoBlanco, `bottom:46px;left:${Math.round(C.w / 2) - 66}px`, 132)
-  const html = `<div style="display:flex;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}"><img src="${src}" width="${C.w}" height="${C.h}" style="object-fit:cover;object-position:center 30%;display:block" />${velo}${centro}${lg}</div>`
+  const src = pedirFoto(fotos, s.foto, 'principal', 'una mascota recortada contra la luz de una ventana, atmósfera serena y cálida, plano medio', '4:5', 'abajo')
+  // El velo carga abajo: sostiene el texto sin apagar la foto en la parte alta.
+  const velo = `<div style="display:flex;position:absolute;top:0;left:0;width:${C.w}px;height:${C.h}px;background:linear-gradient(to bottom, rgba(20,60,100,0.28) 0%, rgba(20,60,100,0.42) 45%, rgba(20,60,100,0.86) 100%)"></div>`
+  const eb = s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:20px;letter-spacing:5px;color:${GOLD};margin-bottom:18px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''
+  const anchoTexto = C.w - PAD * 2
+  const nombre = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, anchoTexto, 132, 56, 0.55)}px;color:${WHITE};line-height:0.98">${esc(clampText(s.titulo, 18))}</span>` : ''
+  const fechas = s.fechas ? `<span style="font-family:Inter;font-weight:600;font-size:29px;letter-spacing:4px;color:${GOLD};margin-top:20px">${esc(clampText(s.fechas, 26))}</span>` : ''
+  const dedic = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:29px;color:${SOFT};line-height:1.42;margin-top:20px">${esc(clampText(s.bajada, 120))}</span>` : ''
+  const filete = `<div style="display:flex;width:96px;height:4px;background:${GOLD};border-radius:2px;margin-bottom:30px"></div>`
+  const pie = `<div style="display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;position:absolute;top:0;left:0;width:${C.w}px;height:${C.h}px;padding:${PAD}px ${PAD}px 76px ${PAD}px">${filete}${eb}${nombre}${fechas}${dedic}</div>`
+  const lg = logoMemorial(o, C, { sobreFoto: true })
+  const html = `<div style="display:flex;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}"><img src="${src}" width="${C.w}" height="${C.h}" style="object-fit:cover;object-position:center 25%;display:block" />${velo}${pie}${lg}</div>`
   return { html, fotos }
 }
 
@@ -1187,7 +1220,7 @@ function memorial_diptico(s: SlotsPlantilla, C: { w: number; h: number }, o: Opc
   const nombre = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2 - 170, 68, 38, 0.55)}px;color:${GOLD};line-height:1.02">${esc(clampText(s.titulo, 22))}</span>` : ''
   const fechas = s.fechas ? `<span style="font-family:Inter;font-weight:600;font-size:24px;letter-spacing:3px;color:${SOFT};margin-top:12px">${esc(clampText(s.fechas, 26))}</span>` : ''
   const banda = `<div style="display:flex;flex-direction:column;justify-content:center;width:${C.w}px;height:${bandaH}px;background:${NAVY};padding:0 ${PAD}px;flex-shrink:0">${nombre}${fechas}</div>`
-  const lg = logoImg(o.logoBlanco, `bottom:${Math.round(bandaH / 2) - 30}px;right:${PAD - 16}px`, 126)
+  const lg = logoMemorial(o, C, { sobreFoto: true })
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${CREAM}">${arriba}${banda}${lg}</div>`
   return { html, fotos }
 }
@@ -1202,8 +1235,8 @@ function memorial_huella(s: SlotsPlantilla, C: { w: number; h: number }, o: Opci
   const tarjeta = `<div style="display:flex;width:${fotoW}px;height:${fotoH}px;overflow:hidden;border-radius:6px"><img src="${src}" width="${fotoW}" height="${fotoH}" style="object-fit:cover;object-position:center 25%;display:block" /></div>`
   const eb = s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:19px;letter-spacing:5px;color:${GOLD};margin-bottom:22px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''
   const pie = `<div style="display:flex;flex-direction:column;align-items:flex-start;width:${fotoW}px;margin-top:36px">${eb}${bloqueNombre(s, fotoW, WHITE, SOFT, 64)}</div>`
-  const lg = logoImg(o.logoBlanco, `top:${PAD}px;right:${PAD}px`, 130)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:flex-start;justify-content:center;padding:60px ${PAD}px ${ZONA_LOGO}px ${PAD}px">${tarjeta}${pie}</div>`
+  const lg = logoMemorial(o, C)
+  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:flex-start;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${tarjeta}${pie}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${marca}${body}${lg}</div>`
   return { html, fotos }
 }
