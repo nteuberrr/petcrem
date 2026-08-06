@@ -93,16 +93,20 @@ function renderTabla(filas: { peso: string; precio: number }[]): string {
 function renderRecargos(recargos: Tramo[]): string {
   const activo = (r: Tramo) => String(r.activo || '').toUpperCase() === 'TRUE'
   const fh = recargos.find(r => activo(r) && r.auto_regla === 'fuera_horario')
-  const dist = recargos.find(r => activo(r) && r.auto_regla === 'distancia')
+  // TODOS los tramos de distancia (de menor a mayor), no solo el primero: el
+  // recargo tiene más de un monto según qué tan lejos quede la comuna, y con un
+  // `find` la página publicaba un tramo y se comía el otro.
+  const dists = recargos.filter(r => activo(r) && r.auto_regla === 'distancia')
+    .sort((a, b) => num(a.precio) - num(b.precio))
   const items: string[] = []
   if (fh) {
     items.push(`<li class="aa-rec-item"><span class="aa-rec-top"><span class="aa-rec-n">Retiro fuera de horario</span><span class="aa-rec-v">+${fmtCLP(num(fh.precio))}</span></span><span class="aa-rec-d">Retiros después de las 18:00 hrs (lunes a viernes), y durante todo el día los fines de semana y feriados.</span></li>`)
   }
-  if (dist) {
+  for (const dist of dists) {
     let comunas: string[] = []
     try { const x = JSON.parse(dist.comunas || '[]'); if (Array.isArray(x)) comunas = x.map(String) } catch { /* comunas mal formadas → sin lista */ }
     const nota = comunas.length ? `Aplica en: ${comunas.join(', ')}.` : 'Aplica en comunas más alejadas de la Región Metropolitana.'
-    items.push(`<li class="aa-rec-item"><span class="aa-rec-top"><span class="aa-rec-n">Adicional por distancia</span><span class="aa-rec-v">+${fmtCLP(num(dist.precio))}</span></span><span class="aa-rec-d">${nota}</span></li>`)
+    items.push(`<li class="aa-rec-item"><span class="aa-rec-top"><span class="aa-rec-n">${dist.nombre || 'Adicional por distancia'}</span><span class="aa-rec-v">+${fmtCLP(num(dist.precio))}</span></span><span class="aa-rec-d">${nota}</span></li>`)
   }
   if (!items.length) return ''
   const css = '<style>'

@@ -188,16 +188,23 @@ async function bloqueRecargos(): Promise<string> {
     const otros = await getSheetData('otros_servicios')
     const act = (r: Record<string, string>) => (r.activo || '').toUpperCase() === 'TRUE'
     const fh = otros.find(r => act(r) && (r.auto_regla || '') === 'fuera_horario')
-    const dist = otros.find(r => act(r) && (r.auto_regla || '') === 'distancia')
+    // TODOS los tramos de distancia, no el primero: el recargo tiene más de un
+    // monto según qué tan lejos quede la comuna, y con un `find` el bot cotizaba
+    // el tramo equivocado (o se callaba) para las comunas del otro.
+    const dists = otros
+      .filter(r => act(r) && (r.auto_regla || '') === 'distancia')
+      .map(r => ({ precio: parseInt(r.precio, 10) || 0, comunas: comunasDeServicio(r.comunas) }))
+      .filter(d => d.comunas.length > 0)
+      .sort((a, b) => a.precio - b.precio)
     const lineas: string[] = []
     if (fh) {
       lineas.push(`- FUERA DE HORARIO: +${fmtPrecio(parseInt(fh.precio, 10) || 0)}. Aplica a los retiros desde las 18:00 (inclusive) de lunes a viernes, y a CUALQUIER hora los sábados, domingos y FERIADOS (un feriado, aunque caiga en día de semana, cuenta como fin de semana: el recargo aplica todo el día).`)
     }
-    if (dist) {
-      const comunas = comunasDeServicio(dist.comunas)
-      if (comunas.length > 0) {
-        lineas.push(`- POR DISTANCIA: +${fmtPrecio(parseInt(dist.precio, 10) || 0)} cuando el retiro es en alguna de estas comunas: ${comunas.join(', ')}.`)
-      }
+    for (const d of dists) {
+      lineas.push(`- POR DISTANCIA: +${fmtPrecio(d.precio)} cuando el retiro es en alguna de estas comunas: ${d.comunas.join(', ')}.`)
+    }
+    if (dists.length > 1) {
+      lineas.push('- OJO con el recargo por distancia: cada comuna paga el monto de SU lista, y solo uno. Nunca sumes dos tramos de distancia ni apliques el monto de una lista a una comuna de la otra. Si la comuna no está en ninguna lista, no hay recargo por distancia.')
     }
     const cobertura = `ZONAS FUERA DE COBERTURA (regla dura): NO damos retiro ni atención a domicilio en estas comunas: ${COMUNAS_NO_CUBIERTAS.join(', ')}. Si el cliente está en una de ellas, DÍSELO apenas te dé la comuna —con amabilidad, que lamentablemente no llegamos hasta ahí— y NO agendes retiro ni eutanasia. Ofrécele las alternativas: acercar a su mascota a nuestras instalaciones en Recoleta, o derivarlo al equipo por si hay alguna opción. Esto es distinto del recargo por distancia (esas comunas SÍ tienen cobertura, solo pagan el adicional).`
     if (lineas.length === 0) return cobertura
