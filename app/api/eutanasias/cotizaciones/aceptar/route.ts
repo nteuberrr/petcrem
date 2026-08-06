@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateById, updateByIdIf, ensureSheet, ensureColumns } from '@/lib/datastore'
-import { verifyToken, createToken } from '@/lib/eutanasia-tokens'
+import { verifyToken } from '@/lib/eutanasia-tokens'
 import { nombreCompletoVet, enviarCoordinarConFamilia, enviarClienteVetAsignado } from '@/lib/eutanasia-mailer'
-import { enviarTextoWhatsapp, isWhatsappConfigured } from '@/lib/whatsapp'
+import { avisarClienteVetConfirmado } from '@/lib/eutanasia-avisos'
 import { marcarConversacionPorTelefono } from '@/lib/mensajes'
 import { formatDate } from '@/lib/dates'
 
@@ -130,19 +130,11 @@ export async function POST(req: NextRequest) {
     await enviarCoordinarConFamilia({ c, vet, baseUrl })
 
     // Avisar al CLIENTE (tutor) que un vet tomó su caso, con los datos del vet.
-    // Best-effort: WhatsApp si la cotización nació del bot (cliente_wa_id) + correo.
-    const vetTel = (vet.telefono || '').replace(/\D/g, '').slice(-9)
-    const waCliente = (c.cliente_wa_id || '').replace(/\D/g, '')
-    if (waCliente && isWhatsappConfigured()) {
-      const linkConf = baseUrl ? `${baseUrl}/eutanasia/cliente-confirma/${createToken(c.id, vet.id, 'cliente_confirmar')}` : ''
-      const msgWa =
-        `Buenas noticias 🐾 Un veterinario de nuestra red confirmó su disponibilidad para acompañar a ${c.mascota_nombre}.\n\n` +
-        `Se pondrá en contacto contigo para coordinar:\n` +
-        `${vetNombreCompleto}${vetTel ? ` · +56 ${vetTel}` : ''}\n\n` +
-        (linkConf ? `Cuando hayas coordinado la visita con el veterinario, confírmanos aquí:\n${linkConf}\n\n` : '') +
-        `Cualquier duda, escríbenos por aquí.`
-      try { await enviarTextoWhatsapp(waCliente, msgWa) } catch (e) { console.warn('[aceptar] WhatsApp al cliente falló:', e) }
-    }
+    // Best-effort: WhatsApp + correo. El helper resuelve el teléfono (wa_id o el
+    // que dejó el tutor) y cae a la plantilla si la ventana de 24h está cerrada.
+    await avisarClienteVetConfirmado({
+      c, vetNombre: vetNombreCompleto, vetTelefono: vet.telefono, baseUrl, vetId: vet.id,
+    })
     if (c.cliente_email) {
       try {
         await enviarClienteVetAsignado({

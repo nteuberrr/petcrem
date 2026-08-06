@@ -3,7 +3,8 @@ import { getSheetData, updateById, deleteRow } from '@/lib/datastore'
 import { sesionConAcceso } from '@/lib/permisos-server'
 import { precioParaPeso } from '@/lib/eutanasia-matcher'
 import { parsePeso } from '@/lib/numbers'
-import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarVetEutanasiaCancelada } from '@/lib/eutanasia-mailer'
+import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarVetEutanasiaCancelada, nombreCompletoVet } from '@/lib/eutanasia-mailer'
+import { avisarClienteVetConfirmado } from '@/lib/eutanasia-avisos'
 import { formatDate } from '@/lib/dates'
 import { crearClienteBorrador } from '@/lib/cliente-borrador'
 import { camposResultado, efectosResultado, esResultado, cancelarEutanasiaConservandoFicha } from '@/lib/eutanasia-resultado'
@@ -217,6 +218,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Asignación manual de un vet NUEVO → coordinar (vet) + aviso (cliente).
     if (vetParaCoordinar) {
       await enviarCoordinarConFamilia({ c: updated, vet: vetParaCoordinar, baseUrl })
+      // Mismo aviso por WhatsApp que cuando el vet acepta desde el link del
+      // correo: al tutor le da igual por qué camino se asignó, y este path no le
+      // avisaba nada (solo correo).
+      await avisarClienteVetConfirmado({
+        c: updated,
+        vetNombre: updated.vet_nombre_asignado || nombreCompletoVet(vetParaCoordinar.nombre, vetParaCoordinar.apellido),
+        vetTelefono: vetParaCoordinar.telefono,
+        baseUrl,
+        vetId: vetParaCoordinar.id,
+      })
       if (updated.cliente_email) {
         try {
           await enviarClienteVetAsignado({

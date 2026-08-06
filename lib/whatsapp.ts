@@ -117,6 +117,15 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
     texto: 'Hola {{1}}, ya entregamos el ánfora de {{2}}. Fue un honor acompañarte en este proceso. Si quieres, puedes dejarnos tu evaluación aquí: {{3}} — te toma menos de un minuto y nos ayuda muchísimo. Gracias por confiar en Crematorio Alma Animal.',
     ejemplos: ['María', 'Rocky', 'https://g.page/r/CXXXXXXXXXXX/review'],
   },
+  eutanasia_vet_confirmado: {
+    nombre: 'eutanasia_vet_confirmado',
+    categoria: 'UTILITY',
+    // Un vet de la red tomó la eutanasia a domicilio. Casi siempre confirma horas
+    // (o días) después de que el tutor nos escribió, así que la ventana de 24h
+    // suele estar cerrada: sin esta plantilla el aviso simplemente no llegaba.
+    texto: 'Hola {{1}}, un veterinario de nuestra red confirmó la visita para acompañar a {{2}}. Se pondrá en contacto contigo a la brevedad para coordinar los detalles. Responde este mensaje si necesitas algo. — Crematorio Alma Animal',
+    ejemplos: ['María', 'Rocky'],
+  },
   aviso_operativo: {
     nombre: 'aviso_operativo',
     categoria: 'UTILITY',
