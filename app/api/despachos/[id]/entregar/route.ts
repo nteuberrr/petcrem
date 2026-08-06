@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { getSheetData, updateById, updateByIdIf } from '@/lib/datastore'
+import { publicarMemorialSiCorresponde } from '@/lib/memorial'
+import { avisarAdminsWhatsapp } from '@/lib/whatsapp'
 import { enviarEntregaConfirmada } from '@/lib/cliente-mailer'
 import { resolverVet, enviarEntregaVet } from '@/lib/vet-cremacion-mailer'
 import { avisarClienteWhatsapp } from '@/lib/whatsapp-avisos'
@@ -164,6 +167,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       try {
         await marcarConversacionPorTelefono(cliente.telefono || '', 'cerrado', { soloSi: ['activo', 'cliente', 'archivado'] })
       } catch (e) { console.warn('[despachos/entregar] no se pudo cerrar la conversación:', e) }
+
+      // HISTORIA DE DESPEDIDA en Instagram. Se dispara acá porque la ENTREGA es
+      // la segunda de las dos condiciones (la otra es el consentimiento del
+      // tutor al subir la foto). El helper revalida ambas contra la ficha fresca
+      // y no hace nada si falta alguna. Best-effort y en segundo plano: renderiza
+      // y sube a Meta, así que no puede demorar la respuesta al chofer.
+      after(async () => {
+        const r = await publicarMemorialSiCorresponde(clienteId)
+        if (!r.ok) {
+          console.log(`[despachos/entregar] sin historia de despedida (${clienteId}): ${r.motivo}`)
+          return
+        }
+        // Las DESTACADAS no se pueden tocar por API (Meta no las expone), así que
+        // el equipo tiene que fijar la historia a mano en "Despedidas" — y solo
+        // puede mientras esté viva, 24 h. Por eso el aviso.
+        try {
+          await avisarAdminsWhatsapp(
+            `🕊️ *Historia de despedida publicada* — ${cliente.nombre_mascota || 'sin nombre'} (${cliente.codigo || 's/código'})\n\n` +
+            `El tutor autorizó el memorial y la mascota ya fue entregada, así que la historia ya está en Instagram.\n\n` +
+            `⚠️ Falta fijarla a mano en la destacada *Despedidas* (Instagram no permite hacerlo por API). ` +
+            `Tienes 24 horas antes de que expire.`)
+        } catch (e) { console.warn('[despachos/entregar] aviso de memorial falló:', e) }
+      })
     }
 
     return NextResponse.json({ ok: true, entregada: true, fecha_hora: now, ruta_terminada: aplicado.ruta_terminada })

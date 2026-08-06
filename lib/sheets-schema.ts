@@ -44,6 +44,13 @@ export const SHEETS: Record<string, string[]> = {
     // ('' = no lo pidió). Antes esto era una marca dentro de `notas`; se sacó de
     // ahí porque `notas` es solo para comentarios manuales (lib/video-solicitado.ts).
     'video_solicitado',
+    // MEMORIAL EN REDES (lib/memorial.ts). El tutor autoriza —opt-in explícito,
+    // desde el mismo link con que sube la foto del certificado— que publiquemos
+    // un homenaje en Instagram, y puede dejarle una dedicatoria. La historia sale
+    // sola cuando la mascota queda ENTREGADA; `memorial_publicado_at` es la
+    // guarda de idempotencia (si tiene fecha, no se vuelve a publicar).
+    'memorial_consentimiento', 'memorial_consentimiento_fecha', 'memorial_comentario',
+    'memorial_publicado_at', 'memorial_story_id', 'memorial_plantilla',
     // JSON array de URLs (R2) de fotos de EVIDENCIA del peso real, que sube el
     // operador cuando hay diferencia de tramo (peso_ingreso > peso_declarado).
     'fotos_evidencia',

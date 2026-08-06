@@ -30,6 +30,11 @@ const MAX_BYTES = 8 * 1024 * 1024 // 8 MB
 type Tipo = 'certificado' | 'cuadro'
 const ACCION: Record<Tipo, AccionTutor> = { certificado: 'subir_foto', cuadro: 'subir_foto_cuadro' }
 const CAMPO: Record<Tipo, string> = { certificado: 'fotos_mascota', cuadro: 'fotos_cuadro' }
+/** Consentimiento del tutor para el memorial en redes (ver lib/memorial.ts). */
+const COLS_MEMORIAL = [
+  'memorial_consentimiento', 'memorial_consentimiento_fecha', 'memorial_comentario',
+  'memorial_publicado_at', 'memorial_story_id', 'memorial_plantilla',
+]
 const parseTipo = (v: unknown): Tipo => (String(v) === 'cuadro' ? 'cuadro' : 'certificado')
 
 /** URLs guardadas en el campo (JSON array); [] si está vacío o corrupto. */
@@ -67,6 +72,9 @@ export async function GET(req: NextRequest) {
       nombre_mascota: cliente.nombre_mascota,
       tipo,
       ya: fotosDe(cliente, CAMPO[tipo]).length > 0,
+      // Para que el formulario vuelva a mostrar lo que ya había elegido.
+      memorial_consentimiento: String(cliente.memorial_consentimiento || '').toUpperCase() === 'TRUE',
+      memorial_comentario: cliente.memorial_comentario || '',
     })
   } catch (e) {
     console.error('[clientes/foto]', e)
@@ -91,9 +99,17 @@ export async function POST(req: NextRequest) {
     if (!ext) return NextResponse.json({ ok: false, error: 'Formato no soportado. Usa JPG o PNG.' }, { status: 400 })
 
     const campo = CAMPO[tipo]
-    await ensureColumns('clientes', [campo])
+    await ensureColumns('clientes', [campo, ...COLS_MEMORIAL])
     const cliente = await clienteDesdeToken(token, tipo)
     if (!cliente) return NextResponse.json({ ok: false, error: 'Enlace inválido o vencido' }, { status: 404 })
+
+    // CONSENTIMIENTO para el memorial en redes. Solo lo pide la foto del
+    // CERTIFICADO (la del cuadro es un producto que se le entrega a él). Es
+    // opt-in explícito: sin este checkbox marcado no se publica nada nunca.
+    const consiente = tipo === 'certificado' && String(form.get('memorial_consentimiento') || '') === 'true'
+    const comentario = tipo === 'certificado'
+      ? String(form.get('memorial_comentario') || '').trim().slice(0, 280)
+      : ''
 
     const ab = await foto.arrayBuffer()
     const carpeta = tipo === 'cuadro' ? 'cuadro' : 'fotos'
@@ -102,7 +118,26 @@ export async function POST(req: NextRequest) {
 
     // Una sola foto por tipo: la nueva REEMPLAZA a la anterior.
     const previas = fotosDe(cliente, campo)
-    await updateById('clientes', cliente.id, { ...cliente, [campo]: JSON.stringify([up.url]) })
+    const memorial: Record<string, string> = tipo === 'certificado'
+      ? {
+          memorial_consentimiento: consiente ? 'TRUE' : 'FALSE',
+          // La fecha solo se sella cuando ACEPTA: es el registro de cuándo dio
+          // el permiso. Si desmarca, se limpia junto con el comentario.
+          memorial_consentimiento_fecha: consiente ? new Date().toISOString() : '',
+          memorial_comentario: consiente ? comentario : '',
+        }
+      : {}
+    // Si las columnas del memorial todavía no existen en Postgres (deploy previo
+    // a supabase/migracion-memorial.sql), PostgREST rechaza el update ENTERO y el
+    // tutor no podría subir su foto. Se reintenta sin ellas: la foto es lo que no
+    // puede fallar; el consentimiento se vuelve a pedir cuando exista la columna.
+    try {
+      await updateById('clientes', cliente.id, { ...cliente, [campo]: JSON.stringify([up.url]), ...memorial })
+    } catch (e) {
+      if (Object.keys(memorial).length === 0) throw e
+      console.warn('[clientes/foto] update con campos de memorial falló, reintento sin ellos:', e)
+      await updateById('clientes', cliente.id, { ...cliente, [campo]: JSON.stringify([up.url]) })
+    }
 
     // Las anteriores ya no las referencia nadie → se borran de R2 (best-effort,
     // después de guardar: si falla solo queda un objeto huérfano).

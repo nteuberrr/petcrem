@@ -30,6 +30,11 @@ export default function SubirFotoPage() {
   const [ya, setYa] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const [tipo, setTipo] = useState<'certificado' | 'cuadro'>('certificado')
+  // Memorial en redes: opt-in explícito del tutor + una dedicatoria opcional.
+  // Solo aplica a la foto del CERTIFICADO (la del cuadro es un producto suyo).
+  const [consiente, setConsiente] = useState(false)
+  const [comentario, setComentario] = useState('')
+  const MAX_COMENTARIO = 280
   const esCuadro = tipo === 'cuadro'
 
   useEffect(() => {
@@ -44,7 +49,12 @@ export default function SubirFotoPage() {
       fetch(`/api/clientes/foto?token=${encodeURIComponent(tok)}&tipo=${tp}`)
         .then(r => r.json())
         .then(d => {
-          if (d?.ok) { setMascota(d.nombre_mascota); setYa(!!d.ya); setEstadoCodigo('ok') }
+          if (d?.ok) {
+            setMascota(d.nombre_mascota); setYa(!!d.ya); setEstadoCodigo('ok')
+            // Si ya había decidido antes, el formulario vuelve como lo dejó.
+            setConsiente(!!d.memorial_consentimiento)
+            setComentario(d.memorial_comentario || '')
+          }
           else setEstadoCodigo('invalido')
         })
         .catch(() => setEstadoCodigo('invalido'))
@@ -68,6 +78,10 @@ export default function SubirFotoPage() {
       fd.append('token', token)
       fd.append('tipo', tipo)
       fd.append('foto', foto)
+      if (tipo === 'certificado') {
+        fd.append('memorial_consentimiento', consiente ? 'true' : 'false')
+        if (consiente) fd.append('memorial_comentario', comentario.trim())
+      }
       const r = await fetch('/api/clientes/foto', { method: 'POST', body: fd })
       const d = await r.json().catch(() => ({}))
       if (r.ok && d?.ok) {
@@ -179,6 +193,51 @@ export default function SubirFotoPage() {
                 <span className="text-sm font-medium">Toca para elegir una foto</span>
                 <span className="block text-xs text-gray-400 mt-1">JPG o PNG, hasta 8 MB</span>
               </button>
+            )}
+
+            {/* MEMORIAL EN REDES: permiso opcional, nunca marcado por defecto.
+                Solo para la foto del certificado; la del cuadro es un producto
+                que se le entrega al tutor y no se publica. */}
+            {tipo === 'certificado' && (
+              <div className="rounded-xl border p-4" style={{ borderColor: HAIRLINE, backgroundColor: '#FBF8F3' }}>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consiente}
+                    onChange={e => setConsiente(e.target.checked)}
+                    className="mt-1 h-5 w-5 shrink-0 rounded border-gray-400 cursor-pointer"
+                    style={{ accentColor: COLOR }}
+                  />
+                  <span className="text-sm text-gray-700 leading-relaxed">
+                    Autorizo a Crematorio Alma Animal a publicar esta foto
+                    {mascota ? <> de <strong>{mascota}</strong></> : null} en un
+                    homenaje en sus redes sociales.
+                    <span className="block text-xs text-gray-500 mt-1">
+                      Es opcional y no afecta en nada al servicio. Si no lo marcas, la foto se usa
+                      únicamente para el certificado.
+                    </span>
+                  </span>
+                </label>
+
+                {consiente && (
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      ¿Quieres dedicarle unas palabras? <span className="text-gray-400 font-normal">(opcional)</span>
+                    </label>
+                    <textarea
+                      value={comentario}
+                      onChange={e => setComentario(e.target.value.slice(0, MAX_COMENTARIO))}
+                      rows={3}
+                      placeholder={mascota ? `Algo que quieras recordar de ${mascota}…` : 'Algo que quieras recordar…'}
+                      className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2"
+                      style={{ borderColor: HAIRLINE }}
+                    />
+                    <p className="text-xs text-gray-400 mt-1 text-right">
+                      {comentario.length}/{MAX_COMENTARIO}
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
 
             {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">{error}</p>}

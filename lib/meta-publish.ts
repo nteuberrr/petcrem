@@ -257,6 +257,31 @@ export async function publicarInstagram(args: { caption: string; imagenUrls: str
   return publicarContenedor(ig, pt, creationId)
 }
 
+/**
+ * Publica una HISTORIA (story) de Instagram: mismo flujo de contenedores que un
+ * post, con `media_type=STORIES` y sin caption (las historias no lo llevan).
+ * La imagen tiene que ser una URL pública JPEG en 9:16 (1080x1920).
+ *
+ * ⚠️ Las DESTACADAS ("Despedidas") NO se pueden tocar por API: Meta no expone
+ * ningún endpoint para crear una destacada ni para agregarle una historia. Hay
+ * que fijarla a mano desde el teléfono mientras la historia esté viva (24 h).
+ * La historia queda registrada para que el equipo sepa cuáles fijar.
+ */
+export async function publicarHistoriaInstagram(args: { imagenUrl: string }): Promise<ResultadoPublicacion> {
+  if (!isInstagramConfigurado()) throw new Error('Instagram no configurado (faltan META_GRAPH_TOKEN o META_IG_USER_ID)')
+  const url = (args.imagenUrl || '').trim()
+  if (!url) throw new Error('La historia necesita una imagen (URL pública JPEG)')
+  if (!/\.jpe?g(\?|$)/i.test(url)) {
+    throw new Error('Instagram solo acepta imágenes JPEG para las historias.')
+  }
+  const pt = await getPageToken()
+  const ig = igUserId()
+  const cont = await graph(`${ig}/media`, { image_url: url, media_type: 'STORIES', access_token: pt }, 'POST')
+  const creationId = (cont.id as string) || ''
+  if (!creationId) throw new Error('Instagram no devolvió el contenedor de la historia')
+  return publicarContenedor(ig, pt, creationId)
+}
+
 /** Publica en el canal indicado. `imagenUrls` permite carrusel en Instagram. */
 export async function publicarEnCanal(
   canal: string,
