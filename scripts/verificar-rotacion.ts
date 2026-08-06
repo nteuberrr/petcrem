@@ -43,9 +43,9 @@ caso('la portada repite la de la pieza anterior',
 caso('la portada cambia respecto de la anterior',
   lintRotacion([im('overlay'), im('numeros')], { ultimaPieza: ['revista', 'dato'], ultimoMemorial: '' }), 'pasa')
 caso('el homenaje repite el memorial anterior',
-  lintRotacion([im('memorial_placa')], { ultimaPieza: [], ultimoMemorial: 'memorial_placa' }), 'rechaza')
+  lintRotacion([im('memorial_silueta')], { ultimaPieza: [], ultimoMemorial: 'memorial_silueta' }), 'rechaza')
 caso('el homenaje rota a otro memorial',
-  lintRotacion([im('memorial_cinta')], { ultimaPieza: [], ultimoMemorial: 'memorial_placa' }), 'pasa')
+  lintRotacion([im('memorial_diptico')], { ultimaPieza: [], ultimoMemorial: 'memorial_silueta' }), 'pasa')
 
 console.log('\n— Fotos sueltas y HTML libre no tienen familia que controlar —')
 caso('dos fotos del banco seguidas',

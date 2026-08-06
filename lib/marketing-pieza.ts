@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { BRAND, getContacto } from './email-layout'
 import { MARCA_VISUAL, MARCA_GRAFICO, recetasVariadas } from './marca-visual'
 import { GUIA_SOCIAL, GUIA_QA } from './marketing-guia'
-import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, PLANTILLA_TOOL_DESC, SLOTS_TOOL_PROPS, familiaDe, llevaFoto, type SlotsPlantilla } from './marketing-plantillas'
+import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, PLANTILLAS_MEMORIAL, PLANTILLA_TOOL_DESC, SLOTS_TOOL_PROPS, familiaDe, llevaFoto, type SlotsPlantilla } from './marketing-plantillas'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { REGLAS_INVIOLABLES } from './marca-voz'
 import { lintCopy, extraerTextoHtml } from './marketing-lint'
@@ -308,12 +308,12 @@ export function lintRotacion(
     })
   }
 
-  // 5) Dos homenajes seguidos con la misma de las cinco memoriales.
+  // 5) Dos homenajes seguidos con la misma plantilla de memorial.
   const memorialAhora = plantillas.find(p => familiaDe(p) === 'memorial')
   if (memorialAhora && mem.ultimoMemorial && memorialAhora === mem.ultimoMemorial) {
     hallazgos.push({
       campo: 'homenaje',
-      problema: `El último homenaje ya usó "${memorialAhora}". Hay cinco (memorial_placa, memorial_retrato, memorial_medallon, memorial_cuadro, memorial_cinta): usá una distinta.`,
+      problema: `El último homenaje ya usó "${memorialAhora}". Elegí otra de: ${PLANTILLAS_MEMORIAL.filter(m => m !== memorialAhora).join(", ")}.`,
     })
   }
   return hallazgos

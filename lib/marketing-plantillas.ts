@@ -103,11 +103,12 @@ export const PLANTILLAS = [
   'revista', 'diptico', 'comparativa', 'timeline', 'collage', 'faq', 'precio',
   'arco', 'bicolor', 'checklist', 'mosaico_datos', 'testimonio', 'horario',
   'overlay', 'tipografico',
-  // MEMORIAL: homenaje a UNA mascota por su nombre. 15 estructuras distintas
-  // (2026-08: de 5 a 15, para que las historias de despedida no se repitan).
-  'memorial_placa', 'memorial_retrato', 'memorial_medallon', 'memorial_cuadro', 'memorial_cinta',
-  'memorial_horizonte', 'memorial_polaroid', 'memorial_orla', 'memorial_susurro', 'memorial_estela',
-  'memorial_alba', 'memorial_carta', 'memorial_silueta', 'memorial_diptico', 'memorial_huella',
+  // MEMORIAL: homenaje a UNA mascota por su nombre. CINCO estructuras, una por
+  // lógica visual — foto a sangre · partición · objeto · círculo · texto. Llegaron
+  // a ser 15 y el dueño las bajó a 5 (2026-08-06): con menos opciones el agente
+  // acierta más y las piezas salen consistentes. Sumar una solo se justifica si
+  // aporta una lógica que ninguna de estas cinco cubre.
+  'memorial_medallon', 'memorial_polaroid', 'memorial_susurro', 'memorial_silueta', 'memorial_diptico',
 ] as const
 export type NombrePlantilla = (typeof PLANTILLAS)[number]
 
@@ -115,9 +116,7 @@ export type NombrePlantilla = (typeof PLANTILLAS)[number]
  *  Es también el pozo del que sale al azar la historia de despedida de cada
  *  mascota entregada (lib/memorial.ts). Todas llevan foto. */
 export const PLANTILLAS_MEMORIAL: NombrePlantilla[] = [
-  'memorial_placa', 'memorial_retrato', 'memorial_medallon', 'memorial_cuadro', 'memorial_cinta',
-  'memorial_horizonte', 'memorial_polaroid', 'memorial_orla', 'memorial_susurro', 'memorial_estela',
-  'memorial_alba', 'memorial_carta', 'memorial_silueta', 'memorial_diptico', 'memorial_huella',
+  'memorial_medallon', 'memorial_polaroid', 'memorial_susurro', 'memorial_silueta', 'memorial_diptico',
 ]
 
 /** Plantillas que llevan al menos una FOTO (para equilibrar una tanda). */
@@ -142,11 +141,8 @@ export const FAMILIA: Record<NombrePlantilla, FamiliaPlantilla> = {
   dato: 'cifras', mosaico_datos: 'cifras', precio: 'cifras',
   cita: 'texto', testimonio: 'texto', faq: 'texto', tipografico: 'texto',
   bicolor: 'texto', horario: 'texto',
-  memorial_placa: 'memorial', memorial_retrato: 'memorial', memorial_medallon: 'memorial',
-  memorial_cuadro: 'memorial', memorial_cinta: 'memorial', memorial_horizonte: 'memorial',
-  memorial_polaroid: 'memorial', memorial_orla: 'memorial', memorial_susurro: 'memorial',
-  memorial_estela: 'memorial', memorial_alba: 'memorial', memorial_carta: 'memorial',
-  memorial_silueta: 'memorial', memorial_diptico: 'memorial', memorial_huella: 'memorial',
+  memorial_medallon: 'memorial', memorial_polaroid: 'memorial', memorial_susurro: 'memorial',
+  memorial_silueta: 'memorial', memorial_diptico: 'memorial',
 }
 
 export const familiaDe = (p?: string): FamiliaPlantilla | null =>
@@ -172,13 +168,12 @@ export const PLANTILLA_TOOL_DESC =
   'bicolor (lienzo partido navy/claro con el titular a caballo) · checklist (items en barras con filete) · ' +
   'mosaico_datos (grilla 2×2 de cifras) · testimonio (avatar redondo + cita) · horario (filas clave→valor) · ' +
   'overlay (foto a sangre + tarjeta flotante) · tipografico (póster de una palabra). ' +
-  'MEMORIAL (homenaje a una mascota, titulo = su nombre + fechas = sus años; ROTÁ las cinco, nunca dos seguidas iguales): ' +
-  'memorial_placa (foto a sangre + placa crema) · memorial_retrato (foto vertical + columna) · ' +
-  'memorial_medallon (medallón circular dorado — la foto REDONDA es EXCLUSIVA de los homenajes, en piezas comerciales usá "arco") · memorial_cuadro (retrato enmarcado) · ' +
-  'memorial_cinta (foto arriba + banda navy con el nombre en dorado) · memorial_horizonte (foto + franja crema con nombre y fechas) · ' +
-  'memorial_polaroid (instantánea de papel) · memorial_orla (marco dorado + placa navy) · memorial_susurro (manda la dedicatoria, foto chica) · ' +
-  'memorial_estela (banda vertical + foto a sangre) · memorial_alba (degradé cálido + arco) · memorial_carta (tarjeta con nota) · ' +
-  'memorial_silueta (velo navy + nombre gigante) · memorial_diptico (mitad foto / mitad texto + banda) · memorial_huella (nombre enorme de fondo). ' +
+  'MEMORIAL (homenaje a una mascota, titulo = su nombre + fechas = sus años; son CINCO y cada una resuelve un caso distinto — elegí por el caso, no por gusto, y no repitas la de la pieza anterior): ' +
+  'memorial_silueta (foto a sangre + nombre grande abajo: cuando la FOTO es fuerte y manda) · ' +
+  'memorial_diptico (mitad foto / mitad texto: la más segura, la foto nunca lleva texto encima) · ' +
+  'memorial_polaroid (instantánea de papel: íntima, de álbum familiar) · ' +
+  'memorial_medallon (medallón circular dorado, la más solemne — la foto REDONDA es EXCLUSIVA de los homenajes, en piezas comerciales usá "arco") · ' +
+  'memorial_susurro (manda la DEDICATORIA en grande: cuando el texto del tutor es lo lindo). ' +
   'ROTÁ: no repitas plantilla ni familia dentro de una misma tanda; al menos 1 de cada 3 piezas con FOTO.'
 
 /**
@@ -251,24 +246,14 @@ ESTRUCTURAS NUEVAS (romper el molde apilado — usalas SEGUIDO, no son "de repue
 - "overlay": foto A SANGRE + una TARJETA clara flotando encima abajo (no un velo). slots: foto {prompt} (obligatoria), eyebrow, titulo, titulo_destacado, bajada, cta, fondo (color de la tarjeta). Se ve moderna y deja ver la foto entera.
 - "tipografico": póster de UNA idea, la palabra manda (tipografía gigante). slots: eyebrow (línea chica arriba), titulo (la palabra/frase grande), titulo_destacado (2ª línea en dorado), bajada. SIN foto. Para una frase de marca con impacto.
 
-MEMORIAL — homenaje a UNA mascota por su nombre (5 estructuras; ROTALAS, es lo que más se publica y no puede salir siempre igual). En las cinco: titulo = el NOMBRE de la mascota, fechas = sus años ("2014 — 2026"), bajada = la dedicatoria (una frase concreta y cotidiana, no un lugar común), eyebrow = "En memoria" / "Hasta siempre" / etc., foto = retrato CÁLIDO de la mascota VIVA y en calma (jamás enferma ni "ausente"; nada de urnas, lápidas, velas, arcoíris ni símbolos religiosos):
-- "memorial_placa": foto a sangre + una placa color crema centrada abajo con el nombre. La más sobria y la más linda para el feed.
-- "memorial_retrato": foto vertical a sangre a la izquierda y una columna de homenaje a la derecha. Aire de página de revista.
-- "memorial_medallon": foto en un medallón CIRCULAR con anillo dorado, centrado, con el nombre gigante de fondo. Solemne sin ser fúnebre.
-- "memorial_cuadro": la foto enmarcada como un retrato colgado (passe-partout blanco grueso) y el nombre debajo. Cálida, de living.
-- "memorial_cinta": foto arriba y una banda navy abajo con el nombre en dorado. La más gráfica.
-- "memorial_horizonte": foto a sangre arriba y una franja crema abajo con el nombre a la izquierda y las fechas a la derecha. Limpia y editorial.
-- "memorial_polaroid": la foto como una instantánea de papel blanco, con el nombre en el borde de abajo. Íntima y de álbum familiar.
-- "memorial_orla": foto a sangre con un marco dorado fino por dentro y una placa navy con el nombre. Solemne y elegante.
-- "memorial_susurro": casi sin foto (un medallón chico arriba); manda la DEDICATORIA en grande. Para cuando el texto del tutor es lo lindo.
-- "memorial_estela": banda vertical navy a la izquierda con el nombre y foto a sangre a la derecha. Moderna y con carácter.
-- "memorial_alba": fondo con degradé cálido y la foto en un arco alto. Luminosa y esperanzadora.
-- "memorial_carta": una tarjeta crema con filete dorado sobre navy, con la dedicatoria como una nota escrita. La más personal.
-- "memorial_silueta": foto a sangre bajo un velo navy parejo y el nombre GIGANTE centrado encima. La más impactante.
-- "memorial_diptico": mitad foto y mitad bloque crema con la dedicatoria; el nombre cruza abajo en una banda navy.
-- "memorial_huella": el nombre enorme de fondo sobre navy y la foto en una tarjeta desplegada abajo. Contemporánea.
+MEMORIAL — homenaje a UNA mascota por su nombre. Son CINCO y NO son intercambiables: cada una resuelve un caso distinto, así que elegí por el CASO (qué tenés: foto fuerte, dedicatoria linda, foto arriesgada…), no por gusto. Nunca repitas la de la pieza anterior. En las cinco: titulo = el NOMBRE de la mascota, fechas = sus años ("2014 — 2026"), bajada = la dedicatoria (una frase concreta y cotidiana, no un lugar común), eyebrow = "En memoria" / "Hasta siempre" / etc., foto = retrato CÁLIDO de la mascota VIVA y en calma (jamás enferma ni "ausente"; nada de urnas, lápidas, velas, arcoíris ni símbolos religiosos):
+- "memorial_silueta": foto a sangre bajo un velo navy y el nombre GIGANTE abajo a la izquierda. USALA CUANDO la foto es buena y tiene que mandar; el velo la sostiene aunque la foto sea clara. La más impactante.
+- "memorial_diptico": mitad foto y mitad bloque crema con la dedicatoria; el nombre cruza abajo en una banda navy. USALA CUANDO la foto es dudosa (mal encuadrada, con gente, poca luz): es la única donde el texto NUNCA se apoya sobre la foto, así que es la más segura.
+- "memorial_polaroid": la foto como una instantánea de papel blanco, con el nombre en el borde de abajo. USALA CUANDO buscás calidez de álbum familiar; funciona muy bien con fotos caseras.
+- "memorial_medallon": foto en un medallón CIRCULAR con anillo dorado y el nombre gigante de fondo. USALA CUANDO querés el tono más solemne, y solo si la cara de la mascota está centrada (el círculo recorta las esquinas).
+- "memorial_susurro": la DEDICATORIA en grande y la foto en un medallón chico arriba. USALA CUANDO el tutor escribió algo lindo y el texto es lo que vale más que la imagen.
 
-ENCUADRE DE LAS FOTOS (regla dura — el dueño rebotó una pieza donde la placa le tapaba el hocico al gato): en las plantillas que apoyan TEXTO ENCIMA de la foto ("foto", "overlay", "memorial_placa", y las bandas de "portada" y "revista"), el prompt de la foto DEBE dejar despejada la zona donde va el texto: mascota en la mitad de arriba y la mitad de abajo libre (piso, manta, pasto, fondo liso). El sistema ya le agrega esa exigencia al prompt, pero escribilo vos también en la descripción de la escena. Y en TODAS: la cara y los ojos de la mascota se ven COMPLETOS, nunca cortados por el borde ni tapados por un bloque de texto, un velo o el logo.
+ENCUADRE DE LAS FOTOS (regla dura — el dueño rebotó una pieza donde la placa le tapaba el hocico al gato): en las plantillas que apoyan TEXTO ENCIMA de la foto ("foto", "overlay", "memorial_silueta", y las bandas de "portada" y "revista"), el prompt de la foto DEBE dejar despejada la zona donde va el texto: mascota en la mitad de arriba y la mitad de abajo libre (piso, manta, pasto, fondo liso). El sistema ya le agrega esa exigencia al prompt, pero escribilo vos también en la descripción de la escena. Y en TODAS: la cara y los ojos de la mascota se ven COMPLETOS, nunca cortados por el borde ni tapados por un bloque de texto, un velo o el logo.
 
 Reglas: textos CORTOS (si no caben, se recortan). El fondo alterna navy/crema/blanco entre piezas — la PORTADA también (ya NO es siempre navy): NO dejes todas las portadas en navy, variá a crema o blanco (o con la foto mandando) para que el feed no se vea "todo azul". Regla práctica: máximo ~1 de cada 3 piezas de una misma tanda con fondo navy dominante. La foto: mascota viva y feliz o tutor con su mascota, cálida; NUNCA instalaciones. El logo se coloca solo.
 ROTACIÓN (regla dura, feedback del dueño "los posts son siempre parecidos"): hay 29 plantillas. En una misma tanda/carrusel NO repitas plantilla, y NO uses dos veces seguidas la misma FAMILIA (apiladas: portada/contenido/cierre · foto protagonista: foto/marco/revista/diptico/overlay/arco/collage · listas: numeros/checklist/timeline/comparativa · cifras: dato/mosaico_datos/precio · texto: cita/testimonio/faq/tipografico/bicolor · memorial: las cinco memorial_*). Al menos 1 de cada 3 piezas tiene que llevar FOTO. En los HOMENAJES: nunca dos memoriales seguidos con la misma plantilla — llevá la cuenta y andá rotando las cinco. Si te pasan las "ÚLTIMAS PIEZAS GENERADAS", elegí plantillas de familias que NO aparezcan ahí.`
@@ -573,8 +558,8 @@ function marco(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlanti
 /**
  * Exigencia de encuadre para las plantillas que APOYAN TEXTO SOBRE LA FOTO.
  *
- * Bug real (2026-08, reportado por el dueño): en `memorial_placa` la placa le
- * tapaba el hocico al gato. La plantilla no sabe dónde está el animal, así que
+ * Bug real (2026-08, reportado por el dueño): en un memorial con la placa
+ * encima de la foto, la placa le tapaba el hocico al gato. La plantilla no sabe dónde está el animal, así que
  * la única solución robusta es PEDIR la foto ya compuesta con la zona del texto
  * despejada. Se le suma al prompt venga de donde venga (del modelo o del
  * fallback), porque el modelo se olvida de decirlo.
@@ -986,35 +971,6 @@ function bloqueNombre(s: SlotsPlantilla, maxW: number, col: string, sub: string,
   return `<div style="display:flex;flex-direction:column;${alinear}">${nombre}${fechas}${dedic}</div>`
 }
 
-/** M1. PLACA: foto a sangre y una placa clara centrada con el nombre. */
-function memorial_placa(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
-  const fotos: FotoGrafico[] = []
-  const src = pedirFoto(fotos, s.foto, 'principal', 'retrato cálido de un perro tranquilo mirando a cámara en el living de su casa, luz suave de ventana', '4:5', 'abajo')
-  const placaW = Math.round(C.w * 0.78)
-  const placa = `<div style="display:flex;flex-direction:column;align-items:center;position:absolute;left:${Math.round((C.w - placaW) / 2)}px;bottom:${Math.round(C.h * 0.07)}px;width:${placaW}px;background:${CREAM};border-radius:6px;padding:40px 40px">${s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:20px;letter-spacing:4px;color:${GOLD};margin-bottom:18px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''}${bloqueNombre(s, placaW - 80, NAVY, INK, 68, true)}</div>`
-  const velo = `<div style="display:flex;position:absolute;bottom:0;left:0;width:${C.w}px;height:${Math.round(C.h * 0.5)}px;background:linear-gradient(to bottom, rgba(20,60,100,0) 0%, rgba(20,60,100,0.55) 70%)"></div>`
-  const lg = logoMemorial(o, C, { sobreFoto: true })
-  const html = `<div style="display:flex;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}"><img src="${src}" width="${C.w}" height="${C.h}" style="object-fit:cover;object-position:center 18%;display:block" />${velo}${placa}${lg}</div>`
-  return { html, fotos }
-}
-
-/** M2. RETRATO: foto vertical a sangre a un lado, columna de homenaje al otro. */
-function memorial_retrato(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
-  const fotos: FotoGrafico[] = []
-  const src = pedirFoto(fotos, s.foto, 'principal', 'retrato vertical de un gato sentado y sereno junto a una ventana, luz cálida lateral', '3:4')
-  const bg = bgColor(s.fondo || 'crema')
-  const oscuro = bg === NAVY
-  const fotoW = Math.round(C.w * 0.52)
-  const colW = C.w - fotoW
-  const marca = ghost(s.titulo || '', { size: Math.round(C.h * 0.26), color: oscuro ? WHITE : NAVY, opacidad: 0.06, bottom: Math.round(C.h * 0.04), left: fotoW - 40 })
-  const eb = s.eyebrow ? `<div style="display:flex;margin-bottom:26px"><span style="font-family:Inter;font-weight:700;font-size:19px;letter-spacing:4px;color:${GOLD}">${esc((s.eyebrow || '').toUpperCase())}</span></div>` : ''
-  const texto = `<div style="display:flex;flex-direction:column;justify-content:center;width:${colW}px;height:${C.h}px;padding:56px 48px 160px 48px">${eb}${bloqueNombre(s, colW - 96, oscuro ? WHITE : NAVY, oscuro ? SOFT : INK, 58)}</div>`
-  const foto = `<div style="display:flex;width:${fotoW}px;height:${C.h}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${fotoW}" height="${C.h}" style="object-fit:cover;display:block" /></div>`
-  const lg = logoMemorial(o, C, { claro: !oscuro })
-  const html = `<div style="display:flex;flex-direction:row;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${foto}${marca}${texto}${lg}</div>`
-  return { html, fotos }
-}
-
 /** M3. MEDALLÓN: foto circular con anillo dorado sobre un fondo con su nombre de fondo. */
 function memorial_medallon(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
   const fotos: FotoGrafico[] = []
@@ -1032,59 +988,6 @@ function memorial_medallon(s: SlotsPlantilla, C: { w: number; h: number }, o: Op
   return { html, fotos }
 }
 
-/** M4. CUADRO: foto con passe-partout blanco grueso, como un retrato colgado. */
-function memorial_cuadro(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
-  const fotos: FotoGrafico[] = []
-  const src = pedirFoto(fotos, s.foto, 'principal', 'retrato de una mascota echada en su lugar favorito de la casa, luz natural suave de la tarde', '1:1')
-  const bg = bgColor(s.fondo || 'crema')
-  const oscuro = bg === NAVY
-  const marcoW = Math.round(C.w * 0.72)
-  const fotoLado = marcoW - 96
-  const cuadro = `<div style="display:flex;align-items:center;justify-content:center;width:${marcoW}px;background:${WHITE};padding:48px;border-radius:4px"><img src="${src}" width="${fotoLado}" height="${fotoLado}" style="object-fit:cover;display:block" /></div>`
-  const filete = `<div style="display:flex;width:90px;height:4px;background:${GOLD};border-radius:2px;margin-top:38px"></div>`
-  const nombre = `<div style="display:flex;margin-top:30px">${bloqueNombre(s, C.w - PAD * 2, oscuro ? WHITE : NAVY, oscuro ? SOFT : INK, 58, true)}</div>`
-  const lg = logoMemorial(o, C, { claro: !oscuro })
-  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${cuadro}${filete}${nombre}</div>`
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
-  return { html, fotos }
-}
-
-/** M5. CINTA: foto arriba y una banda navy abajo con el nombre en dorado. */
-function memorial_cinta(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
-  const fotos: FotoGrafico[] = []
-  const src = pedirFoto(fotos, s.foto, 'principal', 'una mascota caminando por el jardín de su casa al atardecer, plano entero, luz dorada baja', '3:2')
-  const fotoH = Math.round(C.h * 0.58)
-  const bandaH = C.h - fotoH
-  const foto = `<div style="display:flex;width:${C.w}px;height:${fotoH}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${C.w}" height="${fotoH}" style="object-fit:cover;object-position:center 35%;display:block" /></div>`
-  // Ojo: satori NO recorta el desborde, así que un fantasma grande dentro de la
-  // banda se derrama sobre la foto. Se mantiene chico y anclado adentro.
-  const marca = ghost(s.fechas || '', { size: Math.round(bandaH * 0.44), color: WHITE, opacidad: 0.07, bottom: 24, right: PAD })
-  const eb = s.eyebrow ? `<div style="display:flex;margin-bottom:16px"><span style="font-family:Inter;font-weight:700;font-size:19px;letter-spacing:4px;color:${GOLD}">${esc((s.eyebrow || '').toUpperCase())}</span></div>` : ''
-  const nombre = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w - PAD * 2 - 180, 76, 40, 0.55)}px;color:${GOLD};line-height:1.02">${esc(clampText(s.titulo, 24))}</span>` : ''
-  const fechas = s.fechas ? `<span style="font-family:Inter;font-weight:600;font-size:26px;letter-spacing:3px;color:${SOFT};margin-top:14px">${esc(clampText(s.fechas, 26))}</span>` : ''
-  const dedic = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:27px;color:${SOFT};line-height:1.42;margin-top:18px">${esc(clampText(s.bajada, 130))}</span>` : ''
-  const banda = `<div style="display:flex;flex-direction:column;justify-content:center;position:relative;width:${C.w}px;height:${bandaH}px;background:${NAVY};padding:0 ${PAD}px;flex-shrink:0">${marca}${eb}${nombre}${fechas}${dedic}</div>`
-  const lg = logoMemorial(o, C, { sobreFoto: true })
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${foto}${banda}${lg}</div>`
-  return { html, fotos }
-}
-
-/** M6. HORIZONTE: foto a sangre arriba y una franja crema abajo con el nombre a la izquierda y las fechas a la derecha. */
-function memorial_horizonte(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
-  const fotos: FotoGrafico[] = []
-  const src = pedirFoto(fotos, s.foto, 'principal', 'una mascota mirando el horizonte desde la terraza de su casa, plano medio, luz cálida de tarde', '4:5')
-  const franjaH = Math.round(C.h * 0.26)
-  const fotoH = C.h - franjaH
-  const foto = `<div style="display:flex;width:${C.w}px;height:${fotoH}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${C.w}" height="${fotoH}" style="object-fit:cover;object-position:center 30%;display:block" /></div>`
-  const filete = `<div style="display:flex;position:absolute;top:${fotoH}px;left:0;width:${C.w}px;height:6px;background:${GOLD}"></div>`
-  const izq = `<div style="display:flex;flex-direction:column;justify-content:center;flex:1">${s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:18px;letter-spacing:4px;color:${GOLD};margin-bottom:12px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''}${s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, C.w * 0.55, 72, 40, 0.55)}px;color:${NAVY};line-height:1.02">${esc(clampText(s.titulo, 22))}</span>` : ''}</div>`
-  const der = s.fechas ? `<div style="display:flex;flex-direction:column;justify-content:center;align-items:flex-end;width:${Math.round(C.w * 0.3)}px"><span style="font-family:Inter;font-weight:600;font-size:25px;letter-spacing:3px;color:${INK};text-align:right">${esc(clampText(s.fechas, 26))}</span></div>` : ''
-  const franja = `<div style="display:flex;flex-direction:row;width:${C.w}px;height:${franjaH}px;background:${CREAM};padding:0 ${PAD}px;flex-shrink:0">${izq}${der}</div>`
-  const lg = logoMemorial(o, C, { sobreFoto: true })
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${CREAM}">${foto}${franja}${filete}${lg}</div>`
-  return { html, fotos }
-}
-
 /** M7. POLAROID: la foto como una instantánea de papel, con el nombre escrito en el borde blanco de abajo. */
 function memorial_polaroid(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
   const fotos: FotoGrafico[] = []
@@ -1098,20 +1001,6 @@ function memorial_polaroid(s: SlotsPlantilla, C: { w: number; h: number }, o: Op
   const lg = logoMemorial(o, C)
   const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${card}${dedic}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${marca}${body}${lg}</div>`
-  return { html, fotos }
-}
-
-/** M8. ORLA: foto a sangre con un marco dorado fino por dentro y el nombre en una placa navy abajo. */
-function memorial_orla(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
-  const fotos: FotoGrafico[] = []
-  const src = pedirFoto(fotos, s.foto, 'principal', 'retrato sereno de una mascota echada sobre una manta, mirada tranquila a cámara, luz suave de ventana', '4:5', 'abajo')
-  const velo = `<div style="display:flex;position:absolute;bottom:0;left:0;width:${C.w}px;height:${Math.round(C.h * 0.46)}px;background:linear-gradient(to bottom, rgba(20,60,100,0) 0%, rgba(20,60,100,0.62) 72%)"></div>`
-  const m = 34
-  const orla = `<div style="display:flex;position:absolute;top:${m}px;left:${m}px;width:${C.w - m * 2 - 4}px;height:${C.h - m * 2 - 4}px;border:2px solid ${GOLD};border-radius:3px"></div>`
-  const placaW = Math.round(C.w * 0.7)
-  const placa = `<div style="display:flex;flex-direction:column;align-items:center;position:absolute;left:${Math.round((C.w - placaW) / 2)}px;bottom:${Math.round(C.h * 0.10)}px;width:${placaW}px;background:${NAVY};border-radius:4px;padding:34px 36px">${bloqueNombre(s, placaW - 72, WHITE, SOFT, 60, true)}</div>`
-  const lg = logoMemorial(o, C, { sobreFoto: true })
-  const html = `<div style="display:flex;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}"><img src="${src}" width="${C.w}" height="${C.h}" style="object-fit:cover;object-position:center 22%;display:block" />${velo}${orla}${placa}${lg}</div>`
   return { html, fotos }
 }
 
@@ -1132,53 +1021,6 @@ function memorial_susurro(s: SlotsPlantilla, C: { w: number; h: number }, o: Opc
   const lg = logoMemorial(o, C, { claro: !oscuro })
   const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${medallon}<div style="display:flex;margin-top:40px">${frase}</div>${filete}${nombre}${fechas}</div>`
   const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${bg}">${body}${lg}</div>`
-  return { html, fotos }
-}
-
-/** M10. ESTELA: banda vertical de color a la izquierda con el nombre, foto a sangre a la derecha. */
-function memorial_estela(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
-  const fotos: FotoGrafico[] = []
-  const src = pedirFoto(fotos, s.foto, 'principal', 'una mascota descansando junto a la puerta de su casa, plano medio, luz natural cálida', '3:4')
-  const bandaW = Math.round(C.w * 0.40)
-  const fotoW = C.w - bandaW
-  const banda = `<div style="display:flex;flex-direction:column;justify-content:center;width:${bandaW}px;height:${C.h}px;background:${NAVY};padding:48px 40px 64px 40px;flex-shrink:0">${s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:18px;letter-spacing:4px;color:${GOLD};margin-bottom:20px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''}${bloqueNombre(s, bandaW - 80, WHITE, SOFT, 62)}</div>`
-  const foto = `<div style="display:flex;width:${fotoW}px;height:${C.h}px;overflow:hidden;flex-shrink:0"><img src="${src}" width="${fotoW}" height="${C.h}" style="object-fit:cover;display:block" /></div>`
-  const filete = `<div style="display:flex;position:absolute;top:0;left:${bandaW - 5}px;width:5px;height:${C.h}px;background:${GOLD}"></div>`
-  const lg = logoMemorial(o, C, { sobreFoto: true })
-  const html = `<div style="display:flex;flex-direction:row;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${banda}${foto}${filete}${lg}</div>`
-  return { html, fotos }
-}
-
-/** M11. ALBA: fondo con degradé cálido, la foto en un arco alto y el nombre debajo. */
-function memorial_alba(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
-  const fotos: FotoGrafico[] = []
-  const src = pedirFoto(fotos, s.foto, 'principal', 'una mascota de pie en el jardín al amanecer, luz dorada y suave, plano entero', '3:4')
-  const arcoW = Math.round(C.w * 0.62)
-  const arcoH = Math.round(C.h * 0.46)
-  const arco = `<div style="display:flex;width:${arcoW}px;height:${arcoH}px;overflow:hidden;border-radius:${Math.round(arcoW / 2)}px ${Math.round(arcoW / 2)}px 8px 8px"><img src="${src}" width="${arcoW}" height="${arcoH}" style="object-fit:cover;display:block" /></div>`
-  const fondo = `<div style="display:flex;position:absolute;top:0;left:0;width:${C.w}px;height:${C.h}px;background:linear-gradient(to bottom, ${CREAM} 0%, #f6e6c8 100%)"></div>`
-  const nombre = `<div style="display:flex;margin-top:44px">${bloqueNombre(s, C.w - PAD * 2, NAVY, INK, 62, true)}</div>`
-  const lg = logoMemorial(o, C, { claro: true })
-  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${arco}${nombre}</div>`
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${CREAM}">${fondo}${body}${lg}</div>`
-  return { html, fotos }
-}
-
-/** M12. CARTA: una tarjeta crema con filete dorado sobre navy, con la dedicatoria como una nota escrita. */
-function memorial_carta(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
-  const fotos: FotoGrafico[] = []
-  const src = pedirFoto(fotos, s.foto, 'principal', 'retrato cálido de una mascota en su casa, mirada serena, fondo hogareño desenfocado', '1:1')
-  const cardW = Math.round(C.w * 0.80)
-  const d = Math.round(Math.min(cardW * 0.56, C.h * 0.30))
-  const medallon = `<div style="display:flex;align-items:center;justify-content:center;width:${d + 14}px;height:${d + 14}px;border-radius:${Math.round((d + 14) / 2)}px;background:${GOLD}"><img src="${src}" width="${d}" height="${d}" style="object-fit:cover;border-radius:${Math.round(d / 2)}px;display:block" /></div>`
-  const nombre = s.titulo ? `<span style="font-family:Inter;font-weight:700;font-size:${fitFont(s.titulo, cardW - 110, 56, 34, 0.55)}px;color:${NAVY};line-height:1.05;text-align:center;margin-top:28px">${esc(clampText(s.titulo, 22))}</span>` : ''
-  const fechas = s.fechas ? `<span style="font-family:Inter;font-weight:600;font-size:23px;letter-spacing:3px;color:${GOLD};margin-top:12px">${esc(clampText(s.fechas, 26))}</span>` : ''
-  const filete = `<div style="display:flex;width:70px;height:3px;background:${GOLD};border-radius:2px;margin:26px 0"></div>`
-  const dedic = s.bajada ? `<span style="font-family:Inter;font-weight:400;font-size:28px;color:${INK};line-height:1.5;text-align:center">${esc(clampText(s.bajada, 170))}</span>` : ''
-  const card = `<div style="display:flex;flex-direction:column;align-items:center;width:${cardW}px;background:${CREAM};border:2px solid ${GOLD};border-radius:8px;padding:48px 55px">${medallon}${nombre}${fechas}${filete}${dedic}</div>`
-  const lg = logoMemorial(o, C)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${card}</div>`
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${body}${lg}</div>`
   return { html, fotos }
 }
 
@@ -1228,34 +1070,22 @@ function memorial_diptico(s: SlotsPlantilla, C: { w: number; h: number }, o: Opc
   return { html, fotos }
 }
 
-/** M15. HUELLA: fondo navy con el nombre enorme de fondo y la foto en una tarjeta baja, desplazada. */
-function memorial_huella(s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla): ResultadoPlantilla {
-  const fotos: FotoGrafico[] = []
-  const src = pedirFoto(fotos, s.foto, 'principal', 'una mascota mirando a cámara desde su cama, expresión tranquila, luz cálida de interior', '4:5')
-  const marca = ghost(s.titulo || '', { size: Math.round(C.h * 0.32), color: WHITE, opacidad: 0.08, top: Math.round(C.h * 0.07), left: -Math.round(C.w * 0.06) })
-  const fotoW = Math.round(C.w * 0.66)
-  const fotoH = Math.round(C.h * 0.44)
-  const tarjeta = `<div style="display:flex;width:${fotoW}px;height:${fotoH}px;overflow:hidden;border-radius:6px"><img src="${src}" width="${fotoW}" height="${fotoH}" style="object-fit:cover;object-position:center 25%;display:block" /></div>`
-  const eb = s.eyebrow ? `<span style="font-family:Inter;font-weight:700;font-size:19px;letter-spacing:5px;color:${GOLD};margin-bottom:22px">${esc((s.eyebrow || '').toUpperCase())}</span>` : ''
-  const pie = `<div style="display:flex;flex-direction:column;align-items:flex-start;width:${fotoW}px;margin-top:36px">${eb}${bloqueNombre(s, fotoW, WHITE, SOFT, 64)}</div>`
-  const lg = logoMemorial(o, C)
-  const body = `<div style="display:flex;flex-direction:column;flex:1;align-items:flex-start;justify-content:center;padding:${ZONA_LOGO}px ${PAD}px 64px ${PAD}px">${tarjeta}${pie}</div>`
-  const html = `<div style="display:flex;flex-direction:column;position:relative;width:${C.w}px;height:${C.h}px;background:${NAVY}">${marca}${body}${lg}</div>`
-  return { html, fotos }
-}
-
 const BUILDERS: Record<NombrePlantilla, (s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla) => ResultadoPlantilla> = {
   portada, contenido, dato, foto, cierre, cita, split, numeros, marco,
   revista, diptico, comparativa, timeline, collage, faq, precio, arco,
   bicolor, checklist, mosaico_datos, testimonio, horario, overlay, tipografico,
-  memorial_placa, memorial_retrato, memorial_medallon, memorial_cuadro, memorial_cinta,
-  memorial_horizonte, memorial_polaroid, memorial_orla, memorial_susurro, memorial_estela,
-  memorial_alba, memorial_carta, memorial_silueta, memorial_diptico, memorial_huella,
+  memorial_medallon, memorial_polaroid, memorial_susurro, memorial_silueta, memorial_diptico,
 }
 
 /** Construye el HTML on-brand de una plantilla + las fotos a generar. */
 export function construirPlantilla(nombre: string, slots: SlotsPlantilla, opts: OpcionesPlantilla = {}): ResultadoPlantilla {
-  const builder = BUILDERS[(nombre || '').trim() as NombrePlantilla] || portada
+  const n = (nombre || '').trim()
+  // Un nombre desconocido cae a `portada`… salvo que sea un MEMORIAL: una pieza
+  // guardada con una de las 10 plantillas de homenaje que se retiraron saldría
+  // como una portada comercial, con el nombre de la mascota de titular. Se cae a
+  // un homenaje, que es lo que la pieza quería ser.
+  const builder = BUILDERS[n as NombrePlantilla]
+    || (n.startsWith('memorial') ? BUILDERS[PLANTILLAS_MEMORIAL[0]] : portada)
   const C = DIMS[opts.formato || 'post_vertical'] || DIMS.post_vertical
   return builder(slots || {}, C, opts)
 }

@@ -8,7 +8,7 @@ import { listarImagenes } from '../lib/mailing-images'
 import { esLogo } from '../lib/marca-logo'
 
 /**
- * CATÁLOGO VISUAL de las plantillas maestras: renderiza LAS 24 con contenido de
+ * CATÁLOGO VISUAL de las plantillas maestras: renderiza TODAS con contenido de
  * muestra y deja los PNG en `.preview-plantillas/` + un index.html para verlas
  * todas juntas.
  *
@@ -151,53 +151,17 @@ const MUESTRAS: Record<NombrePlantilla, { titulo: string; slots: SlotsPlantilla 
     titulo: 'NUEVA · Póster de una palabra',
     slots: { eyebrow: 'Crematorio Alma Animal', titulo: 'Huellas', titulo_destacado: 'que no se borran', bajada: 'Cremación de mascotas en Santiago, todos los días.', fondo: 'navy' },
   },
-  memorial_placa: {
-    titulo: 'MEMORIAL · Foto a sangre + placa centrada',
-    slots: { eyebrow: 'En memoria', titulo: 'Rocky', fechas: '2011 — 2026', bajada: 'Quince años de esperar en la puerta.', foto: {} },
-  },
-  memorial_retrato: {
-    titulo: 'MEMORIAL · Retrato vertical + columna',
-    slots: { eyebrow: 'Siempre con nosotros', titulo: 'Michi', fechas: '2009 — 2026', bajada: 'Dueña del sillón, del sol de la ventana y de la casa entera.', fondo: 'crema', foto: {} },
-  },
   memorial_medallon: {
     titulo: 'MEMORIAL · Medallón circular dorado',
     slots: { eyebrow: 'En memoria', titulo: 'Simón', fechas: '2013 — 2026', bajada: 'Gracias por cada vuelta a la manzana.', fondo: 'navy', foto: {} },
-  },
-  memorial_cuadro: {
-    titulo: 'MEMORIAL · Retrato enmarcado',
-    slots: { titulo: 'Luna', fechas: '2016 — 2026', bajada: 'La que siempre llegaba primero a la puerta.', fondo: 'crema', foto: {} },
-  },
-  memorial_cinta: {
-    titulo: 'MEMORIAL · Foto arriba + banda con el nombre',
-    slots: { eyebrow: 'Hasta siempre', titulo: 'Otto', fechas: '2012 — 2026', bajada: 'Catorce años de sombra fiel en cada rincón de la casa.', foto: {} },
-  },
-  memorial_horizonte: {
-    titulo: 'MEMORIAL · Foto + franja crema con nombre y fechas',
-    slots: { eyebrow: 'En memoria', titulo: 'Lola', fechas: '2010 — 2026', foto: {} },
   },
   memorial_polaroid: {
     titulo: 'MEMORIAL · Instantánea de papel',
     slots: { titulo: 'Simón', fechas: '2014 — 2026', bajada: 'El que se subía a la mesa apenas mirábamos para otro lado.', foto: {} },
   },
-  memorial_orla: {
-    titulo: 'MEMORIAL · Marco dorado + placa navy',
-    slots: { eyebrow: 'En memoria', titulo: 'Nina', fechas: '2009 — 2026', bajada: 'Diecisiete años de compañía silenciosa.', foto: {} },
-  },
   memorial_susurro: {
     titulo: 'MEMORIAL · Manda la dedicatoria',
     slots: { titulo: 'Kira', fechas: '2015 — 2026', bajada: 'Nos enseñó que la casa no es un lugar, son los que te esperan en ella.', foto: {} },
-  },
-  memorial_estela: {
-    titulo: 'MEMORIAL · Banda vertical + foto a sangre',
-    slots: { eyebrow: 'Hasta siempre', titulo: 'Tomás', fechas: '2013 — 2026', bajada: 'Trece años de siestas al sol.', foto: {} },
-  },
-  memorial_alba: {
-    titulo: 'MEMORIAL · Degradé cálido + arco',
-    slots: { eyebrow: 'En memoria', titulo: 'Canela', fechas: '2012 — 2026', bajada: 'Se despertaba antes que todos para acompañarnos.', foto: {} },
-  },
-  memorial_carta: {
-    titulo: 'MEMORIAL · Tarjeta con nota',
-    slots: { titulo: 'Bruno', fechas: '2008 — 2026', bajada: 'Gracias por dieciocho años de lealtad, de paciencia y de esperarnos siempre en la misma ventana.', foto: {} },
   },
   memorial_silueta: {
     titulo: 'MEMORIAL · Velo navy + nombre gigante',
@@ -206,10 +170,6 @@ const MUESTRAS: Record<NombrePlantilla, { titulo: string; slots: SlotsPlantilla 
   memorial_diptico: {
     titulo: 'MEMORIAL · Mitad foto / mitad texto + banda',
     slots: { eyebrow: 'Hasta siempre', titulo: 'Pelusa', fechas: '2011 — 2026', bajada: 'Quince años durmiendo en el mismo rincón del sillón.', foto: {} },
-  },
-  memorial_huella: {
-    titulo: 'MEMORIAL · Nombre enorme de fondo',
-    slots: { eyebrow: 'En memoria', titulo: 'Duna', fechas: '2014 — 2026', bajada: 'Doce años de recibirnos en la puerta.', foto: {} },
   },
 }
 
