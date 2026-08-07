@@ -1,5 +1,6 @@
 import { lanzarVideo, estadoVideo, isVeoConfigurado } from './veo'
 import { guardarVideo, listarVideos, type VideoBanco } from './mailing-videos'
+import { getFromR2, uploadToR2 } from './cloudflare-r2'
 
 /**
  * METRAJE REAL para los videos de marca: clips generados con Veo.
@@ -34,6 +35,34 @@ export interface ClipListo {
   prompt: string
   /** true si salió del banco (costo cero) en vez de filmarse. */
   reusado?: boolean
+}
+
+/**
+ * Cada cuántas piezas se permite REUSAR un clip del banco en vez de filmar.
+ *
+ * Reusar siempre que hubiera algo parecido salía casi gratis, pero todas las
+ * piezas terminaban con el mismo plano y la cuenta de Instagram se veía
+ * repetida. Decisión del dueño (2026-08-07): 1 de cada 7. El resto filma nuevo,
+ * aunque el banco tenga algo que calce.
+ *
+ * El turno se lleva con un CONTADOR, no al azar: con azar tocan rachas de tres
+ * reusos seguidos, que es justo lo que se quiere evitar.
+ */
+const REUSO_CADA = Math.max(1, parseInt(process.env.METRAJE_REUSO_CADA || '7', 10) || 7)
+const CLAVE_TURNO = 'marketing/metraje/turno.json'
+
+/** Turno actual (se incrementa una vez por pieza con metraje). Best-effort. */
+async function siguienteTurno(): Promise<number> {
+  let n = 0
+  try {
+    const buf = await getFromR2(CLAVE_TURNO)
+    if (buf) n = Number(JSON.parse(buf.toString('utf8'))?.n) || 0
+  } catch { /* arranca de cero */ }
+  n += 1
+  try {
+    await uploadToR2(Buffer.from(JSON.stringify({ n }), 'utf8'), CLAVE_TURNO, 'application/json')
+  } catch { /* si no se puede guardar, se filma: el default es no repetir */ }
+  return n
 }
 
 /** Palabras con peso de una escena (se ignoran artículos y muletillas de cámara). */
@@ -85,7 +114,17 @@ async function esperar(operacion: string, limiteMs: number, intervalo = 10_000):
  */
 export async function generarMetraje(
   pedidos: ClipPedido[],
-  opts: { limiteMs?: number; creadoPor?: string; forzarNuevo?: boolean } = {},
+  opts: {
+    limiteMs?: number
+    creadoPor?: string
+    forzarNuevo?: boolean
+    /**
+     * No llama a Veo: informa qué HARÍA. Existe porque probar la cadencia de
+     * reuso con la función real cuesta plata de verdad — Veo se cobra al LANZAR
+     * el trabajo, no al descargarlo, así que acortar la espera no evita el cargo.
+     */
+    simular?: boolean
+  } = {},
 ): Promise<{ clips: ClipListo[]; avisos: string[] }> {
   const avisos: string[] = []
   if (!isVeoConfigurado()) return { clips: [], avisos: ['No hay metraje: falta GEMINI_API_KEY.'] }
@@ -95,21 +134,34 @@ export async function generarMetraje(
   // locución, la música y codificar el MP4, y la función corta a los 300 s.
   const limite = opts.limiteMs ?? 150_000
 
-  // 1) REUSAR antes de filmar: cada clip cuesta plata y el banco crece solo.
+  // 1) ¿Le toca reusar a esta pieza? Solo 1 de cada REUSO_CADA: reusar siempre
+  //    abarataba, pero dejaba todas las piezas con el mismo plano.
   const clips: ClipListo[] = []
   const usados = new Set<string>()
   const pendientes: ClipPedido[] = []
-  const banco = await listarVideos().catch(() => [] as VideoBanco[])
-  for (const p of pedidos) {
-    const hit = opts.forzarNuevo ? null : buscarEnBanco(p.prompt, banco, usados)
-    if (hit) {
-      usados.add(hit.url)
-      clips.push({ url: hit.url, codigo: hit.codigo, prompt: p.prompt, reusado: true })
-    } else {
-      pendientes.push(p)
+  const turno = await siguienteTurno()
+  const leTocaReusar = !opts.forzarNuevo && turno % REUSO_CADA === 0
+
+  if (leTocaReusar) {
+    const banco = await listarVideos().catch(() => [] as VideoBanco[])
+    for (const p of pedidos) {
+      const hit = buscarEnBanco(p.prompt, banco, usados)
+      if (hit) {
+        usados.add(hit.url)
+        clips.push({ url: hit.url, codigo: hit.codigo, prompt: p.prompt, reusado: true })
+      } else {
+        pendientes.push(p)
+      }
     }
+    if (clips.length) avisos.push(`Reusé metraje del banco (${clips.map(c => c.codigo).join(', ')}): toca 1 de cada ${REUSO_CADA} piezas, para no gastar de más.`)
+  } else {
+    pendientes.push(...pedidos)
   }
   if (pendientes.length === 0) return { clips, avisos }
+  if (opts.simular) {
+    avisos.push(`(simulación) Filmaría ${pendientes.length} clip(s); turno ${turno}, reusa 1 de cada ${REUSO_CADA}.`)
+    return { clips, avisos }
+  }
 
   // 2) Filmar solo lo que no estaba. Se lanzan juntos: en serie no entrarían.
   const operaciones = await Promise.all(pendientes.map(async p => {
