@@ -1,6 +1,6 @@
 import './_env-preload'
 import { lintRotacion } from '../lib/marketing-pieza'
-import { PLANTILLAS, FAMILIA, PLANTILLAS_CON_FOTO, PLANTILLAS_MEMORIAL } from '../lib/marketing-plantillas'
+import { PLANTILLAS, FAMILIA, PLANTILLAS_CON_FOTO, PLANTILLAS_MEMORIAL, sugerenciasParaTanda } from '../lib/marketing-plantillas'
 
 /**
  * Verifica el validador DETERMINISTA de rotación de plantillas (lintRotacion):
@@ -36,6 +36,38 @@ caso('carrusel variado y con foto',
   lintRotacion([im('revista'), im('timeline'), im('dato'), im('cierre')], SIN_MEMORIA), 'pasa')
 caso('post simple de una sola imagen',
   lintRotacion([im('tipografico')], SIN_MEMORIA), 'pasa')
+
+console.log('\n— Variedad REAL del carrusel (no basta con no repetir consecutivas) —')
+// El caso que motivó la regla: alterna prolijamente entre dos familias, ninguna
+// consecutiva se repite… y el carrusel igual se ve monótono.
+caso('5 láminas alternando SOLO dos familias',
+  lintRotacion([im('revista'), im('numeros'), im('overlay'), im('checklist'), im('arco')], SIN_MEMORIA), 'rechaza')
+caso('5 láminas con tres familias distintas',
+  lintRotacion([im('revista'), im('numeros'), im('dato'), im('checklist'), im('arco')], SIN_MEMORIA), 'pasa')
+// El umbral sube con el largo: 3 y 4 láminas se sostienen con dos familias, de 5
+// en adelante se exigen tres. Un carrusel corto alternando foto/lista se ve bien;
+// uno largo, no.
+caso('3 láminas con dos familias (le basta con 2)',
+  lintRotacion([im('revista'), im('numeros'), im('arco')], SIN_MEMORIA), 'pasa')
+caso('4 láminas con dos familias (todavía aceptable)',
+  lintRotacion([im('revista'), im('numeros'), im('arco'), im('checklist')], SIN_MEMORIA), 'pasa')
+caso('6 láminas con dos familias',
+  lintRotacion([im('revista'), im('numeros'), im('arco'), im('checklist'), im('overlay'), im('timeline')], SIN_MEMORIA), 'rechaza')
+
+console.log('\n— La preselección que se le ofrece al modelo ya viene variada —')
+{
+  const sug = sugerenciasParaTanda(5)
+  const fams = new Set(sug.map(p => FAMILIA[p as keyof typeof FAMILIA]))
+  caso(`sugerenciasParaTanda(5) → ${sug.length} plantillas, ${fams.size} familias`,
+    sug.length === 5 && fams.size === 5 ? [] : [{ campo: 'sug', problema: sug.join(', ') }], 'pasa')
+  // Y lo que ofrece tiene que PASAR su propio lint: si no, le estaríamos dando
+  // al modelo una preselección que el validador va a rechazar.
+  caso('lo que sugiere pasa el lint de rotación',
+    lintRotacion(sug.map(p => im(p)), SIN_MEMORIA), 'pasa')
+  const sinFoto = sugerenciasParaTanda(4, { evitarFamilias: ['foto'] })
+  caso('respeta las familias a evitar',
+    sinFoto.every(p => FAMILIA[p as keyof typeof FAMILIA] !== 'foto') ? [] : [{ campo: 'sug', problema: sinFoto.join(', ') }], 'pasa')
+}
 
 console.log('\n— Contra las piezas anteriores —')
 caso('la portada repite la de la pieza anterior',

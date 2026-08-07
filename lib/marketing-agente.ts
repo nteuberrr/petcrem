@@ -19,7 +19,7 @@ import { generarPieza, editarImagenPieza, regenerarImagenPieza, setImagenesPieza
 import { prepararVideo } from './marketing-video-preparar'
 import { linkDescarga } from './marketing-video-armar'
 import { generarGraficoMarca, FORMATOS_GRAFICO, cargarDisenoGrafico } from './marketing-grafico'
-import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, PLANTILLAS_MEMORIAL, PLANTILLA_TOOL_DESC, SLOTS_TOOL_PROPS, familiaDe, type SlotsPlantilla } from './marketing-plantillas'
+import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, PLANTILLAS_MEMORIAL, PLANTILLA_TOOL_DESC, SLOTS_TOOL_PROPS, KITS_INFO, familiaDe, type SlotsPlantilla } from './marketing-plantillas'
 import { leerPerfilFacebook, leerPerfilInstagram, actualizarPerfilFacebook, isFacebookConfigurado } from './meta-publish'
 import { publicarItem } from './marketing-publicar'
 import { resumenAds, resumenOrganico, isInsightsConfigurado } from './meta-insights'
@@ -924,7 +924,7 @@ export async function generarRespuestaMarketing(
   // corre en Opus. Una sesión de trabajo dura más de 5 minutos, así que con el TTL por
   // defecto se re-escribía la caché varias veces por sesión; con 1 hora se escribe una.
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${REGLAS_INVIOLABLES}\n\n${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${PLANTILLAS_INFO}\n\n${MARCA_GRAFICO}\n\n${GUIA_SOCIAL}\n\n${GUIA_EMAIL}\n\n${GUIA_PERFIL}\n\n${tarifas}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
+    { type: 'text', text: `${REGLAS_INVIOLABLES}\n\n${BASE}\n\n${DIFERENCIADORES}\n\n${MARCA_VISUAL}\n\n${PLANTILLAS_INFO}\n\nKITS DE POST (estilos de tanda: acotan de qué GRUPOS salen las plantillas de una campaña, para que tenga carácter propio; DENTRO del kit igual hay que rotar por familia, si no las piezas se parecen entre sí):\n${KITS_INFO}\n\n${MARCA_GRAFICO}\n\n${GUIA_SOCIAL}\n\n${GUIA_EMAIL}\n\n${GUIA_PERFIL}\n\n${tarifas}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
   ]
   if (isGoogleAdsConfigurado()) {
     system.push({

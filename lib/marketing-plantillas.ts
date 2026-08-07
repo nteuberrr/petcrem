@@ -1341,13 +1341,116 @@ export function candidatas(opts: {
   const sinEvitadas = out.filter(([, m]) => !evitar.has(m.familia))
   // Si evitar familias deja la lista vacía, vale más ofrecer algo que nada.
   if (sinEvitadas.length > 0) out = sinEvitadas
-  return out.map(([n]) => n).slice(0, opts.max ?? 8)
+
+  // RONDA POR FAMILIA, no los primeros N. El catálogo está ordenado por grupo y
+  // dentro de un grupo las familias se agrupan (apertura arranca con tres "foto"
+  // seguidas), así que cortar los primeros N devolvía una lista monótona — y una
+  // lista monótona da un carrusel monótono. Tomando de a una por familia, la
+  // preselección SIEMPRE es variada y el modelo no puede elegir mal aunque quiera.
+  const porFamilia = new Map<FamiliaPlantilla, NombrePlantilla[]>()
+  for (const [n, m] of out) porFamilia.set(m.familia, [...(porFamilia.get(m.familia) || []), n])
+  const colas = [...porFamilia.values()]
+  const orden: NombrePlantilla[] = []
+  for (let i = 0; orden.length < out.length; i++) {
+    for (const cola of colas) if (cola[i]) orden.push(cola[i])
+  }
+  return orden.slice(0, opts.max ?? 8)
+}
+
+/**
+ * Sugerencia de plantillas para UNA tanda (carrusel o lote de piezas).
+ *
+ * Devuelve `n` plantillas de familias DISTINTAS entre sí, y distintas también de
+ * las de la pieza anterior. Es la versión proactiva de la regla de rotación: el
+ * lint la controla después, pero llegar con una preselección ya variada evita el
+ * rechazo y, sobre todo, evita el carrusel de cinco láminas que se ven iguales
+ * (queja del dueño: "los posts son siempre parecidos").
+ *
+ * No es una imposición: el modelo puede apartarse si el contenido lo pide. Es el
+ * punto de partida, que es donde se juega la variedad.
+ */
+export function sugerenciasParaTanda(n: number, opts: {
+  grupo?: GrupoPlantilla | GrupoPlantilla[]
+  evitarFamilias?: FamiliaPlantilla[]
+} = {}): NombrePlantilla[] {
+  const pool = candidatas({ ...opts, max: 999 })
+  const out: NombrePlantilla[] = []
+  const usadas = new Set<FamiliaPlantilla>()
+  // 1ª pasada: una por familia (el orden ya viene rotado por candidatas).
+  for (const p of pool) {
+    if (out.length >= n) break
+    const f = CATALOGO[p].familia
+    if (usadas.has(f)) continue
+    usadas.add(f); out.push(p)
+  }
+  // 2ª pasada: si piden más piezas que familias hay, se completa sin repetir
+  // plantilla (dos de la misma familia, pero nunca la misma plantilla dos veces).
+  for (const p of pool) {
+    if (out.length >= n) break
+    if (!out.includes(p)) out.push(p)
+  }
+  return out
 }
 
 /** Ficha de las candidatas, lista para inyectar en el prompt. */
 export function infoDe(nombres: NombrePlantilla[]): string {
   return nombres.map(fichaLarga).join('\n')
 }
+
+// ─── KITS: estilos de tanda ──────────────────────────────────────────────────
+//
+// Un kit es, simplemente, QUÉ GRUPOS entran en juego. Con el catálogo esto es
+// una lista; sin él habría que cablear cada kit contra las nueve listas viejas.
+// Sirven para que una campaña entera tenga un carácter (una de lanzamiento no se
+// parece a una de captación de veterinarios) sin repetir siempre las mismas
+// plantillas dentro de ella: la variedad la sigue dando `sugerenciasParaTanda`,
+// que rota por familia PUERTAS ADENTRO del kit.
+
+export interface KitPlantillas {
+  nombre: string
+  /** Para qué sirve, en una línea (lo lee el agente y se muestra en la UI). */
+  para: string
+  grupos: GrupoPlantilla[]
+}
+
+export const KITS: Record<string, KitPlantillas> = {
+  lanzamiento: {
+    nombre: 'Lanzamiento',
+    para: 'Presentar un servicio o abrir una campaña: engancha, explica y cierra pidiendo la acción.',
+    grupos: ['apertura', 'explicar', 'vender'],
+  },
+  educativo: {
+    nombre: 'Educativo',
+    para: 'Enseñar cómo funciona el proceso y responder las dudas reales, sin vender de frente.',
+    grupos: ['explicar', 'confianza'],
+  },
+  confianza: {
+    nombre: 'Confianza',
+    para: 'Prueba social y calidez: testimonios, caras y mascotas reales para quien nos está evaluando.',
+    grupos: ['confianza', 'apertura'],
+  },
+  veterinarias: {
+    nombre: 'Veterinarias (B2B)',
+    para: 'Hablarle a las clínicas: argumentos duros, plazos y condiciones. Menos emoción, más datos.',
+    grupos: ['diferenciar', 'explicar', 'vender'],
+  },
+  despedidas: {
+    nombre: 'Despedidas',
+    para: 'Homenajes a mascotas por su nombre. Va solo: nunca se mezcla con piezas comerciales.',
+    grupos: ['homenaje'],
+  },
+}
+
+/** Grupos de un kit; si el nombre no existe, no se acota nada (todos menos homenaje). */
+export function gruposDeKit(kit?: string): GrupoPlantilla[] | undefined {
+  const k = KITS[(kit || '').trim().toLowerCase()]
+  return k?.grupos
+}
+
+/** Catálogo de kits para el prompt / la UI. */
+export const KITS_INFO = Object.entries(KITS)
+  .map(([id, k]) => `- "${id}" (${k.nombre}): ${k.para} Usa: ${k.grupos.join(', ')}.`)
+  .join('\n')
 
 /** Construye el HTML on-brand de una plantilla + las fotos a generar. */
 export function construirPlantilla(nombre: string, slots: SlotsPlantilla, opts: OpcionesPlantilla = {}): ResultadoPlantilla {

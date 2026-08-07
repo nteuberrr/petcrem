@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { BRAND, getContacto } from './email-layout'
 import { MARCA_VISUAL, MARCA_GRAFICO, recetasVariadas } from './marca-visual'
 import { GUIA_SOCIAL, GUIA_QA } from './marketing-guia'
-import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, PLANTILLAS_MEMORIAL, PLANTILLA_TOOL_DESC, SLOTS_TOOL_PROPS, familiaDe, llevaFoto, type SlotsPlantilla } from './marketing-plantillas'
+import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, PLANTILLAS_MEMORIAL, PLANTILLA_TOOL_DESC, SLOTS_TOOL_PROPS, familiaDe, llevaFoto, sugerenciasParaTanda, type SlotsPlantilla, type FamiliaPlantilla } from './marketing-plantillas'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { REGLAS_INVIOLABLES } from './marca-voz'
 import { lintCopy, extraerTextoHtml } from './marketing-lint'
@@ -241,6 +241,23 @@ async function memoriaVariedad(exceptoId: string): Promise<{
 }
 
 /**
+ * Preselección de plantillas para la pieza que se está por generar.
+ *
+ * Le llega al modelo DESPUÉS del prefijo cacheado, así que cuesta ~100 tokens y
+ * no toca la caché del catálogo completo. Evita las familias de la pieza anterior
+ * y propone una plantilla por familia, que es lo que impide el carrusel monótono.
+ */
+function bloqueSugerencias(mem: { ultimaPieza: string[] }): string {
+  const evitar = [...new Set(
+    (mem.ultimaPieza || []).map(p => familiaDe(p)).filter((f): f is FamiliaPlantilla => !!f),
+  )]
+  const sug = sugerenciasParaTanda(5, { evitarFamilias: evitar })
+  const porQue = evitar.length ? ` (evitando las familias de la pieza anterior: ${evitar.join(', ')})` : ''
+  return `PRESELECCIÓN DE PLANTILLAS para esta pieza${porQue}: ${sug.join(' · ')}.
+Son de familias DISTINTAS entre sí a propósito: si es un carrusel, tomá una por lámina en ese orden y vas a tener variedad garantizada. NO estás obligado a usarlas —si el contenido pide otra, usala— pero NO caigas en dos láminas seguidas de la misma familia ni en un carrusel entero de placas de texto. El catálogo completo con el "USALA CUANDO" de cada una está más arriba.`
+}
+
+/**
  * ROTACIÓN OBLIGATORIA (validador determinista).
  *
  * Hasta acá la variedad dependía de que el modelo obedeciera el prompt, y no lo
@@ -281,6 +298,23 @@ export function lintRotacion(
       hallazgos.push({
         campo: `imagen ${i + 1}`,
         problema: `Las imágenes ${i} y ${i + 1} son de la MISMA familia (${a}) y se ven parecidas. Alterná: después de una lista va una foto, una cifra o una de texto.`,
+      })
+    }
+  }
+
+  // 2b) VARIEDAD REAL del carrusel. La regla de "no dos seguidas iguales" deja
+  //     pasar un carrusel de 5 que alterna entre SOLO DOS familias (foto, lista,
+  //     foto, lista, foto): técnicamente nunca repite consecutivas, pero se ve
+  //     monótono igual — es la queja del dueño. Con 3 láminas o más se exige un
+  //     mínimo de familias distintas.
+  const conPlantilla = plantillas.filter(Boolean)
+  if (conPlantilla.length >= 3) {
+    const familias = new Set(conPlantilla.map(p => familiaDe(p)).filter(Boolean))
+    const minimo = Math.min(3, Math.ceil(conPlantilla.length / 2))
+    if (familias.size < minimo) {
+      hallazgos.push({
+        campo: 'imágenes',
+        problema: `El carrusel usa ${conPlantilla.length} plantillas pero solo ${familias.size} familia(s) distinta(s) (${[...familias].join(', ')}), y tienen que ser al menos ${minimo}. Aunque no repitas plantilla, alternar entre dos familias se ve monótono: meté una de otra familia (una foto protagonista, una cifra, una de texto o una lista, según cuál falte).`,
       })
     }
   }
@@ -451,6 +485,13 @@ Devuelve SIEMPRE con la herramienta "entregar_post", con el copy Y las imágenes
     // ⚠️ De acá para abajo va lo VARIABLE (rompe caché a propósito). Las recetas
     // rotan en cada llamada: es lo que evita que todas las fotos salgan iguales.
     { type: 'text', text: recetasVariadas() },
+    // PRESELECCIÓN de plantillas para ESTA pieza. Va acá abajo, en lo variable, a
+    // propósito: PLANTILLAS_INFO (el catálogo completo) se queda arriba en el
+    // prefijo cacheado — filtrarlo ahí rompería una caché de ~20k tokens en cada
+    // llamada. Esto son ~100 tokens que igual logran el efecto: llegar con una
+    // lista corta y de familias distintas, para que el carrusel no salga con
+    // cinco láminas que se ven iguales.
+    { type: 'text', text: bloqueSugerencias(memoria) },
     { type: 'text', text: bancoBloque(banco, memoria.fotosUsadas) },
     ...(bloqueLogosPieza(banco) ? [{ type: 'text' as const, text: bloqueLogosPieza(banco) }] : []),
     ...(memoria.bloque ? [{ type: 'text' as const, text: memoria.bloque }] : []),
