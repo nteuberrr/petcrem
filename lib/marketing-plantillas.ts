@@ -112,74 +112,15 @@ export const PLANTILLAS = [
 ] as const
 export type NombrePlantilla = (typeof PLANTILLAS)[number]
 
-/** Las QUINCE de homenaje: el agente DEBE rotarlas, no usar siempre la misma.
- *  Es también el pozo del que sale al azar la historia de despedida de cada
- *  mascota entregada (lib/memorial.ts). Todas llevan foto. */
-export const PLANTILLAS_MEMORIAL: NombrePlantilla[] = [
-  'memorial_medallon', 'memorial_polaroid', 'memorial_susurro', 'memorial_silueta', 'memorial_diptico',
-]
-
-/** Plantillas que llevan al menos una FOTO (para equilibrar una tanda). */
-export const PLANTILLAS_CON_FOTO: NombrePlantilla[] = [
-  'foto', 'marco', 'split', 'revista', 'diptico', 'collage', 'arco', 'testimonio', 'overlay',
-  ...PLANTILLAS_MEMORIAL,
-]
-
+/**
+ * FAMILIA = a qué se PARECE una plantilla. Es la unidad que se controla para la
+ * ROTACIÓN: dos piezas de la misma familia se ven parecidas aunque la plantilla
+ * sea distinta (dos listas siguen siendo dos listas). Es un eje distinto del
+ * `grupo` (para qué sirve), que es el que usa el agente para ELEGIR — ver el
+ * CATÁLOGO al final del archivo.
+ */
 export type FamiliaPlantilla = 'apiladas' | 'foto' | 'listas' | 'cifras' | 'texto' | 'memorial'
 
-/**
- * FAMILIA de cada plantilla. Es la unidad que se controla para la rotación: dos
- * piezas de la misma familia se ven parecidas aunque la plantilla sea distinta
- * (dos listas siguen siendo dos listas). Fuente única — la consume el validador
- * determinista de `generar_pieza`, no solo el prompt.
- */
-export const FAMILIA: Record<NombrePlantilla, FamiliaPlantilla> = {
-  portada: 'apiladas', contenido: 'apiladas', cierre: 'apiladas',
-  foto: 'foto', marco: 'foto', split: 'foto', revista: 'foto', diptico: 'foto',
-  collage: 'foto', arco: 'foto', overlay: 'foto',
-  numeros: 'listas', checklist: 'listas', timeline: 'listas', comparativa: 'listas',
-  dato: 'cifras', mosaico_datos: 'cifras', precio: 'cifras',
-  cita: 'texto', testimonio: 'texto', faq: 'texto', tipografico: 'texto',
-  bicolor: 'texto', horario: 'texto',
-  memorial_medallon: 'memorial', memorial_polaroid: 'memorial', memorial_susurro: 'memorial',
-  memorial_silueta: 'memorial', memorial_diptico: 'memorial',
-}
-
-export const familiaDe = (p?: string): FamiliaPlantilla | null =>
-  (p && FAMILIA[p as NombrePlantilla]) || null
-
-/** ¿Esta plantilla muestra una foto? (para exigir fotos en una tanda). */
-export const llevaFoto = (p?: string): boolean =>
-  !!p && PLANTILLAS_CON_FOTO.includes(p as NombrePlantilla)
-
-/**
- * Descripción del enum `plantilla` para las TOOLS del modelo. Fuente única: la
- * usan `disenar_plantilla` (chat) y `generar_pieza` (calendario), así que sumar
- * una plantilla no deja una de las dos desactualizada.
- */
-export const PLANTILLA_TOOL_DESC =
-  'Qué plantilla usar. BASE: portada (apertura/gancho) · contenido (idea + bullets) · dato (una cifra grande) · ' +
-  'foto (foto protagonista con una frase) · cierre (CTA final) · cita (frase destacada, sin foto) · ' +
-  'split (foto al lado del texto) · numeros (lista numerada) · marco (foto enmarcada). ' +
-  'ESTRUCTURAS NUEVAS (usalas seguido): revista (portada editorial: foto a sangre + banda con el titular) · ' +
-  'diptico (mitad foto / mitad color, titular centrado) · comparativa (dos columnas: nosotros vs lo habitual) · ' +
-  'timeline (hitos en un riel dorado) · collage (3 fotos) · faq (pregunta grande + respuesta) · ' +
-  'precio (tarjeta de plan con cifra y qué incluye) · arco (foto en un arco, editorial) · ' +
-  'bicolor (lienzo partido navy/claro con el titular a caballo) · checklist (items en barras con filete) · ' +
-  'mosaico_datos (grilla 2×2 de cifras) · testimonio (avatar redondo + cita) · horario (filas clave→valor) · ' +
-  'overlay (foto a sangre + tarjeta flotante) · tipografico (póster de una palabra). ' +
-  'MEMORIAL (homenaje a una mascota, titulo = su nombre + fechas = sus años; son CINCO y cada una resuelve un caso distinto — elegí por el caso, no por gusto, y no repitas la de la pieza anterior): ' +
-  'memorial_silueta (foto a sangre + nombre grande abajo: cuando la FOTO es fuerte y manda) · ' +
-  'memorial_diptico (mitad foto / mitad texto: la más segura, la foto nunca lleva texto encima) · ' +
-  'memorial_polaroid (instantánea de papel: íntima, de álbum familiar) · ' +
-  'memorial_medallon (medallón circular dorado, la más solemne — la foto REDONDA es EXCLUSIVA de los homenajes, en piezas comerciales usá "arco") · ' +
-  'memorial_susurro (manda la DEDICATORIA en grande: cuando el texto del tutor es lo lindo). ' +
-  'ROTÁ: no repitas plantilla ni familia dentro de una misma tanda; al menos 1 de cada 3 piezas con FOTO.'
-
-/**
- * Propiedades del objeto `slots` para el input_schema de las tools. Compartido
- * por las dos herramientas por la misma razón que `PLANTILLA_TOOL_DESC`.
- */
 export const SLOTS_TOOL_PROPS: Record<string, unknown> = {
   eyebrow: { type: 'string', description: 'Etiqueta corta arriba (ej. "PARA VETERINARIOS"). En "precio" es el nombre del plan; en "tipografico" la línea chica de arriba.' },
   titulo: { type: 'string', description: 'Titular (2-4 palabras). En "foto"/"cita"/"testimonio" es la frase; en "faq" la pregunta; en "tipografico" la palabra grande.' },
@@ -218,46 +159,6 @@ export const SLOTS_TOOL_PROPS: Record<string, unknown> = {
 }
 
 /** Guía de slots por plantilla, para el prompt/tool del modelo. */
-export const PLANTILLAS_INFO = `PLANTILLAS DISPONIBLES (elegí UNA y llená sus slots; el layout ya es on-brand y no se rompe):
-- "portada": gancho/apertura. slots: eyebrow (corto, ej. "PARA VETERINARIOS"), titulo (2-4 palabras), titulo_destacado (2ª línea, sale en dorado), bajada (1 frase corta, máx ~120 car), foto {prompt} (opcional; va en banda arriba), fondo (navy/crema/blanco), cta + cta_secundario (opcional). NO lleva bullets.
-- "contenido": una idea con apoyos. slots: eyebrow (opcional), titulo, bullets (2-4, MUY cortos), bajada (opcional), foto {prompt} (opcional), fondo. Para láminas de carrusel educativas.
-- "dato": una cifra/palabra fuerte. slots: dato (el número/palabra grande, ej. "4 días"), dato_label (qué es), bajada (1 línea de apoyo), fondo.
-- "foto": foto protagonista, casi sin texto. slots: foto {prompt} (obligatoria), titulo (UNA frase corta encima), fondo. Para piezas emocionales/estéticas.
-- "cierre": llamado a la acción final. slots: titulo, cta (ej. teléfono), cta_secundario (web), bajada (opcional), fondo, foto {prompt} (opcional, banda arriba).
-- "cita": testimonio o frase destacada (gran comilla dorada). slots: titulo (la frase/testimonio, ~1-2 líneas), bajada (autor: "María, tutora de Rocky" o "Clínica X"), eyebrow (opcional), fondo (default crema/claro). SIN foto. Ideal para PRUEBA SOCIAL y frases de marca.
-- "split": editorial lado-a-lado — foto a la izquierda, texto a la derecha (layout DISTINTO a los apilados). slots: foto {prompt} (obligatoria), titulo, titulo_destacado (opcional, dorado), bajada (opcional), bullets (2-3, opcional), cta (opcional), fondo (del panel de texto; default crema). Para una idea con una foto potente, con aire de revista.
-- "numeros": lista NUMERADA (pasos o razones) con números dorados grandes — otro ritmo visual que los bullets. slots: eyebrow (opcional), titulo, bajada (opcional), bullets (2-4, cada uno es un paso/razón, MUY cortos), fondo (default crema). Ideal para "los pasos del proceso", "3 razones para…". SIN foto.
-- "marco": foto ENMARCADA (estilo galería) centrada, con aire alrededor + pie de foto. slots: foto {prompt} (obligatoria), titulo (frase/pie centrado), bajada (opcional, autor/contexto), fondo (default crema). Distinta de "foto" (full-bleed): acá la foto respira sobre el color de marca. Cálida para homenajes, humanización y prueba social.
-
-ESTRUCTURAS NUEVAS (romper el molde apilado — usalas SEGUIDO, no son "de repuesto"):
-- "revista": portada editorial. Foto A SANGRE arriba (2/3 del alto) y una BANDA sólida abajo con el titular. slots: foto {prompt} (obligatoria), eyebrow, titulo, titulo_destacado, bajada, cta, fondo (de la banda). La más linda para abrir una campaña.
-- "diptico": mitad foto / mitad color, con el titular CENTRADO (el resto de las plantillas alinea a la izquierda → cambia el ritmo). slots: foto {prompt} (obligatoria), titulo, titulo_destacado, bajada, fondo.
-- "comparativa": DOS columnas enfrentadas. La izquierda (dorada, destacada) somos nosotros; la derecha, "lo habitual". slots: titulo, titulo_b (encabezado de la columna nuestra, ej. "Alma Animal"), bullets (2-4, lo nuestro), bullets_b (2-4, lo otro), fondo. Ideal para diferenciadores.
-- "timeline": hitos enlazados por un riel dorado vertical. slots: eyebrow, titulo, bullets (2-4 = los hitos), fondo. Para "cómo es el proceso", "qué pasa después de llamarnos".
-- "collage": mosaico de 3 fotos (1 grande + 2 chicas) + titular abajo. slots: fotos [{prompt} ×3], titulo, titulo_destacado, bajada, fondo. Muy vivo para "un día en Alma Animal" o variedad de mascotas.
-- "faq": una PREGUNTA grande con signo dorado + su respuesta. slots: eyebrow (default "Preguntas frecuentes"), titulo (la pregunta), bajada (la respuesta, hasta ~260 car), cta, fondo. Formato que la gente lee.
-- "precio": tarjeta de plan/servicio. slots: eyebrow (nombre del plan), titulo, dato (la cifra, ej. "$120.000"), dato_label ("Cremación individual hasta 10 kg"), bullets (2-4 = qué incluye), cta, pie (letra chica), fondo.
-- "arco": la foto dentro de un ARCO (rectángulo con la parte de arriba redondeada) y el texto abajo. slots: foto {prompt} (obligatoria), eyebrow, titulo, bajada, cta, fondo. Cálida y editorial para retratos y presentaciones. ⚠️ La foto REDONDA tipo foto de perfil quedó RESERVADA para los homenajes ("memorial_medallon"): en una pieza comercial se lee como memorial, así que acá usá el arco.
-- "bicolor": el lienzo partido en dos bloques (navy arriba / claro abajo) y el titular a caballo: titulo va en el navy y titulo_destacado en el claro. slots: eyebrow, titulo, titulo_destacado, bajada, bullets (2-3), cta.
-- "checklist": cada item en su propia BARRA con filete dorado (más contundente que los bullets). slots: eyebrow, titulo, bullets (2-5), fondo. Para "qué incluye", "lo que sí hacemos".
-- "mosaico_datos": grilla de 2×2 con cifras. slots: titulo, datos [{valor, label} ×2-4], pie, fondo. Para varios números juntos (dato = uno solo).
-- "testimonio": foto del tutor en cuadrado redondeado + comilla + la cita. Prueba social CON cara (cita es solo tipografía). slots: foto {prompt} (obligatoria: retrato cálido de un tutor con su mascota), titulo (el testimonio), bajada (autor), fondo.
-- "horario": filas clave→valor con líneas. slots: eyebrow, titulo, filas [{izq, der} ×2-5] (ej. izq "Lunes a domingo" / der "09:00–22:00"), pie, cta, fondo. Para horarios, cobertura por comuna, plazos.
-- "overlay": foto A SANGRE + una TARJETA clara flotando encima abajo (no un velo). slots: foto {prompt} (obligatoria), eyebrow, titulo, titulo_destacado, bajada, cta, fondo (color de la tarjeta). Se ve moderna y deja ver la foto entera.
-- "tipografico": póster de UNA idea, la palabra manda (tipografía gigante). slots: eyebrow (línea chica arriba), titulo (la palabra/frase grande), titulo_destacado (2ª línea en dorado), bajada. SIN foto. Para una frase de marca con impacto.
-
-MEMORIAL — homenaje a UNA mascota por su nombre. Son CINCO y NO son intercambiables: cada una resuelve un caso distinto, así que elegí por el CASO (qué tenés: foto fuerte, dedicatoria linda, foto arriesgada…), no por gusto. Nunca repitas la de la pieza anterior. En las cinco: titulo = el NOMBRE de la mascota, fechas = sus años ("2014 — 2026"), bajada = la dedicatoria (una frase concreta y cotidiana, no un lugar común), eyebrow = "En memoria" / "Hasta siempre" / etc., foto = retrato CÁLIDO de la mascota VIVA y en calma (jamás enferma ni "ausente"; nada de urnas, lápidas, velas, arcoíris ni símbolos religiosos):
-- "memorial_silueta": foto a sangre bajo un velo navy y el nombre GIGANTE abajo a la izquierda. USALA CUANDO la foto es buena y tiene que mandar; el velo la sostiene aunque la foto sea clara. La más impactante.
-- "memorial_diptico": mitad foto y mitad bloque crema con la dedicatoria; el nombre cruza abajo en una banda navy. USALA CUANDO la foto es dudosa (mal encuadrada, con gente, poca luz): es la única donde el texto NUNCA se apoya sobre la foto, así que es la más segura.
-- "memorial_polaroid": la foto como una instantánea de papel blanco, con el nombre en el borde de abajo. USALA CUANDO buscás calidez de álbum familiar; funciona muy bien con fotos caseras.
-- "memorial_medallon": foto en un medallón CIRCULAR con anillo dorado y el nombre gigante de fondo. USALA CUANDO querés el tono más solemne, y solo si la cara de la mascota está centrada (el círculo recorta las esquinas).
-- "memorial_susurro": la DEDICATORIA en grande y la foto en un medallón chico arriba. USALA CUANDO el tutor escribió algo lindo y el texto es lo que vale más que la imagen.
-
-ENCUADRE DE LAS FOTOS (regla dura — el dueño rebotó una pieza donde la placa le tapaba el hocico al gato): en las plantillas que apoyan TEXTO ENCIMA de la foto ("foto", "overlay", "memorial_silueta", y las bandas de "portada" y "revista"), el prompt de la foto DEBE dejar despejada la zona donde va el texto: mascota en la mitad de arriba y la mitad de abajo libre (piso, manta, pasto, fondo liso). El sistema ya le agrega esa exigencia al prompt, pero escribilo vos también en la descripción de la escena. Y en TODAS: la cara y los ojos de la mascota se ven COMPLETOS, nunca cortados por el borde ni tapados por un bloque de texto, un velo o el logo.
-
-Reglas: textos CORTOS (si no caben, se recortan). El fondo alterna navy/crema/blanco entre piezas — la PORTADA también (ya NO es siempre navy): NO dejes todas las portadas en navy, variá a crema o blanco (o con la foto mandando) para que el feed no se vea "todo azul". Regla práctica: máximo ~1 de cada 3 piezas de una misma tanda con fondo navy dominante. La foto: mascota viva y feliz o tutor con su mascota, cálida; NUNCA instalaciones. El logo se coloca solo.
-ROTACIÓN (regla dura, feedback del dueño "los posts son siempre parecidos"): hay 29 plantillas. En una misma tanda/carrusel NO repitas plantilla, y NO uses dos veces seguidas la misma FAMILIA (apiladas: portada/contenido/cierre · foto protagonista: foto/marco/revista/diptico/overlay/arco/collage · listas: numeros/checklist/timeline/comparativa · cifras: dato/mosaico_datos/precio · texto: cita/testimonio/faq/tipografico/bicolor · memorial: las cinco memorial_*). Al menos 1 de cada 3 piezas tiene que llevar FOTO. En los HOMENAJES: nunca dos memoriales seguidos con la misma plantilla — llevá la cuenta y andá rotando las cinco. Si te pasan las "ÚLTIMAS PIEZAS GENERADAS", elegí plantillas de familias que NO aparezcan ahí.`
-
 // ─── helpers de bloque ────────────────────────────────────────────────────────
 function eyebrowChip(text: string, abs?: { top: number; left: number }): string {
   const pos = abs ? `position:absolute;top:${abs.top}px;left:${abs.left}px;` : 'align-self:flex-start;margin-bottom:24px;'
@@ -1070,11 +971,382 @@ function memorial_diptico(s: SlotsPlantilla, C: { w: number; h: number }, o: Opc
   return { html, fotos }
 }
 
-const BUILDERS: Record<NombrePlantilla, (s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla) => ResultadoPlantilla> = {
-  portada, contenido, dato, foto, cierre, cita, split, numeros, marco,
-  revista, diptico, comparativa, timeline, collage, faq, precio, arco,
-  bicolor, checklist, mosaico_datos, testimonio, horario, overlay, tipografico,
-  memorial_medallon, memorial_polaroid, memorial_susurro, memorial_silueta, memorial_diptico,
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CATÁLOGO — la ÚNICA fuente de verdad de qué es cada plantilla
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Antes, lo que se sabía de UNA plantilla vivía repartido en nueve lugares:
+// la lista de nombres, tres listas por categoría (memorial / con foto / familia),
+// dos textos en prosa para el modelo, el mapa de builders y las muestras del
+// script de preview. Nada los conectaba: agregar o sacar una plantilla obligaba a
+// tocar los nueve y nada avisaba si te olvidabas de uno. Pasó dos veces el mismo
+// día (2026-08-06): al sumar 10 memoriales quedaron dos listas sin actualizar, y
+// al sacarlos aparecieron TRES archivos más con los nombres viejos escritos a
+// mano. Ninguno rompía el build; el agente simplemente pedía plantillas que ya no
+// existían.
+//
+// Ahora cada plantilla es UNA entrada acá y todo lo demás se DERIVA. Como el
+// catálogo está tipado `Record<NombrePlantilla, …>`, TypeScript exige una entrada
+// por plantilla: olvidarse deja de ser posible.
+//
+// DOS EJES, a propósito:
+//   · `grupo`   = PARA QUÉ SIRVE  → es el eje por el que el agente ELIGE
+//   · `familia` = A QUÉ SE PARECE → es el eje por el que el agente ROTA
+// No se pueden colapsar en uno: dos plantillas del mismo grupo pueden verse
+// completamente distintas, y dos de familias distintas pueden servir para lo
+// mismo. Un solo árbol perdería la rotación visual, que es lo que evita que el
+// feed se vea repetido.
+//
+// `cuando` es el campo que de verdad mueve la aguja: el modelo elegía mal porque
+// las descripciones decían QUÉ ES cada plantilla ("foto a sangre + placa crema")
+// y no CUÁNDO usarla. Escribilo pensando en el caso, no en el layout.
+
+export type GrupoPlantilla = 'apertura' | 'explicar' | 'diferenciar' | 'vender' | 'confianza' | 'homenaje'
+
+/** Para qué sirve cada grupo (lo lee el agente y lo usan los kits). */
+export const GRUPOS: Record<GrupoPlantilla, string> = {
+  apertura: 'Abrir una campaña o parar el scroll: la imagen manda y el texto es mínimo.',
+  explicar: 'Contar cómo funciona el servicio, el proceso o resolver una duda concreta.',
+  diferenciar: 'Mostrar por qué nosotros: cifras, comparaciones, argumentos duros.',
+  vender: 'Precio, disponibilidad y llamado a la acción.',
+  confianza: 'Prueba social y calidez: testimonios, caras, mascotas reales.',
+  homenaje: 'Despedida de UNA mascota por su nombre. Nunca se mezcla con lo comercial.',
+}
+
+type Builder = (s: SlotsPlantilla, C: { w: number; h: number }, o: OpcionesPlantilla) => ResultadoPlantilla
+
+export interface MetaPlantilla {
+  grupo: GrupoPlantilla
+  familia: FamiliaPlantilla
+  /** Qué es, en una línea (catálogo visual y UI). */
+  que: string
+  /** CUÁNDO usarla. Es lo que el agente lee para decidir: hablá del CASO. */
+  cuando: string
+  /** Slot → qué va ahí EN ESTA plantilla. Antes esto estaba transpuesto (por
+   *  slot, con "en 'faq' es la respuesta, en 'cita' el autor…") y para saber qué
+   *  era `bajada` acá había que leer todos los slots y cazar la mención. */
+  slots: Partial<Record<keyof SlotsPlantilla, string>>
+  /** Sin estos la pieza no se sostiene. */
+  requiere?: (keyof SlotsPlantilla)[]
+  /** Cuántas fotos pide (0 = sin foto). */
+  fotos: number
+  builder: Builder
+}
+
+const FONDO = 'navy | crema | blanco'
+
+export const CATALOGO: Record<NombrePlantilla, MetaPlantilla> = {
+  // ── APERTURA ──────────────────────────────────────────────────────────────
+  portada: {
+    grupo: 'apertura', familia: 'apiladas', fotos: 1, builder: portada,
+    que: 'Gancho de apertura: eyebrow + titular a dos líneas, foto opcional en banda arriba.',
+    cuando: 'Abrís una campaña o una serie y necesitás una primera lámina que enmarque el tema.',
+    slots: { eyebrow: 'Etiqueta corta (ej. "PARA VETERINARIOS")', titulo: '2-4 palabras', titulo_destacado: '2ª línea, sale en dorado', bajada: 'Una frase, máx ~120 car', foto: 'Opcional, va en banda arriba', fondo: FONDO, cta: 'Teléfono o acción', cta_secundario: 'Web' },
+    requiere: ['titulo'],
+  },
+  revista: {
+    grupo: 'apertura', familia: 'foto', fotos: 1, builder: revista,
+    que: 'Portada editorial: foto a sangre en 2/3 del alto y banda sólida abajo con el titular.',
+    cuando: 'Tenés una foto potente y querés abrir con impacto. La más linda para arrancar una campaña.',
+    slots: { foto: 'Obligatoria, a sangre', eyebrow: 'Etiqueta corta', titulo: 'Titular', titulo_destacado: '2ª línea dorada', bajada: 'Frase de apoyo', cta: 'Acción', fondo: `Color de la banda (${FONDO})` },
+    requiere: ['foto', 'titulo'],
+  },
+  foto: {
+    grupo: 'apertura', familia: 'foto', fotos: 1, builder: foto,
+    que: 'Foto protagonista a sangre con una sola frase encima.',
+    cuando: 'La pieza es emocional o estética y el texto sobra. Si tenés algo que explicar, no es esta.',
+    slots: { foto: 'Obligatoria; dejá despejada la zona del texto', titulo: 'UNA frase corta encima', fondo: FONDO },
+    requiere: ['foto', 'titulo'],
+  },
+  overlay: {
+    grupo: 'apertura', familia: 'foto', fotos: 1, builder: overlay,
+    que: 'Foto a sangre con una tarjeta clara flotando abajo (no un velo).',
+    cuando: 'Querés que se vea la foto ENTERA y aun así decir algo concreto. Se ve moderna.',
+    slots: { foto: 'Obligatoria', eyebrow: 'Etiqueta', titulo: 'Titular', titulo_destacado: '2ª línea dorada', bajada: 'Apoyo', cta: 'Acción', fondo: 'Color de la tarjeta' },
+    requiere: ['foto', 'titulo'],
+  },
+  arco: {
+    grupo: 'apertura', familia: 'foto', fotos: 1, builder: arco,
+    que: 'La foto dentro de un arco (rectángulo con el techo redondeado) y el texto abajo.',
+    cuando: 'Presentás un retrato o un servicio con calidez editorial. Usala en vez del círculo: la foto REDONDA quedó reservada para los homenajes y en una pieza comercial se lee como memorial.',
+    slots: { foto: 'Obligatoria', eyebrow: 'Etiqueta', titulo: 'Titular', bajada: 'Apoyo', cta: 'Acción', fondo: FONDO },
+    requiere: ['foto', 'titulo'],
+  },
+  diptico: {
+    grupo: 'apertura', familia: 'foto', fotos: 1, builder: diptico,
+    que: 'Mitad foto / mitad color, con el titular CENTRADO.',
+    cuando: 'Necesitás romper el ritmo: el resto de las plantillas alinea a la izquierda y esta centra.',
+    slots: { foto: 'Obligatoria', titulo: 'Titular', titulo_destacado: '2ª línea dorada', bajada: 'Apoyo', fondo: FONDO },
+    requiere: ['foto', 'titulo'],
+  },
+  tipografico: {
+    grupo: 'apertura', familia: 'texto', fotos: 0, builder: tipografico,
+    que: 'Póster de UNA idea: la tipografía gigante manda.',
+    cuando: 'Tenés una frase de marca con peso propio y no querés competencia visual. Sin foto.',
+    slots: { eyebrow: 'Línea chica arriba', titulo: 'La palabra o frase grande', titulo_destacado: '2ª línea en dorado', bajada: 'Cierre opcional' },
+    requiere: ['titulo'],
+  },
+
+  // ── EXPLICAR ──────────────────────────────────────────────────────────────
+  contenido: {
+    grupo: 'explicar', familia: 'apiladas', fotos: 1, builder: contenido,
+    que: 'Una idea con 2-4 apoyos cortos.',
+    cuando: 'Lámina de carrusel educativa: una idea que necesita tres puntas para entenderse.',
+    slots: { eyebrow: 'Etiqueta', titulo: 'La idea', bullets: '2-4, MUY cortos', bajada: 'Apoyo opcional', foto: 'Opcional', fondo: FONDO },
+    requiere: ['titulo', 'bullets'],
+  },
+  numeros: {
+    grupo: 'explicar', familia: 'listas', fotos: 0, builder: numeros,
+    que: 'Lista NUMERADA con números dorados grandes.',
+    cuando: 'Los items tienen ORDEN: pasos de un proceso, "3 razones para…". Si no hay orden, usá checklist.',
+    slots: { eyebrow: 'Etiqueta', titulo: 'Titular', bajada: 'Apoyo', bullets: '2-4 pasos, muy cortos', fondo: FONDO },
+    requiere: ['titulo', 'bullets'],
+  },
+  timeline: {
+    grupo: 'explicar', familia: 'listas', fotos: 0, builder: timeline,
+    que: 'Hitos enlazados por un riel dorado vertical.',
+    cuando: 'Los items pasan EN EL TIEMPO: "qué pasa después de llamarnos". Es numeros pero con continuidad.',
+    slots: { eyebrow: 'Etiqueta', titulo: 'Titular', bullets: '2-4 hitos', fondo: FONDO },
+    requiere: ['titulo', 'bullets'],
+  },
+  checklist: {
+    grupo: 'explicar', familia: 'listas', fotos: 0, builder: checklist,
+    que: 'Cada item en su propia barra con filete dorado.',
+    cuando: 'Enumerás cosas SIN orden y querés contundencia: "qué incluye", "lo que sí hacemos".',
+    slots: { eyebrow: 'Etiqueta', titulo: 'Titular', bullets: '2-5 items', fondo: FONDO },
+    requiere: ['titulo', 'bullets'],
+  },
+  faq: {
+    grupo: 'explicar', familia: 'texto', fotos: 0, builder: faq,
+    que: 'Una pregunta grande con signo dorado y su respuesta.',
+    cuando: 'Respondés UNA duda real que la gente pregunta de verdad. Es el formato que más se lee.',
+    slots: { eyebrow: 'Default "Preguntas frecuentes"', titulo: 'La PREGUNTA', bajada: 'La RESPUESTA, hasta ~260 car', cta: 'Acción', fondo: FONDO },
+    requiere: ['titulo', 'bajada'],
+  },
+  split: {
+    grupo: 'explicar', familia: 'foto', fotos: 1, builder: split,
+    que: 'Editorial lado a lado: foto a la izquierda, texto a la derecha.',
+    cuando: 'Una idea que necesita foto Y bullets a la vez, con aire de revista.',
+    slots: { foto: 'Obligatoria', titulo: 'Titular', titulo_destacado: '2ª línea dorada', bajada: 'Apoyo', bullets: '2-3 opcionales', cta: 'Acción', fondo: 'Color del panel de texto' },
+    requiere: ['foto', 'titulo'],
+  },
+
+  // ── DIFERENCIAR ───────────────────────────────────────────────────────────
+  dato: {
+    grupo: 'diferenciar', familia: 'cifras', fotos: 0, builder: dato,
+    que: 'Una cifra o palabra enorme con su bajada.',
+    cuando: 'Tenés UN número que habla solo ("4 días"). Si son varios, usá mosaico_datos.',
+    slots: { dato: 'El número o palabra grande', dato_label: 'Qué es', bajada: 'Una línea de apoyo', fondo: FONDO },
+    requiere: ['dato'],
+  },
+  mosaico_datos: {
+    grupo: 'diferenciar', familia: 'cifras', fotos: 0, builder: mosaico_datos,
+    que: 'Grilla 2×2 de cifras.',
+    cuando: 'Tenés VARIOS números que se potencian juntos. Uno solo va en "dato".',
+    slots: { titulo: 'Titular', titulo_destacado: '2ª línea dorada', datos: '2-4 celdas {valor, label}', pie: 'Letra chica', fondo: FONDO },
+    requiere: ['datos'],
+  },
+  comparativa: {
+    grupo: 'diferenciar', familia: 'listas', fotos: 0, builder: comparativa,
+    que: 'Dos columnas enfrentadas: la nuestra destacada en dorado, "lo habitual" al lado.',
+    cuando: 'Querés que la diferencia se vea de un vistazo. No la uses para hablar mal de nadie por su nombre.',
+    slots: { titulo: 'Titular', titulo_b: 'Encabezado de NUESTRA columna', bullets: '2-4, lo nuestro', bullets_b: '2-4, lo otro', fondo: FONDO },
+    requiere: ['titulo', 'bullets', 'bullets_b'],
+  },
+  bicolor: {
+    grupo: 'diferenciar', familia: 'texto', fotos: 0, builder: bicolor,
+    que: 'Lienzo partido navy/claro con el titular a caballo entre los dos bloques.',
+    cuando: 'Un mensaje con dos mitades ("no es X, es Y") y querés que el diseño lo diga solo.',
+    slots: { eyebrow: 'Etiqueta', titulo: 'Cae en el bloque navy', titulo_destacado: 'Cae en el bloque claro', bajada: 'Apoyo', bullets: '2-3', cta: 'Acción' },
+    requiere: ['titulo', 'titulo_destacado'],
+  },
+
+  // ── VENDER ────────────────────────────────────────────────────────────────
+  precio: {
+    grupo: 'vender', familia: 'cifras', fotos: 0, builder: precio,
+    que: 'Tarjeta de plan: cifra grande + qué incluye + CTA.',
+    cuando: 'Publicás una tarifa concreta. Siempre con el pie que aclara que el valor depende del peso.',
+    slots: { eyebrow: 'Nombre del plan', titulo: 'Tramo o servicio', dato: 'La cifra', dato_label: 'Qué cubre', bullets: '2-4, qué incluye', cta: 'Acción', pie: 'Letra chica obligatoria', fondo: FONDO },
+    requiere: ['dato'],
+  },
+  cierre: {
+    grupo: 'vender', familia: 'apiladas', fotos: 1, builder: cierre,
+    que: 'Lámina final con el llamado a la acción.',
+    cuando: 'Cerrás un carrusel o una campaña y necesitás dejar el teléfono y la web.',
+    slots: { titulo: 'Titular', titulo_destacado: '2ª línea dorada', cta: 'Teléfono', cta_secundario: 'Web', bajada: 'Apoyo', foto: 'Opcional, banda arriba', fondo: FONDO },
+    requiere: ['titulo', 'cta'],
+  },
+  horario: {
+    grupo: 'vender', familia: 'texto', fotos: 0, builder: horario,
+    que: 'Filas clave → valor con líneas.',
+    cuando: 'Datos operativos tabulados: horarios, cobertura por comuna, plazos.',
+    slots: { eyebrow: 'Etiqueta', titulo: 'Titular', filas: '2-5 pares {izq, der}', pie: 'Letra chica', cta: 'Acción', fondo: FONDO },
+    requiere: ['filas'],
+  },
+
+  // ── CONFIANZA ─────────────────────────────────────────────────────────────
+  cita: {
+    grupo: 'confianza', familia: 'texto', fotos: 0, builder: cita,
+    que: 'Frase destacada con una gran comilla dorada.',
+    cuando: 'Tenés un testimonio o una frase de marca y NO tenés (o no querés) foto del tutor.',
+    slots: { titulo: 'La frase, 1-2 líneas', bajada: 'Autor ("María, tutora de Rocky")', eyebrow: 'Etiqueta', fondo: FONDO },
+    requiere: ['titulo'],
+  },
+  testimonio: {
+    grupo: 'confianza', familia: 'texto', fotos: 1, builder: testimonio,
+    que: 'Foto del tutor en cuadrado redondeado + comilla + la cita.',
+    cuando: 'Mismo caso que "cita" pero CON cara: la prueba social pesa más con una persona real.',
+    slots: { foto: 'Obligatoria: retrato cálido de un tutor con su mascota', titulo: 'El testimonio', bajada: 'Autor', fondo: FONDO },
+    requiere: ['foto', 'titulo'],
+  },
+  marco: {
+    grupo: 'confianza', familia: 'foto', fotos: 1, builder: marco,
+    que: 'Foto enmarcada estilo galería, centrada y con aire, más un pie.',
+    cuando: 'Querés que la foto respire sobre el color de marca. A diferencia de "foto" (a sangre), acá se ve como un objeto cuidado.',
+    slots: { foto: 'Obligatoria', titulo: 'Frase o pie centrado', bajada: 'Autor o contexto', fondo: FONDO },
+    requiere: ['foto'],
+  },
+  collage: {
+    grupo: 'confianza', familia: 'foto', fotos: 3, builder: collage,
+    que: 'Mosaico de 3 fotos (1 grande + 2 chicas) con el titular abajo.',
+    cuando: 'Querés mostrar VARIEDAD: distintas mascotas, un día de trabajo. Necesita tres fotos que convivan.',
+    slots: { fotos: '3 fotos {prompt}', titulo: 'Titular', titulo_destacado: '2ª línea dorada', bajada: 'Apoyo', fondo: FONDO },
+    requiere: ['fotos'],
+  },
+
+  // ── HOMENAJE ──────────────────────────────────────────────────────────────
+  // En las cinco: titulo = el NOMBRE de la mascota · fechas = sus años
+  // ("2014 — 2026") · bajada = la dedicatoria (concreta y cotidiana, no un lugar
+  // común) · eyebrow = "En memoria" / "Hasta siempre" · foto = retrato CÁLIDO de
+  // la mascota VIVA y en calma. Jamás enferma ni "ausente"; nada de urnas,
+  // lápidas, velas, arcoíris ni símbolos religiosos.
+  memorial_silueta: {
+    grupo: 'homenaje', familia: 'memorial', fotos: 1, builder: memorial_silueta,
+    que: 'Foto a sangre bajo un velo navy y el nombre GIGANTE abajo a la izquierda.',
+    cuando: 'La foto es buena y tiene que mandar. El velo la sostiene aunque la foto sea clara. La más impactante.',
+    slots: { foto: 'Obligatoria', titulo: 'El nombre', fechas: 'Sus años', bajada: 'La dedicatoria', eyebrow: '"En memoria" / "Hasta siempre"' },
+    requiere: ['foto', 'titulo'],
+  },
+  memorial_diptico: {
+    grupo: 'homenaje', familia: 'memorial', fotos: 1, builder: memorial_diptico,
+    que: 'Mitad foto y mitad bloque crema con la dedicatoria; el nombre cruza abajo en una banda navy.',
+    cuando: 'La foto es DUDOSA (mal encuadrada, con gente, poca luz). Es la única donde el texto nunca se apoya sobre la foto: la más segura.',
+    slots: { foto: 'Obligatoria', titulo: 'El nombre', fechas: 'Sus años', bajada: 'La dedicatoria', eyebrow: 'Etiqueta' },
+    requiere: ['foto', 'titulo'],
+  },
+  memorial_polaroid: {
+    grupo: 'homenaje', familia: 'memorial', fotos: 1, builder: memorial_polaroid,
+    que: 'La foto como una instantánea de papel blanco, con el nombre en el borde de abajo.',
+    cuando: 'Buscás calidez de álbum familiar. Funciona muy bien con fotos caseras de celular.',
+    slots: { foto: 'Obligatoria', titulo: 'El nombre', fechas: 'Sus años', bajada: 'La dedicatoria' },
+    requiere: ['foto', 'titulo'],
+  },
+  memorial_medallon: {
+    grupo: 'homenaje', familia: 'memorial', fotos: 1, builder: memorial_medallon,
+    que: 'Foto en un medallón circular con anillo dorado y el nombre gigante de fondo.',
+    cuando: 'Querés el tono más solemne — y SOLO si la cara de la mascota está centrada: el círculo recorta las esquinas.',
+    slots: { foto: 'Obligatoria, cara centrada', titulo: 'El nombre', fechas: 'Sus años', bajada: 'La dedicatoria', eyebrow: 'Etiqueta', fondo: FONDO },
+    requiere: ['foto', 'titulo'],
+  },
+  memorial_susurro: {
+    grupo: 'homenaje', familia: 'memorial', fotos: 1, builder: memorial_susurro,
+    que: 'La dedicatoria en grande y la foto en un medallón chico arriba.',
+    cuando: 'El tutor escribió algo lindo y el TEXTO vale más que la imagen. Sin dedicatoria, no la uses.',
+    slots: { foto: 'Obligatoria', bajada: 'La dedicatoria (es la protagonista)', titulo: 'El nombre', fechas: 'Sus años', fondo: FONDO },
+    requiere: ['foto', 'bajada'],
+  },
+}
+
+// ─── Derivados: NADA de esto se escribe a mano ───────────────────────────────
+
+const ENTRADAS = Object.entries(CATALOGO) as [NombrePlantilla, MetaPlantilla][]
+
+export const FAMILIA = Object.fromEntries(
+  ENTRADAS.map(([n, m]) => [n, m.familia]),
+) as Record<NombrePlantilla, FamiliaPlantilla>
+
+export const PLANTILLAS_CON_FOTO: NombrePlantilla[] = ENTRADAS.filter(([, m]) => m.fotos > 0).map(([n]) => n)
+export const PLANTILLAS_MEMORIAL: NombrePlantilla[] = ENTRADAS.filter(([, m]) => m.grupo === 'homenaje').map(([n]) => n)
+export const PLANTILLAS_POR_GRUPO = ENTRADAS.reduce((acc, [n, m]) => {
+  (acc[m.grupo] ||= []).push(n)
+  return acc
+}, {} as Record<GrupoPlantilla, NombrePlantilla[]>)
+
+const BUILDERS = Object.fromEntries(ENTRADAS.map(([n, m]) => [n, m.builder])) as Record<NombrePlantilla, Builder>
+
+export const familiaDe = (p?: string): FamiliaPlantilla | null =>
+  (p && FAMILIA[p as NombrePlantilla]) || null
+
+/** ¿Esta plantilla muestra una foto? (para exigir fotos en una tanda). */
+export const llevaFoto = (p?: string): boolean =>
+  !!p && PLANTILLAS_CON_FOTO.includes(p as NombrePlantilla)
+
+/** Una línea por plantilla: "nombre — cuándo usarla". */
+function fichaCorta(n: NombrePlantilla): string {
+  return `${n} (${CATALOGO[n].cuando})`
+}
+
+/** Ficha completa: qué es, cuándo usarla y qué va en cada slot. */
+function fichaLarga(n: NombrePlantilla): string {
+  const m = CATALOGO[n]
+  const slots = Object.entries(m.slots).map(([k, v]) => `${k}: ${v}`).join(' · ')
+  const req = m.requiere?.length ? ` OBLIGATORIOS: ${m.requiere.join(', ')}.` : ''
+  return `- "${n}": ${m.que}\n  USALA CUANDO ${m.cuando}\n  slots → ${slots}.${req}`
+}
+
+/**
+ * Descripción del enum `plantilla` para las TOOLS del modelo. Se genera del
+ * catálogo, así que sumar una plantilla ya no deja esto desactualizado.
+ */
+export const PLANTILLA_TOOL_DESC =
+  'Qué plantilla usar. Elegí por el CASO (qué tenés y qué querés lograr), no por gusto. ' +
+  (Object.keys(GRUPOS) as GrupoPlantilla[])
+    .map(g => `${g.toUpperCase()} — ${GRUPOS[g]} ${(PLANTILLAS_POR_GRUPO[g] || []).map(fichaCorta).join(' · ')}`)
+    .join(' ') +
+  ' ROTÁ: no repitas plantilla ni familia dentro de una misma tanda; al menos 1 de cada 3 piezas con FOTO.'
+
+export const PLANTILLAS_INFO = `PLANTILLAS DISPONIBLES (elegí UNA y llená sus slots; el layout ya es on-brand y no se rompe).
+Están agrupadas por PARA QUÉ SIRVEN. Elegí primero el grupo según lo que necesitás lograr y después la plantilla según el CASO que describe su "USALA CUANDO" — no por cuál te gusta más.
+
+${(Object.keys(GRUPOS) as GrupoPlantilla[]).map(g =>
+  `${g.toUpperCase()} — ${GRUPOS[g]}\n${(PLANTILLAS_POR_GRUPO[g] || []).map(fichaLarga).join('\n')}`,
+).join('\n\n')}
+
+ENCUADRE DE LAS FOTOS (regla dura — el dueño rebotó una pieza donde una placa le tapaba el hocico al gato): en las plantillas que apoyan TEXTO ENCIMA de la foto ("foto", "overlay", "memorial_silueta", y las bandas de "portada" y "revista"), el prompt de la foto DEBE dejar despejada la zona donde va el texto: mascota en la mitad de arriba y la mitad de abajo libre (piso, manta, pasto, fondo liso). El sistema ya le agrega esa exigencia al prompt, pero escribilo vos también en la descripción de la escena. Y en TODAS: la cara y los ojos de la mascota se ven COMPLETOS, nunca cortados por el borde ni tapados por un bloque de texto, un velo o el logo.
+
+Reglas: textos CORTOS (si no caben, se recortan). El fondo alterna navy/crema/blanco entre piezas — la PORTADA también (ya NO es siempre navy): máximo ~1 de cada 3 piezas de una misma tanda con fondo navy dominante. La foto: mascota viva y feliz o tutor con su mascota, cálida; NUNCA instalaciones. El logo se coloca solo.
+ROTACIÓN (regla dura, feedback del dueño "los posts son siempre parecidos"): hay ${ENTRADAS.length} plantillas. En una misma tanda/carrusel NO repitas plantilla, y NO uses dos veces seguidas la misma FAMILIA (${[...new Set(ENTRADAS.map(([, m]) => m.familia))].map(f => `${f}: ${ENTRADAS.filter(([, m]) => m.familia === f).map(([n]) => n).join('/')}`).join(' · ')}). Al menos 1 de cada 3 piezas tiene que llevar FOTO. En los HOMENAJES: nunca dos memoriales seguidos con la misma plantilla. Si te pasan las "ÚLTIMAS PIEZAS GENERADAS", elegí plantillas de familias que NO aparezcan ahí.`
+
+/**
+ * Candidatas para un encargo concreto. La idea es NO volcarle las ${'${n}'} plantillas al
+ * modelo: con 29 opciones delante elige peor (y se pagan los tokens de todas).
+ * Filtrando en código antes de la llamada, ve solo las que sirven.
+ *
+ * `evitarFamilias` sale de las últimas piezas publicadas: así la rotación deja de
+ * depender de que el modelo se acuerde.
+ */
+export function candidatas(opts: {
+  grupo?: GrupoPlantilla | GrupoPlantilla[]
+  conFoto?: boolean
+  evitarFamilias?: FamiliaPlantilla[]
+  max?: number
+} = {}): NombrePlantilla[] {
+  const grupos = opts.grupo ? (Array.isArray(opts.grupo) ? opts.grupo : [opts.grupo]) : null
+  const evitar = new Set(opts.evitarFamilias || [])
+  let out = ENTRADAS
+    // El homenaje NUNCA se mezcla: o lo pediste explícitamente, o no aparece.
+    .filter(([, m]) => (grupos ? grupos.includes(m.grupo) : m.grupo !== 'homenaje'))
+    .filter(([, m]) => (opts.conFoto === undefined ? true : opts.conFoto ? m.fotos > 0 : m.fotos === 0))
+  const sinEvitadas = out.filter(([, m]) => !evitar.has(m.familia))
+  // Si evitar familias deja la lista vacía, vale más ofrecer algo que nada.
+  if (sinEvitadas.length > 0) out = sinEvitadas
+  return out.map(([n]) => n).slice(0, opts.max ?? 8)
+}
+
+/** Ficha de las candidatas, lista para inyectar en el prompt. */
+export function infoDe(nombres: NombrePlantilla[]): string {
+  return nombres.map(fichaLarga).join('\n')
 }
 
 /** Construye el HTML on-brand de una plantilla + las fotos a generar. */
