@@ -11,6 +11,7 @@ import { renderPostsWeb, renderPostDetalle, buscarPost } from '@/lib/sitio/blog-
 import { renderTextos } from '@/lib/sitio/paginas-html'
 import { LANDINGS, renderLanding } from '@/lib/sitio/landings'
 import { inyectarConversiones } from '@/lib/sitio/ads-conversion'
+import { inyectarCapturaAds } from '@/lib/sitio/ads-click-captura'
 import { scriptMedicionVelocidad } from '@/lib/sitio/medicion-velocidad'
 
 const HTML_HEADERS = {
@@ -60,11 +61,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const key = (slug || []).join('/')
   // En la versión de prueba (host != dominio oficial) navegamos bajo /sitio/*.
   const prefijar = !esDominioMarketing(req.headers.get('host') || '')
-  // Toda página del sitio sale con el tag de conversiones de Google Ads (ver
-  // lib/sitio/ads-conversion: se perdió en el cutover del 14-jul y con él la
-  // señal que alimenta el Smart Bidding).
+  // Toda página del sitio sale con DOS piezas de medición de Google Ads:
+  //  · ads-conversion: el tag de conversiones (se perdió en el cutover del 14-jul
+  //    y con él la señal que alimenta el Smart Bidding);
+  //  · ads-click-captura: guarda el gclid del anuncio y lo arrastra hasta el
+  //    mensaje de WhatsApp, para poder atribuir la FICHA real al clic
+  //    (ver supabase/migracion-ads-clicks.sql).
   const fin = (html: string) => new NextResponse(
-    inyectarConversiones(prefijar ? prefijarLinksSitio(html) : html) + scriptMedicionVelocidad(),
+    inyectarCapturaAds(inyectarConversiones(prefijar ? prefijarLinksSitio(html) : html)) + scriptMedicionVelocidad(),
     { status: 200, headers: HTML_HEADERS },
   )
 

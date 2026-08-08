@@ -12,6 +12,7 @@ import { isAgenteConfigurado, generarRespuesta, redactarRelayCliente } from '@/l
 import { handlersAgente } from '@/lib/agente-acciones'
 import { buscarRelayPendientePorMsg, buscarRelayPendienteUnico, marcarRelayRespondida } from '@/lib/relay-retiro'
 import { resolverSolicitudRetiro } from '@/lib/solicitudes-retiro'
+import { leerMarcador, limpiarMarcador, vincularTelefono } from '@/lib/ads-clicks'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 
 export const dynamic = 'force-dynamic'
@@ -327,6 +328,16 @@ async function procesarEntrante(value: Record<string, unknown>, msg: MetaMsg) {
 
   if (msg.type === 'text') {
     cuerpo = msg.text?.body ?? ''
+    // ATRIBUCIÓN DE ADS: el link de WhatsApp del sitio arrastra un `[#CODIGO]`
+    // cuando el visitante llegó desde un anuncio (lib/sitio/ads-click-captura).
+    // Acá le pegamos su teléfono a ese clic y BORRAMOS el marcador: es plomería
+    // nuestra, no algo que el tutor escribió — no tiene por qué verlo el equipo
+    // en el inbox ni confundir al agente. Best-effort: nunca frena el mensaje.
+    const codigoAds = leerMarcador(cuerpo)
+    if (codigoAds) {
+      cuerpo = limpiarMarcador(cuerpo)
+      try { await vincularTelefono(codigoAds, msg.from) } catch { /* medición, no bloquea */ }
+    }
   } else if (mediaObj?.id) {
     cuerpo = mediaObj.caption ?? null
     try {

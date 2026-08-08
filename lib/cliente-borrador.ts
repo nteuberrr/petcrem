@@ -1,6 +1,7 @@
 import { appendRow, getNextId, ensureColumns } from './datastore'
 import { todayISO } from './dates'
 import { capitalizarNombre } from './nombres'
+import { vincularClientePorTelefono } from './ads-clicks'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cliente "borrador" (estado='borrador', sin código). Lo crea el bot al agendar
@@ -75,5 +76,10 @@ export async function crearClienteBorrador(d: BorradorInput): Promise<string> {
     notas: d.notas ?? '',
     fecha_creacion: todayISO(),
   })
+  // ATRIBUCIÓN DE ADS: si este teléfono llegó desde un anuncio, la ficha cierra
+  // el círculo clic → venta y el cron la informa a Google con su precio real
+  // (lib/ads-clicks + lib/ads-offline). Best-effort: la medición nunca puede
+  // impedir que se cree la ficha.
+  if (tel) await vincularClientePorTelefono(tel, id)
   return String(id)
 }

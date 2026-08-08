@@ -12,6 +12,7 @@ import { crearEstimadorFichas } from '@/lib/precio-estimado'
 import { capitalizarNombre } from '@/lib/nombres'
 import { sincronizarSaldoParcial } from '@/lib/cobros'
 import { emitirBoletaSiCorresponde } from '@/lib/facturacion'
+import { vincularClientePorTelefono } from '@/lib/ads-clicks'
 
 const ClienteSchema = z.object({
   nombre_mascota: z.string().min(1, 'Nombre de mascota requerido'),
@@ -223,6 +224,13 @@ export async function POST(req: NextRequest) {
     row.greda_descontada = gredaFicha
 
     await appendRow('clientes', row)
+
+    // ATRIBUCIÓN DE ADS: cierra el círculo clic → venta cuando este tutor llegó
+    // desde un anuncio y escribió por WhatsApp (lib/ads-clicks). El alta manual
+    // también cuenta: muchas fichas las tipea el equipo tras hablar por el chat.
+    // Best-effort — la medición no puede tumbar el alta.
+    try { await vincularClientePorTelefono(String(row.telefono || ''), id) }
+    catch (e) { console.warn('[clientes POST] atribución ads:', e) }
 
     // Descontar stock (best-effort, no bloquea la creación): la greda del tramo
     // + los productos adicionales elegidos al crear (ánfora premium, relicarios…).

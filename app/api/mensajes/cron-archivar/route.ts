@@ -6,6 +6,7 @@ import { esAdmin } from '@/lib/roles'
 import { archivarConversacionesInactivas } from '@/lib/mensajes'
 import { enviarSeguimientosPendientes } from '@/lib/seguimiento-leads'
 import { vigilanciaGoogleAds } from '@/lib/gads-vigilancia'
+import { subirConversionesOffline } from '@/lib/ads-offline'
 import { pingHealthcheck } from '@/lib/healthcheck'
 
 /**
@@ -17,6 +18,8 @@ import { pingHealthcheck } from '@/lib/healthcheck'
  *     más de 2 días sin actividad. Las de negocio (cliente/cerrado) o vets no se tocan.
  *  3) VIGILANCIA GOOGLE ADS (lib/gads-vigilancia): guardia diaria silenciosa (solo
  *     avisa al ADMIN_WHATSAPP si hay algo urgente) + informe semanal los lunes.
+ *  4) CONVERSIONES OFFLINE (lib/ads-offline): informa a Google Ads las fichas
+ *     reales, con su precio, de los clics de anuncio que terminaron en venta.
  * Corre en horario hábil de Chile para que los mensajes salgan a buena hora.
  * Auth: Bearer CRON_SECRET (Vercel) o sesión admin.
  */
@@ -47,8 +50,12 @@ export async function GET(req: NextRequest) {
     // 3) Vigilancia de Google Ads (guardia diaria + informe los lunes). Best-effort.
     let vigilancia = null
     try { vigilancia = await vigilanciaGoogleAds() } catch (e) { console.error('[cron-archivar] vigilancia gads', e) }
+    // 4) Conversiones OFFLINE: le devuelve a Google la ficha real y su precio para
+    //    los clics de anuncio que cerraron venta (lib/ads-offline). Best-effort.
+    let offline = null
+    try { offline = await subirConversionesOffline() } catch (e) { console.error('[cron-archivar] conversiones offline', e) }
     await pingHealthcheck('HEALTHCHECK_URL_ARCHIVAR')
-    return NextResponse.json({ ok: true, archivadas: n, seguimiento, vigilancia })
+    return NextResponse.json({ ok: true, archivadas: n, seguimiento, vigilancia, offline })
   } catch (e) {
     console.error('[cron-archivar]', e)
     await pingHealthcheck('HEALTHCHECK_URL_ARCHIVAR', { fail: true })

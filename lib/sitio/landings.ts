@@ -29,6 +29,13 @@ export interface Landing {
   faqs: { q: string; a: string }[]
   /** Inyecta tarjetas de precios VIVOS (desdePorSlug): 'cremacion' = 3 modalidades. */
   bloquePrecios?: 'cremacion'
+  /**
+   * Sección "cómo es el proceso". Es lo que más levanta la EXPERIENCIA DE LANDING
+   * que mide Google (revisión de agosto de 2026: casi todas las keywords marcaban
+   * landing MEDIO, y el 54-58 % de las impresiones se perdía por ranking, no por
+   * presupuesto). Además responde la búsqueda literal de quien no sabe cómo sigue.
+   */
+  proceso?: 'cremacion' | 'eutanasia'
 }
 
 export const LANDINGS: Record<string, Landing> = {
@@ -40,10 +47,17 @@ export const LANDINGS: Record<string, Landing> = {
     subtitulo: 'Una despedida digna para tu mascota, con retiro a domicilio y entrega de sus cenizas en 4 días hábiles.',
     intro: 'En Alma Animal acompañamos a tu familia en la despedida de tu mascota con un servicio cercano, rápido y responsable. Contamos con <strong>instalaciones propias</strong> en Recoleta, trazabilidad total del proceso y cobertura en toda la Región Metropolitana, todos los días de 09:00 a 22:00.',
     waMsg: 'Hola! Necesito información sobre la cremación de mi mascota',
+    bloquePrecios: 'cremacion',
+    proceso: 'cremacion',
     faqs: [
       { q: '¿Cuánto demora la entrega de las cenizas?', a: 'La entrega es en 4 días hábiles, con retiro a domicilio y devolución en un ánfora.' },
       { q: '¿Retiran a domicilio?', a: 'Sí, retiramos tu mascota en tu casa o en la clínica veterinaria, en toda la Región Metropolitana.' },
       { q: '¿Qué modalidades de cremación ofrecen?', a: 'Tres: Cremación Individual (con devolución de cenizas), Cremación Premium (incluye ánfora a elección y cuadro conmemorativo) y Cremación Sin Devolución, la opción más económica. Tú eliges la modalidad.' },
+      { q: '¿Cuánto cuesta la cremación de una mascota?', a: 'El precio depende del peso de tu mascota y de la modalidad que elijas. Arriba están los valores desde; escríbenos con el peso aproximado y te damos el valor exacto al instante, sin compromiso.' },
+      { q: '¿Cómo sé que las cenizas que me entregan son de mi mascota?', a: 'Porque la cremación individual se realiza de a una y todo el proceso ocurre en nuestras instalaciones, sin intermediarios. Cada servicio queda registrado con su código y recibes un certificado de cremación a nombre de tu mascota.' },
+      { q: '¿Qué incluye el servicio?', a: 'Retiro a domicilio, la cremación, el ánfora, un mechón de pelo como recuerdo y el certificado de cremación. En la modalidad Premium se suman el ánfora a elección y un cuadro conmemorativo.' },
+      { q: '¿Atienden si mi mascota falleció recién?', a: 'Sí. Escríbenos apenas puedas y coordinamos el retiro; atendemos todos los días de 09:00 a 22:00 en toda la Región Metropolitana.' },
+      { q: '¿Puedo acompañar el proceso?', a: 'Puedes despedirte antes del retiro y recibir el registro del ingreso de tu mascota. Escríbenos y te explicamos cómo funciona en tu caso.' },
     ],
   },
   'eutanasia-a-domicilio': {
@@ -54,6 +68,7 @@ export const LANDINGS: Record<string, Landing> = {
     subtitulo: 'Una despedida tranquila y con amor, en la comodidad de tu hogar, con acompañamiento veterinario.',
     intro: 'Cuando llega el momento, te acompañamos con un servicio de <strong>eutanasia veterinaria a domicilio</strong> respetuoso y sin apuros, y nos hacemos cargo también de la cremación si lo necesitas. Cobertura en la Región Metropolitana, todos los días.',
     waMsg: 'Hola! Necesito información sobre la eutanasia a domicilio de mi mascota',
+    proceso: 'eutanasia',
     faqs: [
       { q: '¿La eutanasia se realiza en mi casa?', a: 'Sí, un médico veterinario acude a tu domicilio para que la despedida sea tranquila y sin trasladar a tu mascota.' },
       { q: '¿El veterinario evalúa antes de realizar el procedimiento?', a: 'Sí. Es un servicio con evaluación profesional: el veterinario examina a tu mascota en tu casa y confirma si corresponde realizar la eutanasia. Si al evaluar no corresponde, se cobra solo la consulta.' },
@@ -69,6 +84,8 @@ export const LANDINGS: Record<string, Landing> = {
     subtitulo: 'Despide a tu perro con respeto. Retiro a domicilio y entrega de sus cenizas en 4 días hábiles.',
     intro: 'Sabemos lo que significa tu perro para tu familia. En Alma Animal realizamos su cremación con <strong>instalaciones propias</strong> y trazabilidad total, y te devolvemos sus cenizas en un ánfora. Retiro a domicilio en toda la Región Metropolitana.',
     waMsg: 'Hola! Necesito información sobre la cremación de mi perro',
+    bloquePrecios: 'cremacion',
+    proceso: 'cremacion',
     faqs: [
       { q: '¿Retiran a mi perro en casa?', a: 'Sí, retiramos a domicilio o en la clínica veterinaria, en toda la Región Metropolitana.' },
       { q: '¿Me devuelven las cenizas?', a: 'En la cremación individual te devolvemos las cenizas en un ánfora en 4 días hábiles.' },
@@ -83,6 +100,7 @@ export const LANDINGS: Record<string, Landing> = {
     subtitulo: 'Valores claros según el peso de tu mascota y la modalidad que elijas. Sin costos ocultos.',
     intro: 'Trabajamos con <strong>precios publicados por peso y modalidad</strong>, para que decidas con toda la información. El servicio incluye el retiro en tu domicilio o clínica, la cremación con trazabilidad total y el certificado. Escríbenos por WhatsApp con el peso aproximado de tu mascota y te cotizamos de inmediato.',
     waMsg: 'Hola! Quiero cotizar la cremación de mi mascota',
+    proceso: 'cremacion',
     bloquePrecios: 'cremacion',
     faqs: [
       { q: '¿De qué depende el precio?', a: 'Del peso de tu mascota y de la modalidad: Cremación Individual (con devolución de cenizas), Premium (ánfora a elección y cuadro conmemorativo) o Sin Devolución, la opción más económica.' },
@@ -98,6 +116,7 @@ export const LANDINGS: Record<string, Landing> = {
     subtitulo: 'Una despedida tranquila para tu perro, en la comodidad de su casa, con acompañamiento veterinario.',
     intro: 'Cuando tu perro está sufriendo y llega el momento de despedirlo, te acompañamos con un servicio de <strong>eutanasia a domicilio</strong> respetuoso y sin apuros: un veterinario de nuestra red lo evalúa primero en tu casa y, si corresponde, realiza el procedimiento ahí mismo, sin traslados estresantes. Después podemos encargarnos también de la cremación.',
     waMsg: 'Hola! Necesito información sobre la eutanasia a domicilio para mi perro',
+    proceso: 'eutanasia',
     faqs: [
       { q: '¿El veterinario evalúa a mi perro antes?', a: 'Sí. El veterinario lo examina en tu casa y confirma si corresponde realizar la eutanasia. Si al evaluar no corresponde, se cobra solo la consulta.' },
       { q: '¿Puedo estar presente?', a: 'Sí, puedes acompañar a tu perro durante todo el procedimiento — la idea es justamente que la despedida sea en su entorno, con su familia.' },
@@ -113,6 +132,7 @@ export const LANDINGS: Record<string, Landing> = {
     subtitulo: 'Una despedida tranquila para tu gato, en su casa y sin traslados que lo estresen.',
     intro: 'Los traslados estresan especialmente a los gatos. Por eso realizamos la <strong>eutanasia a domicilio</strong>: un veterinario de nuestra red evalúa a tu gato en tu casa y, si corresponde, realiza el procedimiento ahí mismo, con respeto y sin apuros. Después podemos encargarnos también de la cremación.',
     waMsg: 'Hola! Necesito información sobre la eutanasia a domicilio para mi gato',
+    proceso: 'eutanasia',
     faqs: [
       { q: '¿El veterinario evalúa a mi gato antes?', a: 'Sí. El veterinario lo examina en tu casa y confirma si corresponde realizar la eutanasia. Si al evaluar no corresponde, se cobra solo la consulta.' },
       { q: '¿Por qué a domicilio?', a: 'Para los gatos, salir de su territorio es muy estresante. En casa la despedida es tranquila, en su entorno y con su familia.' },
@@ -127,6 +147,8 @@ export const LANDINGS: Record<string, Landing> = {
     subtitulo: 'Incineración con trazabilidad total, retiro a domicilio y entrega de las cenizas en 4 días hábiles.',
     intro: 'La incineración —también llamada cremación— es la forma más digna y responsable de despedir a tu mascota. En Alma Animal la realizamos en <strong>instalaciones propias con horno certificado</strong>, con trazabilidad total del proceso y devolución de las cenizas en un ánfora. Retiro en tu casa o clínica, en toda la Región Metropolitana.',
     waMsg: 'Hola! Necesito información sobre la incineración de mi mascota',
+    bloquePrecios: 'cremacion',
+    proceso: 'cremacion',
     faqs: [
       { q: '¿Incineración y cremación son lo mismo?', a: 'Sí, son el mismo proceso. En Alma Animal lo realizamos en instalaciones propias con horno certificado, sin externalizar ninguna etapa.' },
       { q: '¿Me devuelven las cenizas?', a: 'En la modalidad Individual te devolvemos las cenizas en un ánfora en 4 días hábiles, junto al certificado.' },
@@ -141,6 +163,8 @@ export const LANDINGS: Record<string, Landing> = {
     subtitulo: 'Nos hacemos cargo de todo el servicio funerario de tu mascota: retiro, cremación y entrega de sus cenizas.',
     intro: 'Cuando tu mascota parte, hay muchas decisiones que tomar en un momento difícil. En Alma Animal nos encargamos del servicio completo: retiro en tu casa o clínica, cremación en <strong>instalaciones propias</strong> con trazabilidad total, y entrega de sus cenizas en un ánfora junto al certificado de cremación. Cobertura en toda la Región Metropolitana, todos los días de 09:00 a 22:00.',
     waMsg: 'Hola! Necesito información sobre el servicio funerario para mi mascota',
+    bloquePrecios: 'cremacion',
+    proceso: 'cremacion',
     faqs: [
       { q: '¿Qué incluye el servicio funerario?', a: 'Retiro de tu mascota a domicilio o en la clínica veterinaria, cremación en la modalidad que elijas y entrega de las cenizas en un ánfora, con certificado de cremación.' },
       { q: '¿Cuánto cuesta?', a: 'Depende del peso de tu mascota y de la modalidad de cremación (Individual, Premium o Sin Devolución). Escríbenos por WhatsApp y te cotizamos de inmediato.' },
@@ -156,6 +180,8 @@ export const LANDINGS: Record<string, Landing> = {
     subtitulo: 'Despide a tu gato con respeto. Retiro a domicilio y entrega de sus cenizas en 4 días hábiles.',
     intro: 'Tu gato fue parte de tu familia y merece una despedida a su altura. Realizamos su cremación con <strong>instalaciones propias</strong> y trazabilidad total, con devolución de sus cenizas. Retiro a domicilio en toda la Región Metropolitana.',
     waMsg: 'Hola! Necesito información sobre la cremación de mi gato',
+    bloquePrecios: 'cremacion',
+    proceso: 'cremacion',
     faqs: [
       { q: '¿Retiran a mi gato en casa?', a: 'Sí, retiramos a domicilio o en la clínica veterinaria, en toda la Región Metropolitana.' },
       { q: '¿Me devuelven las cenizas?', a: 'En la cremación individual te devolvemos las cenizas en un ánfora en 4 días hábiles.' },
@@ -172,6 +198,29 @@ const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g,
  *  (ver lib/sitio/ads-conversion.ts). */
 export function waLink(msg: string): string {
   return `https://wa.me/${WA}?text=${encodeURIComponent(msg)}`
+}
+
+/**
+ * "Cómo es el proceso": el contenido que le faltaba a las landings. Responde la
+ * duda real de quien acaba de perder a su mascota y no sabe qué pasa ahora —y de
+ * paso le da a Google la página útil y original que su medición de experiencia
+ * de landing venía marcando como MEDIO.
+ */
+const PASOS: Record<'cremacion' | 'eutanasia', { t: string; d: string }[]> = {
+  cremacion: [
+    { t: 'Nos escribes', d: 'Por WhatsApp, a cualquier hora entre las 09:00 y las 22:00. Con el peso aproximado de tu mascota te damos el valor exacto al instante.' },
+    { t: 'Coordinamos el retiro', d: 'Pasamos a buscarla a tu casa o a la clínica veterinaria, en el horario que te acomode, en toda la Región Metropolitana.' },
+    { t: 'Ingreso registrado', d: 'Al llegar a nuestras instalaciones en Recoleta queda registrada con su propio código, y te avisamos.' },
+    { t: 'La cremación', d: 'Se realiza en nuestros hornos, sin externalizar a terceros. En la modalidad individual, de a una mascota por vez.' },
+    { t: 'Te la devolvemos', d: 'En 4 días hábiles te llevamos sus cenizas en un ánfora, con un mechón de pelo y el certificado de cremación.' },
+  ],
+  eutanasia: [
+    { t: 'Nos escribes', d: 'Cuéntanos por WhatsApp cómo está tu mascota y en qué comuna vives. Te explicamos el procedimiento y el valor, sin apuro.' },
+    { t: 'Agendamos la visita', d: 'Coordinamos día y hora con un médico veterinario de nuestra red, en tu domicilio.' },
+    { t: 'Evaluación en tu casa', d: 'El veterinario examina a tu mascota y confirma si corresponde el procedimiento. Si no corresponde, se cobra solo la consulta.' },
+    { t: 'La despedida', d: 'Se realiza con calma, en tu hogar y con tu familia presente, del modo que ustedes elijan.' },
+    { t: 'Cremación, si la necesitas', d: 'Podemos hacernos cargo después del procedimiento, con devolución de cenizas en 4 días hábiles.' },
+  ],
 }
 
 const DIFERENCIADORES = [
@@ -200,9 +249,39 @@ function bloquePreciosHtml(desde: Record<string, number>): string {
 export function renderLanding(l: Landing, desde?: Record<string, number>): string {
   const wa = waLink(l.waMsg)
   const url = `${BASE}/${l.slug}`
-  const faqSchema = {
-    '@context': 'https://schema.org', '@type': 'FAQPage',
-    mainEntity: l.faqs.map(f => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+  // Datos estructurados: FAQ + negocio local + servicio. Sin `aggregateRating`
+  // ni dirección exacta — solo lo que podemos afirmar de verdad.
+  const schema = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'FAQPage',
+        mainEntity: l.faqs.map(f => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+      },
+      {
+        '@type': 'LocalBusiness',
+        '@id': `${BASE}/#negocio`,
+        name: 'Crematorio Alma Animal',
+        url: BASE,
+        image: `${BASE}${LOGO}`,
+        telephone: `+${WA}`,
+        address: { '@type': 'PostalAddress', addressLocality: 'Recoleta', addressRegion: 'Región Metropolitana', addressCountry: 'CL' },
+        areaServed: { '@type': 'AdministrativeArea', name: 'Región Metropolitana de Santiago' },
+        openingHoursSpecification: [{
+          '@type': 'OpeningHoursSpecification',
+          dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+          opens: '09:00', closes: '22:00',
+        }],
+      },
+      {
+        '@type': 'Service',
+        name: l.h1,
+        serviceType: l.h1,
+        provider: { '@id': `${BASE}/#negocio` },
+        areaServed: { '@type': 'AdministrativeArea', name: 'Región Metropolitana de Santiago' },
+        url,
+      },
+    ],
   }
   return `<!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"/>
@@ -259,6 +338,17 @@ export function renderLanding(l: Landing, desde?: Record<string, number>): strin
 .pre-nota a{color:#2A6DB0;font-weight:600}
 .lp-foot{background:#0B2845;color:#B9C9D8;text-align:center;padding:28px 20px;font-size:13px}
 .lp-foot a{color:#F2B84B;text-decoration:none;font-weight:600}
+.pasos{max-width:860px;margin:0 auto;padding:0 0 48px}
+.pasos h2{text-align:center;font-size:26px;margin:0 0 22px}
+.paso{display:grid;grid-template-columns:38px 1fr;gap:16px;align-items:start;padding:14px 0;border-top:1px solid #E7E0D6}
+.paso:first-of-type{border-top:none}
+.paso .n{width:32px;height:32px;border-radius:50%;background:#143C64;color:#fff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center}
+.paso h3{margin:4px 0 4px;font-size:16px}
+.paso p{margin:0;font-size:14.5px;color:#5B7288;line-height:1.6}
+.conf{max-width:860px;margin:0 auto 48px;background:#fff;border:1px solid #E7E0D6;border-radius:18px;padding:24px;display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:700px){.conf{grid-template-columns:repeat(3,1fr)}}
+.conf div{font-size:14px;color:#5B7288;line-height:1.55}
+.conf b{display:block;color:#143C64;font-size:14px;margin-bottom:3px}
 </style>
 </head>
 <body class="lp">
@@ -279,6 +369,10 @@ export function renderLanding(l: Landing, desde?: Record<string, number>): strin
   <section class="difs">
     ${DIFERENCIADORES.map(d => `<div class="dif"><div class="ic">${d.i}</div><h3>${d.t}</h3><p>${d.d}</p></div>`).join('')}
   </section>
+  ${l.proceso ? `<section class="pasos">
+    <h2>Cómo es el proceso</h2>
+    ${PASOS[l.proceso].map((p, i) => `<div class="paso"><div class="n">${i + 1}</div><div><h3>${esc(p.t)}</h3><p>${esc(p.d)}</p></div></div>`).join('')}
+  </section>` : ''}
   <section class="lp-cta2">
     <h2>Estamos para acompañarte</h2>
     <p>Escríbenos y te orientamos en cada paso, sin compromiso.</p>
@@ -288,12 +382,17 @@ export function renderLanding(l: Landing, desde?: Record<string, number>): strin
     <h2>Preguntas frecuentes</h2>
     ${l.faqs.map(f => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('')}
   </section>
+  <section class="conf">
+    <div><b>Dónde estamos</b>Instalaciones propias en Recoleta, Santiago. No externalizamos ninguna etapa del proceso.</div>
+    <div><b>Cuándo atendemos</b>Todos los días de 09:00 a 22:00, incluidos fines de semana y festivos.</div>
+    <div><b>Dónde llegamos</b>Retiro a domicilio o en clínica veterinaria, en toda la Región Metropolitana.</div>
+  </section>
 </div>
 <footer class="lp-foot">
   Crematorio Alma Animal · Recoleta, Santiago · <a href="${wa}" target="_blank" rel="noopener">WhatsApp ${WA}</a><br/>
   Huellas que no se borran · <a href="/">Ir al sitio</a><br/>
   ${Object.values(LANDINGS).filter(x => x.slug !== l.slug).map(x => `<a href="/${x.slug}">${esc(x.h1.replace(/ en Santiago| para perros y gatos/g, ''))}</a>`).join(' · ')}
 </footer>
-<script type="application/ld+json">${JSON.stringify(faqSchema)}</script>
+<script type="application/ld+json">${JSON.stringify(schema)}</script>
 </body></html>`
 }

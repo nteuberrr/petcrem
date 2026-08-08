@@ -71,6 +71,9 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith('/sitio') ||
     // Medición de velocidad del sitio: la manda el navegador del visitante (sin sesión).
     pathname === '/api/web-vitals' ||
+    // Registro del gclid de Google Ads: lo manda el navegador del visitante que
+    // llegó desde un anuncio (sin sesión). Solo escribe, no expone nada.
+    pathname === '/api/ads/click' ||
     pathname.startsWith('/api/auth') ||
     // Política de privacidad pública (la exige Meta para publicar la app + es buena práctica).
     pathname === '/privacidad' ||

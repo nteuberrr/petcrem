@@ -1298,3 +1298,90 @@ export async function crearCampanaCompleta(p: NuevaCampanaParams, validateOnly =
   const campaignResourceName = validateOnly ? '(validateOnly, no se creó nada)' : (rns.find(rn => rn.includes('/campaigns/')) || '')
   return { campaignResourceName, geoComunas: geo.length }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONVERSIONES OFFLINE (subida por clic)
+//
+// La pata final de la atribución: le devolvemos a Google la FICHA real —con su
+// precio— asociada al gclid del clic que la originó. Sin esto, la puja optimiza
+// hacia clics en el botón de WhatsApp (ver supabase/migracion-ads-clicks.sql).
+// La lógica de negocio (qué fichas están listas, con qué valor) vive en
+// lib/ads-offline.ts; acá solo la llamada.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ConversionPorClic {
+  /** Uno de los tres identificadores del clic; gbraid/wbraid llegan desde iOS. */
+  gclid?: string
+  gbraid?: string
+  wbraid?: string
+  conversionAction: string
+  /** 'yyyy-MM-dd HH:mm:ss+HH:mm' en la zona de la cuenta — usar fechaHoraAds(). */
+  conversionDateTime: string
+  conversionValue?: number
+  currencyCode?: string
+  /** Clave de deduplicación: reenviar la misma no duplica la conversión. */
+  orderId?: string
+}
+
+/**
+ * Formatea una fecha como la exige la API ('yyyy-MM-dd HH:mm:ss±HH:mm'), en la
+ * zona horaria de la cuenta. Chile cambia de -04:00 a -03:00 con el horario de
+ * verano, así que el desfase se calcula para ESA fecha y no se hardcodea.
+ */
+export function fechaHoraAds(d: Date, tz = 'America/Santiago'): string {
+  const partes = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).formatToParts(d).map(p => [p.type, p.value]),
+  ) as Record<string, string>
+  // hourCycle h23 vs h24: en algunos entornos la medianoche sale como '24'.
+  const hora = partes.hour === '24' ? '00' : partes.hour
+  const tzName = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' })
+    .formatToParts(d).find(p => p.type === 'timeZoneName')?.value || 'GMT-04:00'
+  const m = /GMT([+-]\d{2}):?(\d{2})/.exec(tzName)
+  const offset = m ? `${m[1]}:${m[2]}` : '-04:00'
+  return `${partes.year}-${partes.month}-${partes.day} ${hora}:${partes.minute}:${partes.second}${offset}`
+}
+
+/**
+ * Sube conversiones offline. Usa partialFailure: una fila inválida (gclid muy
+ * viejo, fuera de la ventana de 90 días) no debe tumbar el lote entero.
+ * Devuelve, por índice, si esa conversión entró.
+ */
+export async function subirConversionesPorClic(
+  conversiones: ConversionPorClic[],
+  validateOnly = false,
+): Promise<{ aceptadas: boolean[]; errores: string[] }> {
+  if (!conversiones.length) return { aceptadas: [], errores: [] }
+  const token = await getAccessToken()
+  const customerId = process.env.GOOGLE_ADS_CUSTOMER_ID || ''
+  const loginCustomerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || customerId
+  const res = await fetch(`${BASE}/customers/${customerId}:uploadClickConversions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'developer-token': process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '',
+      'login-customer-id': loginCustomerId,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ conversions: conversiones, partialFailure: true, validateOnly }),
+  })
+  const json = await res.json().catch(() => ({})) as {
+    results?: Array<Record<string, unknown>>
+    partialFailureError?: { message?: string; details?: unknown }
+    error?: { message?: string }
+  }
+  if (!res.ok) {
+    console.error('[google-ads] uploadClickConversions:', JSON.stringify(json.error || json))
+    throw new Error(json.error?.message || `Google Ads API: HTTP ${res.status}`)
+  }
+  const errores: string[] = []
+  if (json.partialFailureError?.message) errores.push(json.partialFailureError.message)
+  // En un lote con fallos parciales, la fila rechazada vuelve como objeto vacío.
+  const aceptadas = conversiones.map((_, i) => {
+    const r = json.results?.[i]
+    return !!r && Object.keys(r).length > 0
+  })
+  return { aceptadas, errores }
+}

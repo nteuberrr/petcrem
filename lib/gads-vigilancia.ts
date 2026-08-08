@@ -1,9 +1,10 @@
 import {
   isGoogleAdsConfigurado, esTokenVencido,
-  listarAdsConProblemas, gastoDeAyerPorCampana, resumenCampanas,
+  listarAdsConProblemas, gastoDeAyerPorCampana, resumenCampanas, terminosBusqueda,
 } from './google-ads'
 import { auditarCuenta, type Hallazgo } from './google-ads-audit'
 import { calcularRentabilidad } from './marketing-rentabilidad'
+import { resumenAtribucion } from './ads-clicks'
 import { avisarAdminsWhatsapp, isWhatsappConfigured } from './whatsapp'
 
 /**
@@ -15,8 +16,10 @@ import { avisarAdminsWhatsapp, isWhatsappConfigured } from './whatsapp'
  *     no puede esperar — anuncio rechazado, campaña frenada (gasto $0), CPL real
  *     disparado, token de la API vencido. Si está todo bien, NO manda nada.
  *  2) INFORME SEMANAL (lunes): resumen de la semana (gasto/conversiones/IS vs semana
- *     anterior), rentabilidad REAL del negocio (fichas e ingresos, no plataforma) y
- *     los hallazgos priorizados de la auditoría automática.
+ *     anterior), rentabilidad REAL del negocio (fichas e ingresos, no plataforma),
+ *     la atribución clic → ficha (lib/ads-clicks), los términos de búsqueda que
+ *     gastaron sin convertir —listos para negativizar— y los hallazgos priorizados
+ *     de la auditoría automática.
  *
  * SOLO LECTURA + WhatsApp: nunca muta nada en Google Ads — el informe propone y el
  * humano decide (regla del proyecto: las acciones se ejecutan desde el panel/agente).
@@ -30,6 +33,12 @@ const TZ = 'America/Santiago'
 const CPL_UMBRAL = 15_000       // CPL real 7d ~2× el histórico ($7.200 al 2026-07-15)
 const GASTO_MIN_PARA_CPL = 100_000  // no evaluar CPL con gasto 7d chico (ruido)
 const GASTO_MIN_SIN_LEADS = 50_000  // gasto 7d sin NINGÚN lead → algo está roto
+
+// Términos de búsqueda que queman plata: en la revisión de agosto de 2026, 132
+// términos sin una sola conversión se llevaron $181.870 en 30 días (33 % del
+// gasto). El informe los lista para negativizarlos, que era el paso que faltaba.
+const TERMINO_GASTO_MIN = 3_000  // por debajo de esto todavía no hay señal
+const TERMINOS_EN_INFORME = 6
 
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
 
@@ -87,12 +96,38 @@ function lineaHallazgo(h: Hallazgo): string {
   return `${icono} ${h.titulo}${plata}\n   → ${h.accionSugerida}`
 }
 
+/**
+ * Términos de búsqueda de la semana que gastaron sin convertir. Es la lista para
+ * negativizar el lunes; sin ella la revisión quedaba dependiendo de que alguien
+ * se acordara de entrar a mirarla.
+ */
+export async function terminosQueQuemanPlata(): Promise<{ lineas: string[]; total: number }> {
+  try {
+    const { terminos } = await terminosBusqueda('last_7d', 200)
+    const malos = terminos
+      .filter(t => t.conversiones === 0 && t.gasto >= TERMINO_GASTO_MIN)
+      .sort((a, b) => b.gasto - a.gasto)
+    const total = malos.reduce((s, t) => s + t.gasto, 0)
+    return {
+      total,
+      lineas: malos.slice(0, TERMINOS_EN_INFORME).map(t =>
+        `· "${t.termino}" — ${fmt(t.gasto)}, ${t.clicks} clic${t.clicks === 1 ? '' : 's'}, 0 conv. (${t.campana.replace('Búsqueda - ', '')})`),
+    }
+  } catch (e) {
+    console.warn('[gads-vigilancia] términos:', e)
+    return { lineas: [], total: 0 }
+  }
+}
+
 /** Arma el texto del informe semanal (lunes). */
 export async function armarInformeSemanal(): Promise<string> {
-  const [resumen, rentab, hallazgos] = await Promise.all([
+  const hace7d = new Date(Date.now() - 7 * 86_400_000).toISOString()
+  const [resumen, rentab, hallazgos, quema, atribucion] = await Promise.all([
     resumenCampanas('last_7d'),
     calcularRentabilidad('last_7d').catch(() => null),
     auditarCuenta().catch(() => [] as Hallazgo[]),
+    terminosQueQuemanPlata(),
+    resumenAtribucion(hace7d),
   ])
 
   const c = resumen.cuenta
@@ -120,6 +155,18 @@ export async function armarInformeSemanal(): Promise<string> {
   if (rentab) {
     partes.push(`\n💰 *Negocio real (7d):* ${rentab.leadsWhatsapp ?? '—'} leads · ${rentab.fichasDirectas} fichas → ${fmt(rentab.ingresosDirectos)}` +
       `${rentab.cplReal != null ? ` · CPL ${fmt(rentab.cplReal)}` : ''}${rentab.roasBlended != null ? ` · ROAS ${rentab.roasBlended.toFixed(1)}x` : ''}`)
+  }
+
+  // Atribución real clic → ficha (solo aparece cuando ya hay datos que mostrar).
+  if (atribucion && atribucion.clics > 0) {
+    partes.push(`\n🔗 *Atribución (7d):* ${atribucion.clics} clics de anuncio medidos · ` +
+      `${atribucion.conTelefono} escribieron por WhatsApp · ${atribucion.conFicha} terminaron en ficha`)
+  }
+
+  if (quema.lineas.length) {
+    partes.push(`\n🔥 *Términos que gastaron sin convertir (${fmt(quema.total)} en 7d):*`)
+    for (const l of quema.lineas) partes.push(l)
+    partes.push('Dime cuáles negativizo.')
   }
 
   const relevantes = [...hallazgos.filter(h => h.severidad === 'alta'), ...hallazgos.filter(h => h.severidad === 'media')].slice(0, 5)
