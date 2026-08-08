@@ -65,6 +65,18 @@ export interface ServicioPorPagar {
   monto: number
 }
 
+/** Plata que le debemos a un TUTOR (hoy: diferencia de peso a su favor). */
+export interface DevolucionTutor {
+  clienteId: string
+  codigo: string
+  mascota: string
+  tutor: string
+  telefono: string
+  fecha: string          // ISO del retiro
+  detalle: string
+  monto: number
+}
+
 /** Una línea de la nómina: un veterinario con todo lo que se le debe. */
 export interface VetPorPagar {
   id: string
@@ -86,6 +98,9 @@ export interface InformePagosPendientes {
   /** Nómina de veterinarios de eutanasia por pagar (más antiguo primero). */
   vetsPorPagar: VetPorPagar[]
   totalPorPagar: number
+  /** Devoluciones a tutores todavía sin transferir (más antigua primero). */
+  devoluciones: DevolucionTutor[]
+  totalDevoluciones: number
 }
 
 function normalizarEstadoPago(v: unknown): string {
@@ -113,10 +128,15 @@ export async function construirInformePagosPendientes(): Promise<InformePagosPen
 
   const vetPorId = new Map(vets.map(v => [String(v.id), String(v.nombre || '')]))
   const cobrosPorCliente = new Map<string, Record<string, string>[]>()
+  // Las devoluciones comparten la tabla `cobros` pero van al OTRO lado del
+  // informe: son plata que sale. Si se colaran en el "por cobrar", el correo
+  // diario le pediría al equipo cobrar justo lo que tiene que devolver.
+  const devolucionesRows: Record<string, string>[] = []
   for (const r of cobrosRows) {
     if (String(r.estado || '') === 'pagado') continue
     const cid = String(r.cliente_id || '')
     if (!cid) continue
+    if (String(r.tipo || '') === 'devolucion') { devolucionesRows.push(r); continue }
     const arr = cobrosPorCliente.get(cid) ?? []
     arr.push(r)
     cobrosPorCliente.set(cid, arr)
@@ -196,6 +216,21 @@ export async function construirInformePagosPendientes(): Promise<InformePagosPen
 
   const vetsPorPagar = armarNomina(cotis, vetsEut, cfgEut)
 
+  const porId = new Map(clientes.map(c => [String(c.id), c]))
+  const devoluciones: DevolucionTutor[] = devolucionesRows.map(r => {
+    const c = porId.get(String(r.cliente_id)) ?? {}
+    return {
+      clienteId: String(r.cliente_id),
+      codigo: String(c.codigo || ''),
+      mascota: String(c.nombre_mascota || ''),
+      tutor: String(c.nombre_tutor || ''),
+      telefono: String(c.telefono || ''),
+      fecha: formatDateForSheet(c.fecha_retiro) || formatDateForSheet(c.fecha_creacion) || '',
+      detalle: String(r.detalle || 'Devolución'),
+      monto: parseDecimalOr0(r.monto),
+    }
+  }).sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
+
   return {
     fecha: fechaChileISO(),
     tutores,
@@ -204,6 +239,8 @@ export async function construirInformePagosPendientes(): Promise<InformePagosPen
     totalConvenio: convenio.reduce((s, f) => s + f.porCobrar, 0),
     vetsPorPagar,
     totalPorPagar: vetsPorPagar.reduce((s, v) => s + v.total, 0),
+    devoluciones,
+    totalDevoluciones: devoluciones.reduce((s, d) => s + d.monto, 0),
   }
 }
 
@@ -450,6 +487,57 @@ function renderNomina(vets: VetPorPagar[], total: number): string {
   </table>`
 }
 
+/**
+ * Devoluciones a tutores: plata nuestra que todavía no sale. Va en el bloque de
+ * "por pagar" junto a la nómina de vets, no entre las cobranzas.
+ */
+function renderDevoluciones(devs: DevolucionTutor[], total: number): string {
+  if (devs.length === 0) return ''
+  const filas = devs.map(d => `
+    <tr>
+      <td style="${TD};white-space:nowrap;color:#777">${escapeHtml(fechaCorta(d.fecha))}</td>
+      <td style="${TD}">
+        <strong>${escapeHtml(d.tutor || '(sin nombre)')}</strong>
+        <div style="font-size:11px;color:#aaa">${escapeHtml(d.codigo)}${d.mascota ? ` · ${escapeHtml(d.mascota)}` : ''}</div>
+      </td>
+      <td style="${TD};font-size:12px;color:#666">${escapeHtml(d.detalle)}</td>
+      <td style="${TD};text-align:right;white-space:nowrap"><strong style="color:${BRAND.navy};font-size:15px">${fmtPrecio(d.monto)}</strong></td>
+    </tr>`).join('')
+
+  return `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 18px;background:#fff;border:1px solid #e6e6e6;border-radius:14px;overflow:hidden">
+    <tr>
+      <td style="padding:14px 14px 8px">
+        <span style="font-size:15px;font-weight:700;color:${BRAND.navy}">↩️ Devoluciones a tutores</span>
+        <span style="font-size:12px;color:#aaa"> · ${devs.length} ${devs.length === 1 ? 'ficha' : 'fichas'}</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 6px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse">
+          <tr>
+            <th style="${TH}">Fecha</th>
+            <th style="${TH}">Tutor</th>
+            <th style="${TH}">Motivo</th>
+            <th style="${TH};text-align:right">Monto</th>
+          </tr>
+          ${filas}
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:12px 16px;background:#f6f8fa;border-top:1px solid #ececec">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="font-size:12px;color:#999;text-transform:uppercase;letter-spacing:.04em">Total a devolver</td>
+            <td style="text-align:right;font-size:22px;font-weight:800;color:${BRAND.navy};white-space:nowrap">${fmtPrecio(total)}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>`
+}
+
 export interface AvisoRenderizado {
   subject: string
   html: string
@@ -465,11 +553,14 @@ export async function renderAvisoPagosPendientes(informe: InformePagosPendientes
   const n = informe.tutores.length + informe.convenio.length
   const total = informe.totalTutores + informe.totalConvenio
   const nVets = informe.vetsPorPagar.length
+  // "Por pagar" es todo lo que sale: la nómina de vets + las devoluciones a tutores.
+  const nDevs = informe.devoluciones.length
+  const totalPagar = informe.totalPorPagar + informe.totalDevoluciones
   const fechaLegible = formatDate(informe.fecha)
   const TITULO = 'Cuentas por cobrar y por pagar'
   const CONTEXTO = 'Cobranzas y pagos del día'
 
-  if (n === 0 && nVets === 0) {
+  if (n === 0 && nVets === 0 && nDevs === 0) {
     const bodyHtml = `
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;background:${BRAND.cream};border-left:4px solid ${BRAND.amber};border-radius:12px">
         <tr><td style="padding:20px">
@@ -501,26 +592,31 @@ export async function renderAvisoPagosPendientes(informe: InformePagosPendientes
         ].filter(Boolean).join(' · '),
       },
       {
-        total: informe.totalPorPagar,
-        detalle: nVets ? `${nVets} ${nVets === 1 ? 'veterinario' : 'veterinarios'} · ${nServicios} ${nServicios === 1 ? 'servicio' : 'servicios'}` : 'nada pendiente',
+        total: totalPagar,
+        detalle: [
+          nVets ? `${nVets} ${nVets === 1 ? 'veterinario' : 'veterinarios'} · ${nServicios} ${nServicios === 1 ? 'servicio' : 'servicios'}` : '',
+          nDevs ? `${nDevs} ${nDevs === 1 ? 'devolución' : 'devoluciones'}` : '',
+        ].filter(Boolean).join(' · ') || 'nada pendiente',
       },
     )}
     ${n > 0 ? `${renderSeccion('Por cobrar')}
     ${renderBloque('Tutores', '🏠', informe.tutores, informe.totalTutores)}
     ${renderBloque('Convenio', '🏥', informe.convenio, informe.totalConvenio)}` : ''}
-    ${nVets > 0 ? `${renderSeccion('Por pagar')}
-    ${renderNomina(informe.vetsPorPagar, informe.totalPorPagar)}` : ''}
+    ${nVets > 0 || nDevs > 0 ? `${renderSeccion('Por pagar')}
+    ${renderNomina(informe.vetsPorPagar, informe.totalPorPagar)}
+    ${renderDevoluciones(informe.devoluciones, informe.totalDevoluciones)}` : ''}
     <p style="margin:4px 0 0;font-size:13px;color:#999">
-      Cada cobro que marques como pagado en su ficha, y cada pago que confirmes en Servicios → Eutanasias, desaparece solo de esta lista.
+      Cada cobro que marques como pagado en su ficha, cada devolución que confirmes ahí mismo, y cada pago que confirmes en Servicios → Eutanasias, desaparece solo de esta lista.
     </p>`
 
   const resumen = [
     n ? `${n} ${n === 1 ? 'ficha' : 'fichas'} por cobrar (${fmtPrecio(total)})` : '',
     nVets ? `${nVets} ${nVets === 1 ? 'vet' : 'vets'} por pagar (${fmtPrecio(informe.totalPorPagar)})` : '',
+    nDevs ? `${nDevs} ${nDevs === 1 ? 'devolución' : 'devoluciones'} a tutores (${fmtPrecio(informe.totalDevoluciones)})` : '',
   ].filter(Boolean).join(' · ')
 
   return {
-    subject: `Por cobrar ${fmtPrecio(total)} · Por pagar ${fmtPrecio(informe.totalPorPagar)} (${fechaLegible})`,
+    subject: `Por cobrar ${fmtPrecio(total)} · Por pagar ${fmtPrecio(totalPagar)} (${fechaLegible})`,
     html: renderEmailLayout({ titulo: TITULO, bodyHtml, contacto, contexto: CONTEXTO }),
     vacio: false,
     resumen: `${resumen}.`,

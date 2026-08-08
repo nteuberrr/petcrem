@@ -374,6 +374,56 @@ export async function emitirBoletaCobroSiCorresponde(
   }
 }
 
+/**
+ * DEVOLUCIÓN al tutor confirmada → NOTA DE CRÉDITO parcial sobre la boleta de la
+ * ficha (ver el tipo 'devolucion' en [lib/cobros.ts](cobros.ts)).
+ *
+ * Es la contracara de `emitirBoletaCobroSiCorresponde`: ahí entra plata y se
+ * emite un documento nuevo; acá SALE plata y hay que corregir el documento que ya
+ * se emitió de más. Va como abono PARCIAL (CodRef 3), nunca como anulación total:
+ * la boleta sigue vigente por lo que el servicio realmente valió.
+ *
+ * Devuelve `{ emitida: false }` sin romper nada cuando no hay nada que corregir
+ * al SII —ficha de convenio (se factura al vet), ficha sin boleta (se cobró sin
+ * documento), OpenFactura apagado—: la devolución igual queda cerrada, porque la
+ * plata se le devolvió al tutor de todos modos.
+ */
+export async function emitirNcDevolucionSiCorresponde(
+  cobro: { id: string; cliente_id: string; tipo: string; detalle: string; monto: string },
+  meta: { creadoPorId?: string; creadoPorNombre?: string } = {},
+): Promise<{ emitida: boolean; nota_credito_id?: string; error?: string }> {
+  if (cobro.tipo !== 'devolucion') return { emitida: false }
+  const monto = parseInt(String(cobro.monto || '0'), 10) || 0
+  if (monto <= 0) return { emitida: false }
+  if (!isOpenFacturaConfigurado()) return { emitida: false, error: 'OpenFactura no está configurado.' }
+
+  const ficha = (await getSheetData('clientes')).find(c => String(c.id) === String(cobro.cliente_id))
+  if (!ficha) return { emitida: false, error: 'La ficha del cobro ya no existe.' }
+  // Convenio: el servicio se factura al veterinario, mensual y a mano — la
+  // corrección va por ahí (Descuentos Convenios → Ajustar saldo), no acá. Y sin
+  // boleta no hay documento que corregir (la devolución igual se cierra: la plata
+  // se le devolvió al tutor de todos modos).
+  if (String(ficha.veterinaria_id || '').trim()) return { emitida: false }
+  const boletaId = String(ficha.boleta_id || '').trim()
+  if (!boletaId) return { emitida: false }
+
+  const mascota = (ficha.nombre_mascota || 'mascota').trim()
+  const r = await anularDocumento({
+    documentoId: boletaId,
+    monto,
+    motivo: (cobro.detalle || `Devolución al tutor — ${mascota}`).slice(0, 990),
+    creadoPorId: meta.creadoPorId,
+    creadoPorNombre: meta.creadoPorNombre || 'Automático (devolución confirmada)',
+  })
+  if (!r.ok || !r.documento?.id) {
+    await avisarAdminsWhatsapp(
+      `⚠️ *Nota de crédito NO emitida*\n\nSe confirmó la devolución de ${String(ficha.codigo || '#' + ficha.id)} (${mascota}) por ${fmtPrecio(monto)} pero la NC automática falló:\n${r.error || 'error desconocido'}\n\nEmítela a mano desde Facturación sobre la boleta del servicio.`
+    ).catch(e => console.warn('[facturacion] no se pudo avisar al admin por WhatsApp:', e))
+    return { emitida: false, error: r.error }
+  }
+  return { emitida: true, nota_credito_id: String(r.documento.id) }
+}
+
 /** Correo del dueño para la COPIA de revisión de facturas: email_seguimiento (1º de la lista) o ADMIN_EMAIL. */
 async function getOwnerEmail(): Promise<string> {
   try {

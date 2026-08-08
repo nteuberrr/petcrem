@@ -52,12 +52,19 @@ type AdicionalItem = { tipo: 'producto' | 'servicio'; id: string; nombre: string
 
 type Cobro = { id: string; cliente_id: string; tipo: string; detalle: string; monto: string; estado: string; fecha_creacion: string }
 
-/** Nombre legible del tipo de cobro (los tipos son 'diferencia' | 'saldo' | 'adicional'). */
+/**
+ * Nombre legible del tipo de movimiento. 'devolucion' es el único que va para el
+ * otro lado: es plata que le devolvemos al tutor, no que nos deba.
+ */
 const NOMBRE_COBRO: Record<string, string> = {
   diferencia: 'Diferencia de peso',
   saldo: 'Saldo pendiente (pago parcial)',
   adicional: 'Productos adicionales',
+  devolucion: 'Devolución al tutor',
 }
+
+/** ¿Este movimiento es plata que SALE (se le devuelve al tutor)? */
+const esDevolucion = (tipo: string) => tipo === 'devolucion'
 
 /** Etapas del proceso que le mandan un correo al tutor, en orden. */
 const ETAPAS_CORREO = [
@@ -74,6 +81,13 @@ const ESTADO_COBRO: Record<string, { label: string; cls: string }> = {
   pendiente: { label: 'por cobrar', cls: 'bg-amber-100 text-amber-800 border-amber-200' },
   cliente_confirmo: { label: 'transferencia por verificar', cls: 'bg-sky-100 text-sky-800 border-sky-200' },
   pagado: { label: 'pagado', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+}
+
+/** Igual, pero para una devolución: ahí "pendiente" es plata que TENEMOS que pagar. */
+const ESTADO_DEVOLUCION: Record<string, { label: string; cls: string }> = {
+  pendiente: { label: 'por devolver', cls: 'bg-violet-100 text-violet-800 border-violet-200' },
+  cliente_confirmo: { label: 'por devolver', cls: 'bg-violet-100 text-violet-800 border-violet-200' },
+  pagado: { label: 'devuelto', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
 }
 
 type Descuento = { id: string; nombre: string; tipo: string; valor: string; activo: string }
@@ -125,6 +139,8 @@ type ClienteDetalle = {
   ajuste_admin_fecha?: string
   precio_total?: string
   boleta_id?: string
+  /** Saldo vivo de esa boleta (emitido − notas de crédito). Lo agrega el GET. */
+  boleta_saldo?: number
   omitir_evaluacion?: string
   fotos_mascota?: string
   fotos_cuadro?: string
@@ -793,13 +809,24 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
     setAdicionales(prev => prev.map(a => a.tipo === tipo && a.id === itemId ? { ...a, qty: Math.max(1, qty) } : a))
   }
 
-  async function confirmarPago(cobroId: string) {
-    if (!confirm('¿Confirmar que recibimos este pago? Se cerrará la cobranza.')) return
+  /**
+   * Cierra un movimiento de la ficha. En un cobro confirma que la plata ENTRÓ; en
+   * una devolución, que ya se le transfirió al tutor — y ahí el servidor emite la
+   * nota de crédito sobre la boleta. Si la NC falla, el cierre igual queda hecho
+   * (la plata ya salió) y el aviso dice que hay que emitirla a mano.
+   */
+  async function confirmarPago(cobroId: string, devolucion = false) {
+    const pregunta = devolucion
+      ? '¿Confirmar que ya le devolviste esta plata al tutor?\n\nSe emitirá una nota de crédito sobre la boleta del servicio por ese monto.'
+      : '¿Confirmar que recibimos este pago? Se cerrará la cobranza.'
+    if (!confirm(pregunta)) return
     setPagandoCobroId(cobroId)
     try {
       const r = await fetch(`/api/cobros/${cobroId}`, { method: 'PATCH' })
-      if (r.ok) await recargarCliente()
-      else alert('No se pudo confirmar el pago.')
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { alert(d.error || (devolucion ? 'No se pudo registrar la devolución.' : 'No se pudo confirmar el pago.')); return }
+      await recargarCliente()
+      if (d.aviso) alert(d.aviso)
     } finally {
       setPagandoCobroId('')
     }
@@ -889,7 +916,16 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const precioServicio = precioDelTramo(tramoAplicable, codigoServ)
   const subtotalServicio = precioServicio + totalAdicionales
 
-  // Descuento (aplica sobre subtotal = servicio + adicionales).
+  // Descuento: SOLO sobre el precio de la cremación, NUNCA sobre los adicionales
+  // (ánfora premium, relicario, fuera de horario, distancia… se pagan completos).
+  // Es la misma regla que ya aplican el snapshot del servidor
+  // ([lib/price-calculator.ts](lib/price-calculator.ts)), la estimación en vivo y
+  // el alta de ficha; esta pantalla era la única que había quedado descontando
+  // sobre servicio + adicionales, así que MOSTRABA un total más bajo que el que
+  // se guardaba y se boleteaba (caso Mochi G136-CP, 2026-08-07: en pantalla
+  // $188.700 contra los $193.500 reales — el 30% de Cacttus se le aplicaba
+  // también al relicario). Solo se veía mal: al guardar mandaba el monto correcto.
+  //
   // Si el usuario seleccionó un descuento pero ya no está en la lista activa
   // (porque lo desactivaron en Configuración), recurrimos al snapshot guardado.
   const descuentoActivo = aplicarDescuento && descuentoId
@@ -903,8 +939,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const montoDescuento = !descuentoElegido
     ? 0
     : descuentoElegido.tipo === 'fijo'
-      ? Math.min(descuentoValorNum, subtotalServicio)
-      : Math.round((subtotalServicio * descuentoValorNum) / 100)
+      ? Math.min(descuentoValorNum, precioServicio)
+      : Math.round((precioServicio * descuentoValorNum) / 100)
   // Ajuste manual del dueño: se resta al final, sobre el total ya descontado.
   const ajusteAdmin = Math.round(parseDecimal(String(form.ajuste_admin ?? '')) ?? 0)
   const totalServicio = Math.max(0, subtotalServicio - montoDescuento - ajusteAdmin)
@@ -921,6 +957,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const tramoPesoIngreso = encontrarTramo(tablaPrecios, pesoIngreso)
   const hayDiferenciaPeso = pesoIngreso > 0 && pesoDeclarado > 0 && !!tramoPesoIngreso && !!tramoPesoDeclarado &&
     precioDelTramo(tramoPesoIngreso, codigoServ) > precioDelTramo(tramoPesoDeclarado, codigoServ)
+  // El caso inverso: el total quedó por DEBAJO de lo que ya dice la boleta (pasa
+  // al registrar un peso real de un tramo más barato). Esa diferencia es plata del
+  // tutor: el servidor abre la devolución al guardar (ver lib/devolucion). Acá solo
+  // se ADELANTA el aviso, con la misma cuenta —saldo de la boleta menos el total en
+  // pantalla— para que quien registra el peso sepa lo que va a pasar al guardar.
+  const boletaSaldo = cliente?.boleta_saldo ?? 0
+  const montoDevolucion = boletaSaldo > 0 ? boletaSaldo - Math.round(totalServicio) : 0
+  const hayDevolucion = montoDevolucion > 0
   const mostrarPrecioNormal = form.tipo_precios !== 'general' && precioNormal > 0
 
   const rangoTramo = tramoAplicable
@@ -1034,32 +1078,42 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      {/* COBROS PENDIENTES (adicional / diferencia de peso). Rojo si el cliente
-          aún no confirma; verde-aviso cuando confirmó su transferencia (a revisar). */}
+      {/* MOVIMIENTOS ABIERTOS de la ficha. Dos familias con sentidos opuestos, y
+          por eso con colores distintos: los COBROS son plata que falta que entre
+          (rojo, o verde-aviso cuando el tutor ya marcó su transferencia) y la
+          DEVOLUCIÓN es plata que le debemos nosotros (violeta). Confundirlas es
+          justo lo que hay que evitar: en la devolución el botón no dice "recibí"
+          sino "ya la pagué", y al apretarlo se emite la nota de crédito. */}
       {(cliente.cobros || []).length > 0 && (
         <div className="mb-4 space-y-2">
           {(cliente.cobros || []).map(cb => {
-            const confirmado = cb.estado === 'cliente_confirmo'
+            const devolucion = esDevolucion(cb.tipo)
+            const confirmado = !devolucion && cb.estado === 'cliente_confirmo'
+            const borde = devolucion ? 'border-violet-300 bg-violet-50' : confirmado ? 'border-emerald-300 bg-emerald-50' : 'border-red-300 bg-red-50'
+            const tinta = devolucion ? 'text-violet-900' : confirmado ? 'text-emerald-900' : 'text-red-900'
+            const tintaSuave = devolucion ? 'text-violet-800' : confirmado ? 'text-emerald-800' : 'text-red-800'
             return (
-              <div key={cb.id} className={`rounded-xl border-2 px-4 py-3 flex flex-wrap items-center justify-between gap-3 ${confirmado ? 'border-emerald-300 bg-emerald-50' : 'border-red-300 bg-red-50'}`}>
+              <div key={cb.id} className={`rounded-xl border-2 px-4 py-3 flex flex-wrap items-center justify-between gap-3 ${borde}`}>
                 <div className="min-w-[220px]">
-                  <p className={`text-sm font-bold ${confirmado ? 'text-emerald-900' : 'text-red-900'}`}>
-                    {confirmado ? '✅ Cliente confirmó el pago — revisar' : '⚠️ Cobro pendiente'}
+                  <p className={`text-sm font-bold ${tinta}`}>
+                    {devolucion ? '↩️ Devolución pendiente' : confirmado ? '✅ Cliente confirmó el pago — revisar' : '⚠️ Cobro pendiente'}
                     {' · '}{fmtPrecio(parseInt(cb.monto, 10) || 0)}
                   </p>
-                  <p className={`text-xs mt-0.5 ${confirmado ? 'text-emerald-800' : 'text-red-800'}`}>
-                    {cb.tipo === 'diferencia' ? 'Diferencia de peso' : cb.tipo === 'saldo' ? 'Saldo pendiente (pago parcial)' : 'Productos adicionales'}
+                  <p className={`text-xs mt-0.5 ${tintaSuave}`}>
+                    {NOMBRE_COBRO[cb.tipo] ?? 'Productos adicionales'}
                     {cb.detalle ? ` — ${cb.detalle}` : ''}
-                    {confirmado ? '. El cliente marcó que ya transfirió; verifica y confirma.' : '. Enviado al cliente; a la espera de la transferencia.'}
+                    {devolucion
+                      ? '. Hay que transferirle esta plata al tutor; al confirmarlo se emite la nota de crédito de la boleta.'
+                      : confirmado ? '. El cliente marcó que ya transfirió; verifica y confirma.' : '. Enviado al cliente; a la espera de la transferencia.'}
                   </p>
                 </div>
                 <button
-                  onClick={() => confirmarPago(cb.id)}
+                  onClick={() => confirmarPago(cb.id, devolucion)}
                   disabled={pagandoCobroId === cb.id}
                   className="shrink-0 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-60"
-                  style={{ backgroundColor: confirmado ? '#059669' : '#143C64' }}
+                  style={{ backgroundColor: devolucion ? '#6D28D9' : confirmado ? '#059669' : '#143C64' }}
                 >
-                  {pagandoCobroId === cb.id ? '⌛…' : '✓ Confirmar pago'}
+                  {pagandoCobroId === cb.id ? '⌛…' : devolucion ? '✓ Confirmar pago de la devolución' : '✓ Confirmar pago'}
                 </button>
               </div>
             )
@@ -1319,18 +1373,21 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               </div>
             </div>
 
-            {/* Cobros de la ficha: NO son plata extra — el valor de arriba ya los
-                contempla (el snapshot se recalcula al agregar el adicional o al
+            {/* Movimientos de la ficha: NO son plata extra — el valor de arriba ya
+                los contempla (el snapshot se recalcula al agregar el adicional o al
                 registrar el peso real). Se muestran para saber qué parte del
-                total se cobró aparte y en qué estado quedó. */}
+                total se movió aparte y en qué estado quedó. La devolución va con
+                signo menos: es lo único que sale en vez de entrar. */}
             {cobrosFicha.length > 0 && (
               <div className="mt-4 border-t border-brand/15 pt-3">
                 <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                  Cobros de esta ficha <span className="font-normal normal-case tracking-normal text-gray-400">· ya incluidos en el valor de arriba</span>
+                  Movimientos de esta ficha <span className="font-normal normal-case tracking-normal text-gray-400">· ya reflejados en el valor de arriba</span>
                 </p>
                 <div className="space-y-1">
                   {cobrosFicha.map(cb => {
-                    const est = ESTADO_COBRO[cb.estado] ?? ESTADO_COBRO.pendiente
+                    const dev = esDevolucion(cb.tipo)
+                    const est = (dev ? ESTADO_DEVOLUCION : ESTADO_COBRO)[cb.estado] ?? (dev ? ESTADO_DEVOLUCION : ESTADO_COBRO).pendiente
+                    const monto = parseInt(cb.monto, 10) || 0
                     return (
                       <div key={cb.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm">
                         <span className="min-w-0 text-gray-700">
@@ -1339,7 +1396,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                         </span>
                         <span className="flex shrink-0 items-center gap-2">
                           <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase ${est.cls}`}>{est.label}</span>
-                          <span className="font-semibold text-gray-900">{fmtPrecio(parseInt(cb.monto, 10) || 0)}</span>
+                          <span className={`font-semibold ${dev ? 'text-violet-700' : 'text-gray-900'}`}>{dev ? `− ${fmtPrecio(monto)}` : fmtPrecio(monto)}</span>
                         </span>
                       </div>
                     )
@@ -1659,6 +1716,25 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             tabla={tablaPrecios}
             codigoServ={form.codigo_servicio ?? 'CI'}
           />
+
+          {/* El total quedó por debajo de la boleta ya emitida: le cobramos de más
+              al tutor. El aviso se adelanta acá porque la devolución la abre el
+              servidor recién al guardar; una vez guardada queda arriba en el banner,
+              con su botón para confirmarla y emitir la nota de crédito. */}
+          {hayDevolucion && (
+            <div className="sm:col-span-2 rounded-lg border border-violet-200 bg-violet-50/70 p-3">
+              <p className="text-xs font-semibold text-violet-900">
+                ↩️ Devolución al tutor · {fmtPrecio(montoDevolucion)}
+              </p>
+              <p className="text-[11px] text-violet-800 mt-1">
+                El servicio quedó en {fmtPrecio(Math.round(totalServicio))} y su boleta cobró {fmtPrecio(boletaSaldo)}.
+                {' '}
+                {String(form.peso_ingreso ?? '') !== String(cliente.peso_ingreso ?? '') || String(form.peso_declarado ?? '') !== String(cliente.peso_declarado ?? '')
+                  ? 'Guarda la ficha y la devolución queda registrada arriba, con su botón para confirmarla.'
+                  : 'Está registrada arriba como devolución pendiente; al confirmarla se emite la nota de crédito.'}
+              </p>
+            </div>
+          )}
 
           {/* Evidencia del peso: aparece cuando el peso de ingreso cae en un tramo
               más caro (o si ya hay fotos cargadas). La foto se guarda junto a los

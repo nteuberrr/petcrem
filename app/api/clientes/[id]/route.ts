@@ -6,7 +6,6 @@ import { ajustarStock, ajustarStockAdicionales } from '@/lib/stock'
 import { gredaEsperada, aplicarCambioGreda } from '@/lib/greda-stock'
 import { parseDecimal } from '@/lib/numbers'
 import { formatDateForSheet, todayISO } from '@/lib/dates'
-import { yaFueRetirada } from '@/lib/ficha-retiro'
 import { ahoraChile } from '@/lib/agenda'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 import { generarCodigo } from '@/lib/codigo-generator'
@@ -14,9 +13,10 @@ import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-maile
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin, esAdminTotal } from '@/lib/roles'
 import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
-import { dispararCobroAdicional, cobrosPendientesPorCliente, cobrosPorCliente, sincronizarSaldoParcial, cerrarSaldoParcial } from '@/lib/cobros'
+import { dispararCobroAdicional, correspondeCobrarAdicional, cobrosPendientesPorCliente, cobrosPorCliente, sincronizarSaldoParcial, cerrarSaldoParcial, sincronizarDevolucion } from '@/lib/cobros'
+import { calcularDevolucion } from '@/lib/devolucion'
 import { excluirIncluidos } from '@/lib/anforas-premium'
-import { emitirBoletaSiCorresponde } from '@/lib/facturacion'
+import { emitirBoletaSiCorresponde, abonadoDeDocumento } from '@/lib/facturacion'
 import { desgloseValorCotizacion, valorEutanasiaPorCliente } from '@/lib/eutanasia-precios'
 import { sincronizarEutanasiaDeFicha } from '@/lib/eutanasia-sync'
 import { avisarCambioDeRetiro } from '@/lib/aviso-cambio-retiro'
@@ -83,7 +83,23 @@ export async function GET(
       }
     } catch { /* best-effort: la ficha se muestra igual sin datos de eutanasia */ }
 
-    return NextResponse.json({ ...cliente, ciclo, despacho, cobros, cobros_historial: cobrosHistorial, eutanasia })
+    // Saldo VIVO de la boleta de la ficha (lo emitido menos lo ya acreditado con
+    // notas de crédito). Lo usa la ficha para adelantar, mientras se edita el peso,
+    // cuánto quedaría por devolverle al tutor: la devolución es exactamente lo que
+    // la boleta cobró de más respecto del total actual (ver lib/devolucion).
+    let boleta_saldo = 0
+    const boletaId = String(cliente.boleta_id || '').trim()
+    if (boletaId && !String(cliente.veterinaria_id || '').trim()) {
+      try {
+        const docs = await getSheetData('documentos_tributarios')
+        const doc = docs.find(d => String(d.id) === boletaId)
+        if (doc && String(doc.estado || '') !== 'anulado') {
+          boleta_saldo = Math.max(0, (parseDecimal(String(doc.monto_total ?? '')) ?? 0) - abonadoDeDocumento(boletaId, docs))
+        }
+      } catch { /* best-effort: sin el saldo solo se pierde el aviso anticipado */ }
+    }
+
+    return NextResponse.json({ ...cliente, ciclo, despacho, cobros, cobros_historial: cobrosHistorial, eutanasia, boleta_saldo })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
@@ -358,6 +374,18 @@ export async function PATCH(
       }
     } catch (e) { console.warn('[clientes PATCH] sync saldo parcial falló:', e) }
 
+    // DEVOLUCIÓN AL TUTOR: si registrar el peso real (u otro cambio) dejó el total
+    // por debajo de lo que ya dice su boleta, esa diferencia es plata del tutor.
+    // Se lleva como un movimiento abierto en `cobros` (tipo 'devolucion') para que
+    // aparezca en el banner de la ficha, en la notificación y en el informe diario;
+    // el equipo la transfiere y la confirma desde la ficha, y ahí se emite la nota
+    // de crédito. Se recalcula en cada guardado: corregir el peso otra vez la
+    // ajusta sola, y si deja de corresponder, desaparece. Best-effort.
+    try {
+      const dev = await calcularDevolucion(updated as Record<string, string>)
+      await sincronizarDevolucion(String(updated.id), dev?.monto ?? 0, dev?.detalle ?? '')
+    } catch (e) { console.warn('[clientes PATCH] sync devolución falló:', e) }
+
     // Correo de bienvenida con el código, solo al registrar (best-effort).
     if (codigoGenerado && String(updated.email || '').trim()) {
       try {
@@ -375,12 +403,19 @@ export async function PATCH(
       }
     }
 
-    // COBRO por productos adicionales AGREGADOS a una ficha YA RETIRADA (NO al
-    // registrar: ahí los adicionales son parte de la cotización inicial; y NO si
-    // la mascota todavía no la retiran: eso lo cobra el chofer en el retiro, ver
-    // lib/ficha-retiro). Diff old-vs-new: cada adicional nuevo dispara el correo
-    // + WhatsApp de cobro y crea un "cobro pendiente". Mismo camino que el bot.
-    if (body.adicionales !== undefined && !body.registrar && yaFueRetirada(updated as Record<string, string>, ahoraChile())) {
+    // COBRO por productos adicionales agregados a una ficha cuyo servicio YA
+    // ESTABA CERRADO (retirada + pagada o boleteada ANTES de este request). Si no
+    // lo estaba, el adicional ya viaja dentro de `precio_total` y lo cubre el pago
+    // que falta — ver `correspondeCobrarAdicional` en lib/cobros. Tampoco al
+    // registrar: ahí los adicionales son parte de la cotización inicial. Diff
+    // old-vs-new: cada adicional nuevo dispara el correo + WhatsApp de cobro y
+    // crea un "cobro pendiente". Mismo camino que el bot.
+    //
+    // El estado de pago/boleta se lee de `rows[idx]` (la fila ANTES del merge), no
+    // de `updated`: guardar la ficha marcándola pagada Y agregando el adicional en
+    // la misma pasada es exactamente el caso que NO hay que cobrar aparte.
+    if (body.adicionales !== undefined && !body.registrar &&
+        correspondeCobrarAdicional(updated as Record<string, string>, rows[idx], ahoraChile())) {
       try {
         type AdRaw = { tipo?: string; id?: string; nombre?: string; precio?: number; qty?: number }
         const keyOf = (a: AdRaw) => `${a.tipo || ''}:${a.id || ''}:${a.nombre || ''}`

@@ -1,4 +1,4 @@
-import { getSheetData, appendRow, getNextId, updateById } from './datastore'
+import { getSheetData, appendRow, getNextId, updateById, deleteById } from './datastore'
 import { getContacto } from './email-layout'
 import { buildCobroAdicional, type CobroItem } from './cliente-mailer'
 import { sendEmail, isResendConfigured } from './resend-mailer'
@@ -6,6 +6,7 @@ import { registrarEnvio } from './correos-log'
 import { enviarTextoWhatsapp, isWhatsappConfigured } from './whatsapp'
 import { createCobroToken } from './cobro-token'
 import { fmtPrecio } from './format'
+import { yaFueRetirada } from './ficha-retiro'
 
 /**
  * Cobros pendientes de una ficha (tabla `cobros`). Unifica los dos cobros que
@@ -19,8 +20,22 @@ const TABLE = 'cobros'
 // 'saldo' = diferencia pendiente de un PAGO PARCIAL de la ficha (el tutor abonó
 // una parte y queda el resto por pagar). Se controla internamente (sin correo);
 // al confirmarlo pagado, la ficha queda 'pagado' y recién ahí se emite la boleta.
-export type TipoCobro = 'adicional' | 'diferencia' | 'saldo'
+//
+// 'devolucion' = plata que va PARA EL OTRO LADO: se le debe al tutor, porque su
+// boleta cobró más de lo que el servicio terminó valiendo (típicamente al
+// registrar un peso real de un tramo más barato — ver lib/devolucion). Vive en la
+// misma tabla porque comparte todo el circuito —banner en la ficha, notificación,
+// informe diario, botón de confirmar— pero su monto NO es "por cobrar": quien lo
+// consuma tiene que restarlo o mostrarlo aparte, nunca sumarlo a lo que el tutor
+// debe. Al confirmarlo se emite una NOTA DE CRÉDITO sobre la boleta de la ficha,
+// no una boleta nueva.
+export type TipoCobro = 'adicional' | 'diferencia' | 'saldo' | 'devolucion'
 export type EstadoCobro = 'pendiente' | 'cliente_confirmo' | 'pagado'
+
+/** ¿Este movimiento es plata que le devolvemos al tutor (y no que nos deba)? */
+export function esDevolucion(tipo: string): boolean {
+  return String(tipo || '') === 'devolucion'
+}
 
 export interface Cobro {
   id: string
@@ -157,6 +172,42 @@ export async function cerrarSaldoParcial(clienteId: string): Promise<void> {
   for (const c of abiertos) await marcarCobroPagado(c.id)
 }
 
+/**
+ * DEVOLUCIÓN AL TUTOR — mantiene UNA devolución abierta por ficha con el monto
+ * que hoy corresponde devolverle (ver [lib/devolucion.ts](devolucion.ts)).
+ * Se llama en cada guardado de la ficha, así que tiene que ser idempotente:
+ *
+ *  · sin devolución abierta y `monto > 0` → la crea
+ *  · con una abierta y el monto cambió (se corrigió el peso otra vez) → la ajusta
+ *  · `monto <= 0` (el peso volvió a su tramo, o ya no corresponde) → BORRA la
+ *    abierta. Se borra y no se marca pagada a propósito: marcarla pagada diría que
+ *    le devolvimos plata al tutor, que es justo lo contrario de lo que pasó.
+ *
+ * Nunca toca una devolución ya PAGADA: esa ya tiene su nota de crédito emitida.
+ */
+export async function sincronizarDevolucion(
+  clienteId: string,
+  monto: number,
+  detalle: string,
+): Promise<void> {
+  if (!clienteId) return
+  const abierta = (await getSheetData(TABLE)).map(toCobro)
+    .find(c => c.cliente_id === String(clienteId) && esDevolucion(c.tipo) && c.estado !== 'pagado')
+  const redondeado = Math.round(monto)
+
+  if (redondeado <= 0) {
+    if (abierta) await deleteById(TABLE, abierta.id)
+    return
+  }
+  if (!abierta) {
+    await crearCobro(clienteId, 'devolucion', detalle, redondeado)
+    return
+  }
+  if (Number(abierta.monto) !== redondeado || abierta.detalle !== detalle.slice(0, 500)) {
+    await updateById(TABLE, abierta.id, { ...abierta, monto: String(redondeado), detalle: detalle.slice(0, 500) })
+  }
+}
+
 /** Lee los datos de transferencia de empresa_config (los vacíos se omiten en el correo). */
 async function datosTransferencia() {
   const cfgRows = await getSheetData('empresa_config').catch(() => [] as Record<string, string>[])
@@ -167,6 +218,43 @@ async function datosTransferencia() {
 
 interface ClienteMin {
   id: string; email?: string; nombre_tutor?: string; nombre_mascota?: string; telefono?: string
+}
+
+/**
+ * ¿Corresponde COBRAR APARTE un producto que se acaba de agregar a la ficha
+ * (correo con datos de transferencia + WhatsApp + "pendiente de pago"), o el
+ * adicional simplemente se suma al total del servicio?
+ *
+ * Se cobra aparte solo cuando el servicio YA ESTÁ CERRADO, es decir las dos:
+ *
+ *  1. La mascota ya fue retirada. Antes del retiro el adicional queda anotado en
+ *     la ficha y lo cobra el CHOFER en el momento (casos Mona y Channel: se le
+ *     mandó el cobro por transferencia a alguien que todavía no nos entregaba a
+ *     su mascota).
+ *  2. La ficha ya estaba SALDADA ANTES de este cambio — pagada, o con su boleta
+ *     ya emitida. Si todavía no lo estaba, el adicional viaja DENTRO de
+ *     `precio_total` (la ficha y el bot recalculan el snapshot al agregarlo) y lo
+ *     cubre el pago/boleta que falta: cobrarlo aparte sería cobrarlo dos veces.
+ *
+ * El punto 2 es el que faltaba (caso Mochi G136-CP, 2026-08-07): el relicario se
+ * agregó a los 11 minutos del retiro, con el chofer todavía ahí cobrando el total
+ * — el sistema lo dio por "ya retirada" y le mandó al tutor un cobro de $16.000
+ * que ya estaba pagado y que la boleta de la ficha incluía. Es la misma guarda que
+ * ya tenía `emitirBoletaCobroSiCorresponde` en [lib/facturacion.ts](facturacion.ts)
+ * para no emitir dos DTE, ahora aplicada un paso antes: sin cobro no hay correo.
+ *
+ * ⚠️ `antes` tiene que ser la fila COMO ESTABA antes del request. Si se le pasa
+ * la ya mergeada, un guardado que en la misma pasada agrega el adicional y marca
+ * la ficha como pagada se leería como "ya estaba saldada" y volvería a cobrar.
+ */
+export function correspondeCobrarAdicional(
+  ficha: { codigo?: string; estado?: string; fecha_retiro?: string; hora_retiro?: string },
+  antes: { estado_pago?: string; boleta_id?: string },
+  ahora: { iso: string; min: number },
+): boolean {
+  if (!yaFueRetirada(ficha, ahora)) return false
+  return String(antes.estado_pago || '').toLowerCase() === 'pagado' ||
+    String(antes.boleta_id || '').trim() !== ''
 }
 
 /**

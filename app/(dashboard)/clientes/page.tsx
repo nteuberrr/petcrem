@@ -392,8 +392,23 @@ export default function ClientesPage() {
   const esPremiumCuadro = (c: Cliente) => (c.codigo_servicio || '').toUpperCase() === 'CP'
   const solicitoVideo = (c: Cliente) => pidioVideo(c)
 
-  // Ids de fichas con al menos un cobro NO pagado (de la tabla `cobros`).
-  const idsConCobroPendiente = useMemo(() => new Set(cobrosPend.map(c => String(c.cliente_id))), [cobrosPend])
+  // Ids de fichas con al menos un COBRO no pagado (de la tabla `cobros`). Las
+  // devoluciones viven en la misma tabla pero son plata que sale, no que entra:
+  // van en su propio conjunto para no aparecer nunca como "pendiente de cobro".
+  const idsConCobroPendiente = useMemo(
+    () => new Set(cobrosPend.filter(c => c.tipo !== 'devolucion').map(c => String(c.cliente_id))),
+    [cobrosPend],
+  )
+  /** Ficha → monto que le debemos devolver al tutor (0 si no le debemos nada). */
+  const devolucionPorFicha = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const c of cobrosPend) {
+      if (c.tipo !== 'devolucion') continue
+      const monto = parseFloat(String(c.monto).replace(/[^\d.-]/g, '')) || 0
+      m.set(String(c.cliente_id), (m.get(String(c.cliente_id)) ?? 0) + monto)
+    }
+    return m
+  }, [cobrosPend])
 
   // Resultados filtrados: TODOS los filtros se combinan (AND) — situación,
   // rango de fechas, forma de pago, veterinaria y buscador.
@@ -751,8 +766,10 @@ export default function ClientesPage() {
   function montoPendiente(c: Cliente): number {
     const estado = (c.estado_pago || '').toLowerCase()
     const base = estado === 'pagado' || estado === 'parcial' ? 0 : valorFicha(c).total
+    // Las devoluciones quedan FUERA: son plata que le debemos al tutor, no que él
+    // nos deba. Sumarlas acá diría que debe más justo cuando le debemos nosotros.
     const cobros = cobrosPend
-      .filter(x => String(x.cliente_id) === String(c.id))
+      .filter(x => String(x.cliente_id) === String(c.id) && x.tipo !== 'devolucion')
       .reduce((s, x) => s + (parseFloat(String(x.monto).replace(/[^\d.-]/g, '')) || 0), 0)
     return Math.max(0, Math.round(base + cobros))
   }
@@ -1082,6 +1099,15 @@ export default function ClientesPage() {
                   </p>
                 )
               })()}
+              {/* Plata que le DEBEMOS al tutor (hoy: peso real en un tramo más
+                  barato con el servicio ya cobrado). Va aparte y en violeta para
+                  que no se confunda con lo que él nos debe. */}
+              {(devolucionPorFicha.get(String(c.id)) ?? 0) > 0 && (
+                <p className="mt-2 text-xs font-semibold text-violet-800 bg-violet-50 border border-violet-200 rounded px-2 py-1 flex items-center justify-between gap-2">
+                  <span>↩ Devolución pendiente</span>
+                  <span className="font-bold whitespace-nowrap">{fmtPrecio(devolucionPorFicha.get(String(c.id)) ?? 0)}</span>
+                </p>
+              )}
                 </div>
                 {resumen && (
                   <div className="w-40 shrink-0 border-l border-gray-200 pl-3">
