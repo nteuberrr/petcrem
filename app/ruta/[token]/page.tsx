@@ -308,11 +308,13 @@ export default function HojaDeRutaPage({ params }: { params: Promise<{ token: st
                   )}
 
                   {/* Acciones: con color y objetivos grandes, se usan caminando */}
+                  {/* SIN `capture`: con ese atributo iOS abre la cámara de una y
+                      deja fuera la galería. Así el celular ofrece las dos —sacar
+                      la foto o elegir una ya guardada—, que es lo que se pidió. */}
                   <input
                     ref={el => { inputs.current[p.cliente_id] = el }}
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     className="hidden"
                     onChange={e => { const f = e.target.files?.[0]; if (f) subirFoto(p, f); e.target.value = '' }}
                   />
