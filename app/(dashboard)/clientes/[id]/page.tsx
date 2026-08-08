@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import {
   FolderOpen, Folder, FileText, RefreshCw, Mail, Clapperboard, Camera,
-  PawPrint, Video, Flame, Image, Stethoscope, Save, Printer, Eye, ChevronDown,
+  PawPrint, Video, Flame, Image, Stethoscope, Save, Printer, Eye, ChevronDown, Truck,
 } from 'lucide-react'
 import { InstagramIcon } from '@/components/marketing/BrandIcons'
 import { Badge } from '@/components/ui/Badge'
@@ -149,6 +149,8 @@ type ClienteDetalle = {
   /** Fecha ISO en que el tutor pidió el video del proceso ('' = no lo pidió). */
   video_solicitado?: string
   fotos_evidencia?: string
+  /** JSON array: fotos que sacó el repartidor al entregar (lib/despacho-entrega). */
+  fotos_entrega?: string
   /** MEMORIAL EN REDES (lib/memorial.ts): permiso del tutor + su dedicatoria. */
   memorial_consentimiento?: string
   memorial_consentimiento_fecha?: string
@@ -1055,6 +1057,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const fotosMascota: string[] = (() => {
     try { const x = JSON.parse(cliente.fotos_mascota || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
   })()
+  // Fotos que sacó el repartidor al entregar (hoja de ruta compartida). Son el
+  // registro de la entrega: quedan en la ficha aunque la ruta se edite o borre.
+  const fotosEntrega: string[] = (() => {
+    try { const x = JSON.parse(cliente.fotos_entrega || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
+  })()
   // ¿El tutor autorizó publicar su foto en redes? (lib/memorial.ts — opt-in
   // explícito desde el mismo link con que sube la foto del certificado.)
   const memorialAutorizado = String(cliente.memorial_consentimiento || '').toUpperCase() === 'TRUE'
@@ -1311,7 +1318,15 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                           )}
                         </div>
                       ))}
-                      {videosServicio.length === 0 && fotosEvidencia.length === 0 && fotosMascota.length === 0 && (
+                      {/* Registro de la entrega: las sube el repartidor desde la
+                          hoja de ruta compartida, no el equipo — por eso no se
+                          pueden eliminar desde acá. */}
+                      {fotosEntrega.map((url, i) => (
+                        <div key={`fent-${i}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 text-gray-700">
+                          <Truck className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Foto de entrega {i + 1}</a>
+                        </div>
+                      ))}
+                      {videosServicio.length === 0 && fotosEvidencia.length === 0 && fotosMascota.length === 0 && fotosEntrega.length === 0 && (
                         <p className="px-2 py-2 text-xs text-gray-400">Aún no hay videos ni fotos guardados.</p>
                       )}
                     </div>

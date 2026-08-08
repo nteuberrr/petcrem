@@ -54,6 +54,11 @@ export const SHEETS: Record<string, string[]> = {
     // JSON array de URLs (R2) de fotos de EVIDENCIA del peso real, que sube el
     // operador cuando hay diferencia de tramo (peso_ingreso > peso_declarado).
     'fotos_evidencia',
+    // JSON array de URLs (R2) de las fotos que saca el REPARTIDOR al entregar,
+    // desde la hoja de ruta compartida (lib/despacho-entrega). Se copian acá
+    // además del blob `despachos.entregas` porque la ficha es el archivo
+    // permanente: la ruta se edita o se borra, y la constancia se perdería.
+    'fotos_entrega',
     // Correo de cobro por diferencia de peso: fecha de envío + monto cobrado
     // (vacío = no enviado). Lo setea /api/clientes/[id]/cobro-diferencia.
     'correo_diferencia_fecha', 'correo_diferencia_monto',

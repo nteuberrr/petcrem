@@ -75,6 +75,8 @@ create table if not exists "clientes" (
   "videos_servicio" text not null default '',
   "video_solicitado" text not null default '',
   "fotos_evidencia" text not null default '',
+  -- Fotos que saca el repartidor al entregar (hoja de ruta compartida).
+  "fotos_entrega" text not null default '',
   "correo_diferencia_fecha" text not null default '',
   "correo_diferencia_monto" text not null default '',
   "factura_vet_id" text not null default '',
@@ -1244,5 +1246,10 @@ alter table "clientes" add column if not exists "ajuste_admin" text not null def
 alter table "clientes" add column if not exists "ajuste_admin_motivo" text not null default '';
 alter table "clientes" add column if not exists "ajuste_admin_por" text not null default '';
 alter table "clientes" add column if not exists "ajuste_admin_fecha" text not null default '';
+
+-- clientes.fotos_entrega (2026-08-08): las fotos que saca el repartidor al
+-- entregar desde la hoja de ruta compartida (/ruta/<token>). Se copian del blob
+-- despachos.entregas porque la ficha es el archivo permanente de la mascota.
+alter table "clientes" add column if not exists "fotos_entrega" text not null default '';
 
 notify pgrst, 'reload schema';

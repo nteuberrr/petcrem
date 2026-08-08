@@ -49,6 +49,29 @@ type Entregas = Record<string, { fecha_hora: string; fotos?: string[] }>
 /** Tope de fotos por parada: suficiente para dejar constancia, no un álbum. */
 export const MAX_FOTOS_ENTREGA = 5
 
+/**
+ * Copia las fotos de la entrega a la FICHA (`clientes.fotos_entrega`), que es el
+ * archivo permanente de la mascota: la ruta se puede editar, reordenar o borrar
+ * —y ahí se va el blob `entregas`— pero la constancia de la entrega tiene que
+ * quedar. Se acumulan sin repetir.
+ *
+ * `updateByIdIf` con expectativa vacía escribe SOLO esta columna: no puede pisar
+ * el resto de la ficha (ver el incidente de updateById que vació dos fichas).
+ */
+async function copiarFotosAFicha(clienteId: string, fotos: string[]): Promise<void> {
+  if (!fotos.length) return
+  const cliente = (await getSheetData('clientes')).find(c => String(c.id) === String(clienteId))
+  if (!cliente) return
+  let previas: string[] = []
+  try {
+    const x = JSON.parse(cliente.fotos_entrega || '[]')
+    if (Array.isArray(x)) previas = x.filter(u => typeof u === 'string')
+  } catch {}
+  const todas = [...previas, ...fotos].filter((u, i, a) => a.indexOf(u) === i)
+  if (todas.length === previas.length) return
+  await updateByIdIf('clientes', String(clienteId), {}, { fotos_entrega: JSON.stringify(todas) })
+}
+
 export type ResultadoEntrega =
   | { ok: true; tipo: 'ya_entregada' }
   | { ok: true; tipo: 'entregada'; fecha_hora: string; ruta_terminada: boolean }
@@ -146,7 +169,20 @@ export async function registrarEntrega(
   }
 
   if (cliente) {
-    await updateById('clientes', clienteId, { ...cliente, estado: 'despachado', despacho_id: despachoId })
+    // Las fotos de la entrega quedan también en la ficha (registro permanente).
+    // Van en este mismo write para no hacer dos vueltas a la base.
+    let fotosFicha: string[] = []
+    try {
+      const x = JSON.parse(cliente.fotos_entrega || '[]')
+      if (Array.isArray(x)) fotosFicha = x.filter((u: unknown) => typeof u === 'string')
+    } catch {}
+    const fotosTodas = [...fotosFicha, ...fotos].filter((u, i, a) => a.indexOf(u) === i)
+    await updateById('clientes', clienteId, {
+      ...cliente,
+      estado: 'despachado',
+      despacho_id: despachoId,
+      ...(fotos.length ? { fotos_entrega: JSON.stringify(fotosTodas) } : {}),
+    })
     // Correo de entrega + reseña al tutor (best-effort).
     try {
       await enviarEntregaConfirmada({
@@ -249,7 +285,13 @@ export async function adjuntarFotosEntrega(
     const blob: Entregas = { ...entregas, [clienteId]: { ...actual, fotos: combinadas } }
 
     const ok = await updateByIdIf('despachos', despachoId, { entregas: entregasStr }, { entregas: JSON.stringify(blob) })
-    if (ok) return { ok: true, fotos: combinadas }
+    if (ok) {
+      // Y a la ficha, que es donde queda el registro para siempre (best-effort:
+      // la foto ya está guardada en la ruta, esto es la copia al archivo).
+      try { await copiarFotosAFicha(clienteId, nuevas) }
+      catch (e) { console.warn('[despacho-entrega] no se pudo copiar la foto a la ficha:', e) }
+      return { ok: true, fotos: combinadas }
+    }
   }
   return { ok: false, status: 409, error: 'No se pudo guardar la foto (conflicto). Reintenta.' }
 }
