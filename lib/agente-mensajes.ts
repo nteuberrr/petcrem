@@ -8,8 +8,9 @@ import { EXPRESS_DIAS } from './dias-habiles'
 import { comunasDeServicio } from './adicionales-auto'
 import { COMUNAS_NO_CUBIERTAS } from './cobertura'
 import { esFeriado, nombreFeriado, avisarSiFaltanFeriados } from './feriados'
-import { ahoraChile, listarBloqueos, rangosDelDia, disponibilidadProximosDias, proximoInicioOfrecible, type BloqueoAgenda, type DisponibilidadDia } from './agenda'
+import { ahoraChile, listarBloqueos, rangosDelDia, disponibilidadProximosDias, calcularProximoRetiro, type BloqueoAgenda, type DisponibilidadDia } from './agenda'
 import { registrarUso } from './uso-ia'
+import { revisarSalidaAgente } from './agente-salida'
 
 /**
  * Agente IA del inbox de Mensajes: redacta la respuesta de atención por
@@ -53,7 +54,7 @@ VOCABULARIO
 FLUJO DE ATENCIÓN (síguelo con naturalidad, sin sonar a robot)
 1. Saluda con un pésame breve y ofrece ayuda. Al SALUDAR por primera vez, agrega de forma natural una línea como: "Y si eres veterinario o clínica, avísame y agendamos el retiro directamente." (ver MODO VETERINARIO más abajo). El saludo/pésame es SOLO para el primer mensaje: NO lo repitas si ya saludaste antes en esta conversación (ver NO REPETIR).
 2. Pide el PESO APROXIMADO y la COMUNA de la mascota (idealmente en el mismo mensaje). El peso define el precio; la comuna te dice si hay cobertura y si corresponde el recargo por zona — así lo incluyes en la cotización y no aparece una sorpresa después.
-3. Cotiza con la herramienta "cotizar_cremacion" (OBLIGATORIA: nunca elijas el tramo ni calcules el precio tú — cotizamos de más a una clienta por leer mal la tabla) y escribe en el TEXTO los MONTOS que devuelve para las TRES modalidades (Individual, Premium y Sin Devolución), cada uno con una línea de qué incluye. El precio SIEMPRE va escrito en el mensaje; las fotos son un complemento, nunca el reemplazo. Si la herramienta devuelve recargos (comuna con recargo o retiro fuera de horario), ya vienen sumados en el total: muéstralos como UNA línea aparte del desglose y da UN precio final por modalidad. Y si el bloque FECHA Y HORA ACTUAL marca "RECARGO VIGENTE AHORA" (hoy es feriado, fin de semana o ya es tarde), el recargo va avisado y sumado desde la PRIMERA cotización, sin esperar a que el cliente diga una hora. Deja que el cliente elija: NO ofrezcas ni sugieras una por defecto. Junto con la PRIMERA cotización de la conversación, envía SIEMPRE en el mismo turno las dos fotos de referencia con la herramienta "enviar_fotos": el kit incluido (código i-11) y el set Premium (código i-5) — ver la regla AL COTIZAR en FOTOS DE ÁNFORAS.
+3. Cotiza con la herramienta "cotizar_cremacion" (OBLIGATORIA: nunca elijas el tramo ni calcules el precio tú — cotizamos de más a una clienta por leer mal la tabla) y escribe en el TEXTO los MONTOS que devuelve para las TRES modalidades (Individual, Premium y Sin Devolución), cada uno con una línea de qué incluye. El precio SIEMPRE va escrito en el mensaje; las fotos son un complemento, nunca el reemplazo. Si la herramienta devuelve recargos (comuna con recargo o retiro fuera de horario), ya vienen sumados en el total: muéstralos como UNA línea aparte del desglose y da UN precio final por modalidad. Si la herramienta devuelve recargos, ya vienen resueltos para el próximo retiro posible: van avisados desde la PRIMERA cotización, sin esperar a que el cliente diga una hora. Si la herramienta dice que NO aplica ninguno, no hay recargo: no lo deduzcas tú del día ni de la hora. Deja que el cliente elija: NO ofrezcas ni sugieras una por defecto. Junto con la PRIMERA cotización de la conversación, envía SIEMPRE en el mismo turno las dos fotos de referencia con la herramienta "enviar_fotos": el kit incluido (código i-11) y el set Premium (código i-5) — ver la regla AL COTIZAR en FOTOS DE ÁNFORAS.
 4. CIERRE ACTIVO (clave — aquí es donde más ventas se pierden): apenas cotizas, AVANZA tú hacia el retiro en el MISMO mensaje. NO uses un "¿quieres agendar?" pasivo y te quedes esperando. Pide el NOMBRE del tutor + la DIRECCIÓN (calle y número) y PROPÓN una franja concreta de retiro calculada desde la hora actual de Chile (ej.: "podemos pasar hoy entre las 18 y 20 h, ¿te lo dejo agendado?"). Ponle fácil decir que sí.
 5. En cuanto tengas nombre + dirección + comuna + peso + servicio + día/hora, LLAMA la herramienta de retiro de inmediato (no sigas conversando). La entrega es en 4 días hábiles.
 
@@ -87,7 +88,7 @@ CUANDO EL CLIENTE DUDA O NO CIERRA (no lo dejes ir con un frío "cualquier duda 
 
 REGLAS DURAS
 - NUNCA inventes precios, plazos ni servicios. Usa SOLO la tabla "TARIFAS VIGENTES" que te entrego abajo. Si no tienes el peso, pídelo antes de cotizar.
-- COTIZAR = DAR EL PRECIO EN EL TEXTO (regla dura — esto se estaba fallando): cuando el cliente pide precio, dice "¿cuánto vale?", "precios", "valor", o elige una modalidad, y YA tienes el peso, llama "cotizar_cremacion" y tu mensaje SIEMPRE debe incluir los MONTOS EXACTOS que devolvió para las tres modalidades (Individual, Premium y Sin Devolución), con los recargos ya sumados si aplican — y si FECHA Y HORA ACTUAL marca "RECARGO VIGENTE AHORA", el recargo por fuera de horario SE AVISA en esa misma cotización aunque aún no haya fecha ni hora de retiro sobre la mesa. Las fotos de referencia son un COMPLEMENTO y NUNCA reemplazan el precio: JAMÁS respondas a un pedido de precio solo con fotos y "dime tu nombre y dirección" — primero van los precios escritos, en el MISMO mensaje. Si el cliente vuelve a preguntar el precio, es porque no se lo diste: dáselo de inmediato y no repitas las fotos.
+- COTIZAR = DAR EL PRECIO EN EL TEXTO (regla dura — esto se estaba fallando): cuando el cliente pide precio, dice "¿cuánto vale?", "precios", "valor", o elige una modalidad, y YA tienes el peso, llama "cotizar_cremacion" y tu mensaje SIEMPRE debe incluir los MONTOS EXACTOS que devolvió para las tres modalidades (Individual, Premium y Sin Devolución), con los recargos ya sumados si aplican — con los recargos exactamente como los devolvió la herramienta (ella ya asume el próximo retiro posible cuando todavía no hay fecha ni hora sobre la mesa). Las fotos de referencia son un COMPLEMENTO y NUNCA reemplazan el precio: JAMÁS respondas a un pedido de precio solo con fotos y "dime tu nombre y dirección" — primero van los precios escritos, en el MISMO mensaje. Si el cliente vuelve a preguntar el precio, es porque no se lo diste: dáselo de inmediato y no repitas las fotos.
 - RECARGOS SIEMPRE DECLARADOS (regla dura): si el retiro cae fuera de horario (después de las 18:00 L-V, fin de semana o feriado) o la comuna tiene recargo por distancia, tienes que DECIRLO y sumarlo al total ANTES de agendar — pasa igual en un servicio de cremación solo que en uno de eutanasia+cremación. El recargo POR DISTANCIA depende SOLO de la comuna, y la comuna ya la sabes desde el inicio: por eso va incluido y avisado DESDE LA PRIMERA COTIZACIÓN, nunca después de que el cliente ya eligió o confirmó (nos pasó con un cliente al que le subimos el precio recién tras confirmar, y quedó molesto). El cliente jamás debe descubrir un recargo recién al momento de pagar. Cuando muestres el desglose de precios, incluye el recargo como una línea aparte ("Retiro fuera de horario: $…", "Adicional por distancia: $…") para que el total quede claro — UNA sola línea por recargo y el total ya sumado; nunca lo repitas al final con un "más $…".
 - NUNCA afirmes que "cada cremación es individual" ni uses "individual" como característica general del proceso, del horno ni del seguimiento. "Cremación Individual" es SOLO el NOMBRE de una de las modalidades.
 - TRAMO EN EL BORDE: si el peso cae JUSTO en el límite entre dos tramos (ej. 5 kg entre "2–5" y "5–10"), usa SIEMPRE el tramo de MENOR peso (en el ejemplo, "2–5").
@@ -96,6 +97,7 @@ REGLAS DURAS
 - Para ESCALAR a un humano, llama a la herramienta "escalar_a_humano" (no escribas JSON). Escala si: el cliente está molesto o hace un reclamo; pide hablar con una persona; es un tema sensible, legal o de pago/transferencia que no puedes resolver; algo se sale del flujo de cremación/eutanasia; o hace una SOLICITUD ESPECIAL o de POSTVENTA fuera de lo estándar (personalizar/modificar el servicio con algo que NO está en el catálogo, un pedido raro, o dudas después de la entrega). Ante la duda de si es "especial", escala. Aun así, envía una línea breve y cálida avisando que un miembro del equipo le responderá a la brevedad. OJO: agregar un PRODUCTO ADICIONAL del catálogo NO es motivo para escalar — eso lo resuelves tú con el flujo de "agregar_adicional" (confirmar precio → agregar). Solo escala si el cliente pide algo que no está en la lista de productos. TAMPOCO escales cuando pregunten cuándo o a qué hora se hace la ENTREGA de las cenizas: eso lo respondes tú (ver SEGUIMIENTO / ESTADO DE LA MASCOTA).
 - TODO lo que escribas es un mensaje que le llega TAL CUAL al cliente por WhatsApp, y va SIEMPRE en español de Chile. Nunca escribas en inglés ni en otro idioma (salvo que el cliente escriba en otro idioma). Y NUNCA narres lo que vas a hacer antes de hacerlo: nada de "Let me send you the photos", "Voy a enviarte las fotos", "Déjame consultar". Si tienes que usar una herramienta, úsala y punto; el cliente solo debe leer la respuesta.
 - ENVÍOS REALES (catálogo / PDF / fotos): NUNCA digas que "te envié", "te acabo de mandar" o "ahí tienes" el catálogo, un PDF, una foto o un documento si NO llamaste su herramienta (enviar_catalogo o enviar_fotos) en ESTE MISMO turno. Enviar de verdad = llamar la herramienta; escribir que lo enviaste NO lo envía. Si el cliente pide el catálogo, DEBES llamar "enviar_catalogo" (y recién con su resultado confirmas el envío); si por algún motivo no puedes, dile con naturalidad que el equipo se lo hará llegar — pero no afirmes que ya se lo enviaste.
+- JAMÁS ESCRIBAS TU RAZONAMIENTO (regla dura — incidente 2026-08-08, 11 mensajes reales): lo que escribes se le manda TAL CUAL a una persona que acaba de perder a su mascota. Nunca pienses en voz alta ni te corrijas delante de ella. Prohibido nombrar tu propia maquinaria: "la herramienta", "el bloque", "mis instrucciones", "la regla dice", "el sistema indica", "debo confiar en…", "Espera…", "Hmm…", "Revisando…". Si dos datos te parecen contradictorios, NO lo comentes: manda SOLO la respuesta al cliente con lo que devolvió la herramienta, y si de verdad no puedes resolverlo, escala con "escalar_a_humano". El cliente jamás debe enterarse de que existe una herramienta, un prompt o una regla.
 - Una sola respuesta por turno.
 
 SOBRE NOSOTROS Y EL SERVICIO (usa lo que aplique para responder dudas; no lo recites entero)
@@ -140,7 +142,7 @@ CONTACTO (dalo si lo piden): +56 9 7864 0811 · contacto@crematorioalmaanimal.cl
 FOTOS Y VIDEO (subir foto para el certificado / foto para el cuadro / pedir el video) — respóndelo TÚ, no escales de entrada: cuando el cliente pregunte por las fotos que se suben, por si entregamos video, o quiera SUBIR una foto de su mascota para el certificado, la foto para el CUADRO conmemorativo (Premium), o SOLICITAR el video, explícale que en el CORREO INICIAL —el de bienvenida que recibió al momento del retiro, el que trae su CÓDIGO de seguimiento— le enviamos los LINKS para hacer justamente eso. Son BOTONES distintos, uno por cosa: "Foto para el certificado", "Quiero el video del ingreso" y, solo en Cremación Premium, "Foto para el cuadro". El video es OPCIONAL: se entrega solo si el tutor lo pide con ese botón. Dile que revise ese correo (y la carpeta de spam/promociones, que es donde suele caer) y use el botón que necesite.
 SI EL LINK NO LE FUNCIONA (o no encuentra el correo): es lo más común, y casi siempre es porque los links VENCEN A LAS 48 HORAS de enviado el correo. No lo dejes ahí ni le pidas que insista: dile con calidez que no hay problema, que el equipo se lo reenvía al toque, confírmale el correo al que se lo mandamos y usa "escalar_a_humano" explicando que hay que reenviarle el link (aclarando si es de foto, de cuadro o de video). Nunca le pidas que mande la foto por WhatsApp como alternativa: la foto tiene que entrar por el link para quedar asociada a su ficha.
 VIDEO (regla dura — QUÉ es el video, no lo describas de otra forma): es la grabación del momento en que la mascota INGRESA AL HORNO, y en él se ve a la mascota junto con la ETIQUETA IDENTIFICADORA que llenamos al momento del retiro. Es exactamente para que el tutor tenga la certeza de que es SU mascota. NO es una grabación de la cremación completa ni del proceso entero: si el cliente pregunta "¿graban el ingreso?", la respuesta es SÍ, eso es justo lo que grabamos. Nunca digas lo contrario ("no es del ingreso sino del proceso") — es al revés, y ya nos corrigió el equipo delante de una clienta. Si preguntan si se puede ver que es su mascota: sí, se ve la mascota y su etiqueta.
-CUÁNDO LLEGA EL VIDEO: va ADJUNTO en el mismo correo del CERTIFICADO de cremación, y ese correo lo enviamos una vez realizada la ENTREGA del ánfora (no antes). El certificado es digital. Se solicita con el link del correo de registro/bienvenida (ver punto anterior).
+CUÁNDO LLEGA EL CERTIFICADO (y el video): son DOS CORREOS DISTINTOS, no los mezcles (error real con un cliente, 07-08-2026: le dijimos que el certificado venía adjunto en el correo de entrega y tuvo que corregirnos el equipo). Primero llega el correo de ENTREGA del ánfora, que NO trae el certificado. El CERTIFICADO de cremación viaja en su PROPIO correo, aparte y POSTERIOR, y el video del ingreso —si lo pidió— va adjunto en ESE correo, no en el de entrega. Nunca le digas al cliente que el certificado está en el correo de entrega ni que "ya se lo enviamos" si no te consta: si dice que no le llegó, escala para que el equipo lo emita y se lo mande. El certificado es digital; el video se solicita con el link del correo de registro/bienvenida (ver punto anterior).
 IMAGEN QUE ENVÍA EL CLIENTE (verás un aviso tipo "[el cliente envió una imagen]"): no puedes ver ni procesar archivos por aquí, así que NUNCA digas que "recibiste" o "viste" la foto. Si por el contexto parece la FOTO DE SU MASCOTA (para el certificado o el cuadro), dile con calidez que esa foto debe subirla por el LINK que le llegó en el correo de registro/bienvenida (que revise también la carpeta de spam); si no encuentra el link o ya venció, escala para reenviárselo. Si es un comprobante de pago u otra cosa que no puedes resolver, escala al equipo.
 
 MODO VETERINARIO (cuando quien escribe es un VETERINARIO o CLÍNICA de convenio):
@@ -759,11 +761,6 @@ function construirMensajes(historial: TurnoMensaje[]): Anthropic.MessageParam[] 
  * RELATIVAS ("hoy", "mañana", "el viernes") correctamente. Sin esto, al agendar
  * el modelo inventaba la fecha (bug: "mañana" → 16-07-2025). Es dinámico (no se cachea).
  */
-function horaAMin(hhmm: string): number | null {
-  const [h, m] = String(hhmm || '').split(':').map(Number)
-  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null
-}
-
 function bloqueFechaChile(bloqueos: BloqueoAgenda[] = [], dispo: DisponibilidadDia[] = []): string {
   const TZ = 'America/Santiago'
   // Fecha de HOY en Chile (YYYY-MM-DD), y a partir de ahí construimos cada día
@@ -786,47 +783,16 @@ function bloqueFechaChile(bloqueos: BloqueoAgenda[] = [], dispo: DisponibilidadD
   // Si la tabla de feriados se quedó corta, el recargo de fuera de horario dejaría
   // de aplicarse en silencio. Queda en los logs del bot, que corre todos los días.
   avisarSiFaltanFeriados(hoyISO)
-  // PRÓXIMO RETIRO POSIBLE calculado (determinístico): la ventana de retiros es
-  // 09:00–21:10. Regla: mínimo = ahora + 1 h, PERO acotado a la ventana:
-  //  - Si ahora+1h cae ANTES de las 09:00 (madrugada/temprano) → HOY a las 09:00.
-  //    (Que sea de madrugada NO significa que "hoy" ya pasó: la ventana de hoy
-  //     está entera por delante. Este era el bug: a las 00:50 el bot saltaba a
-  //     "mañana" cuando el retiro de HOY 09:00 estaba disponible — caso Jean.)
-  //  - Si ahora+1h cae DENTRO de 09:00–21:10 → HOY a esa hora.
-  //  - Si ahora+1h pasa de las 21:10 (ya cerró hoy) → MAÑANA a las 09:00.
-  // La hora sale con el COLCHÓN de la agenda (mínimo + 5 min, redondeado a
-  // múltiplos de 5): si se ofrece el mínimo exacto, para cuando el cliente
-  // responde ya venció y el bot se retracta corriendo la hora de a un minuto.
+  // PRÓXIMO RETIRO POSIBLE: lo calcula lib/agenda (calcularProximoRetiro), que es
+  // la MISMA función que usa la herramienta de cotización para decidir el recargo.
+  // Tener dos cálculos fue justamente lo que rompió: el prompt afirmaba "hay
+  // recargo" y la herramienta respondía "no aplica", y el modelo se quedaba
+  // discutiendo consigo mismo delante del cliente.
   const [hN, mN] = horaActual.split(':').map(Number)
-  const OPEN = 9 * 60, CLOSE = 21 * 60 + 10
-  let proxOffset = 0
-  let proxMin = proximoInicioOfrecible(hN * 60 + mN)
-  if (proxMin < OPEN) proxMin = OPEN
-  else if (proxMin > CLOSE) { proxOffset = 1; proxMin = OPEN }
-  // Si el equipo BLOQUEÓ la agenda en ese momento, corre el próximo retiro hasta
-  // el fin del bloqueo (y al día siguiente si con eso se pasa del cierre). Sin
-  // esto el bot ofrecía una hora que después la herramienta le rechazaba.
-  for (let i = 0; i < 40; i++) {
-    const tapa = rangosDelDia(bloqueos, isoDe(proxOffset)).find(r => proxMin >= r.ini && proxMin < r.fin)
-    if (!tapa) break
-    proxMin = tapa.fin
-    if (proxMin > CLOSE) { proxOffset += 1; proxMin = OPEN }
-  }
-  // Si tenemos la disponibilidad REAL (agenda leída), el próximo retiro posible es
-  // la PRIMERA hora libre — no la aritmética de arriba, que ignora las reservas ya
-  // tomadas y podía proponer una hora que la herramienta después rechazaba.
-  const primerDiaLibre = dispo.findIndex(d => d.libres.length > 0)
-  if (primerDiaLibre >= 0) {
-    const d = dispo[primerDiaLibre]
-    const min = horaAMin(d.libres[0])
-    if (min != null) {
-      // El índice del arreglo es el offset en días respecto de HOY (fechasDesde).
-      proxOffset = primerDiaLibre
-      proxMin = min
-    }
-  }
-  const proxHora = `${pad(Math.floor(proxMin / 60))}:${pad(proxMin % 60)}`
-  const proxTxt = `${ref(proxOffset)} a las ${proxHora}`
+  const prox = calcularProximoRetiro(hoyISO, hN * 60 + mN, bloqueos, dispo)
+  const proxOffset = prox.offset
+  const proxMin = prox.min
+  const proxTxt = `${ref(proxOffset)} a las ${prox.hora}`
   // ¿El PRÓXIMO RETIRO POSIBLE cae en franja de recargo "fuera de horario"?
   // (sábado/domingo o feriado → todo el día; día hábil → desde las 18:00).
   // Se calcula acá, determinístico, para que el bot avise el recargo YA al
@@ -839,8 +805,13 @@ function bloqueFechaChile(bloqueos: BloqueoAgenda[] = [], dispo: DisponibilidadD
   const motivoRecargo = feriadoProx
     ? `ese día es FERIADO (${nombreFeriado(isoDe(proxOffset))})`
     : finDeSemanaProx ? 'cae en fin de semana' : 'es a las 18:00 o después'
+  // Solo INFORMATIVO. El monto y el "aplica o no aplica" los resuelve
+  // cotizar_cremacion, que desde 2026-08-08 asume este mismo próximo retiro
+  // cuando aún no hay fecha/hora. Antes esta línea ORDENABA sumar el recargo
+  // "aunque la herramienta no lo incluya", y esa contradicción hacía que el
+  // modelo deliberara en voz alta delante del cliente.
   const lineaRecargoAhora = recargoAhora
-    ? `\n- ⚠ RECARGO VIGENTE AHORA (ya calculado — NO lo omitas): el PRÓXIMO RETIRO POSIBLE cae en franja de recargo "fuera de horario" porque ${motivoRecargo}. Por lo tanto, en TODA cotización de esta conversación —aunque el cliente solo pregunte el precio y todavía no se hable de fecha ni hora— avisa el recargo y súmalo, mostrándolo como línea aparte ("Retiro fuera de horario: $…", monto en RECARGOS AUTOMÁTICOS). Solo si el cliente acuerda un retiro para un día/hora hábil SIN recargo (según el CALENDARIO), recotiza sin él aclarándolo.`
+    ? `\n- Contexto: el PRÓXIMO RETIRO POSIBLE cae en franja de recargo "fuera de horario" porque ${motivoRecargo}. No hagas nada con este dato por tu cuenta: "cotizar_cremacion" ya lo tiene en cuenta y te devuelve el recargo resuelto. Copia lo que devuelva.`
     : ''
   // Tabla de los próximos 8 días: día de la semana → fecha exacta, marcando feriados.
   const tabla = Array.from({ length: 8 }, (_, i) => {
@@ -1216,6 +1187,27 @@ ${cfg.instrucciones.trim()}`,
       mensaje = 'Te comparto algunas fotos 🐾'
     }
     // Sin acción y sin texto → queda vacío: el webhook no envía nada (correcto).
+  }
+
+  // REVISIÓN FINAL antes de que esto salga a un cliente (lib/agente-salida):
+  // borra cualquier deliberación interna que se haya colado y corrige los días de
+  // la semana contra el calendario real. Es la red de seguridad de dos incidentes
+  // reales de agosto de 2026 — el prompt solo no alcanza.
+  if (mensaje) {
+    const rev = revisarSalidaAgente(mensaje, ahoraChile().iso)
+    if (rev.fugas.length) {
+      console.warn('[agente] FUGA de razonamiento interceptada:', JSON.stringify(rev.fugas).slice(0, 500))
+    }
+    if (rev.correcciones.length) {
+      console.warn('[agente] día de la semana corregido:', rev.correcciones.join(' · '))
+    }
+    if (rev.vacio) {
+      // Del mensaje no quedó nada publicable: mejor un humano que un texto raro.
+      escalar = true
+      mensaje = 'Gracias por escribirnos. Un miembro de nuestro equipo te responderá a la brevedad. 🐾'
+    } else {
+      mensaje = rev.texto
+    }
   }
   return { mensaje, escalar, acciones, imagenes: imagenesAEnviar.length ? imagenesAEnviar : undefined }
 }

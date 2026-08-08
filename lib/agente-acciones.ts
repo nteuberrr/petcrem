@@ -9,7 +9,7 @@ import { precioClienteEutanasia, getConsultaEutanasia, getRecargoFueraHorario, r
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
 import { sincronizarFichaDeEutanasia } from './eutanasia-sync'
 import { enviarVetCambioFechaEutanasia } from './eutanasia-mailer'
-import { evaluarSlotRetiro, evaluarHoraEutanasia, horaLibreEnFranja, ahoraChile, retiroTrasEutanasia, type RetiroTrasEutanasia } from './agenda'
+import { evaluarSlotRetiro, evaluarHoraEutanasia, horaLibreEnFranja, ahoraChile, retiroTrasEutanasia, proximoRetiroPosible, type RetiroTrasEutanasia } from './agenda'
 import { capitalizarNombre } from './nombres'
 import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional, correspondeCobrarAdicional } from './cobros'
@@ -670,7 +670,24 @@ async function cotizarCremacion(a: AccionCotizarCremacion): Promise<string> {
 
   // Recargos automáticos con la MISMA regla de la ficha (lib/adicionales-auto).
   const activo = (r: Record<string, string>) => String(r.activo || '').toUpperCase() === 'TRUE'
-  const ctx = { fecha: formatDateForSheet(a.fecha) || String(a.fecha || ''), hora: String(a.hora || ''), comuna: String(a.comuna || '') }
+
+  // Si el cliente todavía no dio fecha/hora (el caso normal de la PRIMERA
+  // cotización), asumimos el PRÓXIMO RETIRO POSIBLE — que es justo lo que el bot
+  // le va a ofrecer. Sin esto la herramienta contestaba "no aplica recargo"
+  // mientras el prompt le exigía avisarlo, y el modelo se ponía a discutir
+  // consigo mismo delante del cliente (ver lib/agenda.ts → calcularProximoRetiro).
+  let fecha = formatDateForSheet(a.fecha) || String(a.fecha || '')
+  let hora = String(a.hora || '')
+  let asumido = false
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    try {
+      const prox = await proximoRetiroPosible()
+      fecha = prox.iso
+      hora = prox.hora
+      asumido = true
+    } catch { /* sin agenda: se cotiza sin recargo horario, como antes */ }
+  }
+  const ctx = { fecha, hora, comuna: String(a.comuna || '') }
   const recargos: { nombre: string; monto: number }[] = []
   for (const s of otros.filter(r => activo(r) && (r.auto_regla || '').trim())) {
     const esFueraHorario = (s.auto_regla || '').trim() === 'fuera_horario'
@@ -687,9 +704,14 @@ async function cotizarCremacion(a: AccionCotizarCremacion): Promise<string> {
   const linea = (cod: 'CI' | 'CP' | 'SD', nombre: string) =>
     `- ${nombre}: ${fmtPrecio(base[cod])}${sumaRecargos > 0 ? ` + recargos ${fmtPrecio(sumaRecargos)} = TOTAL ${fmtPrecio(base[cod] + sumaRecargos)}` : ''}`
 
+  // El texto dice SIEMPRE la última palabra sobre recargos: es la única fuente.
+  // Nada de "puede que aplique" ni de pedirle al modelo que lo decida él.
+  const notaAsumido = asumido
+    ? ` (calculados para el próximo retiro posible, ${fecha} a las ${hora}, que es lo que le vas a ofrecer)`
+    : ''
   const detalleRecargos = recargos.length
-    ? `\nRecargos que aplican (van como UNA línea aparte, y se suman UNA sola vez):\n${recargos.map(r => `- ${r.nombre}: ${fmtPrecio(r.monto)}`).join('\n')}`
-    : '\nNo aplica ningún recargo con los datos actuales: NO menciones recargos.'
+    ? `\nRecargos que aplican${notaAsumido} — van como UNA línea aparte y se suman UNA sola vez:\n${recargos.map(r => `- ${r.nombre}: ${fmtPrecio(r.monto)}`).join('\n')}`
+    : `\nNO aplica ningún recargo${notaAsumido}. Esta es la respuesta definitiva: NO menciones recargos, no los deduzcas del día ni de la hora, y no discutas este resultado.`
 
   // Con eutanasia fuera de horario el recargo YA se cobra con la eutanasia: la
   // cremación no lo suma, pero el cliente igual tiene que oírlo UNA vez (si no,

@@ -800,3 +800,88 @@ export async function evaluarSlotRetiro(
 
   return { ok: true, libres }
 }
+
+// ── PRÓXIMO RETIRO POSIBLE (fuente ÚNICA) ────────────────────────────────────
+/**
+ * Primera fecha/hora en que realmente podemos pasar a retirar.
+ *
+ * ⚠️ Existe para que NO haya dos cálculos. Antes vivía embebido en el prompt del
+ * bot (lib/agente-mensajes) mientras `cotizar_cremacion` decidía el recargo con
+ * la fecha/hora que le pasaran —vacía en la primera cotización—. Resultado: en
+ * fin de semana el prompt decía "hay recargo, súmalo siempre" y la herramienta
+ * respondía "no aplica recargo: NO lo menciones". El modelo quedaba atrapado
+ * entre las dos y DELIBERABA EN VOZ ALTA delante del cliente ("Espera, la
+ * herramienta dice que no aplica recargo, pero hoy es sábado…"): 11 mensajes así
+ * en 30 conversaciones, todos en fin de semana o después de las 18:00.
+ *
+ * Regla: mínimo = ahora + 1 h, acotado a la ventana 09:00–21:10.
+ *  - antes de las 09:00 → HOY a las 09:00 (que sea de madrugada no significa que
+ *    "hoy" ya pasó: la ventana del día está entera por delante);
+ *  - dentro de la ventana → HOY a esa hora;
+ *  - pasadas las 21:10 → MAÑANA a las 09:00.
+ * Después corre por los bloqueos manuales y, si se conoce la disponibilidad real,
+ * se queda con la primera hora efectivamente libre.
+ */
+export interface ProximoRetiro {
+  /** Fecha ISO (YYYY-MM-DD) en Chile. */
+  iso: string
+  /** Hora HH:MM. */
+  hora: string
+  /** Minutos desde medianoche. */
+  min: number
+  /** Días desde hoy (0 = hoy). */
+  offset: number
+}
+
+export function calcularProximoRetiro(
+  hoyISO: string,
+  ahoraMin: number,
+  bloqueos: BloqueoAgenda[] = [],
+  dispo: DisponibilidadDia[] = [],
+): ProximoRetiro {
+  const [Y, M, D] = hoyISO.split('-').map(Number)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const isoDe = (off: number) => {
+    const d = new Date(Date.UTC(Y, M - 1, D + off, 12, 0, 0))
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
+  }
+  const OPEN = HORA_APERTURA * 60
+  const CLOSE = HORA_ULTIMO_RETIRO * 60 + 10
+
+  let offset = 0
+  let min = proximoInicioOfrecible(ahoraMin)
+  if (min < OPEN) min = OPEN
+  else if (min > CLOSE) { offset = 1; min = OPEN }
+
+  // Bloqueos manuales cargados por el equipo: corre hasta el fin del bloqueo.
+  for (let i = 0; i < 40; i++) {
+    const tapa = rangosDelDia(bloqueos, isoDe(offset)).find(r => min >= r.ini && min < r.fin)
+    if (!tapa) break
+    min = tapa.fin
+    if (min > CLOSE) { offset += 1; min = OPEN }
+  }
+
+  // Si conocemos la agenda REAL, manda la primera hora libre de verdad.
+  const primerDiaLibre = dispo.findIndex(d => d.libres.length > 0)
+  if (primerDiaLibre >= 0) {
+    const h = horaMin(dispo[primerDiaLibre].libres[0])
+    if (h != null) { offset = primerDiaLibre; min = h }
+  }
+
+  return { iso: isoDe(offset), hora: fmtMin(min), min, offset }
+}
+
+/**
+ * Igual que `calcularProximoRetiro` pero cargando por su cuenta la hora de Chile,
+ * los bloqueos y la disponibilidad. Para quien no los tenga ya en mano (p. ej. la
+ * herramienta de cotización). Best-effort: si la agenda no responde, cae a la
+ * ventana teórica en vez de fallar.
+ */
+export async function proximoRetiroPosible(): Promise<ProximoRetiro> {
+  const { iso, min } = ahoraChile()
+  let bloqueos: BloqueoAgenda[] = []
+  let dispo: DisponibilidadDia[] = []
+  try { bloqueos = await listarBloqueos() } catch { /* sin bloqueos */ }
+  try { dispo = await disponibilidadProximosDias(2) } catch { /* sin agenda */ }
+  return calcularProximoRetiro(iso, min, bloqueos, dispo)
+}

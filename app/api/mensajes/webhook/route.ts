@@ -121,6 +121,19 @@ async function autoResponder(conv: Conversacion, contacto: Contacto, miMsgId?: n
     }
   } catch (e) { console.warn('[agente] no se pudo re-verificar pausa antes de enviar:', e) }
 
+  // PAUSAR ANTES DE ENVIAR cuando hay que escalar. Antes se marcaba después del
+  // envío, y en una ráfaga de mensajes del cliente el segundo alcanzaba a generar
+  // otra respuesta mientras el primero seguía en vuelo: el bot terminaba hablando
+  // encima del humano que ya había tomado la conversación (caso Gustavo, 07-08).
+  // Pausar primero falla hacia el lado seguro: si el envío se cae, igual queda en
+  // manos del equipo.
+  if (r.escalar) {
+    try {
+      const tags = Array.from(new Set([...(conv.etiquetas || []), 'pausado', 'requiere-humano']))
+      await actualizarConversacion(conv.id, { etiquetas: tags })
+    } catch (e) { console.warn('[agente] no se pudo pausar antes de enviar:', e) }
+  }
+
   // El provider id se guarda para el dedupe de echoes de IG (los envíos por API
   // también llegan como echo al webhook; con el id registrado no se duplican).
   const pid = (e: { id?: string; message_id?: string }) => e.id ?? e.message_id ?? null
@@ -149,8 +162,7 @@ async function autoResponder(conv: Conversacion, contacto: Contacto, miMsgId?: n
   }
 
   if (r.escalar) {
-    const tags = Array.from(new Set([...(conv.etiquetas || []), 'pausado', 'requiere-humano']))
-    await actualizarConversacion(conv.id, { etiquetas: tags })
+    // (la conversación ya quedó pausada ARRIBA, antes del envío)
     // Aviso al admin por WhatsApp: una conversación necesita atención humana
     // (reclamo, solicitud especial/postventa, etc.). Best-effort. La conversación
     // queda 'pausada' → el agente no vuelve a responder hasta que la retomes.
