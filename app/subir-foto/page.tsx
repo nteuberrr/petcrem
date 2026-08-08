@@ -198,8 +198,10 @@ export default function SubirFotoPage() {
             {/* MEMORIAL EN REDES: permiso opcional, nunca marcado por defecto.
                 Solo para la foto del certificado; la del cuadro es un producto
                 que se le entrega al tutor y no se publica. */}
+            {/* En azul de marca, no en gris: es una autorización y tiene que
+                leerse, no diluirse entre el resto del formulario. */}
             {tipo === 'certificado' && (
-              <div className="rounded-xl border p-4" style={{ borderColor: HAIRLINE, backgroundColor: '#FBF8F3' }}>
+              <div className="rounded-xl border-2 p-4" style={{ borderColor: COLOR, backgroundColor: '#FBF8F3' }}>
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -208,11 +210,11 @@ export default function SubirFotoPage() {
                     className="mt-1 h-5 w-5 shrink-0 rounded border-gray-400 cursor-pointer"
                     style={{ accentColor: COLOR }}
                   />
-                  <span className="text-sm text-gray-700 leading-relaxed">
+                  <span className="text-sm font-medium leading-relaxed" style={{ color: COLOR }}>
                     Autorizo a Crematorio Alma Animal a publicar esta foto
                     {mascota ? <> de <strong>{mascota}</strong></> : null} en un
                     homenaje en sus redes sociales.
-                    <span className="block text-xs text-gray-500 mt-1">
+                    <span className="block text-xs font-normal mt-1" style={{ color: '#2A6DB0' }}>
                       Es opcional y no afecta en nada al servicio. Si no lo marcas, la foto se usa
                       únicamente para el certificado.
                     </span>

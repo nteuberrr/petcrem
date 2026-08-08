@@ -1,5 +1,5 @@
 'use client'
-import { Flag, House, Map as MapIcon, Save, Search } from 'lucide-react'
+import { Flag, House, Map as MapIcon, Save, Search, Share2, Copy, Check } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { formatDate, formatDateForSheet, todayISO } from '@/lib/dates'
@@ -116,6 +116,9 @@ export default function DespachosTab() {
   }, [despachos])
 
   const [routeBusy, setRouteBusy] = useState<string | null>(null)
+  /** Link de la hoja de ruta recién generado (por despacho), para copiar/compartir. */
+  const [hojaRuta, setHojaRuta] = useState<{ id: string; url: string; dias: number } | null>(null)
+  const [linkCopiado, setLinkCopiado] = useState(false)
 
   // ─── Calendario de entregas ───
   const [tiposServicio, setTiposServicio] = useState<TipoServicio[]>([])
@@ -467,6 +470,37 @@ export default function DespachosTab() {
     else { const e = await res.json().catch(() => ({})); alert(`Error: ${e.error ?? res.status}`) }
   }
 
+  /**
+   * HOJA DE RUTA para el repartidor externo: pide al servidor un link firmado
+   * (el token se firma con NEXTAUTH_SECRET, así que no se puede armar acá) y lo
+   * deja a mano para copiarlo o mandarlo por WhatsApp. Quien lo abra ve las
+   * paradas con los datos de la etiqueta y puede marcar cada entrega, con el
+   * mismo efecto que si la marcáramos nosotros.
+   */
+  async function generarHojaRuta(d: Despacho) {
+    setRouteBusy(d.id + ':link')
+    try {
+      const res = await fetch(`/api/despachos/${d.id}/hoja-ruta`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.url) { alert(`No se pudo generar el enlace: ${data.error ?? res.status}`); return }
+      setHojaRuta({ id: d.id, url: data.url, dias: data.vence_en_dias ?? 3 })
+      setLinkCopiado(false)
+    } finally {
+      setRouteBusy(null)
+    }
+  }
+
+  async function copiarLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url)
+      setLinkCopiado(true)
+      setTimeout(() => setLinkCopiado(false), 2500)
+    } catch {
+      // Sin permiso de portapapeles (http, navegador viejo): que lo copie a mano.
+      window.prompt('Copia el enlace:', url)
+    }
+  }
+
   async function terminarRuta(d: Despacho) {
     const pendientes = d.mascotas_ids.filter(id => !d.entregas?.[id]).length
     const msg = pendientes > 0
@@ -694,6 +728,14 @@ export default function DespachosTab() {
                             </a>
                           ) })()}
                           {estado !== 'terminada' && (
+                            <button onClick={() => generarHojaRuta(d)} disabled={routeBusy === d.id + ':link'}
+                              title="Genera un enlace para pasarle la ruta al repartidor: ve las paradas con los datos de la etiqueta y marca cada entrega"
+                              className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-lg px-3 py-1.5 disabled:opacity-50">
+                              <Share2 className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" />{' '}
+                              {routeBusy === d.id + ':link' ? 'Generando…' : 'Compartir con el delivery'}
+                            </button>
+                          )}
+                          {estado !== 'terminada' && (
                             <button onClick={() => terminarRuta(d)} disabled={routeBusy === d.id}
                               className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg px-3 py-1.5 disabled:opacity-50">
                               <Flag className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Terminar ruta
@@ -704,6 +746,35 @@ export default function DespachosTab() {
                             {d.hora_inicio_ruta && d.hora_termino_ruta && <> · Término {horaCorta(d.hora_termino_ruta)} · {duracion(d.hora_inicio_ruta, d.hora_termino_ruta)}</>}
                           </span>
                         </div>
+
+                        {/* Enlace recién generado para el repartidor. Se muestra
+                            entero: quien lo manda tiene que ver qué está mandando. */}
+                        {hojaRuta?.id === d.id && (
+                          <div className="mb-3 rounded-lg border-2 border-violet-300 bg-violet-50 p-3">
+                            <p className="text-xs font-bold text-violet-900">Enlace para el repartidor</p>
+                            <p className="mt-0.5 text-[11px] text-violet-800">
+                              Ve las paradas con los datos de la etiqueta y marca las entregas (le avisa al tutor igual que si lo marcáramos nosotros).
+                              Vence en {hojaRuta.dias} {hojaRuta.dias === 1 ? 'día' : 'días'}.
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <input readOnly value={hojaRuta.url} onFocus={e => e.currentTarget.select()}
+                                className="flex-1 min-w-[14rem] rounded-lg border border-violet-300 bg-white px-2.5 py-1.5 text-[11px] font-mono text-gray-700" />
+                              <button onClick={() => copiarLink(hojaRuta.url)}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 px-3 py-1.5 text-xs font-semibold text-white">
+                                {linkCopiado
+                                  ? <><Check className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Copiado</>
+                                  : <><Copy className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> Copiar</>}
+                              </button>
+                              <a href={`https://wa.me/?text=${encodeURIComponent(`Hoja de ruta del recorrido N° ${d.numero_recorrido}: ${hojaRuta.url}`)}`}
+                                target="_blank" rel="noopener noreferrer"
+                                className="rounded-lg border-2 border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-100">
+                                Enviar por WhatsApp
+                              </a>
+                              <button onClick={() => setHojaRuta(null)}
+                                className="text-xs font-medium text-violet-700 hover:underline">Cerrar</button>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Paradas en orden con toggle de entrega */}
                         <div className="border border-gray-300 rounded-lg overflow-hidden bg-white">

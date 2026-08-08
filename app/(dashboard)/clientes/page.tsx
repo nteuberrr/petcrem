@@ -3,8 +3,8 @@ import { PageHeader } from '@/components/ui/kit'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import {
-  Bell, CreditCard, Snowflake, Package, FilePen, Coins, MailWarning,
-  Users, Image, Video, FolderOpen, type LucideIcon,
+  Bell, CreditCard, Snowflake, Package, FilePen, Coins, MailWarning, Undo2,
+  SlidersHorizontal, Image, Video, FolderOpen,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -118,7 +118,7 @@ const SERVICIOS = [
  *  pago y la veterinaria son filtros aparte que se COMBINAN con este. */
 type FiltroSituacion = 'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado'
   | 'pago_pendiente' | 'datos_pendientes' | 'falta_peso' | 'diferencia'
-  | 'pendiente_cobro' | 'correo_malo'
+  | 'pendiente_cobro' | 'devolucion' | 'correo_malo'
 
 /** Formas de pago del alta de ficha + "sin definir" para las que no la tienen. */
 const FORMAS_PAGO = [
@@ -257,92 +257,6 @@ export default function ClientesPage() {
     }
   }, [form.veterinaria_id, noEsVeterinaria, veterinarias])
 
-  // KPIs derivados
-  const kpis = useMemo(() => {
-    const total = clientes.length
-    const hoy = new Date()
-    const startMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-    const startSemana = new Date(hoy)
-    startSemana.setDate(hoy.getDate() - 6)
-    startSemana.setHours(0, 0, 0, 0)
-
-    const parseFecha = (s?: string) => {
-      if (!s) return null
-      const iso = formatDateForSheet(s)
-      if (!iso) return null
-      const d = new Date(`${iso}T12:00:00`)
-      return isNaN(d.getTime()) ? null : d
-    }
-
-    // Keys para agrupar por mes (YYYY-MM) y semana (YYYY-WW) — usadas en el promedio histórico
-    const mesKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    const semanaKey = (d: Date) => {
-      const yearStart = new Date(d.getFullYear(), 0, 1)
-      const diffDays = Math.floor((d.getTime() - yearStart.getTime()) / 86400000)
-      const wk = Math.floor(diffDays / 7) + 1
-      return `${d.getFullYear()}-W${String(wk).padStart(2, '0')}`
-    }
-    const mesActualKey = mesKey(hoy)
-    const semanaActualKey = semanaKey(hoy)
-
-    let delMes = 0, delaSemana = 0
-    let sumaPeso = 0
-    const porEspecie: Record<string, number> = {}
-    const porServicio: Record<string, number> = {}
-    const clientesPendientesPago: Cliente[] = []
-    // Histórico: buckets por mes/semana SOLO de periodos cerrados (excluye el actual)
-    const bucketsMes: Record<string, number> = {}
-    const bucketsSemana: Record<string, number> = {}
-
-    for (const c of clientes) {
-      // Driver: fecha_retiro (solo esa, no fallback)
-      const fecha = parseFecha(c.fecha_retiro)
-      if (fecha) {
-        if (fecha >= startMes) delMes++
-        if (fecha >= startSemana) delaSemana++
-        const mk = mesKey(fecha)
-        if (mk !== mesActualKey) bucketsMes[mk] = (bucketsMes[mk] || 0) + 1
-        const wk = semanaKey(fecha)
-        if (wk !== semanaActualKey) bucketsSemana[wk] = (bucketsSemana[wk] || 0) + 1
-      }
-      // Peso real: ingreso primero, declarado fallback. Normaliza escalamiento heredado.
-      const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
-      if (peso > 0) sumaPeso += peso
-      const esp = c.especie || 'Sin especie'
-      porEspecie[esp] = (porEspecie[esp] || 0) + 1
-      const srv = c.codigo_servicio || 'CI'
-      porServicio[srv] = (porServicio[srv] || 0) + 1
-      // Borradores fuera: aún no son fichas reales (tienen su propia alerta).
-      if (c.estado !== 'borrador' && c.estado_pago !== 'pagado') {
-        clientesPendientesPago.push(c)
-      }
-    }
-
-    // Peso promedio: total kilos / total mascotas ingresadas (todas)
-    const pesoProm = total > 0 ? sumaPeso / total : 0
-    const topEspecie = Object.entries(porEspecie).sort((a, b) => b[1] - a[1])[0]
-    const topServicio = Object.entries(porServicio).sort((a, b) => b[1] - a[1])[0]
-    const mesesCerrados = Object.keys(bucketsMes).length
-    const semanasCerradas = Object.keys(bucketsSemana).length
-    const promMesHist = mesesCerrados > 0
-      ? Object.values(bucketsMes).reduce((s, v) => s + v, 0) / mesesCerrados
-      : null
-    const promSemanaHist = semanasCerradas > 0
-      ? Object.values(bucketsSemana).reduce((s, v) => s + v, 0) / semanasCerradas
-      : null
-
-    return {
-      total, delMes, delaSemana, pesoProm,
-      topEspecie: topEspecie ? { nombre: topEspecie[0], count: topEspecie[1] } : null,
-      topServicio: topServicio ? { codigo: topServicio[0], count: topServicio[1] } : null,
-      porEspecie, porServicio,
-      pendientesPago: clientesPendientesPago.length,
-      clientesPendientesPago,
-      promMesHist, mesesCerrados,
-      promSemanaHist, semanasCerradas,
-    }
-  }, [clientes])
-
   // Detecta si un cliente tiene campos obligatorios sin completar.
   // Estos son los mismos campos marcados como `required` en el form de nueva ficha.
   function tieneDatosPendientes(c: Cliente): boolean {
@@ -435,6 +349,7 @@ export default function ClientesPage() {
       if (filtro === 'falta_peso' && !faltaPesoIngreso(c)) return false
       if (filtro === 'diferencia' && !tieneDiferenciaPorCobrar(c)) return false
       if (filtro === 'pendiente_cobro' && !idsConCobroPendiente.has(String(c.id))) return false
+      if (filtro === 'devolucion' && !((devolucionPorFicha.get(String(c.id)) ?? 0) > 0)) return false
       if (filtro === 'correo_malo' && !idsCorreoMalo.has(String(c.id))) return false
       // Filtro por veterinaria (independiente del filtro de estado)
       if (filtroVet === '__general__' && (c.veterinaria_id || '').trim()) return false
@@ -489,9 +404,14 @@ export default function ClientesPage() {
       diferencia: reales.filter(c => tieneDiferenciaPorCobrar(c)).length,
       // Fichas con un cobro emitido y aún NO pagado (tabla `cobros`).
       pendienteCobro: reales.filter(c => idsConCobroPendiente.has(String(c.id))).length,
+      // Plata que le DEBEMOS al tutor (boleta por encima del total actual). Va
+      // aparte de "pago pendiente": es el movimiento inverso, y se resuelve con
+      // una nota de crédito, no cobrando.
+      devolucion: reales.filter(c => (devolucionPorFicha.get(String(c.id)) ?? 0) > 0).length,
+      devolucionMonto: reales.reduce((s, c) => s + (devolucionPorFicha.get(String(c.id)) ?? 0), 0),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientes, preciosGenerales, preciosConvenio, idsConCobroPendiente])
+  }, [clientes, preciosGenerales, preciosConvenio, idsConCobroPendiente, devolucionPorFicha])
 
   // Permite llegar con un filtro preseleccionado por URL (ej. desde la alerta
   // del dashboard: /clientes?filtro=borrador). Se lee una vez al montar.
@@ -505,7 +425,7 @@ export default function ClientesPage() {
       aplicarRango(f === 'este_mes' ? 'mes' : 'semana')
       return
     }
-    const validos: FiltroSituacion[] = ['todos', 'borrador', 'pendiente', 'cremado', 'despachado', 'pago_pendiente', 'datos_pendientes', 'falta_peso', 'diferencia', 'pendiente_cobro', 'correo_malo']
+    const validos: FiltroSituacion[] = ['todos', 'borrador', 'pendiente', 'cremado', 'despachado', 'pago_pendiente', 'datos_pendientes', 'falta_peso', 'diferencia', 'pendiente_cobro', 'devolucion', 'correo_malo']
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if ((validos as string[]).includes(f)) setFiltro(f as FiltroSituacion)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -826,7 +746,7 @@ export default function ClientesPage() {
 
       {/* Notificaciones compactas: una fila de chips clickeables que aplican el
           filtro correspondiente. Reemplaza al banner grande de pago pendiente. */}
-      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0 || correosMalos.length > 0) && (
+      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0 || alertas.devolucion > 0 || correosMalos.length > 0) && (
         <div className="mb-5 flex flex-wrap items-center gap-2">
           {nBorradores > 0 && (
             <button onClick={() => setFiltro('borrador')}
@@ -870,6 +790,14 @@ export default function ClientesPage() {
               <Coins className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {alertas.diferencia} con diferencia por cobrar
             </button>
           )}
+          {alertas.devolucion > 0 && (
+            <button onClick={() => setFiltro('devolucion')}
+              title="Fichas cuya boleta cobró más de lo que terminó valiendo el servicio — hay que emitir la nota de crédito y devolverle al tutor"
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-violet-300 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 text-xs font-bold text-violet-800 shadow-md transition-colors">
+              <Undo2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {alertas.devolucion} con devolución pendiente
+              <span className="font-extrabold">· {fmtPrecio(alertas.devolucionMonto)}</span>
+            </button>
+          )}
           {correosMalos.length > 0 && (
             <button onClick={() => setFiltro('correo_malo')}
               title="Correos de tutores que rebotaron o fallaron — corrígelos en la ficha"
@@ -880,14 +808,11 @@ export default function ClientesPage() {
         </div>
       )}
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-        <KpiCard icon={Users} color="indigo" value={kpis.total.toString()} label="Total clientes" />
-        <KpiCard icon={Users} color="emerald" value={kpis.delMes.toString()} label="Clientes del mes"
-          hint={kpis.promMesHist !== null ? `Promedio histórico: ${kpis.promMesHist.toFixed(1)} (${kpis.mesesCerrados} mes${kpis.mesesCerrados !== 1 ? 'es' : ''})` : 'Sin histórico aún'} />
-      </div>
-
-      {/* Buscador + filtros */}
+      {/* Buscador + filtros. Sin tarjetas de KPI arriba (los conteos que importan
+          ya están en los chips de notificación) y con los filtros PLEGADOS por
+          defecto en cualquier tamaño: al entrar se busca una ficha, no una
+          estadística, y desplegados empujaban la primera tarjeta fuera de
+          pantalla. */}
       <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 mb-6">
         <input
           type="text"
@@ -896,16 +821,19 @@ export default function ClientesPage() {
           onChange={(e) => setBuscar(e.target.value)}
           className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand"
         />
-        {/* Móvil: los filtros se pliegan. Desplegados ocupaban ~560px y, sumados a
-            las alertas y los KPI, dejaban la primera ficha bajo pantalla y media
-            de preámbulo. En ≥640px se muestran siempre. */}
-        <button type="button" onClick={() => setFiltrosAbiertos(v => !v)}
-          className="mt-3 flex w-full items-center justify-between gap-2 rounded-xl border-2 border-gray-300 px-3 py-2 min-h-11 text-xs font-semibold text-gray-700 sm:hidden">
-          <span>Filtros{cantFiltros > 0 ? ` (${cantFiltros})` : ''}</span>
+        <button type="button" onClick={() => setFiltrosAbiertos(v => !v)} aria-expanded={filtrosAbiertos}
+          className="mt-3 flex w-full items-center justify-between gap-2 rounded-xl border-2 border-gray-300 px-3 py-2 min-h-11 text-xs font-semibold text-gray-700 hover:border-brand hover:bg-brand/5 transition-colors">
+          <span className="inline-flex items-center gap-2">
+            <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            Filtros
+            {cantFiltros > 0 && (
+              <span className="rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold text-white">{cantFiltros}</span>
+            )}
+          </span>
           <span className="text-brand-soft">{filtrosAbiertos ? 'Ocultar' : 'Mostrar'}</span>
         </button>
 
-        <div className={`${filtrosAbiertos ? '' : 'hidden'} sm:block`}>
+        <div className={filtrosAbiertos ? '' : 'hidden'}>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-gray-600 mr-1">Situación:</span>
           {([
@@ -1797,27 +1725,6 @@ export default function ClientesPage() {
           </div>
         )}
       </Modal>
-    </div>
-  )
-}
-
-function KpiCard({ icon: Icon, color, value, label, hint }: { icon: LucideIcon; color: string; value: string; label: string; hint?: string }) {
-  const colorMap: Record<string, string> = {
-    indigo: 'bg-brand/10 text-brand',
-    emerald: 'bg-emerald-100 text-emerald-600',
-    blue: 'bg-blue-100 text-blue-600',
-    purple: 'bg-purple-100 text-purple-600',
-  }
-  return (
-    <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-5 flex items-center gap-4">
-      <div className={`shrink-0 inline-flex w-12 h-12 rounded-xl items-center justify-center ${colorMap[color] ?? 'bg-gray-100'}`}>
-        <Icon className="w-6 h-6" aria-hidden="true" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xl font-bold text-gray-900">{value}</p>
-        <p className="text-xs text-gray-600 mt-0.5 font-medium">{label}</p>
-        {hint && <p className="text-[11px] text-gray-500 mt-1 italic">{hint}</p>}
-      </div>
     </div>
   )
 }

@@ -589,8 +589,13 @@ export default function AgendaSemanal() {
 
       {/* Grilla estilo Google Calendar: columnas continuas, evento posicionado por
           su hora real y con alto proporcional a la duración (bloque de 45 min). */}
+      {/* `overflow-x-auto` obliga al eje Y a `auto` (regla de CSS: si un eje no es
+          `visible`, el otro tampoco), así que la etiqueta "24:00" —que cuelga
+          media línea por debajo de la grilla— alcanzaba para disparar una barra
+          de scroll vertical de unos pocos píxeles. El `pb-3` le da ese margen y
+          la agenda entra entera, sin scroll. */}
       <div className="hidden md:block overflow-x-auto">
-        <div className="min-w-[760px]">
+        <div className="min-w-[760px] pb-3">
           {/* Encabezado de días */}
           <div className="grid" style={{ gridTemplateColumns: '52px repeat(7, minmax(96px, 1fr))' }}>
             <div />

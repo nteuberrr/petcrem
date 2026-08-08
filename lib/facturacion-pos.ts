@@ -2,13 +2,14 @@ import { getSheetData, ensureSheet, ensureColumns, appendRow, updateRow } from '
 import { formatDateForSheet } from './dates'
 import { agregarDiasHabiles, isoFecha } from './dias-habiles'
 import { calcularPrecioFicha, type Tramo } from './ficha-precio'
+import { parseDecimalOr0 } from './numbers'
 
 /**
  * VENTAS POS — lo que el procesador de pagos (TUU/Haulmer) nos tiene que abonar.
  *
- * Entran solo las ventas cobradas con MÁQUINA o LINK DE PAGO y marcadas como
- * pagadas: transferencia y efectivo no pagan comisión, así que no son parte del
- * abono. De cada venta se descuenta la comisión del contrato:
+ * Entran solo las ventas cobradas con MÁQUINA o LINK DE PAGO: transferencia y
+ * efectivo no pagan comisión, así que no son parte del abono. De cada venta se
+ * descuenta la comisión del contrato:
  *
  *     comisión neta  = fija + variable % × total cobrado (bruto, con IVA)
  *     comisión bruta = comisión neta × (1 + IVA)
@@ -18,6 +19,12 @@ import { calcularPrecioFicha, type Tramo } from './ficha-precio'
  * Las fichas viejas no la tienen todavía, así que como respaldo se usa la fecha
  * de emisión del documento — esas filas van marcadas con `fecha_estimada` para
  * que no se lean como dato duro.
+ *
+ * PAGO PARCIAL: por la máquina pasó SOLO EL ABONO. El saldo se recibe siempre
+ * por transferencia (confirmado por el dueño, 2026-08-07), así que no es plata
+ * del procesador y se descuenta del bruto. Por eso la ficha entra también
+ * estando en 'parcial' —el abono ya se cobró— y cuando el saldo se confirma no
+ * cambia nada: el monto y el día siguen siendo los del abono.
  *
  * Haulmer abona al DÍA HÁBIL SIGUIENTE, así que lo del viernes, sábado y domingo
  * llega junto el lunes. Eso lo resuelve `agregarDiasHabiles(dia, 1)`, que además
@@ -52,8 +59,10 @@ export interface VentaPos {
   fecha_boleta: string
   folio: string
   tipo_pago: 'pos' | 'link'
-  /** Lo que pasó por la máquina: total cobrado con IVA. */
+  /** Lo que pasó por la máquina: total cobrado con IVA, sin el saldo por transferencia. */
   bruto: number
+  /** Saldo de un pago parcial descontado del bruto (0 si no hubo). */
+  saldo_excluido: number
   comision_neta: number
   comision_iva: number
   comision_bruta: number
@@ -162,6 +171,24 @@ async function mapaDocumentos(): Promise<Map<string, DocMin>> {
   return m
 }
 
+/**
+ * Ficha → saldo de pago parcial, pagado o no. Es plata que llega por
+ * TRANSFERENCIA, así que se descuenta del bruto: por la máquina solo pasó el
+ * abono. Se suman también los ya pagados —la fila sobrevive al cierre— porque si
+ * no, confirmar el saldo haría aparecer de golpe el total completo.
+ */
+async function saldosPorFicha(): Promise<Map<string, number>> {
+  const m = new Map<string, number>()
+  const cobros = await getSheetData('cobros').catch(() => [])
+  for (const c of cobros) {
+    if (String(c.tipo || '') !== 'saldo') continue
+    const id = String(c.cliente_id || '')
+    if (!id) continue
+    m.set(id, (m.get(id) ?? 0) + (parseDecimalOr0(c.monto) || 0))
+  }
+  return m
+}
+
 async function cargarTablas(): Promise<{ g: Tramo[]; c: Tramo[] }> {
   const [generales, convenio] = await Promise.all([
     getSheetData('precios_generales'),
@@ -190,11 +217,12 @@ export interface ResumenPos {
  * no dependa del reloj (mismo criterio que el motor de remuneraciones).
  */
 export async function resumenVentasPos(f: FiltrosPos = {}): Promise<ResumenPos> {
-  const [clientes, tablas, docs, config] = await Promise.all([
+  const [clientes, tablas, docs, config, saldos] = await Promise.all([
     getSheetData('clientes'),
     cargarTablas(),
     mapaDocumentos(),
     getConfigPos(),
+    saldosPorFicha(),
   ])
 
   const conFecha: VentaPos[] = []
@@ -204,7 +232,9 @@ export async function resumenVentasPos(f: FiltrosPos = {}): Promise<ResumenPos> 
   for (const c of clientes) {
     const tipo = String(c.tipo_pago || '').trim().toLowerCase()
     if (!PAGOS_CON_COMISION.has(tipo)) continue
-    if (String(c.estado_pago || '').trim().toLowerCase() !== 'pagado') continue
+    // 'parcial' entra igual: el abono ya pasó por la máquina (ver cabecera).
+    const estadoPago = String(c.estado_pago || '').trim().toLowerCase()
+    if (estadoPago !== 'pagado' && estadoPago !== 'parcial') continue
     // Un borrador no es una venta todavía.
     if (String(c.estado || '') === 'borrador' || !String(c.codigo || '').trim()) continue
 
@@ -214,8 +244,11 @@ export async function resumenVentasPos(f: FiltrosPos = {}): Promise<ResumenPos> 
 
     // Monto: manda el documento emitido (es el hecho tributario y ya no cambia);
     // si no hay, el precio congelado de la ficha. Mismo criterio que Ventas.
+    // Del total se saca el saldo del parcial: eso llegó por transferencia.
     const precio = calcularPrecioFicha(c, undefined, { generales: tablas.g, convenio: tablas.c, especialesDeVet: [] })
-    const bruto = doc && doc.monto_total > 0 ? doc.monto_total : precio.total
+    const cobrado = doc && doc.monto_total > 0 ? doc.monto_total : precio.total
+    const saldo = Math.min(saldos.get(String(c.id)) ?? 0, cobrado)
+    const bruto = cobrado - saldo
     if (bruto <= 0) continue
 
     const fechaPago = formatDateForSheet(c.fecha_pago) || ''
@@ -231,6 +264,7 @@ export async function resumenVentasPos(f: FiltrosPos = {}): Promise<ResumenPos> 
       folio: doc?.folio || '',
       tipo_pago: tipo === 'link' ? 'link' : 'pos',
       bruto,
+      saldo_excluido: saldo,
       ...calcularComision(bruto, config),
       fecha_estimada: !fechaPago && !!fechaDoc,
     }

@@ -4,13 +4,14 @@ import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import {
   FolderOpen, Folder, FileText, RefreshCw, Mail, Clapperboard, Camera,
-  PawPrint, Video, Flame, Image, Stethoscope, Save, Printer, Eye,
+  PawPrint, Video, Flame, Image, Stethoscope, Save, Printer, Eye, ChevronDown,
 } from 'lucide-react'
+import { InstagramIcon } from '@/components/marketing/BrandIcons'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { fmtLitros, fmtPrecio, fmtFecha, fmtKg } from '@/lib/format'
-import { formatDateForSheet, todayISO } from '@/lib/dates'
+import { formatDateForSheet, formatDateTime, todayISO } from '@/lib/dates'
 import { parsePeso, parseDecimal } from '@/lib/numbers'
 import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { anforaPremiumIncluida, servicioIncluyeAnforaPremium, repartirAnforasPremium } from '@/lib/anforas-premium'
@@ -148,6 +149,12 @@ type ClienteDetalle = {
   /** Fecha ISO en que el tutor pidió el video del proceso ('' = no lo pidió). */
   video_solicitado?: string
   fotos_evidencia?: string
+  /** MEMORIAL EN REDES (lib/memorial.ts): permiso del tutor + su dedicatoria. */
+  memorial_consentimiento?: string
+  memorial_consentimiento_fecha?: string
+  memorial_comentario?: string
+  memorial_publicado_at?: string
+  memorial_story_id?: string
   correo_diferencia_fecha?: string
   correo_diferencia_monto?: string
   /** Cobros SIN pagar: los que alimentan el banner de cobranza. */
@@ -229,6 +236,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Menú "Documentos" (certificados + archivos).
   const [docsOpen, setDocsOpen] = useState(false)
+  const [memorialOpen, setMemorialOpen] = useState(false)
+  // Secciones plegables de la mitad de abajo: todas CERRADAS al entrar.
+  const [secciones, setSecciones] = useState<Record<string, boolean>>({})
+  const toggleSeccion = (k: string) => setSecciones(s => ({ ...s, [k]: !s[k] }))
   const docsMenuRef = useRef<HTMLDivElement>(null)
   // Vista previa de la etiqueta de despacho (80 × 50 mm).
   const [etiquetaOpen, setEtiquetaOpen] = useState(false)
@@ -1044,6 +1055,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const fotosMascota: string[] = (() => {
     try { const x = JSON.parse(cliente.fotos_mascota || '[]'); return Array.isArray(x) ? x : [] } catch { return [] }
   })()
+  // ¿El tutor autorizó publicar su foto en redes? (lib/memorial.ts — opt-in
+  // explícito desde el mismo link con que sube la foto del certificado.)
+  const memorialAutorizado = String(cliente.memorial_consentimiento || '').toUpperCase() === 'TRUE'
   const estadoVariant: 'green' | 'blue' | 'yellow' =
     cliente.estado === 'cremado' ? 'green'
     : cliente.estado === 'despachado' ? 'blue'
@@ -1272,10 +1286,29 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                           <button onClick={() => eliminarFotoEvidencia(url)} className="text-[11px] text-red-600 hover:text-red-800 shrink-0">Eliminar</button>
                         </div>
                       ))}
-                      {/* Fotos que el tutor subió desde el link del correo (certificado) */}
+                      {/* Fotos que el tutor subió desde el link del correo (certificado).
+                          Al lado va el permiso de redes: la foto es del tutor y
+                          publicarla sin su OK no es una opción, así que el estado
+                          tiene que verse junto al archivo, no escondido. */}
                       {fotosMascota.map((url, i) => (
                         <div key={`fmasc-${i}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-gray-50 text-gray-700">
                           <PawPrint className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate hover:underline">Foto del tutor (certificado) {i + 1}</a>
+                          {i === 0 && (
+                            <button
+                              onClick={() => { setDocsOpen(false); setMemorialOpen(true) }}
+                              title={memorialAutorizado
+                                ? (cliente.memorial_publicado_at ? 'Autorizada y ya publicada — ver detalle' : 'El tutor autorizó publicarla — ver detalle')
+                                : 'El tutor NO autorizó publicarla en redes'}
+                              className={`shrink-0 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold transition-colors ${
+                                memorialAutorizado
+                                  ? 'border-brand/40 bg-brand/10 text-brand hover:bg-brand/20'
+                                  : 'border-gray-300 bg-gray-100 text-gray-400 hover:bg-gray-200'
+                              }`}
+                            >
+                              <InstagramIcon className="w-3 h-3 shrink-0" />
+                              {memorialAutorizado ? (cliente.memorial_publicado_at ? 'publicada' : 'autoriza') : 'sin permiso'}
+                            </button>
+                          )}
                         </div>
                       ))}
                       {videosServicio.length === 0 && fotosEvidencia.length === 0 && fotosMascota.length === 0 && (
@@ -1660,8 +1693,8 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       )}
 
       {/* Información del tutor */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 mb-6">
-        <h2 className="text-base font-bold text-gray-900 mb-4">Información del tutor</h2>
+      <Seccion titulo="Información del tutor" resumen={cliente.nombre_tutor}
+        abierta={!!secciones.tutor} onToggle={() => toggleSeccion('tutor')}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field required label="Nombre tutor" value={form.nombre_tutor} onChange={v => setForm(f => ({ ...f, nombre_tutor: v }))} />
           <div>
@@ -1679,11 +1712,12 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           <AddressField required label="Dirección de despacho" value={form.direccion_despacho} onChange={v => setForm(f => ({ ...f, direccion_despacho: v }))} />
           <Field required label="Comuna" value={form.comuna} onChange={v => setForm(f => ({ ...f, comuna: v }))} />
         </div>
-      </div>
+      </Seccion>
 
       {/* Información de la mascota */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 mb-6">
-        <h2 className="text-base font-bold text-gray-900 mb-4">Información de la mascota</h2>
+      <Seccion titulo="Información de la mascota"
+        resumen={[cliente.especie, pesoKg > 0 ? fmtKg(pesoKg) : ''].filter(Boolean).join(' · ')}
+        abierta={!!secciones.mascota} onToggle={() => toggleSeccion('mascota')}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field required label="Nombre mascota" value={form.nombre_mascota} onChange={v => setForm(f => ({ ...f, nombre_mascota: v }))} />
           <div>
@@ -1808,11 +1842,11 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             </div>
           )}
         </div>
-      </div>
+      </Seccion>
 
       {/* Información del servicio */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 mb-6">
-        <h2 className="text-base font-bold text-gray-900 mb-4">Información del servicio</h2>
+      <Seccion titulo="Información del servicio" resumen={cliente.tipo_servicio || codigoServ}
+        abierta={!!secciones.servicio} onToggle={() => toggleSeccion('servicio')}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <label className="text-xs font-semibold text-gray-700">
@@ -2005,55 +2039,49 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
           </label>
         </div>
 
-        <div className="flex justify-end gap-3 mt-5">
-          {(cliente.estado === 'borrador' || !cliente.codigo) ? (
-            <>
-              <button
-                onClick={() => handleSave()}
-                disabled={saving}
-                className="border-2 border-gray-300 text-gray-700 px-5 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Guardando...' : 'Guardar borrador'}
-              </button>
-              <button
-                onClick={() => handleSave({ registrar: true })}
-                disabled={saving}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Guardando...' : 'Registrar ficha'}
-              </button>
-            </>
-          ) : (
+      </Seccion>
+
+      {/* GUARDAR — fuera de las secciones plegables: la acción es de la ficha
+          entera, y adentro de "Información del servicio" quedaba inalcanzable
+          con todo cerrado. */}
+      <div className="flex justify-end gap-3 mb-6">
+        {(cliente.estado === 'borrador' || !cliente.codigo) ? (
+          <>
             <button
               onClick={() => handleSave()}
               disabled={saving}
-              className="bg-brand hover:bg-brand-dark text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              className="border-2 border-gray-300 bg-white text-gray-700 px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 shadow-sm"
             >
-              {saving ? 'Guardando...' : 'Guardar cambios'}
+              {saving ? 'Guardando...' : 'Guardar borrador'}
             </button>
-          )}
-        </div>
+            <button
+              onClick={() => handleSave({ registrar: true })}
+              disabled={saving}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 shadow-md"
+            >
+              {saving ? 'Guardando...' : 'Registrar ficha'}
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => handleSave()}
+            disabled={saving}
+            className="bg-brand hover:bg-brand-dark text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 shadow-md"
+          >
+            {saving ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+        )}
       </div>
 
       {/* Adicionales */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 mb-6 overflow-hidden">
-        <button
-          onClick={() => setShowAdicionales(!showAdicionales)}
-          className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <h2 className="text-base font-semibold text-gray-900">Adicionales</h2>
-            {adicionales.length > 0 && (
-              <span className="bg-brand/10 text-brand text-xs font-semibold px-2 py-0.5 rounded-full">
-                {adicionales.length} ítem(s) · {fmtPrecio(totalAdicionales)}
-              </span>
-            )}
-          </div>
-          <span className="text-gray-400 text-sm">{showAdicionales ? '▲' : '▼'}</span>
-        </button>
-
-        {showAdicionales && (
-          <div className="border-t border-gray-300 px-6 pb-6 pt-4">
+      <Seccion
+        titulo="Adicionales"
+        resumen={adicionales.length > 0 ? `${adicionales.length} ítem${adicionales.length === 1 ? '' : 's'} · ${fmtPrecio(totalAdicionales)}` : undefined}
+        abierta={showAdicionales}
+        onToggle={() => setShowAdicionales(!showAdicionales)}
+      >
+        {(
+          <div className="border-t border-gray-300 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-4">
             {/* Productos — agrupados por categoría, sin info de stock (oculta);
                 los productos con stock = 0 quedan tachados y no seleccionables */}
             {productosDisp.length > 0 && (() => {
@@ -2188,19 +2216,21 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             </div>
           </div>
         )}
-      </div>
+      </Seccion>
 
       {/* Resumen del servicio */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 mb-6">
+      <Seccion
+        titulo="Resumen del servicio"
+        resumen={fmtPrecio(totalServicio)}
+        abierta={!!secciones.resumen}
+        onToggle={() => toggleSeccion('resumen')}
+      >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-gray-900">
-            Resumen del servicio
-            {precioEsEstimado && (
-              <span className="ml-2 text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded align-middle">
-                estimado
-              </span>
-            )}
-          </h2>
+          {precioEsEstimado ? (
+            <span className="text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">
+              estimado
+            </span>
+          ) : <span />}
           <span className="text-xs text-gray-400">{tablaNombre}</span>
         </div>
 
@@ -2322,15 +2352,17 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
                 <div>
                   <label className="text-[11px] text-gray-600">Monto a descontar</label>
-                  <div className="mt-1 flex items-center gap-1.5">
-                    <span className="text-sm text-gray-500">−$</span>
+                  {/* El "−$" va DENTRO del recuadro (prefijo), no suelto al lado:
+                      afuera se leía como un guion perdido y desalineaba la fila. */}
+                  <div className="mt-1 relative">
+                    <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm font-semibold text-gray-500">−$</span>
                     <input
                       type="number"
                       step={1}
                       value={form.ajuste_admin ?? ''}
                       onChange={e => setForm(f => ({ ...f, ajuste_admin: e.target.value }))}
                       placeholder="0"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                      className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                     />
                   </div>
                 </div>
@@ -2391,16 +2423,13 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             </>
           )}
         </div>
-      </div>
+      </Seccion>
 
       {/* Zona de peligro: eliminar ficha (solo admin) */}
       {isAdmin && (
-        <div className="bg-white rounded-xl border-2 border-red-200 mb-6 overflow-hidden">
-          <div className="bg-red-50 px-6 py-3 border-b-2 border-red-100 flex items-center gap-2">
-            <span className="text-lg">⚠️</span>
-            <h2 className="text-sm font-bold text-red-800 uppercase tracking-wide">Zona de peligro</h2>
-          </div>
-          <div className="p-6 flex items-start justify-between gap-4 flex-wrap">
+        <Seccion titulo="Zona de peligro" tono="peligro" icono={<span aria-hidden="true">⚠️</span>}
+          abierta={!!secciones.peligro} onToggle={() => toggleSeccion('peligro')}>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900">Eliminar ficha del cliente</p>
               <p className="text-xs text-gray-600 mt-1 leading-relaxed">
@@ -2416,7 +2445,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               Eliminar ficha
             </button>
           </div>
-        </div>
+        </Seccion>
       )}
 
       {/* Modal confirmación de eliminación — requiere tipear el código para evitar accidentes */}
@@ -2469,6 +2498,68 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
               {deletingFicha ? 'Eliminando…' : 'Eliminar definitivamente'}
             </button>
           </div>
+        </div>
+      </Modal>
+
+      {/* PERMISO DE REDES — lo que autorizó el tutor, su dedicatoria y, si ya
+          salió, cuándo se publicó. Es solo lectura: el permiso lo da (y lo
+          revoca) el tutor desde su link, no el equipo. */}
+      <Modal open={memorialOpen} onClose={() => setMemorialOpen(false)} title="Publicación en redes">
+        <div className="space-y-4">
+          <div className={`rounded-xl border-2 p-4 ${memorialAutorizado ? 'border-brand bg-brand/5' : 'border-gray-300 bg-gray-50'}`}>
+            <p className={`text-sm font-bold ${memorialAutorizado ? 'text-brand' : 'text-gray-600'}`}>
+              {memorialAutorizado
+                ? `El tutor autorizó publicar la foto de ${cliente.nombre_mascota}`
+                : 'El tutor no autorizó publicar la foto'}
+            </p>
+            {memorialAutorizado && cliente.memorial_consentimiento_fecha && (
+              <p className="text-xs text-gray-600 mt-1">
+                Autorizado el {formatDateTime(cliente.memorial_consentimiento_fecha)}
+              </p>
+            )}
+            {!memorialAutorizado && (
+              <p className="text-xs text-gray-600 mt-1">
+                La foto se usa únicamente para el certificado. Sin su permiso no se publica nada.
+              </p>
+            )}
+          </div>
+
+          {memorialAutorizado && (
+            <>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Dedicatoria del tutor</p>
+                {cliente.memorial_comentario?.trim() ? (
+                  <blockquote className="mt-1.5 rounded-xl border border-gray-300 bg-cream px-4 py-3 text-sm italic text-gray-800">
+                    “{cliente.memorial_comentario}”
+                  </blockquote>
+                ) : (
+                  <p className="mt-1 text-sm text-gray-400">No dejó ningún mensaje.</p>
+                )}
+              </div>
+
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Publicación</p>
+                {cliente.memorial_publicado_at ? (
+                  <div className="mt-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-emerald-900">
+                      Publicada el {formatDateTime(cliente.memorial_publicado_at)}
+                    </p>
+                    <p className="text-xs text-emerald-800 mt-1">
+                      Recuerda fijarla en la destacada «Despedidas» dentro de las 24 h: Instagram no permite
+                      hacerlo por API, hay que agregarla a mano desde el teléfono.
+                    </p>
+                    {cliente.memorial_story_id && (
+                      <p className="text-[11px] text-emerald-700/80 mt-1 font-mono">Historia {cliente.memorial_story_id}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm text-gray-600">
+                    Todavía no se publica. La historia sale sola cuando {cliente.nombre_mascota} quede entregada.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </Modal>
 
@@ -2616,6 +2707,45 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         </form>
       </Modal>
 
+    </div>
+  )
+}
+
+/**
+ * Bloque plegable de la ficha. Todo lo que va de "Información del tutor" hacia
+ * abajo arranca CERRADO: la ficha creció hasta ser una pantalla de varios
+ * scrolls, y el 90% de las visitas es para mirar el encabezado (estado, cobro,
+ * proceso), no para editar datos. Plegado se ve todo de una y se abre solo lo
+ * que se va a tocar.
+ */
+function Seccion({ titulo, icono, resumen, abierta, onToggle, tono = 'normal', children }: {
+  titulo: string
+  icono?: React.ReactNode
+  /** Dato al pasar, a la derecha del título, para no tener que abrir. */
+  resumen?: React.ReactNode
+  abierta: boolean
+  onToggle: () => void
+  tono?: 'normal' | 'peligro'
+  children: React.ReactNode
+}) {
+  const peligro = tono === 'peligro'
+  return (
+    <div className={`bg-white rounded-xl shadow-md border-2 mb-6 overflow-hidden ${peligro ? 'border-red-300' : 'border-gray-300'}`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={abierta}
+        className={`w-full flex items-center justify-between gap-3 px-4 sm:px-6 py-4 text-left transition-colors ${peligro ? 'hover:bg-red-50' : 'hover:bg-gray-50'}`}
+      >
+        <span className={`flex items-center gap-2 text-base font-bold ${peligro ? 'text-red-800' : 'text-gray-900'}`}>
+          {icono}{titulo}
+        </span>
+        <span className="flex items-center gap-2 shrink-0">
+          {resumen && <span className="hidden sm:block text-xs font-medium text-gray-500 truncate max-w-[16rem]">{resumen}</span>}
+          <ChevronDown className={`w-4 h-4 transition-transform ${abierta ? 'rotate-180' : ''} ${peligro ? 'text-red-400' : 'text-gray-400'}`} aria-hidden="true" />
+        </span>
+      </button>
+      {abierta && <div className="px-4 sm:px-6 pb-6">{children}</div>}
     </div>
   )
 }

@@ -1,191 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { after } from 'next/server'
-import { getSheetData, updateById, updateByIdIf } from '@/lib/datastore'
-import { publicarMemorialSiCorresponde } from '@/lib/memorial'
-import { enviarEntregaConfirmada } from '@/lib/cliente-mailer'
-import { resolverVet, enviarEntregaVet } from '@/lib/vet-cremacion-mailer'
-import { avisarClienteWhatsapp } from '@/lib/whatsapp-avisos'
-import { getContacto } from '@/lib/email-layout'
-import { marcarConversacionPorTelefono } from '@/lib/mensajes'
-import { todayISO } from '@/lib/dates'
+import { registrarEntrega } from '@/lib/despacho-entrega'
 
 export const dynamic = 'force-dynamic'
 
-type Entregas = Record<string, { fecha_hora: string }>
-
 /**
  * POST /api/despachos/[id]/entregar  body: { cliente_id, deshacer? }
- * Marca (o desmarca) una mascota como entregada dentro de la ruta:
- *  - Registra la entrega en `entregas` con su fecha/hora.
- *  - Pone la mascota en estado 'despachado' y la vincula al despacho.
- *  - Envía el correo de entrega + reseña al tutor (solo al marcar, no al deshacer).
- * Si la ruta estaba 'guardada', la pasa a 'en_curso' (sin reenviar el correo de inicio).
+ * Marca (o desmarca) una mascota como entregada dentro de la ruta.
  *
- * Concurrencia: `entregas` es un blob JSON compartido por toda la ruta. Dos
- * entregas casi simultáneas (de paradas distintas) harían read-modify-write y una
- * se perdería. Lo resolvemos con optimistic concurrency: cada intento condiciona
- * el update a que `entregas` siga igual que cuando lo leímos (updateByIdIf); si
- * cambió, reintentamos con la versión fresca.
+ * La lógica vive en [lib/despacho-entrega.ts](../../../../../lib/despacho-entrega.ts)
+ * porque la comparte con la hoja de ruta pública del delivery
+ * (`/api/rutas/[token]`): marcar entregado tiene que hacer lo mismo desde el
+ * panel que desde el link.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const body = await req.json().catch(() => ({}))
-    const clienteId = String(body.cliente_id ?? '')
-    const deshacer = body.deshacer === true
-    if (!clienteId) return NextResponse.json({ error: 'cliente_id requerido' }, { status: 400 })
-
-    const now = new Date().toISOString()
-    const MAX_RETRY = 5
-
-    // Resultado a devolver tras aplicar el cambio en `entregas` (o early-return).
-    type Aplicado =
-      | { tipo: 'ya_entregada' }
-      | { tipo: 'entregada'; ruta_terminada: boolean }
-      | { tipo: 'deshecha'; ruta_reabierta: boolean }
-    let aplicado: Aplicado | null = null
-
-    for (let attempt = 0; attempt < MAX_RETRY && !aplicado; attempt++) {
-      const rows = await getSheetData('despachos')
-      const idx = rows.findIndex(r => r.id === id)
-      if (idx === -1) return NextResponse.json({ error: 'Ruta no encontrada' }, { status: 404 })
-      const row = rows[idx]
-
-      let mascotasIds: string[] = []
-      try { mascotasIds = JSON.parse(row.mascotas_ids || '[]') } catch {}
-      if (!mascotasIds.includes(clienteId)) {
-        return NextResponse.json({ error: 'La mascota no pertenece a esta ruta' }, { status: 400 })
-      }
-
-      const entregasStr = row.entregas ?? ''  // string EXACTO almacenado (guarda optimista; puede ser '')
-      let entregas: Entregas = {}
-      try { entregas = JSON.parse(entregasStr || '{}') } catch {}
-
-      const cambios: Record<string, string> = {}
-      if (deshacer) {
-        const nuevas = { ...entregas }
-        delete nuevas[clienteId]
-        cambios.entregas = JSON.stringify(nuevas)
-        // Si la ruta se había cerrado sola, al deshacer ya no está completa: reabrir.
-        const reabierta = row.estado_ruta === 'terminada'
-        if (reabierta) {
-          cambios.estado_ruta = 'en_curso'
-          cambios.hora_termino_ruta = ''
-          cambios.fecha_realizada = ''
-        }
-        const ok = await updateByIdIf('despachos', id, { entregas: entregasStr }, cambios)
-        if (ok) aplicado = { tipo: 'deshecha', ruta_reabierta: reabierta }
-        continue
-      }
-
-      if (entregas[clienteId]) { aplicado = { tipo: 'ya_entregada' }; break }
-      const nuevas: Entregas = { ...entregas, [clienteId]: { fecha_hora: now } }
-      cambios.entregas = JSON.stringify(nuevas)
-
-      // ¿Era la última? Si TODAS las paradas quedaron entregadas, cerramos la ruta.
-      const todasEntregadas = mascotasIds.length > 0 && mascotasIds.every(mid => !!nuevas[mid])
-      if (todasEntregadas) {
-        cambios.estado_ruta = 'terminada'
-        if (!row.hora_inicio_ruta) cambios.hora_inicio_ruta = now
-        if (!row.hora_termino_ruta) cambios.hora_termino_ruta = now
-        if (!row.fecha_realizada) cambios.fecha_realizada = todayISO()
-      } else if (row.estado_ruta !== 'terminada' && row.estado_ruta !== 'en_curso') {
-        cambios.estado_ruta = 'en_curso'
-        if (!row.hora_inicio_ruta) cambios.hora_inicio_ruta = now
-      }
-      const ok = await updateByIdIf('despachos', id, { entregas: entregasStr }, cambios)
-      if (ok) aplicado = { tipo: 'entregada', ruta_terminada: todasEntregadas }
-      // si !ok → otra entrega cambió el blob; reintentamos con datos frescos
-    }
-
-    if (!aplicado) {
-      return NextResponse.json({ error: 'No se pudo registrar la entrega (conflicto de concurrencia). Reintenta.' }, { status: 409 })
-    }
-
-    if (aplicado.tipo === 'ya_entregada') {
-      return NextResponse.json({ ok: true, ya_entregada: true })
-    }
-
-    // Flip del cliente + correo: una sola vez, después de fijar el blob de entregas.
-    const clientes = await getSheetData('clientes')
-    const cliente = clientes.find(c => c.id === clienteId)
-
-    if (aplicado.tipo === 'deshecha') {
-      if (cliente && cliente.despacho_id === id) {
-        await updateById('clientes', clienteId, { ...cliente, estado: 'cremado', despacho_id: '' })
-      }
-      return NextResponse.json({ ok: true, entregada: false, ruta_reabierta: aplicado.ruta_reabierta })
-    }
-
-    // tipo === 'entregada'
-    if (cliente) {
-      await updateById('clientes', clienteId, { ...cliente, estado: 'despachado', despacho_id: id })
-      // Correo de entrega + reseña al tutor (best-effort).
-      try {
-        await enviarEntregaConfirmada({
-          email: cliente.email,
-          nombreMascota: cliente.nombre_mascota,
-          nombreTutor: cliente.nombre_tutor,
-          codigo: cliente.codigo,
-          clienteId: cliente.id,
-          // Clientes marcados "no pedir evaluación" reciben la entrega SIN el pedido de reseña.
-          sinEvaluacion: String(cliente.omitir_evaluacion || '').toUpperCase() === 'TRUE',
-        })
-      } catch (e) {
-        console.warn('[despachos/entregar] fallo correo entrega (no bloqueante):', e)
-      }
-      // WhatsApp al tutor con el link "Evalúanos aquí" (el mismo del correo).
-      // Texto libre primero (gratis); con la ventana de 24h cerrada —lo habitual
-      // en la entrega, que suele llegar 72h+ después del último contacto— cae a
-      // la plantilla aprobada `evaluacion_entrega`. Si la ficha está marcada
-      // "no pedir evaluación" (omitir_evaluacion) NO se envía ningún WhatsApp.
-      try {
-        const sinEvaluacion = String(cliente.omitir_evaluacion || '').toUpperCase() === 'TRUE'
-        const reviewUrl = sinEvaluacion ? '' : (await getContacto()).googleReviewUrl
-        if (!sinEvaluacion && reviewUrl && cliente.telefono) {
-          const tutor = (cliente.nombre_tutor || '').trim().split(/\s+/)[0] || '👋'
-          const mascota = cliente.nombre_mascota || 'tu mascota'
-          await avisarClienteWhatsapp(
-            cliente.telefono,
-            `Hola ${tutor}, ya entregamos el ánfora de ${mascota}. Fue un honor acompañarte en este proceso. Si quieres, puedes dejarnos tu evaluación aquí: ${reviewUrl} — te toma menos de un minuto y nos ayuda muchísimo. Gracias por confiar en Crematorio Alma Animal.`,
-            { nombre: 'evaluacion_entrega', variables: [tutor, mascota, reviewUrl] },
-          )
-        }
-      } catch (e) {
-        console.warn('[despachos/entregar] fallo WhatsApp evaluación (no bloqueante):', e)
-      }
-      // Y al veterinario de convenio asociado, si lo hay (best-effort).
-      try {
-        const vet = await resolverVet(cliente.veterinaria_id)
-        if (vet) await enviarEntregaVet({ ...vet, nombreMascota: cliente.nombre_mascota, codigo: cliente.codigo })
-      } catch (e) {
-        console.warn('[despachos/entregar] fallo correo entrega al vet (no bloqueante):', e)
-      }
-      // Con la ENTREGA se cierra el negocio → su conversación de WhatsApp pasa a
-      // 'cerrado' (cliente histórico). No pisa una conversación de veterinario.
-      try {
-        await marcarConversacionPorTelefono(cliente.telefono || '', 'cerrado', { soloSi: ['activo', 'cliente', 'archivado'] })
-      } catch (e) { console.warn('[despachos/entregar] no se pudo cerrar la conversación:', e) }
-
-      // HISTORIA DE DESPEDIDA en Instagram. Se dispara acá porque la ENTREGA es
-      // la segunda de las dos condiciones (la otra es el consentimiento del
-      // tutor al subir la foto). El helper revalida ambas contra la ficha fresca
-      // y no hace nada si falta alguna. Best-effort y en segundo plano: renderiza
-      // y sube a Meta, así que no puede demorar la respuesta al chofer.
-      // Sin aviso por WhatsApp (decisión del dueño 2026-08-06): la publicación es
-      // silenciosa. Queda el rastro en la ficha (`memorial_publicado_at`,
-      // `memorial_story_id`, `memorial_plantilla`) y en el log del servidor. Ojo:
-      // la destacada "Despedidas" se sigue fijando A MANO —Instagram no lo permite
-      // por API— y ahora nada lo recuerda, así que hay que mirar las historias.
-      after(async () => {
-        const r = await publicarMemorialSiCorresponde(clienteId)
-        console.log(r.ok
-          ? `[despachos/entregar] historia de despedida publicada (${clienteId}): ${r.plantilla} · ${r.storyId}`
-          : `[despachos/entregar] sin historia de despedida (${clienteId}): ${r.motivo}`)
-      })
-    }
-
-    return NextResponse.json({ ok: true, entregada: true, fecha_hora: now, ruta_terminada: aplicado.ruta_terminada })
+    const r = await registrarEntrega(id, String(body.cliente_id ?? ''), { deshacer: body.deshacer === true })
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
+    if (r.tipo === 'ya_entregada') return NextResponse.json({ ok: true, ya_entregada: true })
+    if (r.tipo === 'deshecha') return NextResponse.json({ ok: true, entregada: false, ruta_reabierta: r.ruta_reabierta })
+    return NextResponse.json({ ok: true, entregada: true, fecha_hora: r.fecha_hora, ruta_terminada: r.ruta_terminada })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

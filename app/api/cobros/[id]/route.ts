@@ -41,6 +41,11 @@ export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ i
       try {
         const ficha = (await getSheetData('clientes')).find(f => String(f.id) === String(cobro.cliente_id))
         if (ficha && String(ficha.estado_pago || '').toLowerCase() !== 'pagado') {
+          // NO se toca `fecha_pago`: el saldo de un parcial SIEMPRE se recibe por
+          // transferencia (confirmado por el dueño, 2026-08-07), así que no es una
+          // venta del procesador. El día que le importa a Ventas POS es el del
+          // ABONO —el que sí pasó por la máquina o el link—, y ese ya quedó
+          // sellado al registrar el pago parcial.
           await updateByIdIf('clientes', String(ficha.id), {}, { estado_pago: 'pagado' })
           const r = await emitirBoletaSiCorresponde({ ...ficha, estado_pago: 'pagado' }, { creadoPorNombre: 'Automático (saldo de pago parcial recibido)' })
           if (r.boleta_id) boletaId = r.boleta_id

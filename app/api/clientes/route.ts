@@ -206,7 +206,12 @@ export async function POST(req: NextRequest) {
       precio_total: snapshot.precio_total,
       tipo_pago: data.tipo_pago,
       estado_pago: estadoPagoFinal,
-      fecha_pago: data.fecha_pago ?? '',
+      // La ficha que NACE pagada se cobró hoy: sin este sello el día de la venta
+      // se lo pondría la primera edición posterior (Facturación → Ventas POS).
+      // El PARCIAL también sella: el ABONO es lo que pasó por la máquina o el
+      // link hoy. El saldo que queda se recibe por transferencia y no entra en
+      // la conciliación del procesador.
+      fecha_pago: data.fecha_pago || (estadoPagoFinal === 'pagado' || estadoPagoFinal === 'parcial' ? todayISO() : ''),
       fecha_creacion: now,
       greda_descontada: SIN_GREDA, // se resuelve tras el insert (abajo)
     }

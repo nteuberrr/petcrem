@@ -124,6 +124,14 @@ export async function proxy(req: NextRequest) {
     // token HMAC firmado; el endpoint es idempotente.
     pathname.startsWith('/pago/confirma/') ||
     pathname === '/api/pago/confirmar' ||
+    // HOJA DE RUTA del repartidor externo: abre la ruta y marca entregas desde
+    // un link firmado, sin cuenta en el sistema. Auth = el token HMAC de la URL
+    // (lib/ruta-token), que apunta a UN despacho y a ninguna otra cosa.
+    pathname.startsWith('/ruta/') ||
+    pathname.startsWith('/api/rutas/') ||
+    // Emisión de ESE link (auth interna: sesión o Bearer CRON_SECRET). Pasa por
+    // acá para poder firmarlo en PROD, que es el único entorno cuyo token vale.
+    (pathname.startsWith('/api/despachos/') && pathname.endsWith('/hoja-ruta')) ||
     pathname === '/api/eutanasias/precios' ||
     pathname === '/api/eutanasias/vets/inscribir' ||
     // Autocomplete de comunas usado tanto en el landing público como en el

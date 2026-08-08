@@ -307,10 +307,24 @@ export async function PATCH(
 
     // FECHA DE PAGO: el campo ya NO se muestra en la ficha (decisión del dueño,
     // solo se guarda como dato), así que el servidor la sella acá —después de
-    // todas las transiciones de estado_pago, incluida la de un parcial cuyo
-    // abono cubrió el total. Sin día, Facturación → Ventas POS no puede cuadrar
-    // la venta con el abono de Haulmer y la ficha cae en `sin_fecha`.
-    if (String(updated.estado_pago || '').toLowerCase() === 'pagado' && !String(updated.fecha_pago || '').trim()) {
+    // todas las transiciones de estado_pago. Sin día, Facturación → Ventas POS
+    // no puede cuadrar la venta con el abono de Haulmer y la ficha cae en
+    // `sin_fecha`. El PARCIAL también sella: el ABONO es lo que pasó por la
+    // máquina o el link ese día (el saldo que queda llega por transferencia y no
+    // es parte de la conciliación del procesador).
+    //
+    // ⚠️ SOLO cuando el pago OCURRE EN ESTE REQUEST (misma guarda que la emisión
+    // de la boleta, más abajo). Sellar "toda ficha pagada sin fecha" re-fechaba
+    // las ventas viejas al día en que alguien las editaba: las fichas de las
+    // rutas 91 y 92 (retiros del 30-jul al 2-ago, ya boleteadas esos días)
+    // quedaron con fecha_pago 6 y 7 de agosto —el día en que se entregaron— y
+    // Ventas POS las mostraba cobradas ese día, inflando el abono esperado.
+    // Sin sello, la ficha vieja cae en el respaldo por fecha de la boleta, que
+    // es el día real en que se marcó pagada.
+    const pagoAntes = String(rows[idx].estado_pago || '').toLowerCase()
+    const pagoAhora = String(updated.estado_pago || '').toLowerCase()
+    const cobradoAhora = pagoAhora === 'pagado' || pagoAhora === 'parcial'
+    if (cobradoAhora && (pagoAntes !== pagoAhora || !!codigoGenerado) && !String(updated.fecha_pago || '').trim()) {
       updated.fecha_pago = todayISO()
     }
 
@@ -450,8 +464,6 @@ export async function PATCH(
     // es el backlog histórico y se emite a mano desde Facturación, no de golpe al
     // guardar. El helper aplica el resto de las guardas (tutor, registrada, sin
     // boleta previa) y es idempotente por `boleta_id`. Best-effort.
-    const pagoAntes = String(rows[idx].estado_pago || '').toLowerCase()
-    const pagoAhora = String(updated.estado_pago || '').toLowerCase()
     if (pagoAhora === 'pagado' && (pagoAntes !== 'pagado' || !!codigoGenerado)) {
       const { boleta_id } = await emitirBoletaSiCorresponde(updated as Record<string, string>, { creadoPorNombre: 'Automático (pago confirmado)' })
       if (boleta_id) updated.boleta_id = boleta_id

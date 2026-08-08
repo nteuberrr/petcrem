@@ -27,6 +27,7 @@ interface VentaPos {
   folio: string
   tipo_pago: 'pos' | 'link'
   bruto: number
+  saldo_excluido: number
   comision_neta: number
   comision_iva: number
   comision_bruta: number
@@ -224,7 +225,7 @@ export default function VentasPosTab() {
           {/* ── Totales del rango ─────────────────────────────────────── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { t: 'Ventas por POS / link', v: String(data.totales.ventas), sub: 'solo las pagadas' },
+              { t: 'Ventas por POS / link', v: String(data.totales.ventas), sub: 'pagadas y abonos parciales' },
               { t: 'Total cobrado (bruto)', v: fmtPrecio(data.totales.bruto), sub: 'lo que pasó por la máquina' },
               { t: 'Comisión (con IVA)', v: fmtPrecio(data.totales.comision_bruta), sub: 'lo que se queda el procesador' },
               { t: 'A recibir de Haulmer', v: fmtPrecio(data.totales.liquidado), sub: 'líquido del período', destacar: true },
@@ -321,7 +322,15 @@ export default function VentasPosTab() {
                                           className="ml-1.5 text-[10px] font-semibold text-amber-700">día estimado</span>
                                       )}
                                     </td>
-                                    <td className="px-3 py-2.5 text-right text-gray-900 whitespace-nowrap">{fmtPrecio(v.bruto)}</td>
+                                    <td className="px-3 py-2.5 text-right text-gray-900 whitespace-nowrap">
+                                      {fmtPrecio(v.bruto)}
+                                      {v.saldo_excluido > 0 && (
+                                        <span className="block text-[10px] font-semibold text-gray-500"
+                                          title="Pago parcial: el saldo se recibió por transferencia, así que no pasa por el procesador">
+                                          abono · saldo {fmtPrecio(v.saldo_excluido)} por transferencia
+                                        </span>
+                                      )}
+                                    </td>
                                     <td className="px-3 py-2.5 text-right text-gray-600 whitespace-nowrap">{fmtPrecio(v.comision_neta)}</td>
                                     <td className="px-3 py-2.5 text-right text-gray-600 whitespace-nowrap">{fmtPrecio(v.comision_bruta)}</td>
                                     <td className="px-3 py-2.5 text-right font-semibold text-brand whitespace-nowrap">{fmtPrecio(v.liquidado)}</td>
