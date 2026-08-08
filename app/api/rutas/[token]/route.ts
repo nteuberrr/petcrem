@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData } from '@/lib/datastore'
 import { verificarRutaToken } from '@/lib/ruta-token'
-import { registrarEntrega } from '@/lib/despacho-entrega'
+import { registrarEntrega, adjuntarFotosEntrega } from '@/lib/despacho-entrega'
 import { datosEtiqueta, formatearTelefono } from '@/lib/etiqueta-datos'
 import { formatDate } from '@/lib/dates'
 
@@ -47,7 +47,7 @@ async function cargarRuta(despachoId: string) {
 
   let mascotasIds: string[] = []
   try { mascotasIds = JSON.parse(row.mascotas_ids || '[]') } catch {}
-  let entregas: Record<string, { fecha_hora: string }> = {}
+  let entregas: Record<string, { fecha_hora: string; fotos?: string[] }> = {}
   try { entregas = JSON.parse(row.entregas || '{}') } catch {}
 
   const clientes = await getSheetData('clientes')
@@ -68,6 +68,7 @@ async function cargarRuta(despachoId: string) {
       telefono_legible: formatearTelefono(e?.telefono || ''),
       entregada: !!ent,
       entregada_hora: ent?.fecha_hora || '',
+      fotos: ent?.fotos ?? [],
     }
   })
 
@@ -112,10 +113,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
     const body = await req.json().catch(() => ({}))
     const clienteId = String(body.cliente_id ?? '')
+    const fotos = Array.isArray(body.fotos) ? body.fotos.map(String) : []
     if (!clienteId) return NextResponse.json({ error: 'Falta la parada.' }, { status: 400 })
 
+    // `solo_fotos`: la parada YA está entregada y el repartidor sacó otra foto.
+    // Se adjunta sin re-disparar los avisos al tutor.
+    if (body.solo_fotos === true) {
+      const r = await adjuntarFotosEntrega(v.despachoId, clienteId, fotos)
+      if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
+      const ruta = await cargarRuta(v.despachoId)
+      return NextResponse.json({ ok: true, ruta })
+    }
+
     // registrarEntrega valida que la parada pertenezca a ESTA ruta.
-    const r = await registrarEntrega(v.despachoId, clienteId)
+    const r = await registrarEntrega(v.despachoId, clienteId, { fotos })
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
 
     const ruta = await cargarRuta(v.despachoId)

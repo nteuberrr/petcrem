@@ -24,7 +24,9 @@ type Despacho = {
   mascotas_ids: string[]; nota: string; fecha_creacion: string
   estado_ruta?: EstadoRuta
   paradas?: Parada[]
-  entregas?: Record<string, { fecha_hora: string }>
+  // `fotos`: las que saca el repartidor al entregar desde la hoja de ruta
+  // compartida (lib/despacho-entrega). Viven dentro de la entrega.
+  entregas?: Record<string, { fecha_hora: string; fotos?: string[] }>
   origen_direccion?: string; origen_lat?: string; origen_lng?: string
   destino_direccion?: string; destino_lat?: string; destino_lng?: string
   hora_inicio_ruta?: string; hora_termino_ruta?: string; fecha_realizada?: string
@@ -793,6 +795,18 @@ export default function DespachosTab() {
                                   </div>
                                   <div className="text-xs text-gray-600 truncate">{m?.nombre_tutor ?? '—'} · {m?.telefono || 'sin teléfono'}</div>
                                   <div className="text-xs text-gray-500 truncate">{p.direccion || [m?.direccion_despacho, m?.comuna].filter(Boolean).join(', ') || '—'}</div>
+                                  {/* Fotos que sacó el repartidor al entregar (hoja de ruta compartida) */}
+                                  {(ent?.fotos?.length ?? 0) > 0 && (
+                                    <div className="mt-1.5 flex gap-1.5">
+                                      {ent!.fotos!.map(url => (
+                                        <a key={url} href={url} target="_blank" rel="noopener noreferrer" title="Foto de la entrega">
+                                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                                          <img src={url} alt="Foto de la entrega"
+                                            className="h-12 w-12 rounded-md border border-gray-300 object-cover hover:opacity-80" />
+                                        </a>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                                 <button onClick={() => toggleEntrega(d, p.cliente_id, !!ent)} disabled={busy}
                                   className={`shrink-0 text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50 ${ent ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-green-600 hover:bg-green-700 text-white'}`}>

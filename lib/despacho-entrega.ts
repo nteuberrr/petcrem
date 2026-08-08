@@ -34,7 +34,20 @@ import { todayISO } from './dates'
  * cuando lo leímos (updateByIdIf); si cambió, reintenta con la versión fresca.
  */
 
-type Entregas = Record<string, { fecha_hora: string }>
+/**
+ * Una entrega registrada. `fotos` (URLs en R2) son las que saca el repartidor al
+ * momento de entregar: van DENTRO de la entrega y no en una columna aparte
+ * porque son parte de ese hecho, y así el resto del sistema —que solo pregunta
+ * "¿existe la entrada?" y lee `fecha_hora`— sigue funcionando igual.
+ *
+ * ⚠️ La entrada existe SOLO si la parada está entregada. Nada debe crearla
+ * antes (p. ej. para colgarle una foto): media docena de lugares cuentan
+ * entregas con `!!entregas[id]` y pasarían a contar de más.
+ */
+type Entregas = Record<string, { fecha_hora: string; fotos?: string[] }>
+
+/** Tope de fotos por parada: suficiente para dejar constancia, no un álbum. */
+export const MAX_FOTOS_ENTREGA = 5
 
 export type ResultadoEntrega =
   | { ok: true; tipo: 'ya_entregada' }
@@ -47,9 +60,10 @@ const MAX_RETRY = 5
 export async function registrarEntrega(
   despachoId: string,
   clienteId: string,
-  opciones: { deshacer?: boolean } = {},
+  opciones: { deshacer?: boolean; fotos?: string[] } = {},
 ): Promise<ResultadoEntrega> {
   const deshacer = opciones.deshacer === true
+  const fotos = (opciones.fotos ?? []).filter(u => typeof u === 'string' && u.trim()).slice(0, MAX_FOTOS_ENTREGA)
   if (!clienteId) return { ok: false, status: 400, error: 'cliente_id requerido' }
 
   const now = new Date().toISOString()
@@ -93,7 +107,10 @@ export async function registrarEntrega(
     }
 
     if (entregas[clienteId]) { aplicado = { tipo: 'ya_entregada' }; break }
-    const nuevas: Entregas = { ...entregas, [clienteId]: { fecha_hora: now } }
+    const nuevas: Entregas = {
+      ...entregas,
+      [clienteId]: { fecha_hora: now, ...(fotos.length ? { fotos } : {}) },
+    }
     cambios.entregas = JSON.stringify(nuevas)
 
     // ¿Era la última? Si TODAS las paradas quedaron entregadas, cerramos la ruta.
@@ -196,4 +213,43 @@ export async function registrarEntrega(
   }
 
   return { ok: true, tipo: 'entregada', fecha_hora: now, ruta_terminada: aplicado.ruta_terminada }
+}
+
+/**
+ * Suma fotos a una parada YA entregada (el repartidor sacó otra después de
+ * marcar). No re-dispara nada: la entrega ya avisó al tutor.
+ *
+ * Misma concurrencia optimista que `registrarEntrega` — el blob es compartido
+ * por toda la ruta, así que se reintenta si alguien lo movió mientras tanto.
+ */
+export async function adjuntarFotosEntrega(
+  despachoId: string,
+  clienteId: string,
+  fotos: string[],
+): Promise<{ ok: true; fotos: string[] } | { ok: false; status: number; error: string }> {
+  const nuevas = fotos.filter(u => typeof u === 'string' && u.trim())
+  if (!clienteId) return { ok: false, status: 400, error: 'cliente_id requerido' }
+  if (nuevas.length === 0) return { ok: false, status: 400, error: 'No hay fotos que adjuntar' }
+
+  for (let intento = 0; intento < MAX_RETRY; intento++) {
+    const rows = await getSheetData('despachos')
+    const row = rows.find(r => r.id === despachoId)
+    if (!row) return { ok: false, status: 404, error: 'Ruta no encontrada' }
+
+    const entregasStr = row.entregas ?? ''
+    let entregas: Entregas = {}
+    try { entregas = JSON.parse(entregasStr || '{}') } catch {}
+
+    const actual = entregas[clienteId]
+    if (!actual) return { ok: false, status: 400, error: 'La parada todavía no está entregada' }
+
+    const combinadas = [...(actual.fotos ?? []), ...nuevas]
+      .filter((u, i, a) => a.indexOf(u) === i)
+      .slice(0, MAX_FOTOS_ENTREGA)
+    const blob: Entregas = { ...entregas, [clienteId]: { ...actual, fotos: combinadas } }
+
+    const ok = await updateByIdIf('despachos', despachoId, { entregas: entregasStr }, { entregas: JSON.stringify(blob) })
+    if (ok) return { ok: true, fotos: combinadas }
+  }
+  return { ok: false, status: 409, error: 'No se pudo guardar la foto (conflicto). Reintenta.' }
 }
