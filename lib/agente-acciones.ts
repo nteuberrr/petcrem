@@ -629,16 +629,41 @@ async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<s
     return `No pude validar la dirección "${a.direccion}, ${a.comuna}". Pídele al veterinario que la confirme o la corrija (calle y número) y vuelve a registrarla. NO la registres aún.`
   }
 
+  await ensureSheet(SHEET_RETIRO)
+  await ensureColumns(SHEET_RETIRO, COLS_RETIRO)
+  const waVet = (ctx.waId || '').replace(/\D/g, '')
+
+  // ⚠️ El candado anti-duplicado va ANTES de evaluar la hora, igual que en el
+  // flujo del tutor. Si va después, la evaluación de slot corta con un `return` y
+  // el candado nunca se ejecuta: el bot ve OCUPADA la hora que él mismo acaba de
+  // reservar y le ofrece otros horarios al veterinario, como si la reserva que
+  // recién confirmó no existiera.
+  //
+  // Caso real (Remy, convenio Daniella Millas, 2026-08-09): el retiro quedó
+  // agendado a las 11:00 y un minuto después la veterinaria mandó los datos de la
+  // tutora. El modelo leyó ese mensaje como una solicitud nueva, volvió a llamar
+  // la herramienta y le respondió "a las 11:00 no tenemos disponibilidad" —
+  // justo la hora que le acababa de confirmar.
+  //
+  // Acá NO se bloquea "una ficha en proceso" como en el flujo del tutor (un
+  // veterinario agenda muchos retiros distintos): se bloquea solo el MISMO
+  // retiro, o sea mismo número + misma mascota + solicitud todavía vigente.
+  const vigente = (await getSheetData(SHEET_RETIRO)).find(s =>
+    ['pendiente', 'confirmada'].includes(s.estado || '') &&
+    tel9de(s.cliente_wa_id) === tel9de(waVet) &&
+    normalizaNombre(s.nombre_mascota || '') === normalizaNombre(a.nombre_mascota))
+  if (vigente) {
+    return `El retiro de ${a.nombre_mascota} YA está registrado (N° ${vigente.id}, ${formatDateConDia(vigente.fecha_retiro)} a las ${vigente.hora_retiro}) y sigue vigente. NO lo registres de nuevo y NO le ofrezcas otros horarios. ` +
+      `Si el veterinario está mandando datos ADICIONALES (tutor, teléfono, peso, correo), agradécele y dile que quedaron anotados para la ficha — nada más. ` +
+      `Si lo que quiere es CAMBIAR la fecha o la hora, usa la herramienta de reprogramar, no esta. Y si es el retiro de OTRA mascota, vuelve a llamarla con el nombre correcto.`
+  }
+
   const slot = await evaluarSlotRetiro(a.fecha, a.hora)
   if (!slot.ok) {
     const libres = slot.libres.length ? ` Horarios disponibles ese día: ${slot.libres.join(', ')}.` : ''
     return `NO registres este retiro: ${slot.motivo}${libres} Explícaselo al veterinario y ofrécele uno de los horarios disponibles; vuelve a llamar la herramienta solo cuando acuerden una hora válida.`
   }
 
-  await ensureSheet(SHEET_RETIRO)
-  await ensureColumns(SHEET_RETIRO, COLS_RETIRO)
-
-  const waVet = (ctx.waId || '').replace(/\D/g, '')
   const id = await getNextId(SHEET_RETIRO)
   await appendRow(SHEET_RETIRO, {
     id,
@@ -819,7 +844,17 @@ async function cotizarEutanasia(a: AccionCotizarEutanasia): Promise<string> {
   const notaRecargo = recargo > 0
     ? ` Estos dos valores son los del servicio: no les sumes tarifas de cremación. Si la fecha/hora del servicio cae fuera de horario (fin de semana, feriado o desde las 18:00) se cobra un recargo de ${fmtPrecio(recargo)} UNA SOLA VEZ en TODA la atención (aplica se realice o no la eutanasia): nómbralo una sola vez y súmalo una sola vez al total. Si además hay cremación, NO lo cobres de nuevo ahí — cotiza la cremación con "cotizar_cremacion" pasándole eutanasia_fuera_horario=true y usa los montos que devuelva.`
     : ''
-  return `Es un servicio de EVALUACIÓN a domicilio: un veterinario de la red visita a la mascota y evalúa si corresponde la eutanasia. Explícale al cliente con claridad los dos valores: si SE REALIZA la eutanasia, el valor es ${fmtPrecio(cliente)} (mascota de ${peso} kg); si al evaluar NO corresponde realizarla, se cobra solo la consulta de ${fmtPrecio(consulta.total)}. NO expliques cómo se reparte ese monto internamente.${notaRecargo} Si decide avanzar, junta los datos y agéndala.`
+  // ⚠️ El escenario "no corresponde" NO lleva cremación, y hay que decirlo con
+  // todas las letras. Caso real (Niebla, 2026-08-09): al cotizar el servicio
+  // integral el modelo armó "Total si solo es consulta: $175.000" sumándole la
+  // cremación de $135.000 a la consulta. Si el veterinario evalúa y no realiza la
+  // eutanasia, la mascota sigue VIVA: no hay retiro ni cremación que cobrar.
+  const reglaNoCorresponde =
+    ` REGLA DURA del escenario "NO corresponde": si el veterinario evalúa y NO realiza la eutanasia, la mascota sigue VIVA, así que NO hay retiro ni cremación. ` +
+    `En ese escenario el total es ÚNICAMENTE la consulta de ${fmtPrecio(consulta.total)}${recargo > 0 ? ` (más el recargo fuera de horario si aplica)` : ''} — NUNCA le sumes el valor de la cremación ni de un ánfora. ` +
+    `La cremación existe SOLO en el escenario en que la eutanasia SE REALIZA. Si le muestras dos totales, el de "solo consulta" tiene que ser claramente el más barato de los dos.`
+
+  return `Es un servicio de EVALUACIÓN a domicilio: un veterinario de la red visita a la mascota y evalúa si corresponde la eutanasia. Explícale al cliente con claridad los dos valores: si SE REALIZA la eutanasia, el valor es ${fmtPrecio(cliente)} (mascota de ${peso} kg); si al evaluar NO corresponde realizarla, se cobra solo la consulta de ${fmtPrecio(consulta.total)}. NO expliques cómo se reparte ese monto internamente.${reglaNoCorresponde}${notaRecargo} Si decide avanzar, junta los datos y agéndala.`
 }
 
 /** Crea la cotización de eutanasia, matchea la red de vets y les envía el correo. */
