@@ -1,4 +1,5 @@
 import type { FacturaSii } from './eerr-sii'
+import { grupoDe, type DocVentaSii } from './sii-ventas'
 
 /**
  * CONSULTA de documentos en OpenFactura (Haulmer) — la contracara de la emisión
@@ -137,9 +138,40 @@ export async function comprasDelPeriodo(periodo: string): Promise<FacturaSii[]> 
   return docs.map(aFacturaSii).filter(f => f.rut && f.folio && f.tipo_doc)
 }
 
-/** VENTAS emitidas del período (YYYY-MM). */
-export async function ventasDelPeriodo(periodo: string): Promise<FacturaSii[]> {
+const entero = (v: number | null | undefined): number => Math.round(Number(v) || 0)
+
+/**
+ * VENTAS emitidas del período, en el MISMO shape que produce el parser de los
+ * archivos del SII — así la conciliación no distingue de dónde vino el dato.
+ *
+ * Reemplaza la descarga manual de los dos CSV del RCV (detalle + boletas
+ * diferidas). Se verificó contra los archivos reales de julio y agosto 2026: de
+ * los documentos que traía el SII, NINGUNO faltaba acá (incluidas las 41 notas de
+ * crédito que anulan boletas de la numeración antigua). Al revés sí sobran, y a
+ * favor: OpenFactura trae también lo emitido después de generado el archivo.
+ *
+ * Ojo con el alcance: esto es lo que se emitió A TRAVÉS DE OPENFACTURA. Si alguna
+ * vez se emitiera un documento por otra vía, no aparecería acá — para eso se
+ * mantiene la carga manual del archivo del SII, que es el registro del propio SII.
+ */
+export async function ventasParaConciliacion(periodo: string): Promise<DocVentaSii[]> {
   const { desde, hasta } = rangoDelPeriodo(periodo)
   const docs = await listar('/v2/dte/document/issued', desde, hasta)
-  return docs.map(aFacturaSii).filter(f => f.folio && f.tipo_doc)
+  return docs
+    .filter(d => d.TipoDTE != null && d.Folio != null)
+    .map(d => {
+      const tipo = Number(d.TipoDTE)
+      return {
+        tipo_doc: tipo,
+        grupo: grupoDe(tipo),
+        rut: d.RUTRecep != null ? `${d.RUTRecep}-${d.DV ?? ''}` : '',
+        razon_social: d.RznSocRecep ?? '',
+        folio: String(d.Folio),
+        fecha: (d.FchEmis || '').slice(0, 10),
+        exento: entero(d.MntExe),
+        neto: entero(d.MntNeto),
+        iva: entero(d.IVA),
+        total: entero(d.MntTotal),
+      }
+    })
 }

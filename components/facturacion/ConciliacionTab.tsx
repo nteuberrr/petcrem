@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { fmtPrecio } from '@/lib/format'
-import { formatDate } from '@/lib/dates'
-import { Upload, AlertTriangle, CheckCircle2, FileSpreadsheet } from 'lucide-react'
+import { formatDate, todayISO } from '@/lib/dates'
+import { Upload, RefreshCw, AlertTriangle, CheckCircle2, FileSpreadsheet } from 'lucide-react'
 
 /**
  * Conciliación de ventas: lo declarado al SII (archivos del RCV) contra lo que el
@@ -33,6 +33,12 @@ const labelPeriodo = (p: string) => {
   const nombre = MESES[(parseInt(m, 10) || 1) - 1] || ''
   return `${nombre.charAt(0).toUpperCase()}${nombre.slice(1)} ${y || ''}`.trim()
 }
+
+// Desde 2024 hasta el año en curso: antes no hay documentos que traer.
+const ANIOS = (() => {
+  const y = parseInt(todayISO().slice(0, 4), 10)
+  return Array.from({ length: y - 2023 }, (_, i) => String(y - i))
+})()
 
 /** Umbral bajo el cual una diferencia se considera redondeo y no un descuadre. */
 const TOLERANCIA = 1000
@@ -75,6 +81,10 @@ export default function ConciliacionTab() {
   const [pedido, setPedido] = useState('')
   const [tick, setTick] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Período a sincronizar: arranca en el mes en curso, que es el caso normal.
+  const [mes, setMes] = useState(todayISO().slice(5, 7))
+  const [anio, setAnio] = useState(todayISO().slice(0, 4))
+  const [sincronizando, setSincronizando] = useState(false)
 
   // La bandera `vivo` descarta respuestas de una consulta anterior: cambiar de mes
   // dos veces rápido puede resolver las peticiones fuera de orden y dejar en
@@ -93,6 +103,25 @@ export default function ConciliacionTab() {
     })()
     return () => { vivo = false }
   }, [pedido, tick])
+
+  /**
+   * Trae las ventas del mes desde OpenFactura. Se verificó contra los archivos
+   * reales del SII: no falta ningún documento. Es idempotente (dedupe por
+   * tipo+folio), así que sirve para refrescar el mes en curso.
+   */
+  async function sincronizar() {
+    setSincronizando(true); setMsg(''); setError('')
+    try {
+      const r = await fetch('/api/facturacion/conciliacion', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ periodo: `${anio}-${mes}` }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setError(j?.error || 'No se pudo sincronizar'); return }
+      setMsg(`✓ ${labelPeriodo(j.periodo)}: ${j.agregados} documento(s) nuevo(s), ${j.total_documentos} en total.`)
+      setPedido(j.periodo); setTick(t => t + 1)
+    } catch { setError('Error de red') } finally { setSincronizando(false) }
+  }
 
   async function subir(files: FileList) {
     setSubiendo(true); setMsg(''); setError('')
@@ -120,28 +149,44 @@ export default function ConciliacionTab() {
 
   return (
     <div className="space-y-4">
-      {/* Carga de los dos archivos del SII */}
+      {/* Sincronizar es el camino normal; la carga del archivo queda de respaldo. */}
       <div className="bg-white rounded-2xl border border-gray-300 shadow-md p-4">
         <div className="flex flex-wrap items-center gap-3">
-          <input ref={fileRef} type="file" accept=".csv,.gz,text/csv,application/gzip" multiple className="hidden"
-            onChange={e => { const fs = e.target.files; if (fs?.length) subir(fs) }} />
-          <button onClick={() => fileRef.current?.click()} disabled={subiendo}
+          <select value={mes} onChange={e => setMes(e.target.value)} disabled={sincronizando}
+            className="border border-gray-300 rounded-xl px-2 py-2 text-sm disabled:opacity-50">
+            {MESES.map((m, i) => <option key={m} value={String(i + 1).padStart(2, '0')}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
+          </select>
+          <select value={anio} onChange={e => setAnio(e.target.value)} disabled={sincronizando}
+            className="border border-gray-300 rounded-xl px-2 py-2 text-sm disabled:opacity-50">
+            {ANIOS.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <button onClick={sincronizar} disabled={sincronizando || subiendo}
             className="inline-flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-brand-dark disabled:opacity-50">
-            <Upload className="w-4 h-4" aria-hidden="true" />
-            {subiendo ? 'Procesando…' : 'Cargar archivos del SII'}
+            <RefreshCw className={`w-4 h-4 ${sincronizando ? 'animate-spin' : ''}`} aria-hidden="true" />
+            {sincronizando ? 'Sincronizando…' : 'Sincronizar SII'}
           </button>
-          {d && d.periodos_cargados.length > 0 && (
-            <select value={periodo} onChange={e => setPedido(e.target.value)}
-              className="border border-gray-300 rounded-xl px-3 py-2 text-sm">
-              {d.periodos_cargados.map(p => <option key={p} value={p}>{labelPeriodo(p)}</option>)}
-            </select>
-          )}
-          {d?.fecha_carga && <span className="text-xs text-gray-500">Última carga: {formatDate(d.fecha_carga)}</span>}
+
+          <div className="ml-auto flex items-center gap-3">
+            {d && d.periodos_cargados.length > 0 && (
+              <select value={periodo} onChange={e => setPedido(e.target.value)}
+                title="Ver un período ya conciliado"
+                className="border border-gray-300 rounded-xl px-3 py-2 text-sm">
+                {d.periodos_cargados.map(p => <option key={p} value={p}>{labelPeriodo(p)}</option>)}
+              </select>
+            )}
+            <input ref={fileRef} type="file" accept=".csv,.gz,text/csv,application/gzip" multiple className="hidden"
+              onChange={e => { const fs = e.target.files; if (fs?.length) subir(fs) }} />
+            <button onClick={() => fileRef.current?.click()} disabled={subiendo || sincronizando}
+              title="Cargar los CSV de venta descargados del SII (detalle y/o boletas)"
+              className="inline-flex items-center gap-2 border border-gray-300 text-gray-600 px-3 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+              <Upload className="w-4 h-4" aria-hidden="true" />
+              {subiendo ? 'Procesando…' : 'Cargar Manual'}
+            </button>
+          </div>
         </div>
         <p className="text-xs text-gray-500 mt-2">
-          Del SII → Registro de Compra y Venta → pestaña <strong>VENTA</strong>: «Descargar Detalles» (facturas y notas de crédito)
-          y «Descargar Boletas» (queda pendiente, se refresca y baja un <code>.csv.gz</code>). Puedes subir los dos juntos o uno
-          por vez — se combinan en el mismo mes. El período se detecta solo.
+          Trae las ventas emitidas del mes (boletas, facturas y notas de crédito) sin pasar por el portal del SII.
+          {d?.fecha_carga && <> · Última actualización: {formatDate(d.fecha_carga)}</>}
         </p>
       </div>
 
@@ -151,7 +196,7 @@ export default function ConciliacionTab() {
       {!sii ? (
         <div className="bg-white rounded-2xl border border-gray-300 shadow-md p-8 text-center">
           <FileSpreadsheet className="w-8 h-8 mx-auto text-gray-300 mb-2" aria-hidden="true" />
-          <p className="text-sm text-gray-500">Todavía no cargas ningún archivo del SII para <strong>{labelPeriodo(periodo)}</strong>.</p>
+          <p className="text-sm text-gray-500">Todavía no hay ventas conciliadas para <strong>{labelPeriodo(periodo)}</strong>. Elige el mes y usa «Sincronizar SII».</p>
         </div>
       ) : (
         <>

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { puedeNivel } from '@/lib/permisos-server'
 import { getSheetData, appendRow, updateByIdIf, getNextId } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
-import { parseArchivoVentas, resumirVentasSii, type ResumenSii } from '@/lib/sii-ventas'
+import { parseArchivoVentas, resumirVentasSii, type ResumenSii, type DocVentaSii } from '@/lib/sii-ventas'
+import { ventasParaConciliacion, puedeConsultarOpenFactura } from '@/lib/openfactura-consulta'
 import { calcularIngresos, SE_DOCUMENTA, type ClaveIngreso } from '@/lib/eerr-ingresos'
 
 /**
@@ -20,6 +21,8 @@ import { calcularIngresos, SE_DOCUMENTA, type ClaveIngreso } from '@/lib/eerr-in
  */
 
 export const dynamic = 'force-dynamic'
+// Un mes con varias páginas se pagina a ~1 request/segundo (límite de Haulmer).
+export const maxDuration = 120
 
 const SHEET = 'conciliacion_sii'
 
@@ -144,22 +147,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
   try {
-    const form = await req.formData()
-    const archivos = form.getAll('archivos').filter((f): f is File => f instanceof File && f.size > 0)
-    if (archivos.length === 0) {
-      return NextResponse.json({ error: 'Sube al menos un archivo del SII (detalle de ventas o boletas).' }, { status: 400 })
-    }
+    // Dos caminos hacia el mismo lugar: sincronizar contra OpenFactura (JSON, el
+    // normal) o subir los CSV del SII a mano (multipart, el respaldo). Los dos
+    // terminan en la misma lista de documentos y en la misma fusión.
+    const nuevos: DocVentaSii[] = []
+    const esSync = (req.headers.get('content-type') || '').includes('application/json')
 
-    const nuevos = []
-    for (const f of archivos) {
-      let docs
-      try { docs = parseArchivoVentas(await f.arrayBuffer()) } catch (e) {
-        return NextResponse.json({ error: `No pude leer "${f.name}": ${e instanceof Error ? e.message : String(e)}` }, { status: 400 })
+    if (esSync) {
+      const { periodo } = await req.json().catch(() => ({ periodo: '' }))
+      const p = String(periodo || '').trim()
+      if (!esPeriodo(p)) return NextResponse.json({ error: 'Indica el período a sincronizar (mes y año).' }, { status: 400 })
+      if (p > todayISO().slice(0, 7)) return NextResponse.json({ error: 'Ese período todavía no ocurre.' }, { status: 400 })
+      if (!puedeConsultarOpenFactura()) {
+        return NextResponse.json({ error: 'OpenFactura no está configurado (falta OPENFACTURA_API_KEY).' }, { status: 400 })
       }
-      if (docs.length === 0) {
-        return NextResponse.json({ error: `"${f.name}" no tiene documentos. ¿Es el CSV de VENTAS del SII (detalle o boletas)?` }, { status: 400 })
+      nuevos.push(...(await ventasParaConciliacion(p)))
+      if (nuevos.length === 0) {
+        return NextResponse.json({ error: `No hay ventas emitidas en ${p}.` }, { status: 400 })
       }
-      nuevos.push(...docs)
+    } else {
+      const form = await req.formData()
+      const archivos = form.getAll('archivos').filter((f): f is File => f instanceof File && f.size > 0)
+      if (archivos.length === 0) {
+        return NextResponse.json({ error: 'Sube al menos un archivo del SII (detalle de ventas o boletas).' }, { status: 400 })
+      }
+      for (const f of archivos) {
+        let docs
+        try { docs = parseArchivoVentas(await f.arrayBuffer()) } catch (e) {
+          return NextResponse.json({ error: `No pude leer "${f.name}": ${e instanceof Error ? e.message : String(e)}` }, { status: 400 })
+        }
+        if (docs.length === 0) {
+          return NextResponse.json({ error: `"${f.name}" no tiene documentos. ¿Es el CSV de VENTAS del SII (detalle o boletas)?` }, { status: 400 })
+        }
+        nuevos.push(...docs)
+      }
     }
 
     const periodos = [...new Set(nuevos.map(d => d.fecha.slice(0, 7)).filter(Boolean))]
@@ -172,7 +193,7 @@ export async function POST(req: NextRequest) {
     // Fusión con lo ya cargado del mismo período, deduplicando por tipo+folio: el
     // usuario sube los dos archivos en dos pasos y a veces repite uno.
     const fila = await filaDe(periodo)
-    let previos: typeof nuevos = []
+    let previos: DocVentaSii[] = []
     if (fila?.docs_json) { try { previos = JSON.parse(fila.docs_json) } catch { previos = [] } }
     const porClave = new Map(previos.map(d => [`${d.tipo_doc}|${d.folio}`, d]))
     let agregados = 0
@@ -194,7 +215,7 @@ export async function POST(req: NextRequest) {
     else await appendRow(SHEET, { id: await getNextId(SHEET), ...payload, fecha_creacion: todayISO() })
 
     return NextResponse.json({
-      ok: true, periodo, agregados, total_documentos: todos.length,
+      ok: true, periodo, agregados, total_documentos: todos.length, origen: esSync ? 'openfactura' : 'archivo',
       sii, sistema: await ladoSistema(periodo),
     })
   } catch (e) {
