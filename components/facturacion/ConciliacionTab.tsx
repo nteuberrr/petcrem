@@ -21,7 +21,7 @@ type Sistema = {
   documentable: number
   emitido: { boletas: TotDoc; facturas: TotDoc; notas_credito: TotDoc; neto_venta: number }
 }
-type ItemDet = { clave: string; id: string; codigo: string; nombre: string; fecha: string; monto: number; documentado: boolean; documento: string }
+type ItemDet = { clave: string; id: string; codigo: string; nombre: string; fecha: string; monto: number; documentado: boolean; documento: string; origen: 'sistema' | 'pos' | 'ninguno'; vet?: string }
 type GrupoDet = { clave: string; label: string; se_documenta: boolean; total: number; docs: number; sin_documento: number; monto_sin_documento: number; items: ItemDet[] }
 
 type Historico = { periodo: string; fecha_carga: string; sii: Sii | null; sistema: Sistema }
@@ -297,8 +297,9 @@ export default function ConciliacionTab() {
                                     <td className="py-1 pr-2 whitespace-nowrap text-gray-500">{it.fecha ? formatDate(it.fecha) : '—'}</td>
                                     <td className="py-1 pr-2 text-gray-800">
                                       {it.codigo && <span className="text-gray-500">{it.codigo} · </span>}{it.nombre || '—'}
+                                      {it.vet && <span className="block text-[10px] text-gray-500 leading-tight">{it.vet}</span>}
                                     </td>
-                                    <td className={`py-1 pr-2 whitespace-nowrap ${it.documentado ? 'text-gray-500' : g.se_documenta ? 'text-amber-700 font-medium' : 'text-gray-400'}`}>
+                                    <td className={`py-1 pr-2 whitespace-nowrap ${it.origen === 'pos' ? 'text-sky-700' : it.documentado ? 'text-gray-500' : g.se_documenta ? 'text-amber-700 font-medium' : 'text-gray-400'}`}>
                                       {it.documento}
                                     </td>
                                     <td className="py-1 text-right tabular-nums whitespace-nowrap text-gray-700">{fmtPrecio(it.monto)}</td>

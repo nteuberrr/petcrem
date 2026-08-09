@@ -186,6 +186,10 @@ export interface ItemIngreso {
   documentado: boolean
   /** Etiqueta del documento ("Boleta 10234"), o el motivo de que no haya. */
   documento: string
+  /** Quién emitió el documento: nosotros, el POS (TUU) o nadie. */
+  origen: 'sistema' | 'pos' | 'ninguno'
+  /** Veterinario que derivó la ficha (solo en la clave `convenio`). */
+  vet?: string
 }
 
 const ETIQUETA_DTE: Record<string, string> = { '39': 'Boleta', '41': 'Boleta exenta', '33': 'Factura', '34': 'Factura exenta', '61': 'Nota de crédito' }
@@ -198,21 +202,37 @@ const ETIQUETA_DTE: Record<string, string> = { '39': 'Boleta', '41': 'Boleta exe
  */
 export async function detalleIngresos(periodo: string): Promise<ItemIngreso[]> {
   const { clientes, eutanasias, cfgEut, tablaDe } = await cargarBase()
-  const docs = await getSheetData('documentos_tributarios')
+  const [docs, vets] = await Promise.all([
+    getSheetData('documentos_tributarios'),
+    getSheetData('veterinarios'),
+  ])
   const docById = new Map(docs.map(d => [String(d.id), d]))
+  const vetById = new Map(vets.map(v => [String(v.id), v.nombre || v.razon_social || '']))
   const enPeriodo = (iso: string) => (formatDateForSheet(iso) || '').slice(0, 7) === periodo
 
-  /** Documento asociado a la ficha: su boleta (tutor) o la factura del vet. */
-  const documentoDe = (c: Cli): { ok: boolean; label: string } => {
+  /**
+   * Documento asociado a la ficha. Tres orígenes posibles, y confundirlos genera
+   * falsos positivos:
+   *  - `sistema`: boleta o factura que emitimos nosotros (documentos_tributarios).
+   *  - `pos`: la venta se pagó con el POS y la boleta la emitió TUU directamente,
+   *    así que NO existe en documentos_tributarios pero SÍ llega al SII. Marcarla
+   *    como "sin documento" era el error: pasaba con las fichas cuya boleta
+   *    nuestra se anuló justamente por duplicar la del POS.
+   *  - `ninguno`: no hay respaldo por ninguna vía.
+   */
+  const documentoDe = (c: Cli): { ok: boolean; label: string; origen: ItemIngreso['origen'] } => {
     for (const campo of ['boleta_id', 'factura_vet_id']) {
       const id = String(c[campo] || '').trim()
       if (!id) continue
       const d = docById.get(id)
       if (!d) continue
-      if (String(d.estado || '') === 'anulado') return { ok: false, label: `${ETIQUETA_DTE[d.tipo_dte] || 'Documento'} ${d.folio} anulada` }
-      return { ok: true, label: `${ETIQUETA_DTE[d.tipo_dte] || 'Documento'} ${d.folio}` }
+      if (String(d.estado || '') === 'anulado') break // anulada → puede quedar cubierta por el POS
+      return { ok: true, label: `${ETIQUETA_DTE[d.tipo_dte] || 'Documento'} ${d.folio}`, origen: 'sistema' }
     }
-    return { ok: false, label: 'Sin documento' }
+    if (String(c.tipo_pago || '').toLowerCase() === 'pos') {
+      return { ok: true, label: 'Boleta del POS (TUU)', origen: 'pos' }
+    }
+    return { ok: false, label: 'Sin documento', origen: 'ninguno' }
   }
 
   const out: ItemIngreso[] = []
@@ -224,7 +244,8 @@ export async function detalleIngresos(periodo: string): Promise<ItemIngreso[]> {
     const base = {
       id: String(c.id), codigo: c.codigo || '', nombre: c.nombre_mascota || '',
       fecha: formatDateForSheet(c.fecha_retiro || c.fecha_creacion) || '',
-      documentado: doc.ok, documento: doc.label,
+      documentado: doc.ok, documento: doc.label, origen: doc.origen,
+      ...(m.convenio ? { vet: vetById.get(String(c.veterinaria_id || '')) || '' } : {}),
     }
     if (Math.round(m.serv) !== 0) out.push({ ...base, clave: m.convenio ? 'convenio' : 'general', monto: Math.round(m.serv) })
     if (Math.round(m.adic) !== 0) out.push({ ...base, clave: 'adicionales', monto: Math.round(m.adic) })
@@ -238,7 +259,7 @@ export async function detalleIngresos(periodo: string): Promise<ItemIngreso[]> {
       fecha: formatDateForSheet(m.fecha) || '',
       monto: Math.round(m.margen / IVA),
       // La comisión se cobra fuera de la boleta: no es un descuadre, es el modelo.
-      documentado: false, documento: 'Se cobra fuera de boleta',
+      documentado: false, documento: 'Se cobra fuera de boleta', origen: 'ninguno',
     })
   }
   return out.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.codigo.localeCompare(b.codigo))
