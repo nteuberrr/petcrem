@@ -37,6 +37,24 @@ export const PLAZO_ACUSE_DIAS = 8
  */
 const TIPOS_CON_ACUSE = new Set([33, 34, 46, 56])
 
+/**
+ * Formas de pago que NO admiten acuse: 1 = contado, 3 = sin costo (gratuito).
+ *
+ * El SII las rechaza de plano — *"No se puede registrar un evento (acuse de
+ * recibo, reclamo o aceptación de contenido) de un DTE pagado al contado o
+ * gratuito"* — porque el régimen de mérito ejecutivo es de las facturas a
+ * crédito. En su lugar el SII les pone solo un evento `PAG` automático.
+ *
+ * Vale la pena tenerlo presente: en este negocio casi todo se paga al contado,
+ * así que la mayoría de las facturas recibidas nunca van a necesitar acuse.
+ *
+ * `FmaPago` ausente (0) SÍ admite acuse — hay documentos así con `ACD` puesto.
+ */
+const FORMAS_SIN_ACUSE = new Set([1, 3])
+
+/** Por qué una factura no admite acuse. Vacío = sí lo admite. */
+export type MotivoSinAcuse = '' | 'contado' | 'plazo'
+
 /** Los cinco acuses que acepta el SII, con el texto que ve el usuario. */
 export const TIPOS_ACUSE = {
   ACD: { label: 'Aceptar el contenido', desc: 'Acepta la factura tal como viene.', reclamo: false },
@@ -63,6 +81,11 @@ export interface DocPendienteAcuse {
   /** Días que quedan para reclamar. 0 o menos = ya operó el acuse tácito. */
   dias_restantes: number
   vencido: boolean
+  /** 1 contado · 2 crédito · 3 sin costo · 0 no declarada. */
+  forma_pago: number
+  /** True solo si el SII va a aceptar un acuse sobre este documento. */
+  acusable: boolean
+  motivo_sin_acuse: MotivoSinAcuse
 }
 
 /** Diferencia en días corridos entre dos fechas ISO (YYYY-MM-DD). */
@@ -86,6 +109,11 @@ function aPendiente(d: DocOF, hoy: string): DocPendienteAcuse {
   const recepcion = (d.FchRecepSII || d.FchRecepOF || d.FchEmis || '').slice(0, 10)
   const transcurridos = recepcion ? diasEntre(recepcion, hoy) : 0
   const restantes = PLAZO_ACUSE_DIAS - transcurridos
+  const forma = Number(d.FmaPago ?? 0) || 0
+  // "Al contado" gana sobre "plazo vencido": es la razón de fondo (nunca hubo
+  // nada que acusar), mientras que hablar de plazo sugeriría una oportunidad
+  // perdida que nunca existió.
+  const motivo: MotivoSinAcuse = FORMAS_SIN_ACUSE.has(forma) ? 'contado' : restantes <= 0 ? 'plazo' : ''
   return {
     rut: d.RUTEmisor != null ? `${d.RUTEmisor}-${d.DV ?? ''}` : '',
     razon_social: d.RznSoc ?? '',
@@ -97,6 +125,9 @@ function aPendiente(d: DocOF, hoy: string): DocPendienteAcuse {
     dias_transcurridos: transcurridos,
     dias_restantes: restantes,
     vencido: restantes <= 0,
+    forma_pago: forma,
+    acusable: motivo === '',
+    motivo_sin_acuse: motivo,
   }
 }
 
@@ -114,7 +145,8 @@ export async function pendientesDeAcuse(mesesAtras = 2): Promise<DocPendienteAcu
     .filter(d => !d.Acuses || d.Acuses.length === 0)
     .filter(d => d.Folio != null && d.TipoDTE != null && TIPOS_CON_ACUSE.has(Number(d.TipoDTE)))
     .map(d => aPendiente(d, hoy))
-    .sort((a, b) => a.dias_restantes - b.dias_restantes)
+    // Primero las que se pueden acusar, y dentro de ellas las más urgentes.
+    .sort((a, b) => Number(b.acusable) - Number(a.acusable) || a.dias_restantes - b.dias_restantes)
 }
 
 /* ────────────────────────────── Ver el documento ────────────────────────────── */
@@ -184,6 +216,19 @@ export interface ResultadoAcuse {
 }
 
 /**
+ * Traduce los rechazos conocidos del SII a una frase corta. Los originales son
+ * largos y sin tildes, y repetidos por cada documento de un lote llenan la
+ * pantalla sin decir nada nuevo.
+ */
+function enCristiano(msg: string): string {
+  const m = msg.toLowerCase()
+  if (m.includes('contado') || m.includes('gratuito')) return 'no admite acuse (pagada al contado)'
+  if (m.includes('pasados 8') || m.includes('8 dias')) return 'el plazo de 8 días ya venció'
+  if (m.includes('no existe dte')) return 'el SII no encuentra el documento'
+  return msg
+}
+
+/**
  * Da acuse a un documento recibido. IRREVERSIBLE: confirmar antes de llamar.
  *
  * OpenFactura responde con un sobre `{message, code, details}`; cuando el SII
@@ -212,7 +257,8 @@ export async function darAcuse(rut: string, dte: number, folio: number, acuse: T
     : ''
 
   if (!r.ok || detalle?.result === 'error') {
-    return { ok: false, mensaje: desdeSii || String(j.message || texto.slice(0, 200) || `HTTP ${r.status}`) }
+    const crudo = desdeSii || String(j.message || texto.slice(0, 200) || `HTTP ${r.status}`)
+    return { ok: false, mensaje: enCristiano(crudo) }
   }
   return { ok: true, mensaje: desdeSii || 'Acuse registrado en el SII.' }
 }

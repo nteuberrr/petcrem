@@ -32,6 +32,28 @@ interface Pendiente {
   dias_transcurridos: number
   dias_restantes: number
   vencido: boolean
+  forma_pago: number
+  acusable: boolean
+  motivo_sin_acuse: '' | 'contado' | 'plazo'
+}
+
+/**
+ * Por qué una factura no admite acuse. El SII rechaza CUALQUIER evento —
+ * incluida la aceptación — pasados los 8 días o si el DTE se pagó al contado.
+ * Por eso estas filas no llevan botones: no es una restricción nuestra, es que
+ * el SII responde error.
+ */
+const MOTIVO: Record<string, { titulo: string; badge: string; clase: string }> = {
+  contado: {
+    titulo: 'Pagadas al contado — no requieren acuse',
+    badge: 'Al contado',
+    clase: 'text-slate-700 bg-slate-100 border-slate-300',
+  },
+  plazo: {
+    titulo: 'Con el plazo vencido — ya aceptadas tácitamente',
+    badge: 'Plazo vencido',
+    clase: 'text-red-700 bg-red-50 border-red-200',
+  },
 }
 
 interface Encabezado {
@@ -62,8 +84,9 @@ const urlDoc = (p: Pendiente, extra = '') =>
   `/api/eerr/gastos-sii/documento?rut=${encodeURIComponent(p.rut)}&dte=${p.tipo_doc}&folio=${p.folio}${extra}`
 
 function Plazo({ p }: { p: Pendiente }) {
-  if (p.vencido) {
-    return <span className="inline-flex items-center text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 whitespace-nowrap">Plazo vencido</span>
+  const m = MOTIVO[p.motivo_sin_acuse]
+  if (m) {
+    return <span className={`inline-flex items-center text-xs font-medium border rounded-full px-2 py-0.5 whitespace-nowrap ${m.clase}`}>{m.badge}</span>
   }
   const cls = p.dias_restantes <= 3
     ? 'text-amber-800 bg-amber-50 border-amber-300'
@@ -186,9 +209,11 @@ export default function AcusePendientes() {
     )
   }
 
-  const vigentes = pendientes.filter(p => !p.vencido)
-  const vencidas = pendientes.filter(p => p.vencido)
-  const seleccionadas = pendientes.filter(p => sel.has(clave(p)))
+  // Solo se muestran acciones sobre lo que el SII realmente va a aceptar. El
+  // resto se lista con el motivo, sin botones: intentar igual devuelve error.
+  const accionables = pendientes.filter(p => p.acusable)
+  const bloqueadas = pendientes.filter(p => !p.acusable)
+  const seleccionadas = accionables.filter(p => sel.has(clave(p)))
 
   function alternar(p: Pendiente) {
     setSel(s => { const n = new Set(s); const k = clave(p); if (n.has(k)) n.delete(k); else n.add(k); return n })
@@ -201,11 +226,13 @@ export default function AcusePendientes() {
     })
   }
 
-  const fila = (p: Pendiente) => (
+  const fila = (p: Pendiente, accionable: boolean) => (
     <tr key={clave(p)} className={`border-t border-gray-200 hover:bg-gray-50 ${sel.has(clave(p)) ? 'bg-brand/5' : ''}`}>
-      <td className="px-3 py-2">
-        <input type="checkbox" checked={sel.has(clave(p))} onChange={() => alternar(p)} className="accent-brand" aria-label={`Seleccionar ${nombreDoc(p)}`} />
-      </td>
+      {accionable && (
+        <td className="px-3 py-2">
+          <input type="checkbox" checked={sel.has(clave(p))} onChange={() => alternar(p)} className="accent-brand" aria-label={`Seleccionar ${nombreDoc(p)}`} />
+        </td>
+      )}
       <td className="px-3 py-2">
         <div className="font-medium text-gray-800">{p.razon_social || p.rut}</div>
         <div className="text-gray-500">{p.rut}</div>
@@ -220,62 +247,69 @@ export default function AcusePendientes() {
           <button onClick={() => abrirDetalle(p)} title="Ver el documento" className="inline-flex items-center gap-1 border border-gray-300 text-gray-700 px-2 py-1 rounded-lg text-xs font-medium hover:bg-gray-100">
             <FileText size={13} /> Ver
           </button>
-          <button onClick={() => abrirAcuse([p], 'ACD')} className="inline-flex items-center gap-1 bg-brand text-white px-2.5 py-1 rounded-lg text-xs font-medium hover:bg-brand-dark">
-            <Check size={13} /> Aceptar
-          </button>
-          <button
-            onClick={() => abrirAcuse([p], 'RCD')} disabled={p.vencido}
-            title={p.vencido ? 'El plazo de 8 días para reclamar ya venció' : 'Reclamar ante el SII'}
-            className="inline-flex items-center gap-1 border border-gray-300 text-gray-700 px-2.5 py-1 rounded-lg text-xs font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <X size={13} /> Reclamar
-          </button>
+          {accionable && (
+            <>
+              <button onClick={() => abrirAcuse([p], 'ACD')} className="inline-flex items-center gap-1 bg-brand text-white px-2.5 py-1 rounded-lg text-xs font-medium hover:bg-brand-dark">
+                <Check size={13} /> Aceptar
+              </button>
+              <button onClick={() => abrirAcuse([p], 'RCD')} className="inline-flex items-center gap-1 border border-gray-300 text-gray-700 px-2.5 py-1 rounded-lg text-xs font-medium hover:bg-gray-100">
+                <X size={13} /> Reclamar
+              </button>
+            </>
+          )}
         </div>
       </td>
     </tr>
   )
 
-  const tabla = (grupo: Pendiente[]) => {
+  const tabla = (grupo: Pendiente[], accionable: boolean) => {
     const todas = grupo.every(p => sel.has(clave(p)))
     return (
       <div className="overflow-x-auto">
-        <table className="w-full text-xs min-w-[900px]">
+        <table className="w-full text-xs min-w-[880px]">
           <thead className="bg-gray-50 text-gray-500 uppercase text-[11px]">
             <tr>
-              <th className="px-3 py-2 w-8">
-                <input type="checkbox" checked={todas} onChange={() => alternarGrupo(grupo, todas)} className="accent-brand" aria-label="Seleccionar todas" />
-              </th>
+              {accionable && (
+                <th className="px-3 py-2 w-8">
+                  <input type="checkbox" checked={todas} onChange={() => alternarGrupo(grupo, todas)} className="accent-brand" aria-label="Seleccionar todas" />
+                </th>
+              )}
               <th className="px-3 py-2 text-left font-medium">Proveedor</th>
               <th className="px-3 py-2 text-left font-medium">Documento</th>
               <th className="px-3 py-2 text-left font-medium">Emisión</th>
               <th className="px-3 py-2 text-left font-medium">Recibida SII</th>
               <th className="px-3 py-2 text-right font-medium">Total</th>
-              <th className="px-3 py-2 text-left font-medium">Plazo</th>
+              <th className="px-3 py-2 text-left font-medium">Estado</th>
               <th className="px-3 py-2 text-right font-medium">Acción</th>
             </tr>
           </thead>
-          <tbody>{grupo.map(fila)}</tbody>
+          <tbody>{grupo.map(p => fila(p, accionable))}</tbody>
         </table>
       </div>
     )
   }
 
-  const algunaVencida = (accionDocs || []).some(p => p.vencido)
   const totalSel = seleccionadas.reduce((s, p) => s + p.monto_total, 0)
+  // Grupos sin acción posible, cada uno con su explicación.
+  const grupos = (['contado', 'plazo'] as const)
+    .map(motivo => ({ motivo, docs: bloqueadas.filter(p => p.motivo_sin_acuse === motivo) }))
+    .filter(g => g.docs.length > 0)
 
   return (
     <div className="space-y-3">
       <div className="bg-white rounded-2xl border border-gray-300 shadow-md overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-200">
-          <AlertTriangle size={16} className="text-amber-500" />
+          <AlertTriangle size={16} className={accionables.length > 0 ? 'text-amber-500' : 'text-gray-300'} />
           <h3 className="font-semibold text-brand">Facturas por aceptar</h3>
-          <span className="text-xs bg-brand/10 text-brand rounded-full px-2 py-0.5 font-medium">{vigentes.length} dentro de plazo</span>
+          <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${accionables.length > 0 ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-500'}`}>
+            {accionables.length} por resolver
+          </span>
           <button onClick={() => setTick(t => t + 1)} className="ml-auto text-xs text-gray-500 hover:text-brand inline-flex items-center gap-1">
             <RefreshCw size={12} /> Actualizar
           </button>
         </div>
         <p className="px-4 py-2 text-xs text-gray-600 bg-cream border-b border-gray-200">
-          Tienes <strong>8 días corridos</strong> desde que el SII recibe cada factura para reclamarla. Pasado ese plazo queda aceptada automáticamente y ya no se puede objetar.
+          Tienes <strong>8 días corridos</strong> desde que el SII recibe cada factura para aceptarla o reclamarla. Pasado ese plazo el SII ya no acepta ningún evento sobre ella. Las facturas <strong>pagadas al contado</strong> tampoco admiten acuse: el SII las registra solo.
         </p>
 
         {seleccionadas.length > 0 && (
@@ -286,28 +320,29 @@ export default function AcusePendientes() {
             <button onClick={() => abrirAcuse(seleccionadas, 'ACD')} className="inline-flex items-center gap-1 bg-brand text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-brand-dark">
               <Check size={14} /> Aceptar todas
             </button>
-            <button
-              onClick={() => abrirAcuse(seleccionadas, 'RCD')}
-              disabled={seleccionadas.some(p => p.vencido)}
-              title={seleccionadas.some(p => p.vencido) ? 'Hay seleccionadas con el plazo vencido: no se pueden reclamar' : 'Reclamar las seleccionadas'}
-              className="inline-flex items-center gap-1 border border-gray-300 bg-white text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
+            <button onClick={() => abrirAcuse(seleccionadas, 'RCD')} className="inline-flex items-center gap-1 border border-gray-300 bg-white text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-100">
               <X size={14} /> Reclamar todas
             </button>
             <button onClick={() => setSel(new Set())} className="text-sm text-gray-500 hover:text-gray-700">Limpiar selección</button>
           </div>
         )}
 
-        {vigentes.length > 0 && tabla(vigentes)}
+        {accionables.length > 0
+          ? tabla(accionables, true)
+          : (
+            <p className="px-4 py-3 text-sm text-emerald-800 bg-emerald-50 border-b border-emerald-200">
+              ✓ No hay ninguna factura esperando tu acuse.
+            </p>
+          )}
 
-        {vencidas.length > 0 && (
-          <details className="border-t border-gray-200">
+        {grupos.map(g => (
+          <details key={g.motivo} className="border-t border-gray-200">
             <summary className="px-4 py-2.5 text-xs text-gray-600 cursor-pointer hover:bg-gray-50">
-              {vencidas.length} factura(s) con el plazo vencido — ya aceptadas tácitamente ({fmtPrecio(vencidas.reduce((s, p) => s + p.monto_total, 0))})
+              {g.docs.length} factura(s) {MOTIVO[g.motivo].titulo.toLowerCase()} ({fmtPrecio(g.docs.reduce((s, p) => s + p.monto_total, 0))})
             </summary>
-            <div className="opacity-80">{tabla(vencidas)}</div>
+            <div className="opacity-80">{tabla(g.docs, false)}</div>
           </details>
-        )}
+        ))}
       </div>
 
       {msg && <p className="text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">{msg}</p>}
@@ -326,26 +361,21 @@ export default function AcusePendientes() {
             </div>
 
             <div className="space-y-1.5">
-              {OPCIONES.map(o => {
-                const bloqueada = o.reclamo && algunaVencida
-                return (
-                  <label
-                    key={o.id}
-                    className={`flex gap-2.5 items-start border rounded-xl p-2.5 ${bloqueada ? 'opacity-40 cursor-not-allowed border-gray-200' : 'cursor-pointer hover:bg-gray-50 ' + (eleccion === o.id ? 'border-brand ring-1 ring-brand' : 'border-gray-300')}`}
-                  >
-                    <input
-                      type="radio" name="acuse" value={o.id} checked={eleccion === o.id} disabled={bloqueada}
-                      onChange={() => setEleccion(o.id)} className="mt-0.5 accent-brand"
-                    />
-                    <span className="text-sm">
-                      <span className="font-medium text-gray-800">{o.label}</span>
-                      <span className="block text-xs text-gray-500">
-                        {bloqueada ? 'No disponible: hay facturas con el plazo de 8 días ya vencido.' : o.desc}
-                      </span>
-                    </span>
-                  </label>
-                )
-              })}
+              {OPCIONES.map(o => (
+                <label
+                  key={o.id}
+                  className={`flex gap-2.5 items-start border rounded-xl p-2.5 cursor-pointer hover:bg-gray-50 ${eleccion === o.id ? 'border-brand ring-1 ring-brand' : 'border-gray-300'}`}
+                >
+                  <input
+                    type="radio" name="acuse" value={o.id} checked={eleccion === o.id}
+                    onChange={() => setEleccion(o.id)} className="mt-0.5 accent-brand"
+                  />
+                  <span className="text-sm">
+                    <span className="font-medium text-gray-800">{o.label}</span>
+                    <span className="block text-xs text-gray-500">{o.desc}</span>
+                  </span>
+                </label>
+              ))}
             </div>
 
             <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">

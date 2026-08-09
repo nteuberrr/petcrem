@@ -44,6 +44,8 @@ export interface DocOF {
   IVA?: number | null
   MntTotal?: number | null
   TpoTranCompra?: number | null
+  /** 1 contado · 2 crédito · 3 sin costo. Puede venir 0/null si el emisor no la declaró. */
+  FmaPago?: number | string | null
   /** Acuses dados al documento. Viene `null` cuando no tiene ninguno. */
   Acuses?: AcuseOF[] | null
 }

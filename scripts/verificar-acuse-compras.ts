@@ -28,12 +28,15 @@ async function main() {
   if (!config().apiKey) throw new Error('Falta OPENFACTURA_API_KEY en .env.local')
 
   const pendientes = await pendientesDeAcuse()
-  console.log(`\nPendientes de acuse según nosotros: ${pendientes.length}\n`)
+  const accionables = pendientes.filter(p => p.acusable)
+  console.log(`\nSin acuse: ${pendientes.length} — de las cuales ${accionables.length} el SII SÍ va a aceptar\n`)
   for (const p of pendientes) {
-    const plazo = p.vencido ? 'VENCIDA' : `quedan ${p.dias_restantes}d`
+    const estado = p.acusable
+      ? `ACCIONABLE (quedan ${p.dias_restantes}d)`
+      : p.motivo_sin_acuse === 'contado' ? 'no admite acuse: al contado' : 'no admite acuse: plazo vencido'
     console.log(
-      `  ${String(p.tipo_doc).padEnd(2)}-${p.folio.padEnd(9)} ${p.razon_social.slice(0, 30).padEnd(30)} ` +
-      `${fmtPrecio(p.monto_total).padStart(10)}  recep=${p.fecha_recepcion}  ${plazo}`,
+      `  ${String(p.tipo_doc).padEnd(2)}-${p.folio.padEnd(9)} ${p.razon_social.slice(0, 28).padEnd(28)} ` +
+      `${fmtPrecio(p.monto_total).padStart(10)}  recep=${p.fecha_recepcion}  FmaPago=${p.forma_pago}  ${estado}`,
     )
   }
 
