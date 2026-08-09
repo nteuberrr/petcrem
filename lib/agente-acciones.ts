@@ -837,24 +837,35 @@ async function cotizarEutanasia(a: AccionCotizarEutanasia): Promise<string> {
   if (cliente <= 0) {
     return 'No tengo el precio de la eutanasia a domicilio configurado para ese peso ahora mismo. Ofrécele que un miembro del equipo lo contacte para darle el valor, o escala a un humano.'
   }
-  // El recargo fuera de horario es UNO SOLO por atención: si además hay cremación
-  // lo cobra ella (cotizar_cremacion ya lo resuelve). Antes esta nota decía
-  // "súmalo a la eutanasia" mientras el prompt decía "va en la cremación" → el
-  // modelo lo sumaba dos veces y le informaba $20.000 al cliente (caso Yami).
-  const notaRecargo = recargo > 0
-    ? ` Estos dos valores son los del servicio: no les sumes tarifas de cremación. Si la fecha/hora del servicio cae fuera de horario (fin de semana, feriado o desde las 18:00) se cobra un recargo de ${fmtPrecio(recargo)} UNA SOLA VEZ en TODA la atención (aplica se realice o no la eutanasia): nómbralo una sola vez y súmalo una sola vez al total. Si además hay cremación, NO lo cobres de nuevo ahí — cotiza la cremación con "cotizar_cremacion" pasándole eutanasia_fuera_horario=true y usa los montos que devuelva.`
-    : ''
+
+  // El recargo fuera de horario lo resuelve la herramienta, no el modelo, y va en
+  // los DOS escenarios: se cobra por la visita del veterinario, que ocurre igual
+  // aunque al evaluar no corresponda la eutanasia. Sin fecha/hora se asume AHORA
+  // (que es cuando la mayoría pregunta y para cuando la piden) y se avisa.
+  const ahora = ahoraChile()
+  const fecha = formatDateForSheet(a.fecha || '') || ahora.iso
+  const hora = (a.hora || '').trim() || `${String(Math.floor(ahora.min / 60)).padStart(2, '0')}:${String(ahora.min % 60).padStart(2, '0')}`
+  const asumido = !a.fecha
+  const recargoFuera = recargoEutanasiaPara(fecha, hora, recargo)
+  const totalRealizada = cliente + recargoFuera
+  const totalConsulta = consulta.total + recargoFuera
+  const notaAsumido = asumido ? ` (calculado para HOY ${formatDateConDia(fecha)}; si acuerdan otra fecha, vuelve a cotizar con esa fecha)` : ''
+  const detalleRecargo = recargoFuera > 0
+    ? `\nRECARGO fuera de horario: ${fmtPrecio(recargoFuera)}${notaAsumido}. Va INCLUIDO en los dos totales de arriba, se nombra UNA sola vez y se suma UNA sola vez en TODA la atención. Si además hay cremación, NO lo cobres de nuevo ahí: cotiza con "cotizar_cremacion" pasándole eutanasia_fuera_horario=true y usa los montos que devuelva.`
+    : `\nNO aplica recargo fuera de horario${notaAsumido}. Es la respuesta definitiva: no lo menciones ni lo deduzcas del día o la hora.`
+
   // ⚠️ El escenario "no corresponde" NO lleva cremación, y hay que decirlo con
   // todas las letras. Caso real (Niebla, 2026-08-09): al cotizar el servicio
   // integral el modelo armó "Total si solo es consulta: $175.000" sumándole la
   // cremación de $135.000 a la consulta. Si el veterinario evalúa y no realiza la
-  // eutanasia, la mascota sigue VIVA: no hay retiro ni cremación que cobrar.
-  const reglaNoCorresponde =
-    ` REGLA DURA del escenario "NO corresponde": si el veterinario evalúa y NO realiza la eutanasia, la mascota sigue VIVA, así que NO hay retiro ni cremación. ` +
-    `En ese escenario el total es ÚNICAMENTE la consulta de ${fmtPrecio(consulta.total)}${recargo > 0 ? ` (más el recargo fuera de horario si aplica)` : ''} — NUNCA le sumes el valor de la cremación ni de un ánfora. ` +
-    `La cremación existe SOLO en el escenario en que la eutanasia SE REALIZA. Si le muestras dos totales, el de "solo consulta" tiene que ser claramente el más barato de los dos.`
+  // eutanasia, la mascota sigue VIVA: no hay retiro ni cremación que cobrar. El
+  // recargo SÍ va (se cobra por la visita, que ocurrió igual).
+  return `Es un servicio de EVALUACIÓN a domicilio: un veterinario de la red visita a la mascota y evalúa si corresponde la eutanasia. Estos son los TOTALES FINALES al cliente para ${peso} kg — escríbelos TAL CUAL, ya traen el recargo que corresponda y NO les sumes nada:
+- Si SE REALIZA la eutanasia: ${fmtPrecio(totalRealizada)}
+- Si al evaluar NO corresponde (solo la visita): ${fmtPrecio(totalConsulta)}${detalleRecargo}
 
-  return `Es un servicio de EVALUACIÓN a domicilio: un veterinario de la red visita a la mascota y evalúa si corresponde la eutanasia. Explícale al cliente con claridad los dos valores: si SE REALIZA la eutanasia, el valor es ${fmtPrecio(cliente)} (mascota de ${peso} kg); si al evaluar NO corresponde realizarla, se cobra solo la consulta de ${fmtPrecio(consulta.total)}. NO expliques cómo se reparte ese monto internamente.${reglaNoCorresponde}${notaRecargo} Si decide avanzar, junta los datos y agéndala.`
+REGLA DURA del escenario "NO corresponde": la mascota sigue VIVA, así que NO hay retiro ni cremación. Ese total es ${fmtPrecio(totalConsulta)} y punto: NUNCA le sumes la cremación ni un ánfora. La cremación existe SOLO en el escenario en que la eutanasia SE REALIZA, y va como un monto APARTE que se suma únicamente a ese lado. Si muestras los dos totales del servicio integral, el de "solo consulta" tiene que ser el MÁS BARATO por lejos; si te queda parecido al otro, te equivocaste.
+NO expliques cómo se reparte internamente ninguno de estos montos ni uses las tarifas de cremación para calcularlos. Si decide avanzar, junta los datos y agéndala.`
 }
 
 /** Crea la cotización de eutanasia, matchea la red de vets y les envía el correo. */

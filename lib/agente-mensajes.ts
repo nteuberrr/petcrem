@@ -445,6 +445,10 @@ export interface AccionEutanasia {
  */
 export interface AccionCotizarEutanasia {
   peso: number
+  /** Fecha del servicio (YYYY-MM-DD) si ya se habló de una: define el recargo fuera de horario. */
+  fecha?: string
+  /** Hora del servicio (HH:MM) si ya se habló de una. */
+  hora?: string
 }
 
 export interface AccionCotizarCremacion {
@@ -516,10 +520,14 @@ const TOOL_COTIZAR_CREMACION: Anthropic.Tool = {
 
 const TOOL_COTIZAR_EUTANASIA: Anthropic.Tool = {
   name: 'cotizar_eutanasia',
-  description: 'Devuelve los DOS precios al cliente del servicio de evaluación de eutanasia a domicilio para una mascota de cierto peso: el de la eutanasia si se realiza y el de la consulta si al evaluar no corresponde. Úsala cuando el cliente pregunte el valor de la eutanasia, antes de agendar. NO uses las TARIFAS de cremación para esto.',
+  description: 'Devuelve los DOS TOTALES FINALES al cliente del servicio de evaluación de eutanasia a domicilio: el de la eutanasia si se realiza y el de la visita si al evaluar no corresponde. Ambos ya vienen con el recargo fuera de horario incluido cuando aplica; cópialos tal cual sin sumarles nada. Úsala cuando el cliente pregunte el valor de la eutanasia, antes de agendar. NO uses las TARIFAS de cremación para esto.',
   input_schema: {
     type: 'object',
-    properties: { peso: { type: 'number', description: 'Peso aproximado de la mascota en kg.' } },
+    properties: {
+      peso: { type: 'number', description: 'Peso aproximado de la mascota en kg.' },
+      fecha: { type: 'string', description: 'Fecha del servicio en formato YYYY-MM-DD, si ya la hablaron. Define si aplica el recargo fuera de horario. Si no la sabes, omítela y se asume hoy.' },
+      hora: { type: 'string', description: 'Hora del servicio en formato HH:MM, si ya la hablaron.' },
+    },
     required: ['peso'],
   },
 }
