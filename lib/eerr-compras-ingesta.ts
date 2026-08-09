@@ -14,6 +14,33 @@ import type { FacturaSii } from './eerr-sii'
 const SHEET = 'eerr_gastos_sii'
 const PROV = 'eerr_proveedores'
 
+/**
+ * Documentos de compra que RESTAN en vez de sumar: la nota de crédito devuelve
+ * parte de un gasto (61 electrónica, 60 en papel).
+ *
+ * Estaba sin contemplar y el efecto era doble: 13 notas de crédito por
+ * $1.929.577 entraban SUMANDO, así que el resultado cargaba $3.859.154 de costos
+ * inexistentes y el F29 declaraba de más ese mismo IVA como crédito.
+ */
+const DOCS_QUE_RESTAN = new Set(['60', '61'])
+const resta = (tipoDoc: string) => DOCS_QUE_RESTAN.has(String(tipoDoc || '').trim())
+
+/**
+ * Neto de una compra CON SIGNO — así es como debe entrar al resultado.
+ * Úsala SIEMPRE en vez de sumar `monto_neto + monto_exento` a mano, o las notas
+ * de crédito vuelven a contarse al revés.
+ */
+export function netoDeCompra(f: Record<string, string>): number {
+  const neto = (parseInt(f.monto_neto) || 0) + (parseInt(f.monto_exento) || 0)
+  return resta(f.tipo_doc) ? -neto : neto
+}
+
+/** IVA de una compra CON SIGNO (crédito fiscal del F29). Misma regla. */
+export function ivaDeCompra(f: Record<string, string>): number {
+  const iva = parseInt(f.monto_iva) || 0
+  return resta(f.tipo_doc) ? -iva : iva
+}
+
 /** Un documento es el mismo si coinciden proveedor, tipo y folio. */
 const claveDedup = (rut: string, tipoDoc: string, folio: string) => `${rut}|${tipoDoc}|${folio}`
 

@@ -9,6 +9,7 @@ import { findTramo, precioDelTramo } from '@/lib/tramos'
 import { getConfigCobroEutanasia, margenEutanasiaCon } from '@/lib/eutanasia-precios'
 import { CLAVE_RETIROS, getPagosRetirosEerr } from '@/lib/eerr-retiros'
 import { CLAVE_IMPOSICIONES, CLAVE_REMUNERACIONES, getCostoRemuneracionesEerr } from '@/lib/remuneraciones/eerr'
+import { netoDeCompra } from '@/lib/eerr-compras-ingesta'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,8 +121,9 @@ export async function GET(req: NextRequest) {
     } else {
       const [gsii, gman, rend] = await Promise.all([getSheetData('eerr_gastos_sii'), getSheetData('eerr_gastos_manuales'), getSheetData('rendiciones')])
       for (const f of gsii) if (f.contabilizado === 'TRUE' && f.partida_id === partidaId && enPeriodo(f.fecha_documento)) {
-        const monto = (parseInt(f.monto_neto) || 0) + (parseInt(f.monto_exento) || 0)
-        if (monto > 0) movimientos.push({ fecha: f.fecha_documento, fuente: 'Factura SII', descripcion: f.comentario || '', proveedor: f.razon_social || '', documento: `${f.tipo_doc || ''} ${f.folio || ''}`.trim(), monto })
+        // Con signo, igual que en el EERR: una nota de crédito aparece restando.
+        const monto = netoDeCompra(f)
+        if (monto !== 0) movimientos.push({ fecha: f.fecha_documento, fuente: 'Factura SII', descripcion: f.comentario || '', proveedor: f.razon_social || '', documento: `${f.tipo_doc || ''} ${f.folio || ''}`.trim(), monto })
       }
       for (const g of gman) if (g.partida_id === partidaId && enPeriodo(g.fecha)) {
         const monto = parseInt(g.monto) || 0

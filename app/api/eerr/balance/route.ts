@@ -5,6 +5,7 @@ import { esAdmin } from '@/lib/roles'
 import { getSheetData } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseDecimalOr0 } from '@/lib/numbers'
+import { ivaDeCompra } from '@/lib/eerr-compras-ingesta'
 
 /**
  * Balance — Posición de IVA (F29) + otras cuentas de balance.
@@ -79,7 +80,8 @@ export async function GET() {
       if (f.contabilizado !== 'TRUE') continue
       const m = mesDe(f.fecha_documento)
       if (!enRango(m)) continue
-      credito[m] += parseInt(f.monto_iva) || 0
+      // Con signo: el IVA de una nota de crédito de compra devuelve crédito fiscal.
+      credito[m] += ivaDeCompra(f)
     }
 
     // F29 mes a mes con arrastre de remanente (saldo a favor que pasa al mes siguiente).

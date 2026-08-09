@@ -7,6 +7,7 @@ import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { getPagosRetirosEerr, partidaRetiros } from '@/lib/eerr-retiros'
 import { getCostoRemuneracionesEerr, partidaImposiciones, partidaRemuneraciones } from '@/lib/remuneraciones/eerr'
 import { calcularIngresos } from '@/lib/eerr-ingresos'
+import { netoDeCompra } from '@/lib/eerr-compras-ingesta'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,8 +68,9 @@ export async function GET(req: NextRequest) {
 
     // ── COSTO / GASTO / IMPUESTO: gastos asignados a cada partida, por período.
     const porPartida = new Map<string, number[]>()
+    // Acepta montos NEGATIVOS: las notas de crédito de compra restan.
     const add = (partida_id: string, iso: string, monto: number) => {
-      if (!partida_id || !(monto > 0)) return
+      if (!partida_id || !Number.isFinite(monto) || monto === 0) return
       const p = periodIdx(iso)
       if (p === undefined) return
       const arr = porPartida.get(partida_id) ?? zeros()
@@ -79,7 +81,7 @@ export async function GET(req: NextRequest) {
     // con una alerta para que el usuario complete la fecha).
     for (const f of gastosSii as Cli[]) {
       if (f.contabilizado !== 'TRUE' || !f.partida_id) continue
-      add(f.partida_id, f.fecha_documento, (parseInt(f.monto_neto) || 0) + (parseInt(f.monto_exento) || 0))
+      add(f.partida_id, f.fecha_documento, netoDeCompra(f))
     }
     for (const g of gastosMan as Cli[]) add(g.partida_id, g.fecha, parseInt(g.monto) || 0)
     for (const r of rendiciones as Cli[]) {
