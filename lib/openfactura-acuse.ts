@@ -117,6 +117,66 @@ export async function pendientesDeAcuse(mesesAtras = 2): Promise<DocPendienteAcu
     .sort((a, b) => a.dias_restantes - b.dias_restantes)
 }
 
+/* ────────────────────────────── Ver el documento ────────────────────────────── */
+
+/**
+ * Detalle de un documento recibido: `GET /v2/dte/document/{rut}/{tipo}/{folio}/{value}`
+ * con `value` ∈ status | json | xml | pdf | cedible.
+ *
+ * Ojo: para documentos RECIBIDOS el `json` trae solo el Encabezado (emisor,
+ * receptor, totales) — las líneas del detalle no vienen. Para ver el desglose
+ * real hay que abrir el PDF, que Haulmer devuelve en base64.
+ */
+async function traerValor(rut: string, dte: number, folio: number, value: string): Promise<Record<string, unknown>> {
+  const { baseUrl, apiKey } = config()
+  if (!apiKey) throw new Error('OpenFactura no está configurado (falta OPENFACTURA_API_KEY).')
+  const r = await fetch(`${baseUrl}/v2/dte/document/${encodeURIComponent(rut)}/${dte}/${folio}/${value}`, {
+    headers: { apikey: apiKey },
+  })
+  const texto = await r.text()
+  if (!r.ok) {
+    let detalle = texto.slice(0, 200)
+    try { detalle = String((JSON.parse(texto) as { message?: string })?.message || detalle) } catch { /* texto crudo */ }
+    throw new Error(`No se pudo obtener el documento (${r.status}): ${detalle}`)
+  }
+  try { return JSON.parse(texto) as Record<string, unknown> } catch { throw new Error('OpenFactura devolvió una respuesta ilegible.') }
+}
+
+export interface DetalleDocumento {
+  /** Estado en el Registro de Compras del SII: Pendiente | Registrado | No_incluir | Reclamado. */
+  estado: string
+  encabezado: Record<string, unknown> | null
+  fecha_recepcion_sii: string
+  fecha_recepcion_of: string
+}
+
+export async function detalleDocumento(rut: string, dte: number, folio: number): Promise<DetalleDocumento> {
+  const [st, js] = await Promise.all([
+    traerValor(rut, dte, folio, 'status'),
+    traerValor(rut, dte, folio, 'json'),
+  ])
+  const cuerpo = (js.json ?? null) as { Encabezado?: Record<string, unknown> } | null
+  return {
+    estado: String(st.estado || ''),
+    encabezado: cuerpo?.Encabezado ?? null,
+    fecha_recepcion_sii: String(js.FchRecepSII || ''),
+    fecha_recepcion_of: String(js.FchRecepOF || ''),
+  }
+}
+
+/** PDF del documento, ya decodificado. Haulmer lo entrega en base64. */
+export async function pdfDocumento(rut: string, dte: number, folio: number): Promise<ArrayBuffer> {
+  const j = await traerValor(rut, dte, folio, 'pdf')
+  const b64 = String(j.pdf || '')
+  if (!b64) throw new Error('OpenFactura no devolvió el PDF del documento.')
+  const buf = Buffer.from(b64, 'base64')
+  // Se recorta el ArrayBuffer subyacente: Buffer suele ser una vista sobre un
+  // pool compartido, y mandarlo entero filtraría bytes de otras operaciones.
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
+}
+
+/* ────────────────────────────── Dar el acuse ────────────────────────────── */
+
 export interface ResultadoAcuse {
   ok: boolean
   /** Mensaje del SII/OpenFactura, ya legible. */

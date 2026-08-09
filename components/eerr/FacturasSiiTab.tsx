@@ -241,7 +241,7 @@ export default function FacturasSiiTab() {
 
       {/* Va arriba de la tabla a propósito: el plazo para reclamar corre solo y
           vence a los 8 días, así que tiene que verse al entrar. */}
-      <AcusePendientes onCambio={cargar} />
+      <AcusePendientes />
 
       {msg && <p className="text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">{msg}</p>}
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</p>}

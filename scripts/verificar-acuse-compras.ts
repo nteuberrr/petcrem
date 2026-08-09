@@ -1,6 +1,6 @@
 import './_env-preload'
 import { config } from '../lib/openfactura-consulta'
-import { pendientesDeAcuse, PLAZO_ACUSE_DIAS } from '../lib/openfactura-acuse'
+import { detalleDocumento, pdfDocumento, pendientesDeAcuse, PLAZO_ACUSE_DIAS } from '../lib/openfactura-acuse'
 import { fmtPrecio } from '../lib/format'
 
 /**
@@ -50,14 +50,41 @@ async function main() {
     const cantSii = (pend?.registros || []).reduce((s, x) => s + x.cantDocumentos, 0)
     // El SII agrupa por período del REGISTRO, que es el de recepción, no el de emisión.
     const cantNuestra = pendientes.filter(p => p.fecha_recepcion.slice(0, 7) === `${anio}-${String(mes).padStart(2, '0')}`).length
-    const ok = cantSii === cantNuestra
-    if (!ok) fallas++
-    console.log(`  ${anio}-${String(mes).padStart(2, '0')}  SII=${cantSii}  nosotros=${cantNuestra}  ${ok ? '✓' : '✗ NO CALZA'}`)
+    // Solo importa una dirección. Si mostramos MÁS pendientes que el SII, estamos
+    // ofreciendo acusar algo que ya no lo necesita: eso es el bug (así apareció
+    // una nota de crédito colada). Mostrar MENOS es normal y esperable: el campo
+    // `Acuses` de cada documento se actualiza antes que el resumen mensual, así
+    // que una factura recién acusada desaparece de nuestra lista mientras el
+    // registro del SII todavía la cuenta.
+    const sobran = cantNuestra - cantSii
+    if (sobran > 0) fallas++
+    const nota = sobran > 0 ? '✗ MOSTRAMOS DE MÁS' : sobran < 0 ? '· el SII va atrasado (ok)' : '✓'
+    console.log(`  ${anio}-${String(mes).padStart(2, '0')}  SII=${cantSii}  nosotros=${cantNuestra}  ${nota}`)
   }
 
   console.log(fallas === 0
-    ? '\n✓ Los conteos calzan: leer `Acuses == null` equivale al estado "Pendiente" del SII.\n'
-    : `\n✗ ${fallas} mes(es) sin calzar — revisar antes de confiar en el panel.\n`)
+    ? '\n✓ No mostramos ningún pendiente que el SII no reconozca.'
+    : `\n✗ ${fallas} mes(es) con pendientes de más — revisar antes de confiar en el panel.`)
+
+  // El botón «Ver» del panel: detalle + PDF de un documento real.
+  const p = pendientes[0]
+  if (p) {
+    console.log(`\nDetalle de ${p.tipo_doc}-${p.folio} (${p.razon_social}):`)
+    await dormir(1300)
+    const det = await detalleDocumento(p.rut, p.tipo_doc, Number(p.folio))
+    const emisor = det.encabezado?.Emisor as Record<string, unknown> | undefined
+    console.log(`  estado SII: ${det.estado} | giro: ${String(emisor?.GiroEmis || '—').slice(0, 50)}`)
+    if (!det.estado) { console.error('  ✗ el detalle vino sin estado'); fallas++ }
+
+    await dormir(1300)
+    const pdf = await pdfDocumento(p.rut, p.tipo_doc, Number(p.folio))
+    const cabecera = Buffer.from(pdf.slice(0, 5)).toString('latin1')
+    const okPdf = cabecera === '%PDF-'
+    console.log(`  PDF: ${(pdf.byteLength / 1024).toFixed(0)} KB, cabecera "${cabecera}" ${okPdf ? '✓' : '✗'}`)
+    if (!okPdf) fallas++
+  }
+
+  console.log(fallas === 0 ? '\n✓ Todo en orden.\n' : `\n✗ ${fallas} problema(s).\n`)
   process.exit(fallas === 0 ? 0 : 1)
 }
 
