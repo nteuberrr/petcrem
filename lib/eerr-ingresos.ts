@@ -1,4 +1,5 @@
 import { getSheetData } from './datastore'
+import { formatDateForSheet } from './dates'
 import { parseDecimalOr0, parsePeso } from './numbers'
 import { findTramo, precioDelTramo } from './tramos'
 import { getConfigCobroEutanasia, margenEutanasiaCon } from './eutanasia-precios'
@@ -15,11 +16,14 @@ import { getConfigCobroEutanasia, margenEutanasiaCon } from './eutanasia-precios
  * sean comparables.
  *
  * Convenciones que NO son obvias:
- *  - `general`/`convenio`/`adicionales` van NETOS (÷1,19): son ventas boleteadas
- *    o facturadas, y el EERR trabaja neto de IVA.
- *  - `eutanasias` es el MARGEN (cobrado al cliente − pagado al vet) y va BRUTO: se
- *    cobra FUERA de la boleta, así que no lleva la división por IVA. Por lo mismo,
- *    en la conciliación NO debe aparecer en el lado del SII.
+ *  - TODOS los ingresos van NETOS (÷1,19). El EERR trabaja neto de IVA y los
+ *    números tienen que ser comparables entre sí y contra el SII.
+ *  - `eutanasias` es el MARGEN (cobrado al cliente − pagado al vet). Iba BRUTO
+ *    porque se cobra fuera de la boleta; se pasó a neto por decisión del dueño
+ *    (2026-08-09) para que no fuera la única línea de ingreso en otra unidad.
+ *    Sigue SIN documentarse (ver SE_DOCUMENTA), así que no entra en la
+ *    comparación contra el SII — pero ahora al menos se muestra en la misma
+ *    moneda que el resto.
  *  - La ficha se imputa por `fecha_retiro` (o `fecha_creacion` si falta), NO por la
  *    fecha de la boleta: el ingreso es del mes en que se prestó el servicio.
  *  - Las fichas 'borrador' no son ventas todavía y quedan fuera.
@@ -79,6 +83,36 @@ export async function calcularIngresos(
   n: number,
 ): Promise<IngresosPorClave> {
   const zeros = () => new Array(n).fill(0)
+  const { clientes, eutanasias, cfgEut, tablaDe } = await cargarBase()
+
+  const general = zeros(), convenio = zeros(), adicionales = zeros()
+  for (const c of clientes) {
+    if (c.estado === 'borrador') continue
+    const p = periodIdx(c.fecha_retiro || c.fecha_creacion)
+    if (p === undefined) continue
+    const m = montosDeFicha(c, tablaDe)
+    if (m.convenio) convenio[p] += m.serv
+    else general[p] += m.serv
+    adicionales[p] += m.adic
+  }
+
+  // EUTANASIAS: el ingreso es el MARGEN (cobrado al cliente − pagado al
+  // veterinario), imputado al período de la FECHA DEL SERVICIO (no la de
+  // confirmación del vet, que llega tarde).
+  const eutan = zeros()
+  for (const cot of eutanasias) {
+    const m = margenEutanasiaCon(cot, cfgEut)
+    if (!m) continue
+    const p = periodIdx(m.fecha)
+    if (p === undefined) continue
+    eutan[p] += m.margen / IVA
+  }
+
+  return { general, convenio, adicionales, eutanasias: eutan }
+}
+
+/** Datos y tablas de precio que necesitan tanto el total como el detalle. */
+async function cargarBase() {
   const [clientes, pg, pc, pe, eutanasias, cfgEut] = await Promise.all([
     getSheetData('clientes'),
     getSheetData('precios_generales'),
@@ -87,7 +121,6 @@ export async function calcularIngresos(
     getSheetData('cotizaciones_eutanasia'),
     getConfigCobroEutanasia(),
   ])
-
   const preciosG = pg as unknown as Tramo[]
   const preciosC = pc as unknown as Tramo[]
   const peByVet = new Map<string, Tramo[]>()
@@ -95,8 +128,7 @@ export async function calcularIngresos(
     const v = t.veterinaria_id ?? ''
     const arr = peByVet.get(v) ?? []; arr.push(t); peByVet.set(v, arr)
   }
-
-  function tablaDe(c: Cli): Tramo[] {
+  const tablaDe = (c: Cli): Tramo[] => {
     const e = c.tipo_precios
     if (e === 'convenio') return preciosC
     if (e === 'especial') return peByVet.get(c.veterinaria_id ?? '') ?? []
@@ -110,47 +142,106 @@ export async function calcularIngresos(
     }
     return preciosG
   }
+  return { clientes: clientes as Cli[], eutanasias: eutanasias as Cli[], cfgEut, tablaDe }
+}
 
-  // General/Convenio = servicio de cremación; Adicionales aparte. El descuento ya
-  // viene aplicado en `precio_total`, así que se reparte proporcionalmente entre
-  // servicio y adicionales para no descontarle de más a ninguno de los dos.
-  const general = zeros(), convenio = zeros(), adicionales = zeros()
-  for (const c of clientes as Cli[]) {
-    if (c.estado === 'borrador') continue
-    const p = periodIdx(c.fecha_retiro || c.fecha_creacion)
-    if (p === undefined) continue
-    let serv = parseDecimalOr0(c.precio_servicio)
-    let adic = parseDecimalOr0(c.precio_adicionales)
-    let total = parseDecimalOr0(c.precio_total)
-    if (!(total > 0 || serv > 0 || adic > 0)) {
-      // Ficha legacy sin snapshot → recalcular en vivo con las tablas vigentes.
-      const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
-      serv = precioDelTramo(findTramo(tablaDe(c), peso), c.codigo_servicio || 'CI')
-      adic = adicionalesSum(c.adicionales)
-      total = Math.max(0, serv + adic - descuentoMonto(c, serv))
+/**
+ * Reparte una ficha en servicio y adicionales, NETOS. Es la unidad de cálculo que
+ * comparten el total (`calcularIngresos`) y el detalle (`detalleIngresos`): si se
+ * separan, el desglose deja de sumar el total y la conciliación pierde sentido.
+ *
+ * El descuento ya viene aplicado en `precio_total`, así que se reparte
+ * proporcionalmente entre servicio y adicionales para no descontarle de más a
+ * ninguno de los dos.
+ */
+function montosDeFicha(c: Cli, tablaDe: (c: Cli) => Tramo[]): { serv: number; adic: number; convenio: boolean } {
+  let serv = parseDecimalOr0(c.precio_servicio)
+  let adic = parseDecimalOr0(c.precio_adicionales)
+  let total = parseDecimalOr0(c.precio_total)
+  if (!(total > 0 || serv > 0 || adic > 0)) {
+    // Ficha legacy sin snapshot → recalcular en vivo con las tablas vigentes.
+    const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
+    serv = precioDelTramo(findTramo(tablaDe(c), peso), c.codigo_servicio || 'CI')
+    adic = adicionalesSum(c.adicionales)
+    total = Math.max(0, serv + adic - descuentoMonto(c, serv))
+  }
+  const base = serv + adic
+  return {
+    serv: (base > 0 ? total * (serv / base) : total) / IVA,
+    adic: (base > 0 ? total * (adic / base) : 0) / IVA,
+    convenio: esConvenio(c),
+  }
+}
+
+/** Una línea del desglose: de dónde sale el monto y si tiene respaldo tributario. */
+export interface ItemIngreso {
+  clave: ClaveIngreso
+  /** id de la ficha (clientes) o de la cotización de eutanasia. */
+  id: string
+  codigo: string
+  nombre: string
+  fecha: string
+  monto: number
+  /** ¿Tiene documento tributario emitido? Las eutanasias nunca (no se documentan). */
+  documentado: boolean
+  /** Etiqueta del documento ("Boleta 10234"), o el motivo de que no haya. */
+  documento: string
+}
+
+const ETIQUETA_DTE: Record<string, string> = { '39': 'Boleta', '41': 'Boleta exenta', '33': 'Factura', '34': 'Factura exenta', '61': 'Nota de crédito' }
+
+/**
+ * DESGLOSE de un período: cada ficha/cotización que compone cada clave de
+ * ingreso, con su monto neto y si quedó documentada. Es lo que abre el «+» del
+ * cuadro del sistema en la Conciliación — sirve para pasar de "faltan $3M" a
+ * "estas 34 fichas no tienen boleta".
+ */
+export async function detalleIngresos(periodo: string): Promise<ItemIngreso[]> {
+  const { clientes, eutanasias, cfgEut, tablaDe } = await cargarBase()
+  const docs = await getSheetData('documentos_tributarios')
+  const docById = new Map(docs.map(d => [String(d.id), d]))
+  const enPeriodo = (iso: string) => (formatDateForSheet(iso) || '').slice(0, 7) === periodo
+
+  /** Documento asociado a la ficha: su boleta (tutor) o la factura del vet. */
+  const documentoDe = (c: Cli): { ok: boolean; label: string } => {
+    for (const campo of ['boleta_id', 'factura_vet_id']) {
+      const id = String(c[campo] || '').trim()
+      if (!id) continue
+      const d = docById.get(id)
+      if (!d) continue
+      if (String(d.estado || '') === 'anulado') return { ok: false, label: `${ETIQUETA_DTE[d.tipo_dte] || 'Documento'} ${d.folio} anulada` }
+      return { ok: true, label: `${ETIQUETA_DTE[d.tipo_dte] || 'Documento'} ${d.folio}` }
     }
-    const base = serv + adic
-    const servShare = base > 0 ? total * (serv / base) : total
-    const adicShare = base > 0 ? total * (adic / base) : 0
-    if (esConvenio(c)) convenio[p] += servShare / IVA
-    else general[p] += servShare / IVA
-    adicionales[p] += adicShare / IVA
+    return { ok: false, label: 'Sin documento' }
   }
 
-  // EUTANASIAS a domicilio: el ingreso es el MARGEN (cobrado al cliente − pagado
-  // al veterinario), porque el servicio lo presta el vet y su pago se traspasa
-  // completo. Se imputa al período de la FECHA DEL SERVICIO (no la de confirmación
-  // del vet, que llega tarde) y va BRUTO (se cobra fuera de la boleta).
-  const eutan = zeros()
-  for (const cot of eutanasias as Cli[]) {
+  const out: ItemIngreso[] = []
+  for (const c of clientes) {
+    if (c.estado === 'borrador') continue
+    if (!enPeriodo(c.fecha_retiro || c.fecha_creacion)) continue
+    const m = montosDeFicha(c, tablaDe)
+    const doc = documentoDe(c)
+    const base = {
+      id: String(c.id), codigo: c.codigo || '', nombre: c.nombre_mascota || '',
+      fecha: formatDateForSheet(c.fecha_retiro || c.fecha_creacion) || '',
+      documentado: doc.ok, documento: doc.label,
+    }
+    if (Math.round(m.serv) !== 0) out.push({ ...base, clave: m.convenio ? 'convenio' : 'general', monto: Math.round(m.serv) })
+    if (Math.round(m.adic) !== 0) out.push({ ...base, clave: 'adicionales', monto: Math.round(m.adic) })
+  }
+  for (const cot of eutanasias) {
     const m = margenEutanasiaCon(cot, cfgEut)
-    if (!m) continue
-    const p = periodIdx(m.fecha)
-    if (p === undefined) continue
-    eutan[p] += m.margen
+    if (!m || !enPeriodo(m.fecha)) continue
+    out.push({
+      clave: 'eutanasias', id: String(cot.id), codigo: '',
+      nombre: cot.mascota_nombre || cot.cliente_nombre || '',
+      fecha: formatDateForSheet(m.fecha) || '',
+      monto: Math.round(m.margen / IVA),
+      // La comisión se cobra fuera de la boleta: no es un descuadre, es el modelo.
+      documentado: false, documento: 'Se cobra fuera de boleta',
+    })
   }
-
-  return { general, convenio, adicionales, eutanasias: eutan }
+  return out.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.codigo.localeCompare(b.codigo))
 }
 
 /** Etiquetas de cara al usuario para cada clave de ingreso. */

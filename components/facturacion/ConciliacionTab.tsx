@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fmtPrecio } from '@/lib/format'
 import { formatDate, todayISO } from '@/lib/dates'
-import { Upload, RefreshCw, AlertTriangle, CheckCircle2, FileSpreadsheet } from 'lucide-react'
+import { Upload, RefreshCw, AlertTriangle, CheckCircle2, FileSpreadsheet, Plus, Minus } from 'lucide-react'
 
 /**
  * Conciliación de ventas: lo declarado al SII (archivos del RCV) contra lo que el
@@ -21,6 +21,9 @@ type Sistema = {
   documentable: number
   emitido: { boletas: TotDoc; facturas: TotDoc; notas_credito: TotDoc; neto_venta: number }
 }
+type ItemDet = { clave: string; id: string; codigo: string; nombre: string; fecha: string; monto: number; documentado: boolean; documento: string }
+type GrupoDet = { clave: string; label: string; se_documenta: boolean; total: number; docs: number; sin_documento: number; monto_sin_documento: number; items: ItemDet[] }
+
 type Historico = { periodo: string; fecha_carga: string; sii: Sii | null; sistema: Sistema }
 type Datos = {
   periodo: string; sii: Sii | null; fecha_carga: string; sistema: Sistema
@@ -85,6 +88,9 @@ export default function ConciliacionTab() {
   const [mes, setMes] = useState(todayISO().slice(5, 7))
   const [anio, setAnio] = useState(todayISO().slice(0, 4))
   const [sincronizando, setSincronizando] = useState(false)
+  // Desglose por tipo de ingreso: se pide una sola vez por período y se cachea.
+  const [det, setDet] = useState<GrupoDet[] | null>(null)
+  const [abierto, setAbierto] = useState<string | null>(null)
 
   // La bandera `vivo` descarta respuestas de una consulta anterior: cambiar de mes
   // dos veces rápido puede resolver las peticiones fuera de orden y dejar en
@@ -98,7 +104,7 @@ export default function ConciliacionTab() {
         const j = await r.json()
         if (!vivo) return
         if (!r.ok) { setError(j?.error || 'No se pudo cargar'); return }
-        setD(j); setError('')
+        setD(j); setError(''); setDet(null); setAbierto(null)
       } catch { if (vivo) setError('Error de red') } finally { if (vivo) setCargando(false) }
     })()
     return () => { vivo = false }
@@ -121,6 +127,17 @@ export default function ConciliacionTab() {
       setMsg(`✓ ${labelPeriodo(j.periodo)}: ${j.agregados} documento(s) nuevo(s), ${j.total_documentos} en total.`)
       setPedido(j.periodo); setTick(t => t + 1)
     } catch { setError('Error de red') } finally { setSincronizando(false) }
+  }
+
+  /** Abre/cierra el desglose de una fila; la primera vez trae el detalle del mes. */
+  async function alternar(clave: string) {
+    setAbierto(a => (a === clave ? null : clave))
+    if (det || !periodo) return
+    try {
+      const r = await fetch(`/api/facturacion/conciliacion/detalle?periodo=${encodeURIComponent(periodo)}`, { cache: 'no-store' })
+      const j = await r.json()
+      if (r.ok && Array.isArray(j?.grupos)) setDet(j.grupos)
+    } catch { /* si falla, la fila queda abierta sin detalle */ }
   }
 
   async function subir(files: FileList) {
@@ -240,11 +257,62 @@ export default function ConciliacionTab() {
             <div className="bg-white rounded-2xl border border-gray-300 shadow-md p-4">
               <h3 className="text-sm font-bold text-brand mb-1">Según el sistema</h3>
               <p className="text-[11px] text-gray-500 mb-2">Lo que va al Estado de Resultados, por tipo de ingreso.</p>
-              {(Object.keys(LABEL_ING) as Array<keyof Sistema['ingresos']>).map(k => (
-                <Fila key={k} label={LABEL_ING[k]} valor={sis!.ingresos[k]}
-                  atenuado={!DOCUMENTABLE[k]}
-                  sub={!DOCUMENTABLE[k] ? 'Se cobra fuera de boleta — no se busca en el SII' : undefined} />
-              ))}
+              {(Object.keys(LABEL_ING) as Array<keyof Sistema['ingresos']>).map(k => {
+                const g = det?.find(x => x.clave === k)
+                const open = abierto === k
+                return (
+                  <div key={k}>
+                    <button onClick={() => alternar(k)}
+                      className="w-full flex items-baseline justify-between gap-3 py-1.5 text-left hover:bg-gray-50 rounded-lg px-1 -mx-1">
+                      <span className={`text-sm flex items-center gap-1.5 ${DOCUMENTABLE[k] ? 'text-gray-600' : 'text-gray-400'}`}>
+                        {open
+                          ? <Minus className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                          : <Plus className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />}
+                        <span>
+                          {LABEL_ING[k]}
+                          {!DOCUMENTABLE[k] && <span className="block text-[11px] text-gray-400 leading-tight ml-5">Se cobra fuera de boleta — no se busca en el SII</span>}
+                          {DOCUMENTABLE[k] && g && g.sin_documento > 0 && (
+                            <span className="block text-[11px] text-amber-700 leading-tight">
+                              {g.sin_documento} sin documento · {fmtPrecio(g.monto_sin_documento)}
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                      <span className={`tabular-nums whitespace-nowrap text-sm ${DOCUMENTABLE[k] ? 'text-gray-800' : 'text-gray-400'}`}>
+                        {fmtPrecio(sis!.ingresos[k])}
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="ml-5 mb-2 border-l-2 border-gray-200 pl-3">
+                        {!g ? (
+                          <p className="text-[11px] text-gray-400 py-1">Cargando detalle…</p>
+                        ) : g.items.length === 0 ? (
+                          <p className="text-[11px] text-gray-400 py-1">Sin movimientos este mes.</p>
+                        ) : (
+                          <div className="max-h-64 overflow-y-auto overflow-x-auto">
+                            <table className="w-full text-[11px] min-w-[300px]">
+                              <tbody className="divide-y divide-gray-100">
+                                {g.items.map((it, i) => (
+                                  <tr key={`${it.id}-${i}`} className={it.documentado || !g.se_documenta ? '' : 'bg-amber-50'}>
+                                    <td className="py-1 pr-2 whitespace-nowrap text-gray-500">{it.fecha ? formatDate(it.fecha) : '—'}</td>
+                                    <td className="py-1 pr-2 text-gray-800">
+                                      {it.codigo && <span className="text-gray-500">{it.codigo} · </span>}{it.nombre || '—'}
+                                    </td>
+                                    <td className={`py-1 pr-2 whitespace-nowrap ${it.documentado ? 'text-gray-500' : g.se_documenta ? 'text-amber-700 font-medium' : 'text-gray-400'}`}>
+                                      {it.documento}
+                                    </td>
+                                    <td className="py-1 text-right tabular-nums whitespace-nowrap text-gray-700">{fmtPrecio(it.monto)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
               <Fila label="Venta que debería estar documentada" valor={sis!.documentable} fuerte />
               <div className="mt-3 pt-2 border-t border-dashed border-gray-300">
                 <p className="text-[11px] text-gray-500 mb-1">
