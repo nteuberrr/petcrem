@@ -95,7 +95,14 @@ async function listar(ruta: string, desde: string, hasta: string): Promise<DocOF
       const t = await r.text().catch(() => '')
       throw new Error(`OpenFactura respondió ${r.status}${t ? `: ${t.slice(0, 200)}` : ''}`)
     }
-    const j = (await r.json()) as RespuestaOF
+    // Cuando NO hay documentos en el rango, Haulmer responde 200 con el cuerpo
+    // VACÍO (no un JSON con data:[]). Sin esto, `r.json()` explota con
+    // "Unexpected end of JSON input" y el usuario ve un error de sistema al
+    // sincronizar cualquier mes anterior a su primer documento emitido.
+    const texto = await r.text()
+    if (!texto.trim()) break
+    let j: RespuestaOF
+    try { j = JSON.parse(texto) as RespuestaOF } catch { break }
     out.push(...(j.data ?? []))
     ultima = j.last_page ?? 1
     page++
