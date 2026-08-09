@@ -19,8 +19,15 @@ import { grupoDe, type DocVentaSii } from './sii-ventas'
  * (404): el filtro va en el body aunque sea una lectura.
  */
 
+/** Acuse registrado sobre un documento recibido (ver openfactura-acuse.ts). */
+export interface AcuseOF {
+  codEvento?: string
+  fechaEvento?: string
+  estado?: string
+}
+
 /** Un documento tal como lo devuelve OpenFactura (campos comunes a recibidos/emitidos). */
-interface DocOF {
+export interface DocOF {
   RUTEmisor?: number
   RUTRecep?: number
   DV?: string
@@ -30,11 +37,15 @@ interface DocOF {
   Folio?: number
   FchEmis?: string
   FchRecepSII?: string
+  /** Fecha en que el documento llegó a OpenFactura. A diferencia de FchRecepSII, nunca viene vacía. */
+  FchRecepOF?: string
   MntExe?: number | null
   MntNeto?: number | null
   IVA?: number | null
   MntTotal?: number | null
   TpoTranCompra?: number | null
+  /** Acuses dados al documento. Viene `null` cuando no tiene ninguno. */
+  Acuses?: AcuseOF[] | null
 }
 
 interface RespuestaOF {
@@ -43,7 +54,7 @@ interface RespuestaOF {
   data?: DocOF[]
 }
 
-function config(): { baseUrl: string; apiKey: string } {
+export function config(): { baseUrl: string; apiKey: string } {
   return {
     baseUrl: (process.env.OPENFACTURA_BASE_URL || 'https://api.haulmer.com').replace(/\/+$/, ''),
     apiKey: process.env.OPENFACTURA_API_KEY || '',
@@ -68,7 +79,7 @@ export function rangoDelPeriodo(periodo: string): { desde: string; hasta: string
  * segundo (responde 429 con "Try again in 1 seconds"), así que se espera entre
  * páginas; sin eso, un mes con varias páginas se cae a la mitad.
  */
-async function listar(ruta: string, desde: string, hasta: string): Promise<DocOF[]> {
+export async function listarDocumentos(ruta: string, desde: string, hasta: string): Promise<DocOF[]> {
   const { baseUrl, apiKey } = config()
   if (!apiKey) throw new Error('OpenFactura no está configurado (falta OPENFACTURA_API_KEY).')
 
@@ -141,7 +152,7 @@ function aFacturaSii(d: DocOF): FacturaSii {
 /** COMPRAS del período (YYYY-MM), ya en el formato que espera la ingesta. */
 export async function comprasDelPeriodo(periodo: string): Promise<FacturaSii[]> {
   const { desde, hasta } = rangoDelPeriodo(periodo)
-  const docs = await listar('/v2/dte/document/received', desde, hasta)
+  const docs = await listarDocumentos('/v2/dte/document/received', desde, hasta)
   return docs.map(aFacturaSii).filter(f => f.rut && f.folio && f.tipo_doc)
 }
 
@@ -163,7 +174,7 @@ const entero = (v: number | null | undefined): number => Math.round(Number(v) ||
  */
 export async function ventasParaConciliacion(periodo: string): Promise<DocVentaSii[]> {
   const { desde, hasta } = rangoDelPeriodo(periodo)
-  const docs = await listar('/v2/dte/document/issued', desde, hasta)
+  const docs = await listarDocumentos('/v2/dte/document/issued', desde, hasta)
   return docs
     .filter(d => d.TipoDTE != null && d.Folio != null)
     .map(d => {

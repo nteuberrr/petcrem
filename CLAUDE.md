@@ -191,6 +191,16 @@ El botón **Sincronizar SII** (Estado de Resultados → Compras: mes/año + bot�
 - [lib/openfactura-consulta.ts](lib/openfactura-consulta.ts) — `POST /v2/dte/document/received` (compras) y `/issued` (ventas), body `{ Page, FchEmis: { gte, lte } }`, respuesta `{ current_page, last_page, data }`. **Los GET equivalentes dan 404**: el filtro va en el body aunque sea lectura. Haulmer limita a ~1 request/segundo (429 «Try again in 1 seconds») → hay espera entre páginas; sin eso un mes con varias páginas se corta a la mitad. Ojo: `MntNeto` viene `null` en los exentos (tipo 34).
 - La **ingesta** (dedupe por `rut|tipo_doc|folio`, alta de proveedores, relleno de blancos y contabilización automática) vive en [lib/eerr-compras-ingesta.ts](lib/eerr-compras-ingesta.ts) y la comparten el CSV manual y el sync — **no duplicarla**. Sincronizar el mismo mes es idempotente, así que sirve para refrescar el mes en curso.
 
+### Acuse de facturas de compra (aceptar / reclamar ante el SII)
+
+Arriba de la tabla de Compras, el panel **«Facturas por aceptar»** ([components/eerr/AcusePendientes.tsx](components/eerr/AcusePendientes.tsx)) lista las facturas recibidas sin acuse y permite aceptarlas o reclamarlas sin salir del sistema. Existe por el **plazo**: hay **8 días corridos** desde que el SII recibe la factura para reclamarla (Ley 19.983); vencido, opera el *acuse tácito* y queda irrevocablemente aceptada con mérito ejecutivo. Sin el panel ese reloj corre a ciegas — así se pasó una factura de $511.201.
+
+- **Lógica en [lib/openfactura-acuse.ts](lib/openfactura-acuse.ts)**, API en [app/api/eerr/gastos-sii/acuse/route.ts](app/api/eerr/gastos-sii/acuse/route.ts) (GET lista, POST da el acuse). Endpoint de Haulmer: `POST /v2/dte/document/received/accuse` con `{rut, dte, folio, acuse}`. Cinco acuses: `ACD` acepta contenido · `ERM` otorga recibo de mercaderías · `RCD`/`RFP`/`RFT` reclamos (contenido / falta parcial / falta total).
+- **El estado NO se cachea en nuestra base, a propósito**: vence solo a los 8 días, así que una copia local mentiría a los pocos días. Se lee en vivo del campo **`Acuses`** que devuelve `/v2/dte/document/received` (`null` = sin acuse).
+- **Solo tipos 33/34/46/56.** Las notas de crédito (61) NO admiten acuse y se filtran: sin ese filtro el panel mostraba un pendiente de más que el SII no cuenta.
+- **Verificación: `npx tsx scripts/verificar-acuse-compras.ts`** — cruza nuestra lista contra el Registro de Compras del propio SII (`GET /v2/dte/registry/purchase/{año}/{mes}`, estados Registro/Pendiente/No_incluir/Reclamado) y falla si los conteos de "Pendiente" no calzan. Es read-only: **nunca** da un acuse. Fue lo que cazó el bug de las NC.
+- ⚠️ Dar acuse es **irreversible** y tiene efecto legal ante el SII: todo camino a `darAcuse` pide confirmación explícita, y las opciones de reclamo se deshabilitan cuando el plazo ya venció.
+
 ## Conciliación de ventas SII ↔ sistema
 
 `/facturacion` → pestaña **Conciliación**: compara lo declarado al SII contra lo vendido según nosotros, para cazar servicios prestados que nunca se boletearon.

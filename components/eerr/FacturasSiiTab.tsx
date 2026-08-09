@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Upload } from 'lucide-react'
 import { fmtPrecio } from '@/lib/format'
 import { formatDate, todayISO } from '@/lib/dates'
+import AcusePendientes from './AcusePendientes'
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 // Desde 2024 hasta el año en curso: antes de eso no hay documentos que traer.
@@ -237,6 +238,10 @@ export default function FacturasSiiTab() {
           )}
         </div>
       </div>
+
+      {/* Va arriba de la tabla a propósito: el plazo para reclamar corre solo y
+          vence a los 8 días, así que tiene que verse al entrar. */}
+      <AcusePendientes onCambio={cargar} />
 
       {msg && <p className="text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">{msg}</p>}
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</p>}
