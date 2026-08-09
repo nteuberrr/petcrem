@@ -25,10 +25,26 @@ type ItemDet = { clave: string; id: string; codigo: string; nombre: string; fech
 type GrupoDet = { clave: string; label: string; se_documenta: boolean; total: number; docs: number; sin_documento: number; monto_sin_documento: number; items: ItemDet[] }
 
 type Historico = { periodo: string; fecha_carga: string; sii: Sii | null; sistema: Sistema }
+type Atribucion = {
+  porClave: Record<string, number>
+  sinClasificar: { docs: number; neto: number }
+  cobertura: { sistema: number; pos: number; ninguna: number; total: number }
+  pct: number
+}
 type Datos = {
   periodo: string; sii: Sii | null; fecha_carga: string; sistema: Sistema
+  atribucion: Atribucion | null
   historico: Historico[]; periodos_cargados: string[]
 }
+
+/**
+ * Cobertura mínima para mostrar el cuadro del SII por categorías. Bajo esto, los
+ * documentos que no se pudieron atar a una ficha dominan el cuadro y confunden
+ * más de lo que aportan: se cae al desglose por tipo de documento, que siempre
+ * es exacto. Los meses anteriores a julio 2026 (era MercadoPago, fichas sin
+ * precio_total guardado) caen siempre acá.
+ */
+const COBERTURA_MINIMA = 80
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 const labelPeriodo = (p: string) => {
@@ -161,6 +177,9 @@ export default function ConciliacionTab() {
   const periodo = d?.periodo || pedido
   const sii = d?.sii ?? null
   const sis = d?.sistema
+  const at = d?.atribucion ?? null
+  // Solo se muestra por categorías si la atribución cubre lo suficiente.
+  const porCategoria = !!at && at.pct >= COBERTURA_MINIMA
   const diferencia = (sii?.neto_venta ?? 0) - (sis?.documentable ?? 0)
   const cuadra = Math.abs(diferencia) < TOLERANCIA
 
@@ -243,14 +262,37 @@ export default function ConciliacionTab() {
             {/* SII */}
             <div className="bg-white rounded-2xl border border-gray-300 shadow-md p-4">
               <h3 className="text-sm font-bold text-brand mb-1">Según el SII</h3>
-              <p className="text-[11px] text-gray-500 mb-2">Montos netos del registro de ventas.</p>
-              <Fila label="Boletas" valor={sii.boletas.neto + sii.boletas.exento} sub={`${sii.boletas.docs} documento(s)`} />
-              <Fila label="Facturas" valor={sii.facturas.neto + sii.facturas.exento} sub={`${sii.facturas.docs} documento(s)`} />
-              {sii.notas_debito.docs > 0 && (
-                <Fila label="Notas de débito" valor={sii.notas_debito.neto + sii.notas_debito.exento} sub={`${sii.notas_debito.docs} documento(s)`} />
+              {porCategoria ? (
+                <>
+                  <p className="text-[11px] text-gray-500 mb-2">
+                    Montos netos, atribuidos a la ficha que los originó ({at!.pct}% de {at!.cobertura.total} documentos).
+                  </p>
+                  {(Object.keys(LABEL_ING) as Array<keyof Sistema['ingresos']>).map(k => (
+                    <Fila key={k} label={LABEL_ING[k]} valor={Math.round(at!.porClave[k] || 0)}
+                      atenuado={!DOCUMENTABLE[k]}
+                      sub={!DOCUMENTABLE[k] ? 'No se documenta' : undefined} />
+                  ))}
+                  {at!.sinClasificar.docs > 0 && (
+                    <Fila label="Sin clasificar" valor={Math.round(at!.sinClasificar.neto)}
+                      sub={`${at!.sinClasificar.docs} documento(s) que no pudimos atar a una ficha`} />
+                  )}
+                  <Fila label="Venta neta declarada" valor={sii.neto_venta} fuerte />
+                </>
+              ) : (
+                <>
+                  <p className="text-[11px] text-gray-500 mb-2">
+                    Montos netos del registro de ventas.
+                    {at && at.pct < COBERTURA_MINIMA && ` Solo pudimos atar el ${at.pct}% de los documentos a una ficha, así que se muestra por tipo de documento.`}
+                  </p>
+                  <Fila label="Boletas" valor={sii.boletas.neto + sii.boletas.exento} sub={`${sii.boletas.docs} documento(s)`} />
+                  <Fila label="Facturas" valor={sii.facturas.neto + sii.facturas.exento} sub={`${sii.facturas.docs} documento(s)`} />
+                  {sii.notas_debito.docs > 0 && (
+                    <Fila label="Notas de débito" valor={sii.notas_debito.neto + sii.notas_debito.exento} sub={`${sii.notas_debito.docs} documento(s)`} />
+                  )}
+                  <Fila label="Notas de crédito" valor={-(sii.notas_credito.neto + sii.notas_credito.exento)} sub={`${sii.notas_credito.docs} documento(s) · restan`} />
+                  <Fila label="Venta neta declarada" valor={sii.neto_venta} fuerte />
+                </>
               )}
-              <Fila label="Notas de crédito" valor={-(sii.notas_credito.neto + sii.notas_credito.exento)} sub={`${sii.notas_credito.docs} documento(s) · restan`} />
-              <Fila label="Venta neta declarada" valor={sii.neto_venta} fuerte />
             </div>
 
             {/* Sistema */}

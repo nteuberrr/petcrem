@@ -5,6 +5,7 @@ import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseArchivoVentas, resumirVentasSii, type ResumenSii, type DocVentaSii } from '@/lib/sii-ventas'
 import { ventasParaConciliacion, puedeConsultarOpenFactura } from '@/lib/openfactura-consulta'
 import { calcularIngresos, SE_DOCUMENTA, type ClaveIngreso } from '@/lib/eerr-ingresos'
+import { atribuirDocumentosSii } from '@/lib/conciliacion-match'
 
 /**
  * CONCILIACIÓN de ventas: lo declarado al SII vs lo vendido según el sistema.
@@ -93,6 +94,35 @@ function leerSii(row?: Record<string, string>): ResumenSii | null {
 }
 
 /**
+ * Atribuye los documentos del SII a las categorías de ingreso. Solo se calcula
+ * para el período en pantalla (no para todo el histórico): implica releer fichas
+ * y precios, y en el histórico basta el total.
+ *
+ * Devuelve null si no hay documentos guardados. La UI decide si mostrar el cuadro
+ * categorizado según la COBERTURA — con pocos documentos enganchados, "sin
+ * clasificar" se come el cuadro y confunde más de lo que aporta.
+ */
+async function atribucionDe(row?: Record<string, string>, periodo?: string) {
+  if (!row?.docs_json || !periodo) return null
+  let docs: DocVentaSii[] = []
+  try { docs = JSON.parse(row.docs_json) } catch { return null }
+  if (docs.length === 0) return null
+  try {
+    const r = await atribuirDocumentosSii(periodo, docs)
+    const enganchados = r.cobertura.sistema + r.cobertura.pos
+    return {
+      porClave: r.porClave,
+      sinClasificar: r.sinClasificar,
+      cobertura: r.cobertura,
+      pct: r.cobertura.total > 0 ? Math.round((enganchados / r.cobertura.total) * 100) : 0,
+    }
+  } catch (e) {
+    console.warn('[conciliacion] no se pudo atribuir los documentos del SII:', e)
+    return null
+  }
+}
+
+/**
  * GET ?periodo=YYYY-MM → el período pedido (o el último cargado) + el histórico
  * de todos los meses conciliados, cada uno con su lado del sistema recalculado.
  */
@@ -106,8 +136,9 @@ export async function GET(req: NextRequest) {
     const periodo = esPeriodo(pedido) ? pedido : (filas[0]?.periodo || todayISO().slice(0, 7))
 
     const fila = filas.find(r => r.periodo === periodo)
-    const [sistema, historico] = await Promise.all([
+    const [sistema, atribucion, historico] = await Promise.all([
       ladoSistema(periodo),
+      atribucionDe(fila, periodo),
       // El histórico recalcula el lado del sistema de cada mes: una corrección en
       // una ficha vieja tiene que verse acá, no quedar congelada.
       Promise.all(filas.filter(r => r.periodo !== periodo).map(async r => ({
@@ -123,6 +154,7 @@ export async function GET(req: NextRequest) {
       sii: leerSii(fila),
       fecha_carga: fila?.fecha_carga || '',
       sistema,
+      atribucion,
       historico,
       periodos_cargados: filas.map(r => r.periodo),
     })
