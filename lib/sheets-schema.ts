@@ -205,6 +205,11 @@ export const SHEETS: Record<string, string[]> = {
     'enviado_ultima_fecha', 'enviado_ultima_hora', 'enviado_cantidad', 'enviado_a',
     'fecha_creacion',
   ],
+  // Conciliación de ventas SII vs sistema, un registro por período YYYY-MM.
+  // ⚠️ En Postgres esto NO crea nada: correr supabase/conciliacion-sii.sql.
+  conciliacion_sii: [
+    'id', 'periodo', 'sii_json', 'docs_json', 'fecha_carga', 'fecha_creacion',
+  ],
   documentos_tributarios: [
     'id', 'tipo_dte', 'folio', 'estado', 'ambiente', 'fecha_emision',
     'receptor_tipo', 'receptor_id', 'receptor_rut', 'receptor_razon_social',

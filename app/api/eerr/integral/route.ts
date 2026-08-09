@@ -4,18 +4,14 @@ import { authOptions } from '@/lib/auth'
 import { esAdmin } from '@/lib/roles'
 import { getSheetData } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
-import { parseDecimalOr0, parsePeso } from '@/lib/numbers'
-import { findTramo, precioDelTramo } from '@/lib/tramos'
-import { getConfigCobroEutanasia, margenEutanasiaCon } from '@/lib/eutanasia-precios'
 import { getPagosRetirosEerr, partidaRetiros } from '@/lib/eerr-retiros'
 import { getCostoRemuneracionesEerr, partidaImposiciones, partidaRemuneraciones } from '@/lib/remuneraciones/eerr'
+import { calcularIngresos } from '@/lib/eerr-ingresos'
 
 export const dynamic = 'force-dynamic'
 
-const IVA = 1.19
 const MES_ABBR = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
-interface Tramo { id?: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string; veterinaria_id?: string }
 type Cli = Record<string, string>
 
 async function noAutorizado(): Promise<boolean> {
@@ -38,30 +34,6 @@ function ultimos12Meses(hoyMes: string): string[] {
   return keys
 }
 
-function esConvenio(c: Cli): boolean {
-  const e = c.tipo_precios
-  if (e === 'convenio' || e === 'especial') return true
-  if (e === 'general') return false
-  return !!c.veterinaria_id
-}
-function adicionalesSum(raw: string): number {
-  try {
-    const items = JSON.parse(raw || '[]') as Array<{ precio?: number; qty?: number }>
-    return items.reduce((s, a) => s + Math.max(0, a.precio ?? 0) * Math.max(0, a.qty ?? 1), 0)
-  } catch { return 0 }
-}
-// `base` = precio del servicio de cremación (el descuento aplica SOLO sobre él, no
-// sobre los adicionales). Para fichas con snapshot se usa el monto congelado.
-function descuentoMonto(c: Cli, base: number): number {
-  const snap = parseDecimalOr0(c.descuento_monto)
-  if (snap > 0) return snap
-  const dVal = parseDecimalOr0(c.descuento_valor)
-  if (dVal <= 0) return 0
-  if (c.descuento_tipo === 'fijo') return Math.min(dVal, base)
-  if (c.descuento_tipo === 'variable') return Math.round(base * dVal / 100)
-  return 0
-}
-
 export async function GET(req: NextRequest) {
   if (await noAutorizado()) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   try {
@@ -80,8 +52,10 @@ export async function GET(req: NextRequest) {
     const N = periodos.length
     const zeros = () => new Array(N).fill(0)
 
-    const [clientes, partidas, subgrupos, gastosSii, gastosMan, rendiciones, pagosRetiros, costoRemuneraciones, pg, pc, pe, vets, eutanasias, cfgEut] = await Promise.all([
-      getSheetData('clientes'),
+    // Los INGRESOS los calcula lib/eerr-ingresos (misma fuente que la Conciliación
+    // del SII en Facturación): acá solo se arman costos, gastos e impuestos.
+    const [ingresoPorClave, partidas, subgrupos, gastosSii, gastosMan, rendiciones, pagosRetiros, costoRemuneraciones] = await Promise.all([
+      calcularIngresos(periodIdx, N),
       getSheetData('eerr_partidas'),
       getSheetData('eerr_subgrupos'),
       getSheetData('eerr_gastos_sii'),
@@ -89,77 +63,7 @@ export async function GET(req: NextRequest) {
       getSheetData('rendiciones'),
       getPagosRetirosEerr(),
       getCostoRemuneracionesEerr(),
-      getSheetData('precios_generales'),
-      getSheetData('precios_convenio'),
-      getSheetData('precios_especiales'),
-      getSheetData('veterinarios'),
-      getSheetData('cotizaciones_eutanasia'),
-      getConfigCobroEutanasia(),
     ])
-
-    const preciosG = pg as unknown as Tramo[]
-    const preciosC = pc as unknown as Tramo[]
-    const peByVet = new Map<string, Tramo[]>()
-    for (const t of pe as unknown as Tramo[]) {
-      const v = t.veterinaria_id ?? ''
-      const arr = peByVet.get(v) ?? []; arr.push(t); peByVet.set(v, arr)
-    }
-    const vetById: Record<string, Cli> = {}
-    for (const v of vets as Cli[]) vetById[v.id] = v
-
-    function tablaDe(c: Cli): Tramo[] {
-      const e = c.tipo_precios
-      if (e === 'convenio') return preciosC
-      if (e === 'especial') return peByVet.get(c.veterinaria_id ?? '') ?? []
-      if (e === 'general') return preciosG
-      if (c.veterinaria_id) {
-        // El tier lo decide la EXISTENCIA de filas especiales, no el string
-        // `tipo_precios` (un vet indexado a generales lo tiene en 'precios_generales'
-        // y sus tramos igual viven en precios_especiales).
-        const especialesDeVet = peByVet.get(c.veterinaria_id) ?? []
-        return especialesDeVet.length > 0 ? especialesDeVet : preciosC
-      }
-      return preciosG
-    }
-
-    // ── INGRESOS (neto = ÷1,19). General/Convenios = servicio; Adicionales aparte.
-    // El descuento se reparte proporcional usando precio_total (ya neto de descuento).
-    const inGeneral = zeros(), inConvenio = zeros(), inAdic = zeros()
-    for (const c of clientes as Cli[]) {
-      if (c.estado === 'borrador') continue
-      const p = periodIdx(c.fecha_retiro || c.fecha_creacion)
-      if (p === undefined) continue
-      let serv = parseDecimalOr0(c.precio_servicio)
-      let adic = parseDecimalOr0(c.precio_adicionales)
-      let total = parseDecimalOr0(c.precio_total)
-      if (!(total > 0 || serv > 0 || adic > 0)) {
-        // Ficha legacy sin snapshot → recalcular en vivo.
-        const peso = parsePeso(c.peso_ingreso) || parsePeso(c.peso_declarado)
-        serv = precioDelTramo(findTramo(tablaDe(c), peso), c.codigo_servicio || 'CI')
-        adic = adicionalesSum(c.adicionales)
-        total = Math.max(0, serv + adic - descuentoMonto(c, serv))
-      }
-      const base = serv + adic
-      const servShare = base > 0 ? total * (serv / base) : total
-      const adicShare = base > 0 ? total * (adic / base) : 0
-      if (esConvenio(c)) inConvenio[p] += servShare / IVA
-      else inGeneral[p] += servShare / IVA
-      inAdic[p] += adicShare / IVA
-    }
-    // ── EUTANASIAS a domicilio: el ingreso es el MARGEN (cobrado al cliente −
-    // pagado al veterinario), porque el servicio lo presta el vet y su pago se
-    // traspasa completo. Se imputa al período de la FECHA DEL SERVICIO (no la de
-    // confirmación del vet, que llega tarde) y va BRUTO: se cobra fuera de la
-    // boleta, así que no lleva la división por IVA de la cremación.
-    const inEutan = zeros()
-    for (const cot of eutanasias as Cli[]) {
-      const m = margenEutanasiaCon(cot, cfgEut)
-      if (!m) continue
-      const p = periodIdx(m.fecha)
-      if (p === undefined) continue
-      inEutan[p] += m.margen
-    }
-    const ingresoPorClave: Record<string, number[]> = { general: inGeneral, convenio: inConvenio, adicionales: inAdic, eutanasias: inEutan }
 
     // ── COSTO / GASTO / IMPUESTO: gastos asignados a cada partida, por período.
     const porPartida = new Map<string, number[]>()
@@ -204,9 +108,12 @@ export async function GET(req: NextRequest) {
     for (const s of subgrupos as Cli[]) sgById.set(s.id, { nombre: s.nombre, orden: parseInt(s.orden) || 0 })
     const SUELTA = 99999
 
+    // `clave` viene de la fila de eerr_partidas (texto libre en la base): puede no
+    // corresponder a ninguna clave de ingreso conocida → esa partida va en cero.
+    const porClave = ingresoPorClave as Record<string, number[] | undefined>
     const fila = (p: Cli) => {
       const valores = p.tipo === 'ingreso'
-        ? (ingresoPorClave[p.clave] ? [...ingresoPorClave[p.clave]] : zeros())
+        ? ([...(porClave[p.clave] ?? zeros())])
         : (porPartida.get(p.id) ?? zeros())
       const sg = sgById.get(p.subgrupo_id || '')
       return { nombre: p.nombre, valores, subgrupo: sg?.nombre || '', sgOrden: sg ? sg.orden : SUELTA, partida_id: p.id, tipo: p.tipo, clave: p.clave || '' }

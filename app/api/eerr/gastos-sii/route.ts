@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { esAdmin } from '@/lib/roles'
-import { getSheetData, appendRow, updateById, getNextId } from '@/lib/datastore'
-import { todayISO } from '@/lib/dates'
+import { getSheetData, updateById } from '@/lib/datastore'
 import { parseCsvSii, decodeCsvSii } from '@/lib/eerr-sii'
+import { ingestarCompras } from '@/lib/eerr-compras-ingesta'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,14 +17,6 @@ async function noAutorizado(): Promise<boolean> {
   return !esAdmin((s?.user as { role?: string })?.role)
 }
 
-const claveDedup = (rut: string, tipoDoc: string, folio: string) => `${rut}|${tipoDoc}|${folio}`
-
-// Campos que vienen del SII (no del usuario: comentario/partida/etc. no se tocan).
-// Para un documento YA cargado, si uno está en blanco y el nuevo lo trae, se
-// rellena. Los montos vacíos se guardan como '0', así que '0' cuenta como blanco
-// (solo se rellena si el nuevo trae un valor distinto de vacío/0).
-const CAMPOS_SII = ['razon_social', 'tipo_compra', 'fecha_documento', 'fecha_recepcion', 'monto_exento', 'monto_neto', 'monto_iva', 'monto_total', 'valor_otro_impuesto']
-const esBlank = (v: string | undefined) => { const s = (v || '').trim(); return s === '' || s === '0' }
 
 export async function GET(req: NextRequest) {
   if (await noAutorizado()) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
@@ -63,74 +55,9 @@ export async function POST(req: NextRequest) {
     if (facturas.length === 0) {
       return NextResponse.json({ error: 'No se encontraron facturas en el archivo. ¿Es el CSV de compras del SII?' }, { status: 400 })
     }
-
-    const [existentes, proveedores] = await Promise.all([getSheetData(SHEET), getSheetData(PROV)])
-    const existByKey = new Map(existentes.map(r => [claveDedup(r.rut, r.tipo_doc, r.folio), r]))
-    const provByRut = new Map(proveedores.map(p => [p.rut, p]))
-    const fechaCarga = todayISO()
-
-    // Crear proveedores que aparezcan por primera vez (sin contabilización auto).
-    const rutsNuevos = new Map<string, string>() // rut -> razon_social
-    for (const f of facturas) {
-      if (!provByRut.has(f.rut) && !rutsNuevos.has(f.rut)) rutsNuevos.set(f.rut, f.razon_social)
-    }
-    for (const [rut, razon] of rutsNuevos) {
-      const id = await getNextId(PROV)
-      await appendRow(PROV, {
-        id, rut, razon_social: razon,
-        auto_contabiliza: 'FALSE', auto_tipo: '', auto_partida_id: '',
-        fecha_creacion: fechaCarga,
-      })
-    }
-
-    let nuevas = 0, duplicadas = 0, completadas = 0
-    const vistas = new Set<string>()
-    for (const f of facturas) {
-      const k = claveDedup(f.rut, f.tipo_doc, f.folio)
-      if (vistas.has(k)) { duplicadas++; continue }
-      vistas.add(k)
-
-      const existe = existByKey.get(k)
-      if (existe) {
-        // Ya cargada: no se duplica. Si lo existente tiene campos en blanco y el
-        // nuevo los trae completos, rellenamos SOLO esos blancos (no pisamos datos
-        // ya cargados ni los del usuario: comentario/partida/contabilizado).
-        const fRec = f as unknown as Record<string, string>
-        const cambios: Record<string, string> = {}
-        for (const c of CAMPOS_SII) {
-          if (esBlank(existe[c]) && !esBlank(fRec[c])) cambios[c] = fRec[c]
-        }
-        if (Object.keys(cambios).length > 0) {
-          await updateById(SHEET, existe.id, { ...existe, ...cambios })
-          completadas++
-        } else {
-          duplicadas++
-        }
-        continue
-      }
-
-      // Nueva: contabilización automática si el proveedor ya la tenía configurada.
-      const prov = provByRut.get(f.rut)
-      const auto = prov?.auto_contabiliza === 'TRUE' && prov.auto_partida_id
-        ? { tipo_asignacion: prov.auto_tipo, partida_id: prov.auto_partida_id, contabilizado: 'TRUE' }
-        : { tipo_asignacion: '', partida_id: '', contabilizado: 'FALSE' }
-
-      const id = await getNextId(SHEET)
-      await appendRow(SHEET, {
-        id,
-        tipo_doc: f.tipo_doc, tipo_compra: f.tipo_compra, rut: f.rut, razon_social: f.razon_social, folio: f.folio,
-        fecha_documento: f.fecha_documento, fecha_recepcion: f.fecha_recepcion,
-        monto_exento: f.monto_exento, monto_neto: f.monto_neto, monto_iva: f.monto_iva,
-        monto_total: f.monto_total, valor_otro_impuesto: f.valor_otro_impuesto,
-        comentario: '',
-        ...auto,
-        fecha_carga: fechaCarga,
-        fecha_creacion: fechaCarga,
-      })
-      nuevas++
-    }
-
-    return NextResponse.json({ ok: true, nuevas, duplicadas, completadas, proveedores_nuevos: rutsNuevos.size, fecha_carga: fechaCarga })
+    // La ingesta (dedupe + proveedores + contabilización automática) vive en
+    // lib/eerr-compras-ingesta: la comparte el botón «Sincronizar SII».
+    return NextResponse.json({ ok: true, ...(await ingestarCompras(facturas)) })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

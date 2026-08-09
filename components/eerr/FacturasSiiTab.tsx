@@ -1,7 +1,15 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { RefreshCw, Upload } from 'lucide-react'
 import { fmtPrecio } from '@/lib/format'
-import { formatDate } from '@/lib/dates'
+import { formatDate, todayISO } from '@/lib/dates'
+
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+// Desde 2024 hasta el año en curso: antes de eso no hay documentos que traer.
+const ANIOS = (() => {
+  const y = parseInt(todayISO().slice(0, 4), 10)
+  return Array.from({ length: y - 2023 }, (_, i) => String(y - i))
+})()
 
 interface Factura {
   id: string; tipo_doc: string; rut: string; razon_social: string; folio: string
@@ -24,6 +32,10 @@ export default function FacturasSiiTab() {
   const [subiendo, setSubiendo] = useState(false)
   const [msg, setMsg] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  // Período a sincronizar: arranca en el mes en curso, que es el caso normal.
+  const [mes, setMes] = useState(todayISO().slice(5, 7))
+  const [anio, setAnio] = useState(todayISO().slice(0, 4))
+  const [sincronizando, setSincronizando] = useState(false)
   const [asig, setAsig] = useState<Factura | null>(null)
   const [sortBy, setSortBy] = useState('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -64,6 +76,28 @@ export default function FacturasSiiTab() {
       setMsg(err ? `⚠ ${err}` : `✓ ${nuevas} compras nuevas${comp ? `, ${comp} completadas` : ''} (${dup} ya estaban) · ${files.length} archivo(s).`)
       cargar()
     } catch { setMsg('Error de red') } finally { setSubiendo(false); if (fileRef.current) fileRef.current.value = '' }
+  }
+
+  /**
+   * Trae las compras del mes desde OpenFactura (no del portal del SII, que
+   * protege sus descargas con reCAPTCHA). Idempotente: repetir el mismo mes solo
+   * suma lo que falte, así que sirve para refrescar el mes en curso.
+   */
+  async function sincronizar() {
+    setSincronizando(true); setMsg('')
+    try {
+      const r = await fetch('/api/eerr/gastos-sii/sincronizar', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ periodo: `${anio}-${mes}` }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { setMsg(`⚠ ${d?.error || 'No se pudo sincronizar'}`); return }
+      const etiqueta = `${MESES[parseInt(mes, 10) - 1]} ${anio}`
+      setMsg(d.encontradas === 0
+        ? `✓ ${etiqueta}: el SII no tiene compras registradas en ese mes.`
+        : `✓ ${etiqueta}: ${d.nuevas} compra(s) nueva(s)${d.completadas ? `, ${d.completadas} completada(s)` : ''} (${d.duplicadas} ya estaban, ${d.encontradas} revisadas).`)
+      cargar()
+    } catch { setMsg('Error de red') } finally { setSincronizando(false) }
   }
 
   const partidaNombre = (id: string) => partidas.find(p => p.id === id)?.nombre || ''
@@ -128,15 +162,34 @@ export default function FacturasSiiTab() {
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl border border-gray-300 p-4 space-y-3">
-        {/* Carga arriba */}
+        {/* Carga arriba: primero el período + Sincronizar SII (camino normal);
+            la carga manual del CSV queda a la derecha, como respaldo. */}
         <div className="flex items-center gap-3 flex-wrap">
-          <input ref={fileRef} type="file" accept=".csv,text/csv" multiple className="hidden"
-            onChange={e => { const fs = e.target.files; if (fs && fs.length) subir(fs) }} />
-          <button onClick={() => fileRef.current?.click()} disabled={subiendo}
-            className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark disabled:opacity-50">
-            {subiendo ? 'Subiendo…' : '⬆ Subir compras (CSV)'}
+          <select value={mes} onChange={e => setMes(e.target.value)} disabled={sincronizando}
+            className="border border-gray-300 rounded-xl px-2 py-2 text-sm disabled:opacity-50">
+            {MESES.map((m, i) => <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>)}
+          </select>
+          <select value={anio} onChange={e => setAnio(e.target.value)} disabled={sincronizando}
+            className="border border-gray-300 rounded-xl px-2 py-2 text-sm disabled:opacity-50">
+            {ANIOS.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <button onClick={sincronizar} disabled={sincronizando || subiendo}
+            className="inline-flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-brand-dark disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${sincronizando ? 'animate-spin' : ''}`} aria-hidden="true" />
+            {sincronizando ? 'Sincronizando…' : 'Sincronizar SII'}
           </button>
-          <p className="text-xs text-gray-400">Puedes elegir varios archivos.{ultimaCarga ? ` · Última carga: ${formatDate(ultimaCarga)}` : ''}</p>
+
+          <div className="ml-auto flex items-center gap-3">
+            {ultimaCarga && <span className="text-xs text-gray-400">Última carga: {formatDate(ultimaCarga)}</span>}
+            <input ref={fileRef} type="file" accept=".csv,text/csv" multiple className="hidden"
+              onChange={e => { const fs = e.target.files; if (fs && fs.length) subir(fs) }} />
+            <button onClick={() => fileRef.current?.click()} disabled={subiendo || sincronizando}
+              title="Cargar el CSV de compras descargado del SII"
+              className="inline-flex items-center gap-2 border border-gray-300 text-gray-600 px-3 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+              <Upload className="w-4 h-4" aria-hidden="true" />
+              {subiendo ? 'Subiendo…' : 'Cargar Manual'}
+            </button>
+          </div>
         </div>
 
         {/* Filtros + buscar en una fila */}
@@ -189,7 +242,7 @@ export default function FacturasSiiTab() {
       {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</p>}
       {sinFecha > 0 && (
         <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">
-          ⚠ {sinFecha} compra(s) <strong>sin fecha de emisión</strong> — no se pueden asignar (no caen en ningún mes del EERR). Volvé a subir el CSV para completar la fecha.
+          ⚠ {sinFecha} compra(s) <strong>sin fecha de emisión</strong> — no se pueden asignar (no caen en ningún mes del EERR). Volvé a sincronizar el mes para completar la fecha.
         </p>
       )}
       {sel.size > 0 && (
@@ -204,7 +257,7 @@ export default function FacturasSiiTab() {
         <div className="text-gray-500 text-sm">Cargando…</div>
       ) : items.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-300 p-8 text-center text-gray-400 text-sm">
-          No hay compras {(desde || hasta || estado || tipoFiltro || partidaFiltro || buscar) ? 'con esos filtros' : 'cargadas todavía'}. Usá «Subir compras».
+          No hay compras {(desde || hasta || estado || tipoFiltro || partidaFiltro || buscar) ? 'con esos filtros' : 'cargadas todavía'}. Elegí el mes y usá «Sincronizar SII».
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-300 overflow-x-auto">
@@ -262,7 +315,7 @@ export default function FacturasSiiTab() {
                   </td>
                   <td className={`px-2 py-1.5 text-right sticky right-0 border-l border-gray-300 ${!f.fecha_documento ? 'bg-red-50' : f.contabilizado === 'TRUE' ? 'bg-white' : 'bg-amber-50'}`}>
                     {!f.fecha_documento
-                      ? <span className="text-red-600 font-medium whitespace-nowrap" title="Completá la fecha de emisión (volvé a subir el CSV) para poder asignarla.">⚠ Falta fecha</span>
+                      ? <span className="text-red-600 font-medium whitespace-nowrap" title="Completá la fecha de emisión (volvé a sincronizar el mes) para poder asignarla.">⚠ Falta fecha</span>
                       : f.partida_id
                         ? <button onClick={() => setAsig(f)} className="border border-gray-300 text-gray-600 hover:bg-gray-50 px-2 py-1 rounded-lg font-medium whitespace-nowrap">Editar</button>
                         : <button onClick={() => setAsig(f)} className="bg-brand text-white hover:bg-brand-dark px-2.5 py-1 rounded-lg font-medium whitespace-nowrap">Asignar</button>}
