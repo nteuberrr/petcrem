@@ -75,6 +75,13 @@ export interface PlantillaWa {
   texto: string
   /** Valores de ejemplo (los exige Meta al crear, uno por variable). */
   ejemplos: string[]
+  /**
+   * Etiquetas de los botones de respuesta rápida (máx. 3, 25 caracteres c/u).
+   * Con botones la plantilla sigue siendo ACCIONABLE fuera de la ventana de 24h:
+   * el payload se define al enviar y vuelve por webhook en `button.payload`.
+   * ⚠️ Sin emojis — Meta los rechaza en el texto de un botón (en el cuerpo sí van).
+   */
+  botones?: string[]
 }
 
 export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
@@ -126,6 +133,20 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
     texto: 'Hola {{1}}, un veterinario de nuestra red confirmó la visita para acompañar a {{2}}. Se pondrá en contacto contigo a la brevedad para coordinar los detalles. Responde este mensaje si necesitas algo. — Crematorio Alma Animal',
     ejemplos: ['María', 'Rocky'],
   },
+  solicitud_retiro: {
+    nombre: 'solicitud_retiro',
+    categoria: 'UTILITY',
+    // Aviso al EQUIPO (no al cliente) de un retiro que el bot dejó por confirmar.
+    // Es la versión en plantilla del mensaje `interactive` con botones ✅/❌, y
+    // existe porque ese interactivo SOLO se entrega dentro de la ventana de 24h…
+    // que se abría justamente con el botón que no llegaba. Sin retiros por un día
+    // la cadena se cortaba y las solicitudes quedaban mudas (caso real 09-08-2026:
+    // tres retiros seguidos sin un solo aviso). Con plantilla el aviso sale
+    // siempre y los quick-reply lo mantienen accionable desde el mismo WhatsApp.
+    texto: '🐾 Nueva solicitud de retiro por confirmar.\n\nSolicita: {{1}}\nMascota: {{2}}\nDirección: {{3}}\nFecha y hora: {{4}}\nContacto: {{5}}\n\n¿Confirmas este retiro?',
+    ejemplos: ['María Pérez', 'Rocky (12 kg)', 'Av. Los Leones 1234, Providencia', '09-08-2026 a las 18:00', '+56912345678'],
+    botones: ['Confirmar', 'Rechazar'],
+  },
   aviso_operativo: {
     nombre: 'aviso_operativo',
     categoria: 'UTILITY',
@@ -137,11 +158,22 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
 
 const IDIOMA_PLANTILLAS = 'es'
 
+/**
+ * Deja un valor apto para ir como variable de plantilla. Meta RECHAZA los
+ * parámetros que traen saltos de línea, tabs o más de 4 espacios seguidos
+ * ("Parameter text cannot have new-line/tab characters..."), así que un aviso
+ * multilínea metido tal cual en `aviso_operativo` fallaba en silencio y el
+ * respaldo no respaldaba nada. Se colapsa todo a una sola línea.
+ */
+function limpiarParam(v: unknown): string {
+  return String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 500)
+}
+
 /** Sustituye {{1}}, {{2}}… — para registrar en el inbox el texto real que recibió la persona. */
 export function renderPlantillaWa(nombre: string, variables: string[]): string {
   const p = PLANTILLAS_WA[nombre]
   if (!p) return ''
-  return p.texto.replace(/\{\{(\d+)\}\}/g, (_, n) => variables[Number(n) - 1] ?? '')
+  return p.texto.replace(/\{\{(\d+)\}\}/g, (_, n) => limpiarParam(variables[Number(n) - 1] ?? ''))
 }
 
 /**
@@ -156,9 +188,45 @@ export async function enviarPlantillaWhatsapp(to: string, nombre: string, variab
   if (variables.length < esperadas) return { ok: false, error: `La plantilla ${nombre} espera ${esperadas} variable(s), llegaron ${variables.length}.` }
   const template: Record<string, unknown> = { name: nombre, language: { code: IDIOMA_PLANTILLAS } }
   if (esperadas > 0) {
-    template.components = [{ type: 'body', parameters: variables.slice(0, esperadas).map(v => ({ type: 'text', text: String(v).slice(0, 500) })) }]
+    template.components = [{ type: 'body', parameters: variables.slice(0, esperadas).map(v => ({ type: 'text', text: limpiarParam(v) })) }]
   }
   return postMensaje({ to: to.replace(/[^\d]/g, ''), type: 'template', template })
+}
+
+/**
+ * Envía una plantilla CON botones de respuesta rápida, asignándole a cada uno su
+ * payload (lo que vuelve por webhook al tocarlo). Es el reemplazo del mensaje
+ * `interactive` cuando la ventana de 24h está cerrada: mismo aviso, misma
+ * capacidad de resolver desde WhatsApp, pero entregable siempre.
+ *
+ * ⚠️ La respuesta NO llega como `interactive.button_reply` sino como un mensaje
+ * `type: 'button'` con `button.payload` — quien la procese tiene que leer las dos
+ * formas (ver procesarBotonAdmin en el webhook).
+ */
+export async function enviarPlantillaBotonesWhatsapp(
+  to: string, nombre: string, variables: string[], payloads: string[],
+): Promise<EnvioResult> {
+  const p = PLANTILLAS_WA[nombre]
+  if (!p) return { ok: false, error: `Plantilla desconocida: ${nombre}` }
+  if (!p.botones?.length) return { ok: false, error: `La plantilla ${nombre} no tiene botones` }
+  const esperadas = (p.texto.match(/\{\{\d+\}\}/g) || []).length
+  if (variables.length < esperadas) return { ok: false, error: `La plantilla ${nombre} espera ${esperadas} variable(s), llegaron ${variables.length}.` }
+  const components: Record<string, unknown>[] = []
+  if (esperadas > 0) {
+    components.push({ type: 'body', parameters: variables.slice(0, esperadas).map(v => ({ type: 'text', text: limpiarParam(v) })) })
+  }
+  // Un component por botón, en el MISMO orden en que se aprobó la plantilla.
+  payloads.slice(0, p.botones.length).forEach((pl, i) => {
+    components.push({
+      type: 'button', sub_type: 'quick_reply', index: String(i),
+      parameters: [{ type: 'payload', payload: String(pl ?? '').slice(0, 128) }],
+    })
+  })
+  return postMensaje({
+    to: to.replace(/[^\d]/g, ''),
+    type: 'template',
+    template: { name: nombre, language: { code: IDIOMA_PLANTILLAS }, components },
+  })
 }
 
 export interface PlantillaEstado {
@@ -216,11 +284,18 @@ export async function crearPlantillasFaltantes(): Promise<{ nombre: string; resu
     if (existentes.has(p.nombre)) { out.push({ nombre: p.nombre, resultado: 'ya existe (se salta)' }); continue }
     const body: Record<string, unknown> = { type: 'BODY', text: p.texto }
     if (p.ejemplos.length) body.example = { body_text: [p.ejemplos] }
+    const components: Record<string, unknown>[] = [body]
+    if (p.botones?.length) {
+      components.push({
+        type: 'BUTTONS',
+        buttons: p.botones.slice(0, 3).map(t => ({ type: 'QUICK_REPLY', text: t.slice(0, 25) })),
+      })
+    }
     try {
       const res = await fetch(`${GRAPH}/${version()}/${waba}/message_templates`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: p.nombre, language: IDIOMA_PLANTILLAS, category: p.categoria, allow_category_change: true, components: [body] }),
+        body: JSON.stringify({ name: p.nombre, language: IDIOMA_PLANTILLAS, category: p.categoria, allow_category_change: true, components }),
       })
       const j = await res.json().catch(() => ({}))
       out.push({ nombre: p.nombre, resultado: res.ok ? `creada (id ${j.id || '?'}, estado ${j.status || 'PENDING'})` : `ERROR: ${j?.error?.error_user_msg || j?.error?.message || res.status}` })

@@ -1,5 +1,5 @@
 import { ensureSheet, ensureColumns, appendRow, getNextId, getSheetData, updateById, updateByIdIf, deleteById } from './datastore'
-import { enviarBotonesWhatsapp, destinatariosRetiros, avisarAdminsWhatsapp, enviarMediaWhatsapp, type BotonWa, type EnvioResult } from './whatsapp'
+import { enviarBotonesWhatsapp, enviarPlantillaBotonesWhatsapp, enviarPlantillaWhatsapp, destinatariosRetiros, avisarAdminsWhatsapp, enviarMediaWhatsapp, type BotonWa, type EnvioResult } from './whatsapp'
 import { crearRelayPendiente } from './relay-retiro'
 import { geocodeAddress, coordEnChile } from './google-maps'
 import { formatDate, formatDateConDia, formatDateForSheet, fechaChileISO } from './dates'
@@ -40,21 +40,76 @@ async function direccionValida(direccion: string, comuna: string): Promise<boole
   }
 }
 
+/** Datos del aviso de retiro, en las dos formas que puede salir (libre / plantilla). */
+interface AvisoRetiro {
+  /** Cuerpo del mensaje interactivo: multilínea y con formato. */
+  resumen: string
+  /** Variables de `solicitud_retiro`: quién pide, mascota, dirección, cuándo, contacto. */
+  vars: [string, string, string, string, string]
+  botones: BotonWa[]
+}
+
 /**
- * Botones de SOLICITUD DE RETIRO a todo el equipo (env + usuarios con avisos ON,
- * incluidos operadores — ver destinatariosRetiros). ok si al menos uno los
- * recibió; la resolución es atómica, así que el primero que toque ✅/❌ gana y el
- * resto recibe el acuse.
+ * Arma las 5 variables de la plantilla `solicitud_retiro` desde los datos crudos.
+ * NINGUNA puede quedar vacía: Meta rechaza el envío si un parámetro llega en
+ * blanco, y ahí se caería el único aviso que le queda al equipo.
  */
-async function botonesATodosLosAdmins(body: string, botones: BotonWa[]): Promise<{ ok: boolean; error?: string }> {
+function varsPlantillaRetiro(d: {
+  quien: string; mascota: string; peso: string | number
+  direccion: string; comuna: string; fecha: string; hora: string; contacto: string
+}): [string, string, string, string, string] {
+  const oSino = (v: string, alt: string) => String(v || '').trim() || alt
+  const peso = String(d.peso ?? '').trim()
+  return [
+    oSino(d.quien, 'Sin nombre'),
+    `${oSino(d.mascota, 'Sin nombre')}${peso ? ` (${peso} kg)` : ''}`,
+    oSino([d.direccion, d.comuna].filter(Boolean).join(', '), 'Sin dirección'),
+    oSino(`${formatDate(d.fecha)} a las ${d.hora}`, 'Por coordinar'),
+    d.contacto ? `+${d.contacto}` : 'Sin número',
+  ]
+}
+
+/**
+ * Aviso de SOLICITUD DE RETIRO a todo el equipo (env + usuarios con avisos ON,
+ * incluidos operadores — ver destinatariosRetiros), con los botones ✅/❌ para
+ * resolverla sin salir de WhatsApp. ok si al menos uno lo recibió; la resolución
+ * es atómica, así que el primero que toque un botón gana y el resto recibe el acuse.
+ *
+ * Baja por TRES escalones, porque un mensaje `interactive` solo se entrega dentro
+ * de la ventana de 24h de Meta… y esa ventana la abría justamente el botón que no
+ * llegaba: bastó UN día sin retiros para que la cadena se cortara y el aviso
+ * quedara mudo sin que nadie se enterara (caso real 09-08-2026, tres solicitudes
+ * seguidas sin un solo WhatsApp).
+ *   1. interactivo — gratis, el camino normal dentro de la ventana;
+ *   2. plantilla `solicitud_retiro` CON botones — se entrega siempre y sigue
+ *      siendo accionable; cuesta como utility;
+ *   3. plantilla `aviso_operativo` en texto — si la 2 todavía no está aprobada en
+ *      Meta, al menos el equipo se entera y lo resuelve desde el panel.
+ *
+ * El escalón 2 se intenta a ciegas en vez de consultar `plantillasAprobadas()`:
+ * ese chequeo necesita `WHATSAPP_BUSINESS_ACCOUNT_ID` y, si faltara, degradaría
+ * todos los avisos a texto sin botones sin motivo.
+ */
+async function avisarRetiroAlEquipo(av: AvisoRetiro): Promise<{ ok: boolean; error?: string }> {
   let ok = false
   let error = ''
+  const intentar = async (fn: () => Promise<EnvioResult>): Promise<EnvioResult> => {
+    try { return await fn() } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+  }
   for (const num of await destinatariosRetiros()) {
-    let env: EnvioResult
-    try { env = await enviarBotonesWhatsapp(num, body, botones) } catch (e) { env = { ok: false, error: e instanceof Error ? e.message : String(e) } }
+    let env = await intentar(() => enviarBotonesWhatsapp(num, av.resumen, av.botones))
+    if (!env.ok && env.fuera_de_ventana) {
+      env = await intentar(() => enviarPlantillaBotonesWhatsapp(num, 'solicitud_retiro', av.vars, av.botones.map(b => b.id)))
+      if (!env.ok) {
+        env = await intentar(() => enviarPlantillaWhatsapp(num, 'aviso_operativo', [`${av.resumen} — Confírmalo en el panel del dashboard`]))
+      }
+    }
     if (env.ok) ok = true
     else error = env.error || error
   }
+  // Que NADIE se haya enterado es grave: el retiro queda comprometido con el
+  // cliente y esperando en el panel. Va como error, no como warning.
+  if (!ok) console.error('[agente-acciones] ⚠ el aviso de retiro no llegó a NINGÚN número del equipo:', error)
   return { ok, error: error || undefined }
 }
 
@@ -266,10 +321,17 @@ async function solicitarRetiro(a: AccionRetiro, ctx: CtxAgente): Promise<string>
     (waCliente ? `Cliente: +${waCliente}\n` : '') +
     `\n¿Confirmas este retiro?`
 
-  const env = await botonesATodosLosAdmins(resumen, [
-    { id: `retiro_ok:${id}`, title: '✅ Confirmar' },
-    { id: `retiro_no:${id}`, title: '❌ Rechazar' },
-  ])
+  const env = await avisarRetiroAlEquipo({
+    resumen,
+    vars: varsPlantillaRetiro({
+      quien: a.nombre_tutor, mascota: a.nombre_mascota, peso: a.peso,
+      direccion: a.direccion, comuna: a.comuna, fecha: a.fecha, hora: a.hora, contacto: waCliente,
+    }),
+    botones: [
+      { id: `retiro_ok:${id}`, title: '✅ Confirmar' },
+      { id: `retiro_no:${id}`, title: '❌ Rechazar' },
+    ],
+  })
 
   if (!env.ok) {
     console.warn('[agente-acciones] no se pudo avisar al admin:', env.error)
@@ -619,10 +681,17 @@ async function solicitarRetiroVet(a: AccionRetiroVet, ctx: CtxAgente): Promise<s
     (waVet ? `Contacto: +${waVet}\n` : '') +
     `\n¿Confirmas este retiro?`
 
-  const env = await botonesATodosLosAdmins(resumen, [
-    { id: `retiro_ok:${id}`, title: '✅ Confirmar' },
-    { id: `retiro_no:${id}`, title: '❌ Rechazar' },
-  ])
+  const env = await avisarRetiroAlEquipo({
+    resumen,
+    vars: varsPlantillaRetiro({
+      quien: `${unico.nombre || a.veterinaria_nombre} (veterinario)`, mascota: a.nombre_mascota, peso: a.peso,
+      direccion: a.direccion, comuna: a.comuna, fecha: a.fecha, hora: a.hora, contacto: waVet,
+    }),
+    botones: [
+      { id: `retiro_ok:${id}`, title: '✅ Confirmar' },
+      { id: `retiro_no:${id}`, title: '❌ Rechazar' },
+    ],
+  })
 
   if (!env.ok) {
     console.warn('[agente-acciones] no se pudo avisar al admin (vet):', env.error)

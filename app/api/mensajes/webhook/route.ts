@@ -217,6 +217,8 @@ interface MetaMsg {
   video?: { id: string; caption?: string; mime_type?: string }
   document?: { id: string; caption?: string; filename?: string; mime_type?: string }
   interactive?: { type?: string; button_reply?: { id: string; title: string }; list_reply?: { id: string; title: string } }
+  /** Respuesta a un botón quick-reply de PLANTILLA (llega como type:'button', no 'interactive'). */
+  button?: { text?: string; payload?: string }
   /** Presente cuando el mensaje es una RESPUESTA citando otro (id = wamid citado). */
   context?: { id?: string; from?: string }
   [k: string]: unknown
@@ -227,11 +229,16 @@ interface MetaMsg {
  * el agente. Si el botón es nuestro y viene del número admin, procesa la
  * confirmación/rechazo: avisa al cliente por WhatsApp y cierra la solicitud.
  * Devuelve true si consumió el mensaje (no debe seguir el flujo normal).
+ *
+ * El botón llega en DOS formas según cómo salió el aviso, y las dos son nuestras:
+ *  - `interactive.button_reply.id` → mensaje interactivo (dentro de la ventana de 24h);
+ *  - `button.payload` → quick-reply de la plantilla `solicitud_retiro` (fuera de
+ *    la ventana). Leer solo la primera dejaba el botón de la plantilla sin efecto.
  */
 async function procesarBotonAdmin(msg: MetaMsg): Promise<boolean> {
-  const br = msg.interactive?.button_reply
-  if (!br?.id) return false
-  const m = /^retiro_(ok|no):(\d+)$/.exec(br.id)
+  const accion = msg.interactive?.button_reply?.id || msg.button?.payload || ''
+  if (!accion) return false
+  const m = /^retiro_(ok|no):(\d+)$/.exec(accion)
   if (!m) return false
   // Las solicitudes de retiro las puede resolver TODO el equipo con avisos ON
   // (incluidos operadores), no solo los admins.
@@ -591,7 +598,9 @@ export async function POST(req: NextRequest) {
         }
         for (const msg of (value.messages as MetaMsg[]) ?? []) {
           // Flujo A: respuesta del admin a una solicitud de retiro (botón ✅/❌).
-          if (msg.type === 'interactive' && await procesarBotonAdmin(msg)) continue
+          // 'interactive' = aviso dentro de la ventana; 'button' = quick-reply de
+          // la plantilla solicitud_retiro (fuera de la ventana de 24h).
+          if ((msg.type === 'interactive' || msg.type === 'button') && await procesarBotonAdmin(msg)) continue
           // Relay: el admin respondió (citando) un aviso de ETA → reenviar al cliente.
           if (msg.type === 'text' && await procesarRelayAdmin(msg)) continue
           await procesarEntrante(value, msg)
