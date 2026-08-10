@@ -3,30 +3,22 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { esAdmin } from '@/lib/roles'
 import { getSheetData } from '@/lib/datastore'
-import { todayISO, formatDateForSheet } from '@/lib/dates'
+import { todayISO } from '@/lib/dates'
 import { parseDecimalOr0 } from '@/lib/numbers'
-import { ivaDeCompra, periodoSiiDe } from '@/lib/eerr-compras-ingesta'
+import { ivaPorMes, IVA_DESDE } from '@/lib/eerr-iva'
 
 /**
  * Balance — Posición de IVA (F29) + otras cuentas de balance.
  *
- * IVA DÉBITO FISCAL (pasivo): el IVA contenido en cada venta desde junio 2026
- * (antes no se pagaba IVA). Los precios de las fichas están CON IVA incluido, así
- * que el débito por venta = bruto − bruto/1,19 = bruto × 19/119. Se usa
- * `precio_total` (servicio + adicionales/ánforas). La eutanasia a domicilio NO
- * entra (no vive en `clientes`, se factura aparte).
- *
- * IVA CRÉDITO FISCAL (activo): el "Monto IVA Recuperable" de las facturas del SII
- * (hoja eerr_gastos_sii) que estén CONTABILIZADAS, por mes de emisión. Boletas y
- * rendiciones no generan crédito (no tienen IVA recuperable).
- *
- * Con el débito y el crédito por mes se arma el F29 con arrastre de remanente:
- * si el crédito supera al débito, el saldo a favor se acumula al mes siguiente.
+ * El débito y el crédito de cada mes salen de [lib/eerr-iva.ts](lib/eerr-iva.ts),
+ * la misma fuente que alimenta la línea informativa de IVA del EERR. Acá se les
+ * agrega lo propio del F29: el ARRASTRE DE REMANENTE, o sea que cuando el
+ * crédito supera al débito el saldo a favor pasa al mes siguiente en vez de
+ * perderse.
  */
 export const dynamic = 'force-dynamic'
 
-const IVA = 1.19
-const DESDE = '2026-06' // junio 2026: antes no se pagaba IVA
+const DESDE = IVA_DESDE
 const MES_ABBR = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
 function labelMes(k: string): string {
@@ -44,8 +36,6 @@ function mesesEntre(desde: string, hasta: string): string[] {
   }
   return out
 }
-const mesDe = (f: string): string => (formatDateForSheet(f) || '').slice(0, 7)
-
 export async function GET() {
   const s = await getServerSession(authOptions)
   if (!esAdmin((s?.user as { role?: string })?.role)) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
@@ -53,41 +43,20 @@ export async function GET() {
     const hoyMes = todayISO().slice(0, 7)
     const hasta = hoyMes < DESDE ? DESDE : hoyMes
     const meses = mesesEntre(DESDE, hasta)
-    const enRango = (m: string) => m >= DESDE && m <= hasta
-
-    const [clientes, gastosSii, rendiciones] = await Promise.all([
-      getSheetData('clientes'),
-      getSheetData('eerr_gastos_sii'),
+    const [rendiciones, iva] = await Promise.all([
       getSheetData('rendiciones'),
+      ivaPorMes(),
     ])
 
+    // Débito y crédito salen de lib/eerr-iva, la misma fuente que usa la línea
+    // informativa del EERR: si se calcularan por separado, un día dirían cosas
+    // distintas sobre el mismo mes.
     const debito: Record<string, number> = {}
     const credito: Record<string, number> = {}
-    for (const m of meses) { debito[m] = 0; credito[m] = 0 }
-
-    // Débito: IVA incluido en el precio_total de cada ficha (no borrador), por mes de retiro.
-    for (const c of clientes as Record<string, string>[]) {
-      if (c.estado === 'borrador') continue
-      const m = mesDe(c.fecha_retiro || c.fecha_creacion)
-      if (!enRango(m)) continue
-      const total = parseDecimalOr0(c.precio_total)
-      if (total <= 0) continue
-      debito[m] += total - total / IVA
-    }
-
-    // Crédito: IVA recuperable de las facturas SII contabilizadas, por PERÍODO
-    // TRIBUTARIO — el mes en que el SII registra la compra, no el de emisión.
-    // Una factura del 28 de julio sin acuse entra al RCV de agosto, y ahí es
-    // donde se usa su crédito fiscal; imputarla por emisión dejaba el F29
-    // permanentemente descuadrado contra el del SII. El EERR sí va por fecha de
-    // emisión (decisión del dueño): son dos preguntas distintas, cuándo se gastó
-    // la plata y cuándo se puede usar el IVA.
-    for (const f of gastosSii as Record<string, string>[]) {
-      if (f.contabilizado !== 'TRUE') continue
-      const m = periodoSiiDe(f)
-      if (!enRango(m)) continue
-      // Con signo: el IVA de una nota de crédito de compra devuelve crédito fiscal.
-      credito[m] += ivaDeCompra(f)
+    for (const m of meses) {
+      const v = iva.get(m)
+      debito[m] = v?.debito ?? 0
+      credito[m] = v?.credito ?? 0
     }
 
     // F29 mes a mes con arrastre de remanente (saldo a favor que pasa al mes siguiente).

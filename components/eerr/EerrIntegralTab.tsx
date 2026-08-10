@@ -5,7 +5,8 @@ import { todayISO, formatDate } from '@/lib/dates'
 import BalanceView from './BalanceView'
 
 interface Fila { nombre: string; valores: number[]; subgrupo: string; sgOrden: number; partida_id: string; tipo: string; clave: string }
-interface Data { periodos: { key: string; label: string }[]; ingresos: Fila[]; costos: Fila[]; gastos: Fila[]; impuestos: Fila[] }
+interface Iva { debito: number[]; credito: number[]; neto: number[] }
+interface Data { periodos: { key: string; label: string }[]; ingresos: Fila[]; costos: Fila[]; gastos: Fila[]; impuestos: Fila[]; iva?: Iva }
 type Drill = { partida_id: string; nombre: string; periodo: string; label: string }
 
 export default function EerrIntegralTab() {
@@ -151,9 +152,26 @@ export default function EerrIntegralTab() {
                 {row('rai', 'Resultado Antes de Impuestos', rai, 'accent')}
                 {renderSection('Impuestos', data.impuestos, totImp, 'imp')}
                 {row('res', 'Resultado del Ejercicio', resultado, 'result')}
+                {/* El IVA va DESPUÉS del resultado y fuera de la suma: los
+                    ingresos y los costos del informe ya están netos, así que
+                    restarlo acá descontaría dos veces plata que nunca se contó
+                    como ingreso. Es información para el F29, no un gasto. */}
+                {data.iva && <>
+                  {row('iva-head', 'IVA del período (informativo)', data.iva.neto, 'section')}
+                  {row('iva-d', 'Débito — IVA de las ventas', data.iva.debito, 'item')}
+                  {row('iva-c', 'Crédito — IVA de las compras', data.iva.credito, 'item')}
+                  {row('iva-n', 'A declarar (débito − crédito)', data.iva.neto, 'accent')}
+                </>}
               </tbody>
             </table>
             </div>
+            {data.iva && (
+              <p className="text-xs text-gray-500 mt-2">
+                El <strong>IVA no afecta el resultado</strong>: los ingresos y los costos de arriba ya están netos, se muestra solo para saber cuánto declarar.
+                El débito lo genera toda venta (boleta o factura) y el crédito solo las facturas de compra.
+                Un valor negativo en «A declarar» es <strong>remanente a favor</strong>, que pasa al mes siguiente — el arrastre mes a mes está en la pestaña Balance.
+              </p>
+            )}
           </div>
         )
       })()}

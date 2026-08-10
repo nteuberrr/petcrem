@@ -8,6 +8,7 @@ import { getPagosRetirosEerr, partidaRetiros } from '@/lib/eerr-retiros'
 import { getCostoRemuneracionesEerr, partidaImposiciones, partidaRemuneraciones } from '@/lib/remuneraciones/eerr'
 import { calcularIngresos } from '@/lib/eerr-ingresos'
 import { netoDeCompra } from '@/lib/eerr-compras-ingesta'
+import { ivaPorPeriodo } from '@/lib/eerr-iva'
 
 export const dynamic = 'force-dynamic'
 
@@ -133,12 +134,20 @@ export async function GET(req: NextRequest) {
         })
         .map(fila)
 
+    // IVA del período: NO entra al resultado y por eso va aparte. Los ingresos
+    // del EERR ya están netos y los costos también, así que el IVA quedó fuera
+    // del cálculo desde el principio; restarlo acá sería descontar dos veces
+    // plata que nunca se contó como ingreso. Va como información: cuánto habría
+    // que declarar en el F29 de cada mes.
+    const iva = await ivaPorPeriodo(periodIdx, N)
+
     return NextResponse.json({
       periodos,
       ingresos: grupo('ingreso'),
       costos: grupo('costo'),
       gastos: grupo('gasto'),
       impuestos: grupo('impuesto'),
+      iva,
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
