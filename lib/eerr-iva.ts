@@ -22,12 +22,20 @@ import type { DocVentaSii } from './sii-ventas'
  *    cero solas. Se imputa al **período tributario del SII** (`periodoSiiDe`), no
  *    al mes de emisión.
  *
- * ⚠️ Solo se informan los períodos que tienen el registro de ventas del SII
- * cargado. Un mes sin cargar no vale cero: vale «no sabemos», y mostrarlo como
- * cero daría un remanente a favor inventado del tamaño de todo el crédito del
- * mes. Para que aparezca un mes nuevo hay que sincronizarlo en
- * Facturación → Conciliación.
+ * ⚠️ Solo se informan los períodos donde el débito se CONOCE, que son dos casos:
+ * los que tienen el registro de ventas del SII cargado, y los anteriores a la
+ * primera venta, donde el débito es cero por definición. Un mes posterior sin
+ * cargar no vale cero: vale «no sabemos», y mostrarlo como cero daría un
+ * remanente a favor inventado del tamaño de todo el crédito del mes. Para que
+ * aparezca un mes nuevo hay que sincronizarlo en Facturación → Conciliación.
  */
+
+/**
+ * Mes de la primera venta de la empresa. Antes de esto hubo compras (montaje del
+ * crematorio) pero ningún ingreso, así que el débito de esos meses es CERO —dato,
+ * no laguna— y su crédito es remanente legítimo que se arrastra hacia adelante.
+ */
+export const VENTAS_DESDE = '2025-12'
 
 export interface IvaMes {
   /** IVA de las ventas documentadas del período (notas de crédito restadas). */
@@ -67,7 +75,12 @@ export async function ivaPorMes(): Promise<Map<string, IvaMes>> {
   }
 
   for (const f of gastosSii) {
-    const m = out.get(periodoSiiDe(f))
+    const periodo = periodoSiiDe(f)
+    if (!esPeriodo(periodo)) continue
+    // Antes de la primera venta no hay registro que cargar y tampoco hace falta:
+    // el débito es cero y el crédito de esas compras es remanente que se arrastra.
+    if (!out.has(periodo) && periodo < VENTAS_DESDE) out.set(periodo, { debito: 0, credito: 0 })
+    const m = out.get(periodo)
     if (m) m.credito += ivaDeCompra(f)
   }
   for (const v of out.values()) v.credito = Math.round(v.credito)
