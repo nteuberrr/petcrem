@@ -124,6 +124,43 @@ export async function listarDocumentos(ruta: string, desde: string, hasta: strin
   return out
 }
 
+/**
+ * Le pide a OpenFactura que REFRESQUE su copia del Registro de Compra/Venta
+ * desde el SII antes de que la leamos.
+ *
+ * Sin esto la sincronización miente por omisión: OpenFactura mantiene una copia
+ * del RCV que se queda atrás, y `/document/received` devuelve esa copia, no lo
+ * que el SII tiene hoy. Pasó en serio — el 09-08-2026 el SII mostraba 6
+ * facturas de agosto y OpenFactura entregaba 4; faltaban la del petróleo de
+ * $653.501 y otra de $41.625. Tras llamar acá, aparecieron en menos de 20
+ * segundos.
+ *
+ * Es asíncrono («se encoló correctamente… puede tardar unos minutos») y tiene un
+ * límite de consumo propio por contribuyente y tipo de registro: si responde 429
+ * NO se reintenta, se sigue con la copia que haya. Como la ingesta es
+ * idempotente, la sincronización siguiente recoge lo que haya faltado.
+ */
+export async function sincronizarRcv(periodo: string, registro: 'purchase' | 'sales'): Promise<{ ok: boolean; mensaje: string }> {
+  const { baseUrl, apiKey } = config()
+  if (!apiKey) return { ok: false, mensaje: 'OpenFactura no está configurado.' }
+  try {
+    const r = await fetch(`${baseUrl}/v2/dte/registry/sync-rcv`, {
+      method: 'POST',
+      headers: { apikey: apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ registro, periodo: Number(periodo.replace('-', '')) }),
+    })
+    const t = await r.text()
+    let j: { message?: string } = {}
+    try { j = t.trim() ? JSON.parse(t) as { message?: string } : {} } catch { /* texto crudo */ }
+    return { ok: r.ok, mensaje: String(j.message || t.slice(0, 200) || `HTTP ${r.status}`) }
+  } catch (e) {
+    return { ok: false, mensaje: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/** Cuánto se le da a OpenFactura para procesar el refresco antes de leer. */
+const ESPERA_RCV_MS = 20000
+
 const n = (v: number | null | undefined): string => String(Math.round(Number(v) || 0))
 
 /**
@@ -182,8 +219,18 @@ function aFacturaSii(d: DocOF): FacturaSii {
   }
 }
 
-/** COMPRAS del período (YYYY-MM), ya en el formato que espera la ingesta. */
-export async function comprasDelPeriodo(periodo: string): Promise<FacturaSii[]> {
+/**
+ * COMPRAS del período (YYYY-MM), ya en el formato que espera la ingesta.
+ *
+ * Refresca primero la copia del RCV (ver `sincronizarRcv`) porque si no devuelve
+ * lo que OpenFactura tenía guardado, que puede estar días atrás del SII. Pasar
+ * `refrescar:false` solo para lecturas de diagnóstico donde la espera molesta.
+ */
+export async function comprasDelPeriodo(periodo: string, opciones?: { refrescar?: boolean }): Promise<FacturaSii[]> {
+  if (opciones?.refrescar !== false) {
+    const r = await sincronizarRcv(periodo, 'purchase')
+    if (r.ok) await dormir(ESPERA_RCV_MS)
+  }
   const { desde, hasta } = rangoDelPeriodo(periodo)
   const docs = await listarDocumentos('/v2/dte/document/received', desde, hasta)
   return docs.map(aFacturaSii).filter(f => f.rut && f.folio && f.tipo_doc)
@@ -206,6 +253,9 @@ const entero = (v: number | null | undefined): number => Math.round(Number(v) ||
  * mantiene la carga manual del archivo del SII, que es el registro del propio SII.
  */
 export async function ventasParaConciliacion(periodo: string): Promise<DocVentaSii[]> {
+  // Mismo refresco que en compras: la copia del RCV de ventas también se atrasa.
+  const r = await sincronizarRcv(periodo, 'sales')
+  if (r.ok) await dormir(ESPERA_RCV_MS)
   const { desde, hasta } = rangoDelPeriodo(periodo)
   const docs = await listarDocumentos('/v2/dte/document/issued', desde, hasta)
   return docs
