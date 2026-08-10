@@ -162,10 +162,11 @@ export default function EerrIntegralTab() {
             </div>
             {data.iva && (
               <p className="text-xs text-gray-500 mt-2">
-                Cuánto IVA declarar en el mes: el débito que generan todas las ventas (boleta o factura) menos el crédito de las facturas de compra.
+                Cuánto IVA declarar en el mes: el débito de lo efectivamente <strong>boleteado y facturado</strong> según el SII, menos el crédito de las facturas de compra.
                 Negativo es <strong>remanente a favor</strong>, que pasa al mes siguiente — el arrastre está en la pestaña Balance.
                 <strong> No se resta del resultado</strong> porque ya está descontado: los ingresos de arriba entran divididos por 1,19 y los costos van netos,
-                así que el resultado que ves es el que queda después de pagarle el IVA al SII. Desde junio 2026, que es cuando las fichas empiezan a tener precio guardado.
+                así que el resultado que ves es el que queda después de pagarle el IVA al SII.
+                Un mes aparece en cuanto se sincroniza en Facturación → Conciliación; sin eso no se sabe el débito y no se muestra.
               </p>
             )}
           </div>

@@ -5,7 +5,7 @@ import { esAdmin } from '@/lib/roles'
 import { getSheetData } from '@/lib/datastore'
 import { todayISO } from '@/lib/dates'
 import { parseDecimalOr0 } from '@/lib/numbers'
-import { ivaPorMes, IVA_DESDE } from '@/lib/eerr-iva'
+import { ivaPorMes } from '@/lib/eerr-iva'
 
 /**
  * Balance — Posición de IVA (F29) + otras cuentas de balance.
@@ -18,7 +18,6 @@ import { ivaPorMes, IVA_DESDE } from '@/lib/eerr-iva'
  */
 export const dynamic = 'force-dynamic'
 
-const DESDE = IVA_DESDE
 const MES_ABBR = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
 function labelMes(k: string): string {
@@ -40,17 +39,21 @@ export async function GET() {
   const s = await getServerSession(authOptions)
   if (!esAdmin((s?.user as { role?: string })?.role)) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   try {
-    const hoyMes = todayISO().slice(0, 7)
-    const hasta = hoyMes < DESDE ? DESDE : hoyMes
-    const meses = mesesEntre(DESDE, hasta)
     const [rendiciones, iva] = await Promise.all([
       getSheetData('rendiciones'),
       ivaPorMes(),
     ])
 
     // Débito y crédito salen de lib/eerr-iva, la misma fuente que usa la línea
-    // informativa del EERR: si se calcularan por separado, un día dirían cosas
-    // distintas sobre el mismo mes.
+    // del EERR: si se calcularan por separado, un día dirían cosas distintas
+    // sobre el mismo mes. Los meses son los que tienen el registro de ventas del
+    // SII cargado — un mes sin cargar no vale cero, vale «no sabemos», y meterlo
+    // inventaría un remanente a favor del tamaño de todo su crédito.
+    const cargados = [...iva.keys()].sort()
+    const DESDE = cargados[0] || todayISO().slice(0, 7)
+    const hasta = cargados[cargados.length - 1] || DESDE
+    const meses = mesesEntre(DESDE, hasta)
+
     const debito: Record<string, number> = {}
     const credito: Record<string, number> = {}
     for (const m of meses) {
