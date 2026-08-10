@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { esAdmin } from '@/lib/roles'
 import { getSheetData, updateById } from '@/lib/datastore'
-import { parseCsvSii, decodeCsvSii } from '@/lib/eerr-sii'
+import { parseCsvSii, decodeCsvSii, tipoDocDeNombre } from '@/lib/eerr-sii'
 import { ingestarCompras } from '@/lib/eerr-compras-ingesta'
 
 export const dynamic = 'force-dynamic'
@@ -51,7 +51,9 @@ export async function POST(req: NextRequest) {
     if (!(file instanceof File) || file.size === 0) {
       return NextResponse.json({ error: 'Sube el archivo CSV del SII.' }, { status: 400 })
     }
-    const facturas = parseCsvSii(decodeCsvSii(await file.arrayBuffer()))
+    // El tipo sale del nombre para los CSV que el SII entrega por tipo de
+    // documento (`..._202509_33.csv`), que no traen la columna «Tipo Doc».
+    const facturas = parseCsvSii(decodeCsvSii(await file.arrayBuffer()), tipoDocDeNombre(file.name))
     if (facturas.length === 0) {
       return NextResponse.json({ error: 'No se encontraron facturas en el archivo. ¿Es el CSV de compras del SII?' }, { status: 400 })
     }

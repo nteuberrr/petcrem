@@ -79,30 +79,75 @@ export function decodeCsvSii(buf: ArrayBuffer): string {
   }
 }
 
-/** Parsea el texto del CSV del SII a facturas. Ignora el encabezado y filas vacías. */
-export function parseCsvSii(text: string): FacturaSii[] {
+/** Normaliza un nombre de columna para compararlo: sin tildes, puntos ni dobles espacios. */
+const normCol = (s: string) =>
+  s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\./g, '').replace(/\s+/g, ' ')
+
+/**
+ * Tipo de documento sacado del NOMBRE del archivo del SII.
+ *
+ * Cuando en el RCV se entra a un tipo de documento en particular, el CSV que
+ * descarga se llama `..._<AAAAMM>_<tipo>.csv` y **no trae la columna «Tipo
+ * Doc»** — el tipo está solo en el nombre. Sin esto esos archivos se cargaban
+ * como cero filas, en silencio.
+ */
+export function tipoDocDeNombre(nombre: string): string {
+  const m = (nombre || '').match(/_\d{6}_(\d{2,3})\.csv$/i)
+  return m ? m[1] : ''
+}
+
+/**
+ * Parsea el CSV de COMPRAS del SII. Mapea por ENCABEZADO, no por posición: el
+ * archivo por tipo de documento tiene una columna menos que el combinado, así
+ * que leer por índice corría todos los montos.
+ *
+ * `tipoDocPorDefecto` cubre justamente ese archivo, que no trae «Tipo Doc»:
+ * pásale `tipoDocDeNombre(archivo)`.
+ */
+export function parseCsvSii(text: string, tipoDocPorDefecto = ''): FacturaSii[] {
   const lines = text.split(/\r?\n/)
+  const iHead = lines.findIndex(l => normCol(l).includes('rut proveedor'))
+  if (iHead < 0) return []
+
+  const cols = lines[iHead].split(';').map(normCol)
+  const at = (nombre: string) => cols.indexOf(normCol(nombre))
+  const iTipo = at('Tipo Doc')
+  const c = {
+    tipoCompra: at('Tipo Compra'),
+    rut: at('RUT Proveedor'),
+    razon: at('Razon Social'),
+    folio: at('Folio'),
+    emision: at('Fecha Docto'),
+    recepcion: at('Fecha Recepcion'),
+    exento: at('Monto Exento'),
+    neto: at('Monto Neto'),
+    iva: at('Monto IVA Recuperable'),
+    total: at('Monto Total'),
+    otro: at('Valor Otro Impuesto'),
+  }
+  if (c.rut < 0 || c.folio < 0) return []
+
+  const val = (f: string[], i: number) => (i >= 0 ? (f[i] || '').trim() : '')
   const out: FacturaSii[] = []
-  for (const line of lines) {
+  for (const line of lines.slice(iHead + 1)) {
     if (!line.trim()) continue
-    const c = line.split(';')
-    const tipoDoc = (c[1] || '').trim()
-    const rut = (c[3] || '').trim()
-    // Solo filas de datos: Tipo Doc numérico y RUT presente (descarta el encabezado).
+    const f = line.split(';')
+    const rut = val(f, c.rut)
+    const tipoDoc = iTipo >= 0 ? val(f, iTipo) : tipoDocPorDefecto
     if (!/^\d+$/.test(tipoDoc) || !rut) continue
     out.push({
       tipo_doc: tipoDoc,
-      tipo_compra: (c[2] || '').trim(),
+      tipo_compra: val(f, c.tipoCompra),
       rut,
-      razon_social: (c[4] || '').trim(),
-      folio: (c[5] || '').trim(),
-      fecha_documento: aIso(c[6] || ''),
-      fecha_recepcion: aIso(c[7] || ''),
-      monto_exento: num(c[9]),
-      monto_neto: num(c[10]),
-      monto_iva: num(c[11]),
-      monto_total: num(c[14]),
-      valor_otro_impuesto: num(c[25]),
+      razon_social: val(f, c.razon),
+      folio: val(f, c.folio),
+      fecha_documento: aIso(val(f, c.emision)),
+      fecha_recepcion: aIso(val(f, c.recepcion)),
+      monto_exento: num(val(f, c.exento)),
+      monto_neto: num(val(f, c.neto)),
+      monto_iva: num(val(f, c.iva)),
+      monto_total: num(val(f, c.total)),
+      valor_otro_impuesto: num(val(f, c.otro)),
     })
   }
   return out
