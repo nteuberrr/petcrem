@@ -5,7 +5,7 @@ import { esAdmin } from '@/lib/roles'
 import { getSheetData } from '@/lib/datastore'
 import { todayISO, formatDateForSheet } from '@/lib/dates'
 import { parseDecimalOr0 } from '@/lib/numbers'
-import { ivaDeCompra } from '@/lib/eerr-compras-ingesta'
+import { ivaDeCompra, periodoSiiDe } from '@/lib/eerr-compras-ingesta'
 
 /**
  * Balance — Posición de IVA (F29) + otras cuentas de balance.
@@ -75,10 +75,16 @@ export async function GET() {
       debito[m] += total - total / IVA
     }
 
-    // Crédito: IVA recuperable de las facturas SII contabilizadas, por mes de emisión.
+    // Crédito: IVA recuperable de las facturas SII contabilizadas, por PERÍODO
+    // TRIBUTARIO — el mes en que el SII registra la compra, no el de emisión.
+    // Una factura del 28 de julio sin acuse entra al RCV de agosto, y ahí es
+    // donde se usa su crédito fiscal; imputarla por emisión dejaba el F29
+    // permanentemente descuadrado contra el del SII. El EERR sí va por fecha de
+    // emisión (decisión del dueño): son dos preguntas distintas, cuándo se gastó
+    // la plata y cuándo se puede usar el IVA.
     for (const f of gastosSii as Record<string, string>[]) {
       if (f.contabilizado !== 'TRUE') continue
-      const m = mesDe(f.fecha_documento)
+      const m = periodoSiiDe(f)
       if (!enRango(m)) continue
       // Con signo: el IVA de una nota de crédito de compra devuelve crédito fiscal.
       credito[m] += ivaDeCompra(f)

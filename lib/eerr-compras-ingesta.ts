@@ -41,13 +41,48 @@ export function ivaDeCompra(f: Record<string, string>): number {
   return resta(f.tipo_doc) ? -iva : iva
 }
 
+/** Plazo tras el cual el SII registra solo una factura sin acuse. */
+const DIAS_REGISTRO_AUTOMATICO = 8
+
+/**
+ * PERÍODO TRIBUTARIO del SII de una compra (YYYY-MM) — el mes en que entra al
+ * Registro de Compras, que es el que manda para el crédito fiscal del F29.
+ *
+ * No es el mes de emisión NI el de recepción: el SII archiva la compra cuando la
+ * REGISTRA, y a una factura sin acuse la registra recién al vencer los 8 días.
+ * Por eso una factura del 28 de julio recibida el 28 de julio aparece en el RCV
+ * de AGOSTO (verificado contra `RCV_COMPRA_REGISTRO_..._202608_33.csv`, donde la
+ * columna «Fecha Acuse» viene vacía en todas: nadie las aceptó, las registró el
+ * SII solo).
+ *
+ * Se prefiere `periodo_sii` si la fila lo trae (lo estampa la sincronización con
+ * el dato real del evento de registro o la forma de pago). Si no —toda la
+ * historia cargada antes, y el CSV manual, que no lo trae—, se deduce sumando
+ * los 8 días a la recepción. Esa deducción reprodujo los 9 documentos del
+ * archivo del SII; el caso que no cubre es la factura al contado recibida en los
+ * últimos 8 días del mes, que el SII registra al llegar: para esas hace falta el
+ * dato estampado al sincronizar.
+ */
+export function periodoSiiDe(f: Record<string, string>): string {
+  const guardado = (f.periodo_sii || '').trim()
+  if (/^\d{4}-\d{2}$/.test(guardado)) return guardado
+
+  const rec = (f.fecha_recepcion || '').trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(rec)) {
+    const t = Date.parse(`${rec}T12:00:00Z`)
+    if (Number.isFinite(t)) return new Date(t + DIAS_REGISTRO_AUTOMATICO * 86400000).toISOString().slice(0, 7)
+  }
+  // Sin fecha de recepción no hay nada mejor que el mes de emisión.
+  return (f.fecha_documento || '').slice(0, 7)
+}
+
 /** Un documento es el mismo si coinciden proveedor, tipo y folio. */
 const claveDedup = (rut: string, tipoDoc: string, folio: string) => `${rut}|${tipoDoc}|${folio}`
 
 // Campos que vienen del SII (no del usuario: comentario/partida/etc. no se tocan).
 // Para un documento YA cargado, si uno está en blanco y el nuevo lo trae, se
 // rellena. Los montos vacíos se guardan como '0', así que '0' cuenta como blanco.
-const CAMPOS_SII = ['razon_social', 'tipo_compra', 'fecha_documento', 'fecha_recepcion', 'monto_exento', 'monto_neto', 'monto_iva', 'monto_total', 'valor_otro_impuesto']
+const CAMPOS_SII = ['razon_social', 'tipo_compra', 'fecha_documento', 'fecha_recepcion', 'monto_exento', 'monto_neto', 'monto_iva', 'monto_total', 'valor_otro_impuesto', 'periodo_sii']
 const esBlank = (v: string | undefined) => { const s = (v || '').trim(); return s === '' || s === '0' }
 
 export interface ResultadoIngesta {
@@ -125,6 +160,7 @@ export async function ingestarCompras(facturas: FacturaSii[]): Promise<Resultado
       id,
       tipo_doc: f.tipo_doc, tipo_compra: f.tipo_compra, rut: f.rut, razon_social: f.razon_social, folio: f.folio,
       fecha_documento: f.fecha_documento, fecha_recepcion: f.fecha_recepcion,
+      periodo_sii: f.periodo_sii || '',
       monto_exento: f.monto_exento, monto_neto: f.monto_neto, monto_iva: f.monto_iva,
       monto_total: f.monto_total, valor_otro_impuesto: f.valor_otro_impuesto,
       comentario: '',

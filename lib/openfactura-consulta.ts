@@ -133,9 +133,40 @@ const n = (v: number | null | undefined): string => String(Math.round(Number(v) 
  * `valor_otro_impuesto` va en 0: OpenFactura no lo expone en el listado. Es un
  * campo que en la práctica solo aparece en combustibles/tabacos, ajeno al giro.
  */
+/**
+ * Período tributario en que el SII registra la compra (YYYY-MM), que es el que
+ * manda para el crédito fiscal — ver `periodoSiiDe` en eerr-compras-ingesta.
+ *
+ * Tres fuentes, de más a menos firme:
+ *  1. el evento de acuse con estado «Registro»: es el dato, no una deducción;
+ *  2. las pagadas al contado o gratuitas, que el SII registra al recibirlas
+ *     (no admiten acuse, así que no esperan los 8 días);
+ *  3. el resto, al vencer los 8 días desde la recepción.
+ *
+ * El paso 1 falla más de lo que uno esperaría: de los 9 documentos del RCV de
+ * agosto-2026, 5 seguían sin ningún evento en OpenFactura aunque el SII ya los
+ * tenía registrados. Por eso hay 2 y 3, y por eso conviene re-sincronizar un mes
+ * pasado un tiempo: el dato firme reemplaza a la deducción.
+ */
+function periodoSiiDeDoc(d: DocOF): string {
+  const registro = (d.Acuses ?? []).find(a => String(a.estado || '').toLowerCase().startsWith('registro'))
+  if (registro?.fechaEvento) {
+    const m = String(registro.fechaEvento).slice(0, 7)
+    if (/^\d{4}-\d{2}$/.test(m)) return m
+  }
+  const recepcion = (d.FchRecepSII || d.FchRecepOF || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(recepcion)) return ''
+  const t = Date.parse(`${recepcion}T12:00:00Z`)
+  if (!Number.isFinite(t)) return ''
+  const forma = Number(d.FmaPago ?? 0) || 0
+  const alContado = forma === 1 || forma === 3
+  return new Date(t + (alContado ? 0 : 8 * 86400000)).toISOString().slice(0, 7)
+}
+
 function aFacturaSii(d: DocOF): FacturaSii {
   const rut = d.RUTEmisor ?? d.RUTRecep
   return {
+    periodo_sii: periodoSiiDeDoc(d),
     tipo_doc: String(d.TipoDTE ?? ''),
     tipo_compra: d.TpoTranCompra != null ? String(d.TpoTranCompra) : '',
     rut: rut != null ? `${rut}-${d.DV ?? ''}` : '',

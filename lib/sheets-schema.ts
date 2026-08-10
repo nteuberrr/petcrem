@@ -466,7 +466,7 @@ export const SHEETS: Record<string, string[]> = {
   // Facturas del SII (§2.1). Dedup: rut + tipo_doc + folio. fecha_documento = emisión (mes).
   eerr_gastos_sii: [
     'id', 'tipo_doc', 'tipo_compra', 'rut', 'razon_social', 'folio',
-    'fecha_documento', 'fecha_recepcion',
+    'fecha_documento', 'fecha_recepcion', 'periodo_sii',
     'monto_exento', 'monto_neto', 'monto_iva', 'monto_total', 'valor_otro_impuesto',
     'comentario', 'tipo_asignacion', 'partida_id', 'contabilizado',
     'fecha_carga', 'fecha_creacion',

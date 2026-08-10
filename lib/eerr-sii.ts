@@ -19,6 +19,13 @@ export interface FacturaSii {
   monto_iva: string
   monto_total: string
   valor_otro_impuesto: string
+  /**
+   * Período tributario del SII (YYYY-MM) en que la compra entra al Registro, que
+   * NO es el mes de emisión ni el de recepción. Ver `periodoSiiDe` en
+   * [eerr-compras-ingesta.ts](eerr-compras-ingesta.ts). Opcional: el CSV del SII
+   * no lo trae por documento y ahí se deduce al leer.
+   */
+  periodo_sii?: string
 }
 
 /**
