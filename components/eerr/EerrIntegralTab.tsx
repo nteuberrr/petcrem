@@ -156,20 +156,16 @@ export default function EerrIntegralTab() {
                     ingresos y los costos del informe ya están netos, así que
                     restarlo acá descontaría dos veces plata que nunca se contó
                     como ingreso. Es información para el F29, no un gasto. */}
-                {data.iva && <>
-                  {row('iva-head', 'IVA del período (informativo)', data.iva.neto, 'section')}
-                  {row('iva-d', 'Débito — IVA de las ventas', data.iva.debito, 'item')}
-                  {row('iva-c', 'Crédito — IVA de las compras', data.iva.credito, 'item')}
-                  {row('iva-n', 'A declarar (débito − crédito)', data.iva.neto, 'accent')}
-                </>}
+                {data.iva && row('iva-n', 'IVA a declarar (débito − crédito)', data.iva.neto, 'accent')}
               </tbody>
             </table>
             </div>
             {data.iva && (
               <p className="text-xs text-gray-500 mt-2">
-                El <strong>IVA no afecta el resultado</strong>: los ingresos y los costos de arriba ya están netos, se muestra solo para saber cuánto declarar.
-                El débito lo genera toda venta (boleta o factura) y el crédito solo las facturas de compra.
-                Un valor negativo en «A declarar» es <strong>remanente a favor</strong>, que pasa al mes siguiente — el arrastre mes a mes está en la pestaña Balance.
+                Cuánto IVA declarar en el mes: el débito que generan todas las ventas (boleta o factura) menos el crédito de las facturas de compra.
+                Negativo es <strong>remanente a favor</strong>, que pasa al mes siguiente — el arrastre está en la pestaña Balance.
+                <strong> No se resta del resultado</strong> porque ya está descontado: los ingresos de arriba entran divididos por 1,19 y los costos van netos,
+                así que el resultado que ves es el que queda después de pagarle el IVA al SII. Desde junio 2026, que es cuando las fichas empiezan a tener precio guardado.
               </p>
             )}
           </div>
