@@ -515,45 +515,66 @@ async function cancelarAgendamiento(a: AccionCancelar, ctx: CtxAgente): Promise<
     return 'Este cliente no tiene ningún servicio agendado a su nombre (ni retiro ni eutanasia), así que no hay nada que cancelar. Si insiste en que sí, escala a un humano en vez de inventar.'
   }
 
-  // Ficha borrador ligada: se elimina, igual que cuando el equipo borra la ficha
-  // desde el panel. Una ficha con código NO se toca.
-  const borrarFichaSiBorrador = async (clienteId: string) => {
+  // ¿El agendamiento YA es una ficha REGISTRADA (con código)? Entonces el bot no
+  // cancela NADA: la mascota ya está ingresada con nosotros y deshacerlo toca
+  // ciclo, cobros, correos y certificado. Se avisa al equipo y lo resuelven
+  // ellos. Solo la ficha BORRADOR (nació de este agendamiento) se elimina.
+  const fichaDe = (clienteId?: string) => {
     const cid = String(clienteId || '').trim()
-    if (!cid) return false
-    const ficha = clientes.find(c => String(c.id) === cid)
-    if (!ficha || (ficha.estado || '') !== 'borrador') return false
+    if (!cid) return null
+    return clientes.find(c => String(c.id) === cid) || null
+  }
+  const yaRegistrada = (clienteId?: string) => {
+    const f = fichaDe(clienteId)
+    return !!f && (f.estado || '') !== 'borrador'
+  }
+  const borrarFichaSiBorrador = async (clienteId: string) => {
+    const f = fichaDe(clienteId)
+    if (!f || (f.estado || '') !== 'borrador') return
     // Por ID, no por índice: entre la lectura y el borrado puede entrar otra ficha.
-    try { await deleteById('clientes', cid); return true } catch (e) {
-      console.warn('[agente-acciones] no se pudo borrar la ficha borrador al cancelar:', e); return false
+    try { await deleteById('clientes', String(f.id)) } catch (e) {
+      console.warn('[agente-acciones] no se pudo borrar la ficha borrador al cancelar:', e)
     }
   }
 
   const detalle: string[] = []
-  let quedaFicha = false
+  const bloqueados: string[] = []
   if (sol) {
-    await updateByIdIf(SHEET_RETIRO, sol.id, { estado: sol.estado }, { estado: 'cancelada', fecha_resolucion: ahora })
-    const borrada = await borrarFichaSiBorrador(sol.cliente_id)
-    if (sol.cliente_id && !borrada) quedaFicha = true
-    detalle.push(`retiro de ${sol.nombre_mascota || 'la mascota'} (${formatDate(sol.fecha_retiro)} ${sol.hora_retiro})`)
+    const txt = `retiro de ${sol.nombre_mascota || 'la mascota'} (${formatDate(sol.fecha_retiro)} ${sol.hora_retiro})`
+    if (yaRegistrada(sol.cliente_id)) bloqueados.push(txt)
+    else {
+      await updateByIdIf(SHEET_RETIRO, sol.id, { estado: sol.estado }, { estado: 'cancelada', fecha_resolucion: ahora })
+      await borrarFichaSiBorrador(sol.cliente_id)
+      detalle.push(txt)
+    }
   }
   if (cot) {
-    await updateByIdIf('cotizaciones_eutanasia', cot.id, { estado: cot.estado }, { estado: 'cancelada', fecha_cancelacion: ahora })
-    const borrada = await borrarFichaSiBorrador(cot.cliente_id)
-    if (cot.cliente_id && !borrada) quedaFicha = true
-    detalle.push(`eutanasia de ${cot.mascota_nombre || 'la mascota'} (${formatDate(cot.fecha_servicio)} ${cot.hora_servicio})`)
+    const txt = `eutanasia de ${cot.mascota_nombre || 'la mascota'} (${formatDate(cot.fecha_servicio)} ${cot.hora_servicio})`
+    if (yaRegistrada(cot.cliente_id)) bloqueados.push(txt)
+    else {
+      await updateByIdIf('cotizaciones_eutanasia', cot.id, { estado: cot.estado }, { estado: 'cancelada', fecha_cancelacion: ahora })
+      await borrarFichaSiBorrador(cot.cliente_id)
+      detalle.push(txt)
+    }
   }
 
+  const tel = `+${(ctx.waId || '').replace(/\D/g, '')}`
   try {
     await avisarAdminsWhatsapp(
-      `🚫 *Cancelación pedida por el cliente*\n\n` +
-      `${detalle.join('\n')}\n` +
+      (detalle.length ? `🚫 *Cancelación pedida por el cliente*\n\n${detalle.join('\n')}\n` : `⚠ *Cliente pide CANCELAR una ficha ya registrada*\n\n`) +
+      (bloqueados.length ? `${detalle.length ? '\n⚠ NO cancelado (ficha ya registrada, resuélvanlo ustedes):\n' : ''}${bloqueados.join('\n')}\n` : '') +
       (motivo ? `Motivo: ${motivo}\n` : '') +
-      `Cliente: +${(ctx.waId || '').replace(/\D/g, '')}\n` +
-      (cot?.vet_nombre_asignado ? `\n⚠ La eutanasia tenía asignado a ${cot.vet_nombre_asignado}: hay que avisarle.` : '') +
-      (quedaFicha ? '\n⚠ La ficha ya estaba registrada: revísala en /clientes.' : ''))
+      `Cliente: ${tel}` +
+      (cot?.vet_nombre_asignado && detalle.some(d => d.startsWith('eutanasia')) ? `\n\n⚠ La eutanasia tenía asignado a ${cot.vet_nombre_asignado}: hay que avisarle.` : ''))
   } catch (e) { console.warn('[agente-acciones] aviso de cancelación falló:', e) }
 
-  return `Listo, cancelé ${detalle.join(' y ')} y avisé al equipo. Dile al cliente, breve y cálido, que quedó cancelado y que si más adelante nos necesita estamos disponibles. NO le pidas explicaciones ni intentes retenerlo.`
+  if (!detalle.length) {
+    return `NO cancelé nada: ${bloqueados.join(' y ')} ya está como ficha REGISTRADA (la mascota ya ingresó con nosotros), y eso no se deshace por acá. ` +
+      `Ya avisé al equipo. Dile al cliente, cálido y breve, que un miembro del equipo lo va a contactar en seguida para resolverlo. ` +
+      `NO le digas que quedó cancelado ni le prometas devoluciones.`
+  }
+  return `Listo, cancelé ${detalle.join(' y ')} y avisé al equipo. Dile al cliente, breve y cálido, que quedó cancelado y que si más adelante nos necesita estamos disponibles. NO le pidas explicaciones ni intentes retenerlo.` +
+    (bloqueados.length ? ` OJO: ${bloqueados.join(' y ')} NO se canceló porque ya es una ficha registrada — de eso NO le digas que quedó cancelado; avísale que el equipo lo contacta por esa parte.` : '')
 }
 
 // ─── Flujo A-vet: retiro originado por un veterinario de convenio ─────────────

@@ -118,7 +118,11 @@ const SERVICIOS = [
  *  pago y la veterinaria son filtros aparte que se COMBINAN con este. */
 type FiltroSituacion = 'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado'
   | 'pago_pendiente' | 'datos_pendientes' | 'falta_peso' | 'diferencia'
-  | 'pendiente_cobro' | 'devolucion' | 'correo_malo'
+  | 'pendiente_cobro' | 'devolucion' | 'correo_malo' | 'video_pendiente'
+
+/** Desde cuándo avisamos por los videos sin subir (ISO). Antes de esta fecha la
+ *  solicitud del tutor quedaba sin cargar y no se va a completar hacia atrás. */
+const VIDEO_DESDE = '2026-08-01'
 
 /** Formas de pago del alta de ficha + "sin definir" para las que no la tienen. */
 const FORMAS_PAGO = [
@@ -306,6 +310,17 @@ export default function ClientesPage() {
   const esPremiumCuadro = (c: Cliente) => (c.codigo_servicio || '').toUpperCase() === 'CP'
   const solicitoVideo = (c: Cliente) => pidioVideo(c)
 
+  // VIDEO PENDIENTE DE SUBIR: el tutor lo pidió y todavía no hay ningún archivo
+  // cargado. Solo de AGOSTO 2026 en adelante (decisión del dueño, 10-08-2026):
+  // desde ahí se suben todos, y las fichas anteriores dejarían el contador
+  // encendido para siempre con videos que ya nadie va a cargar.
+  const videoPendiente = (c: Cliente): boolean => {
+    if (c.estado === 'borrador') return false
+    if (!solicitoVideo(c) || jsonTieneItems(c.videos_servicio)) return false
+    const iso = formatDateForSheet(c.fecha_retiro || c.fecha_creacion)
+    return !!iso && iso >= VIDEO_DESDE
+  }
+
   // Ids de fichas con al menos un COBRO no pagado (de la tabla `cobros`). Las
   // devoluciones viven en la misma tabla pero son plata que sale, no que entra:
   // van en su propio conjunto para no aparecer nunca como "pendiente de cobro".
@@ -351,6 +366,7 @@ export default function ClientesPage() {
       if (filtro === 'pendiente_cobro' && !idsConCobroPendiente.has(String(c.id))) return false
       if (filtro === 'devolucion' && !((devolucionPorFicha.get(String(c.id)) ?? 0) > 0)) return false
       if (filtro === 'correo_malo' && !idsCorreoMalo.has(String(c.id))) return false
+      if (filtro === 'video_pendiente' && !videoPendiente(c)) return false
       // Filtro por veterinaria (independiente del filtro de estado)
       if (filtroVet === '__general__' && (c.veterinaria_id || '').trim()) return false
       if (filtroVet && filtroVet !== '__general__' && c.veterinaria_id !== filtroVet) return false
@@ -402,6 +418,8 @@ export default function ClientesPage() {
       datosPendientes: reales.filter(c => tieneDatosPendientes(c)).length,
       faltaPeso: reales.filter(c => faltaPesoIngreso(c)).length,
       diferencia: reales.filter(c => tieneDiferenciaPorCobrar(c)).length,
+      // Videos que el tutor pidió y siguen sin cargarse (de agosto en adelante).
+      videoPendiente: reales.filter(c => videoPendiente(c)).length,
       // Fichas con un cobro emitido y aún NO pagado (tabla `cobros`).
       pendienteCobro: reales.filter(c => idsConCobroPendiente.has(String(c.id))).length,
       // Plata que le DEBEMOS al tutor (boleta por encima del total actual). Va
@@ -425,7 +443,7 @@ export default function ClientesPage() {
       aplicarRango(f === 'este_mes' ? 'mes' : 'semana')
       return
     }
-    const validos: FiltroSituacion[] = ['todos', 'borrador', 'pendiente', 'cremado', 'despachado', 'pago_pendiente', 'datos_pendientes', 'falta_peso', 'diferencia', 'pendiente_cobro', 'devolucion', 'correo_malo']
+    const validos: FiltroSituacion[] = ['todos', 'borrador', 'pendiente', 'cremado', 'despachado', 'pago_pendiente', 'datos_pendientes', 'falta_peso', 'diferencia', 'pendiente_cobro', 'devolucion', 'correo_malo', 'video_pendiente']
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if ((validos as string[]).includes(f)) setFiltro(f as FiltroSituacion)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -746,7 +764,7 @@ export default function ClientesPage() {
 
       {/* Notificaciones compactas: una fila de chips clickeables que aplican el
           filtro correspondiente. Reemplaza al banner grande de pago pendiente. */}
-      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0 || alertas.devolucion > 0 || correosMalos.length > 0) && (
+      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0 || alertas.videoPendiente > 0 || alertas.devolucion > 0 || correosMalos.length > 0) && (
         <div className="mb-5 flex flex-wrap items-center gap-2">
           {nBorradores > 0 && (
             <button onClick={() => setFiltro('borrador')}
@@ -788,6 +806,13 @@ export default function ClientesPage() {
             <button onClick={() => setFiltro('diferencia')}
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-fuchsia-300 bg-fuchsia-50 hover:bg-fuchsia-100 px-3 py-1.5 text-xs font-bold text-fuchsia-800 shadow-md transition-colors">
               <Coins className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {alertas.diferencia} con diferencia por cobrar
+            </button>
+          )}
+          {alertas.videoPendiente > 0 && (
+            <button onClick={() => setFiltro('video_pendiente')}
+              title="Fichas donde el tutor pidió el video del ingreso y todavía no se sube (de agosto en adelante). El video va adjunto en el correo del certificado, el día de la entrega."
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-sky-300 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-800 shadow-md transition-colors">
+              <Video className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {alertas.videoPendiente} con video por subir
             </button>
           )}
           {alertas.devolucion > 0 && (
