@@ -96,6 +96,29 @@ export async function getSheetData(sheetName: string): Promise<Record<string, st
 }
 
 /**
+ * Las ÚLTIMAS `n` filas de una tabla (por id, que es el orden en que se crearon),
+ * devueltas en el mismo orden ascendente que `getSheetData`.
+ *
+ * Existe para que /clientes pinte rápido sin bajar el histórico entero: la lista
+ * arranca con las más recientes y el resto llega en segundo plano. En Postgres es
+ * un `order by id desc limit n` (no toca el resto de la tabla); en Sheets no hay
+ * consulta parcial, así que lee y corta en memoria — igual de correcto, sin la
+ * ganancia.
+ */
+export async function getUltimasFilas(sheetName: string, n: number): Promise<Record<string, string>[]> {
+  if (n <= 0) return []
+  if (!usePg) {
+    const rows = await sheets.getSheetData(sheetName)
+    return rows.slice(-n)
+  }
+  const sb = getSupabase()
+  const { data, error } = await sb.from(sheetName).select('*').order('id', { ascending: false }).limit(n)
+  if (error) throw new Error(`[datastore] ultimas ${sheetName}: ${error.message}`)
+  const rows = ((data ?? []) as Record<string, unknown>[]).map(rowToStringRecord)
+  return rows.reverse()
+}
+
+/**
  * Filas de una tabla acotadas a una lista de IDs. Existe para no bajar tablas
  * completas cuando solo se necesitan unas pocas filas conocidas (la agenda
  * resolvía las fichas leyendo `clientes` entero en CADA evaluación de horario).

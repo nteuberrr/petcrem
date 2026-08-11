@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getSheetData, appendRow, getNextId, ensureColumns } from '@/lib/datastore'
+import { getSheetData, getUltimasFilas, appendRow, getNextId, ensureColumns } from '@/lib/datastore'
 import { ajustarStockAdicionales } from '@/lib/stock'
 import { gredaEsperada, aplicarCambioGreda, SIN_GREDA } from '@/lib/greda-stock'
 import { generarCodigo } from '@/lib/codigo-generator'
@@ -55,7 +55,14 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const estado = searchParams.get('estado')
     const buscar = searchParams.get('buscar')
-    let rows = await getSheetData('clientes')
+    // `ultimas=N`: solo las N fichas más recientes. Es la primera carga de
+    // /clientes — pinta al instante y el histórico completo se pide después en
+    // segundo plano. Sin el parámetro, se devuelve todo (comportamiento previo:
+    // lo usan el resto de las pantallas y el propio /clientes al completarse).
+    const ultimas = parseInt(searchParams.get('ultimas') || '', 10)
+    let rows = Number.isFinite(ultimas) && ultimas > 0
+      ? await getUltimasFilas('clientes', ultimas)
+      : await getSheetData('clientes')
     if (estado) rows = rows.filter((r) => r.estado === estado)
     if (buscar) {
       const q = buscar.toLowerCase()
@@ -70,14 +77,21 @@ export async function GET(req: NextRequest) {
     // eutanasia_valor (NO persistido): valor a cobrar de la eutanasia a domicilio
     // asociada a la ficha, para que el resumen de la lista muestre el total real
     // a cobrar. Fuera de boleta (esa sigue solo por precio_total). Best-effort.
+    // ⚠️ La config se lee UNA vez y el valor se calcula en memoria con
+    // `cobroClienteCon`. Antes esto era un `for` con `await valorClienteCotizacion`
+    // por cotización, y cada llamada releía `config_eutanasia` dos veces: con 15
+    // eutanasias activas eran ~1,8 s de la carga de /clientes, y crecía con CADA
+    // eutanasia nueva (medido 10-08-2026). No volver a poner un await adentro del
+    // loop.
     try {
       const cotis = await getSheetData('cotizaciones_eutanasia')
       const activas = cotis.filter(c => c.cliente_id && !['cancelada', 'no_realizada'].includes(String(c.estado || '')))
       if (activas.length) {
-        const { valorClienteCotizacion } = await import('@/lib/eutanasia-precios')
+        const { getConfigCobroEutanasia, cobroClienteCon } = await import('@/lib/eutanasia-precios')
+        const cfg = await getConfigCobroEutanasia()
         const valores = new Map<string, number>()
         for (const cot of activas) {
-          valores.set(String(cot.cliente_id), await valorClienteCotizacion(cot))
+          valores.set(String(cot.cliente_id), cobroClienteCon(cot, cfg).total)
         }
         rows = rows.map(r => {
           const v = valores.get(String(r.id))

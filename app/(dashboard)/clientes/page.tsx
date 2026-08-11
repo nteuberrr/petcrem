@@ -19,6 +19,10 @@ import { esComunaNoCubierta } from '@/lib/cobertura'
 import { aplicaReglaAuto, etiquetaRegla } from '@/lib/adicionales-auto'
 import { ORIGENES_MANUALES, labelOrigen } from '@/lib/origen-cliente'
 import { pidioVideo } from '@/lib/video-solicitado'
+import {
+  cumpleFiltro, FILTROS_VALIDOS,
+  type FiltroSituacion, type ContextoAlertas, type ResumenFichas, type TramoPrecio,
+} from '@/lib/fichas-alertas'
 
 type Cliente = {
   id: string; codigo: string; nombre_mascota: string; nombre_tutor: string
@@ -114,15 +118,16 @@ const SERVICIOS = [
   { nombre: 'Cremación Sin Devolución', codigo: 'SD' },
 ]
 
-/** Filtro de situación de la ficha (de a uno). El rango de fechas, la forma de
- *  pago y la veterinaria son filtros aparte que se COMBINAN con este. */
-type FiltroSituacion = 'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado'
-  | 'pago_pendiente' | 'datos_pendientes' | 'falta_peso' | 'diferencia'
-  | 'pendiente_cobro' | 'devolucion' | 'correo_malo' | 'video_pendiente'
+/** Cuántas fichas se PINTAN por tanda (ver `visibles`). */
+const PAGINA = 40
 
-/** Desde cuándo avisamos por los videos sin subir (ISO). Antes de esta fecha la
- *  solicitud del tutor quedaba sin cargar y no se va a completar hacia atrás. */
-const VIDEO_DESDE = '2026-08-01'
+/**
+ * Cuántas fichas trae la PRIMERA carga. La sección se abre con las más recientes
+ * —que es con lo que trabaja el equipo— y el histórico completo entra después en
+ * segundo plano, sin bloquear. Con 375 fichas la carga completa eran ~2,8 s de
+ * pantalla en blanco, y suben ~46 por mes.
+ */
+const PRIMERA_TANDA = 120
 
 /** Formas de pago del alta de ficha + "sin definir" para las que no la tienen. */
 const FORMAS_PAGO = [
@@ -198,15 +203,55 @@ export default function ClientesPage() {
   // "pendiente de cobro" (distinto de la diferencia SUGERIDA, que es pre-cobro).
   const [cobrosPend, setCobrosPend] = useState<{ cliente_id: string; monto: string; detalle: string; tipo: string }[]>([])
 
+  /** ¿Ya llegó el histórico completo, o estamos con la primera tanda? */
+  const [historicoCompleto, setHistoricoCompleto] = useState(false)
+  // En un ref además del estado: `fetchClientes` es un useCallback sin deps y
+  // necesita el valor VIGENTE al recargar tras guardar una ficha (si leyera el
+  // estado capturado, volvería a mostrar 120 y la lista parpadearía).
+  const historicoRef = useRef(false)
+
+  /**
+   * Carga en DOS tiempos: primero las últimas PRIMERA_TANDA fichas (la pantalla
+   * pinta en ~medio segundo) y enseguida, sin bloquear, el histórico completo,
+   * que reemplaza a la primera tanda cuando llega. Los CONTEOS de los chips no
+   * dependen de esto: salen de /api/clientes/resumen, que cuenta en el servidor
+   * sobre todas las fichas.
+   */
   const fetchClientes = useCallback(async () => {
-    setLoading(true)
-    const res = await fetch('/api/clientes')
-    const data = await res.json()
-    setClientes(Array.isArray(data) ? data : [])
-    setLoading(false)
+    // Recarga posterior (guardaste una ficha): el histórico ya está en pantalla,
+    // así que se pide entero de una y no se pasa por la tanda corta.
+    if (!historicoRef.current) {
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/clientes?ultimas=${PRIMERA_TANDA}`)
+        const data = await res.json()
+        setClientes(Array.isArray(data) ? data : [])
+      } catch { setClientes([]) }
+      setLoading(false)
+    }
+    try {
+      const res = await fetch('/api/clientes')
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        setClientes(data)
+        historicoRef.current = true
+        setHistoricoCompleto(true)
+      }
+    } catch { /* nos quedamos con lo que haya */ }
   }, [])
 
   useEffect(() => { fetchClientes() }, [fetchClientes])
+
+  // Conteos de los chips, calculados en el servidor sobre TODAS las fichas.
+  const [resumen, setResumen] = useState<ResumenFichas | null>(null)
+  const fetchResumen = useCallback(async () => {
+    try {
+      const r = await fetch('/api/clientes/resumen')
+      const d = await r.json()
+      if (d && typeof d.total === 'number') setResumen(d as ResumenFichas)
+    } catch { /* los chips simplemente no se muestran */ }
+  }, [])
+  useEffect(() => { fetchResumen() }, [fetchResumen])
 
   const fetchCobros = useCallback(async () => {
     try {
@@ -261,65 +306,10 @@ export default function ClientesPage() {
     }
   }, [form.veterinaria_id, noEsVeterinaria, veterinarias])
 
-  // Detecta si un cliente tiene campos obligatorios sin completar.
-  // Estos son los mismos campos marcados como `required` en el form de nueva ficha.
-  function tieneDatosPendientes(c: Cliente): boolean {
-    const vacio = (v?: string) => !v || !String(v).trim()
-    if (vacio(c.nombre_mascota)) return true
-    if (vacio(c.nombre_tutor)) return true
-    if (vacio(c.email)) return true
-    if (vacio(c.telefono)) return true
-    if (vacio(c.direccion_retiro)) return true
-    if (vacio(c.direccion_despacho)) return true
-    if (vacio(c.comuna)) return true
-    if (vacio(c.fecha_retiro)) return true
-    if (vacio(c.especie)) return true
-    if (!c.peso_declarado || (parseFloat(c.peso_declarado) || 0) <= 0) return true
-    if (vacio(c.codigo_servicio)) return true
-    if (vacio(c.tipo_pago)) return true
-    if (vacio(c.estado_pago)) return true
-    return false
-  }
-
-  // Falta el PESO DE INGRESO: ficha ya en proceso (retirada, no despachada) sin
-  // peso real registrado (el operador debe pesarla al recibirla).
-  function faltaPesoIngreso(c: Cliente): boolean {
-    return c.estado !== 'borrador' && c.estado !== 'despachado' && (!c.peso_ingreso || !c.peso_ingreso.trim())
-  }
-
-  // Hay DIFERENCIA DE PRECIO POR COBRAR: el peso de ingreso cae en un tramo más
-  // caro que el declarado y todavía no se envió el cobro de diferencia.
-  function tieneDiferenciaPorCobrar(c: Cliente): boolean {
-    // Solo fichas EN PROCESO: una vez despachada (entregada) la ventana de cobro
-    // ya pasó y sumaría ruido de fichas viejas.
-    if (c.estado === 'borrador' || c.estado === 'despachado') return false
-    if (c.correo_diferencia_fecha && c.correo_diferencia_fecha.trim()) return false
-    const pd = parsePeso(c.peso_declarado)
-    const pi = parsePeso(c.peso_ingreso)
-    if (!(pi > pd)) return false
-    const tabla = c.veterinaria_id ? preciosConvenio : preciosGenerales
-    if (!tabla.length) return false
-    const cod = c.codigo_servicio || 'CI'
-    const precioPd = precioDelTramo(encontrarTramo(tabla, pd), cod)
-    const precioPi = precioDelTramo(encontrarTramo(tabla, pi), cod)
-    return precioPi > precioPd
-  }
-
   // Íconos de estado para las tarjetas.
   const jsonTieneItems = (s?: string) => { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) && a.length > 0 } catch { return false } }
   const esPremiumCuadro = (c: Cliente) => (c.codigo_servicio || '').toUpperCase() === 'CP'
   const solicitoVideo = (c: Cliente) => pidioVideo(c)
-
-  // VIDEO PENDIENTE DE SUBIR: el tutor lo pidió y todavía no hay ningún archivo
-  // cargado. Solo de AGOSTO 2026 en adelante (decisión del dueño, 10-08-2026):
-  // desde ahí se suben todos, y las fichas anteriores dejarían el contador
-  // encendido para siempre con videos que ya nadie va a cargar.
-  const videoPendiente = (c: Cliente): boolean => {
-    if (c.estado === 'borrador') return false
-    if (!solicitoVideo(c) || jsonTieneItems(c.videos_servicio)) return false
-    const iso = formatDateForSheet(c.fecha_retiro || c.fecha_creacion)
-    return !!iso && iso >= VIDEO_DESDE
-  }
 
   // Ids de fichas con al menos un COBRO no pagado (de la tabla `cobros`). Las
   // devoluciones viven en la misma tabla pero son plata que sale, no que entra:
@@ -339,6 +329,16 @@ export default function ClientesPage() {
     return m
   }, [cobrosPend])
 
+  /** Lo que necesitan los predicados de situación (lib/fichas-alertas) — los
+   *  MISMOS que usa el servidor para contar, así el chip y la lista coinciden. */
+  const ctxAlertas: ContextoAlertas = useMemo(() => ({
+    preciosGenerales: preciosGenerales as unknown as TramoPrecio[],
+    preciosConvenio: preciosConvenio as unknown as TramoPrecio[],
+    idsConCobroPendiente,
+    devolucionPorFicha,
+    idsCorreoMalo,
+  }), [preciosGenerales, preciosConvenio, idsConCobroPendiente, devolucionPorFicha, idsCorreoMalo])
+
   // Resultados filtrados: TODOS los filtros se combinan (AND) — situación,
   // rango de fechas, forma de pago, veterinaria y buscador.
   const resultados = useMemo(() => {
@@ -349,24 +349,10 @@ export default function ClientesPage() {
     const ordenados = [...clientes].reverse()
 
     return ordenados.filter(c => {
-      // Borradores (creados por el bot, sin código aún): solo bajo "Por ingresar".
-      // En el resto de vistas se ocultan porque todavía no son fichas reales.
-      if (filtro === 'borrador') { if (c.estado !== 'borrador') return false }
-      else if (c.estado === 'borrador') return false
-      // Filtro por categoría
-      if (filtro === 'pendiente' && !(c.estado === 'pendiente' || !c.estado)) return false
-      if (filtro === 'cremado' && c.estado !== 'cremado') return false
-      if (filtro === 'despachado' && c.estado !== 'despachado') return false
-      // "Pago pendiente" = servicio no pagado O ficha con un cobro pendiente
-      // (incluye el saldo de un pago parcial). Un solo filtro que las muestra todas.
-      if (filtro === 'pago_pendiente' && c.estado_pago === 'pagado' && !idsConCobroPendiente.has(String(c.id))) return false
-      if (filtro === 'datos_pendientes' && !tieneDatosPendientes(c)) return false
-      if (filtro === 'falta_peso' && !faltaPesoIngreso(c)) return false
-      if (filtro === 'diferencia' && !tieneDiferenciaPorCobrar(c)) return false
-      if (filtro === 'pendiente_cobro' && !idsConCobroPendiente.has(String(c.id))) return false
-      if (filtro === 'devolucion' && !((devolucionPorFicha.get(String(c.id)) ?? 0) > 0)) return false
-      if (filtro === 'correo_malo' && !idsCorreoMalo.has(String(c.id))) return false
-      if (filtro === 'video_pendiente' && !videoPendiente(c)) return false
+      // Situación de la ficha (incluye la regla de que los borradores solo se ven
+      // bajo "Por ingresar"). Es el MISMO predicado con que el servidor cuenta los
+      // chips — ver lib/fichas-alertas.
+      if (!cumpleFiltro(c, filtro, ctxAlertas)) return false
       // Filtro por veterinaria (independiente del filtro de estado)
       if (filtroVet === '__general__' && (c.veterinaria_id || '').trim()) return false
       if (filtroVet && filtroVet !== '__general__' && c.veterinaria_id !== filtroVet) return false
@@ -400,36 +386,46 @@ export default function ClientesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buscar, filtro, filtroVet, fechaCampo, fechaDesde, fechaHasta, filtroPagos, clientes, preciosGenerales, preciosConvenio, cobrosPend, idsCorreoMalo])
 
-  const nBorradores = useMemo(() => clientes.filter(c => c.estado === 'borrador').length, [clientes])
+  // ── Render por tandas ───────────────────────────────────────────────────────
+  // Aparte de cargar en dos tiempos, las fichas se PINTAN de a PAGINA: dibujar
+  // 375 tarjetas de una es lo que hacía sentir lenta la sección. Al llegar al
+  // final de la lista se agrega la tanda siguiente; cualquier cambio de filtro o
+  // búsqueda vuelve a empezar por la primera.
+  const [visibles, setVisibles] = useState(PAGINA)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const sentinelaRef = useRef<HTMLDivElement>(null)
 
-  // Conteos para las notificaciones compactas de arriba. Excluyen borradores
-  // (esos tienen su propia alerta de "nueva reserva del agente").
-  const alertas = useMemo(() => {
-    const reales = clientes.filter(c => c.estado !== 'borrador')
-    return {
-      // "Pago pendiente" unifica en UNA sola notificación TODO lo cobrable:
-      // servicios no pagados + fichas con un cobro pendiente (adicional / diferencia
-      // de peso / saldo de pago parcial). Antes eran dos chips separados.
-      pagoPendiente: reales.filter(c => c.estado_pago !== 'pagado' || idsConCobroPendiente.has(String(c.id))).length,
-      enCamara: reales.filter(c => c.estado === 'pendiente' || !c.estado).length,
-      // Los Sin Devolución (SD) NO se despachan (su flujo termina en "cremado"),
-      // así que no cuentan como pendientes de despacho.
-      porDespachar: reales.filter(c => c.estado === 'cremado' && (c.codigo_servicio || 'CI').toUpperCase() !== 'SD').length,
-      datosPendientes: reales.filter(c => tieneDatosPendientes(c)).length,
-      faltaPeso: reales.filter(c => faltaPesoIngreso(c)).length,
-      diferencia: reales.filter(c => tieneDiferenciaPorCobrar(c)).length,
-      // Videos que el tutor pidió y siguen sin cargarse (de agosto en adelante).
-      videoPendiente: reales.filter(c => videoPendiente(c)).length,
-      // Fichas con un cobro emitido y aún NO pagado (tabla `cobros`).
-      pendienteCobro: reales.filter(c => idsConCobroPendiente.has(String(c.id))).length,
-      // Plata que le DEBEMOS al tutor (boleta por encima del total actual). Va
-      // aparte de "pago pendiente": es el movimiento inverso, y se resuelve con
-      // una nota de crédito, no cobrando.
-      devolucion: reales.filter(c => (devolucionPorFicha.get(String(c.id)) ?? 0) > 0).length,
-      devolucionMonto: reales.reduce((s, c) => s + (devolucionPorFicha.get(String(c.id)) ?? 0), 0),
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientes, preciosGenerales, preciosConvenio, idsConCobroPendiente, devolucionPorFicha])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVisibles(PAGINA)
+  }, [buscar, filtro, filtroVet, fechaCampo, fechaDesde, fechaHasta, filtroPagos])
+
+  useEffect(() => {
+    const cont = scrollRef.current
+    const sent = sentinelaRef.current
+    if (!cont || !sent) return
+    // El observer se RE-CREA con cada tanda a propósito: si tras sumar 40 la
+    // sentinela sigue a la vista, un observer ya montado no vuelve a dispararse
+    // (IntersectionObserver solo avisa las transiciones) y la lista se quedaría
+    // pegada. Uno nuevo evalúa al montarse.
+    const obs = new IntersectionObserver(
+      entradas => { if (entradas[0]?.isIntersecting) setVisibles(v => Math.min(v + PAGINA, resultados.length)) },
+      { root: cont, rootMargin: '300px' },
+    )
+    obs.observe(sent)
+    return () => obs.disconnect()
+  }, [resultados.length, visibles])
+
+  const mostrados = useMemo(() => resultados.slice(0, visibles), [resultados, visibles])
+
+  // Los conteos de los chips vienen del SERVIDOR (/api/clientes/resumen), que los
+  // calcula sobre TODAS las fichas con los mismos predicados de lib/fichas-alertas.
+  // Antes se contaban acá sobre `clientes`, y con la carga en dos tiempos eso
+  // mostraría de menos hasta que llegara el histórico. Mientras no llega el
+  // resumen los chips no se dibujan (mejor nada que un número equivocado).
+  const alertas = resumen
+  const nBorradores = resumen?.borradores ?? 0
+  const totalFichas = resumen ? resumen.total + resumen.borradores : clientes.length
 
   // Permite llegar con un filtro preseleccionado por URL (ej. desde la alerta
   // del dashboard: /clientes?filtro=borrador). Se lee una vez al montar.
@@ -443,9 +439,8 @@ export default function ClientesPage() {
       aplicarRango(f === 'este_mes' ? 'mes' : 'semana')
       return
     }
-    const validos: FiltroSituacion[] = ['todos', 'borrador', 'pendiente', 'cremado', 'despachado', 'pago_pendiente', 'datos_pendientes', 'falta_peso', 'diferencia', 'pendiente_cobro', 'devolucion', 'correo_malo', 'video_pendiente']
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if ((validos as string[]).includes(f)) setFiltro(f as FiltroSituacion)
+    if ((FILTROS_VALIDOS as string[]).includes(f)) setFiltro(f as FiltroSituacion)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -764,7 +759,7 @@ export default function ClientesPage() {
 
       {/* Notificaciones compactas: una fila de chips clickeables que aplican el
           filtro correspondiente. Reemplaza al banner grande de pago pendiente. */}
-      {(nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0 || alertas.videoPendiente > 0 || alertas.devolucion > 0 || correosMalos.length > 0) && (
+      {alertas && (nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0 || alertas.videoPendiente > 0 || alertas.devolucion > 0 || correosMalos.length > 0) && (
         <div className="mb-5 flex flex-wrap items-center gap-2">
           {nBorradores > 0 && (
             <button onClick={() => setFiltro('borrador')}
@@ -954,7 +949,8 @@ export default function ClientesPage() {
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-gray-500">
-            {resultados.length} resultado{resultados.length !== 1 ? 's' : ''} · {clientes.length} en total
+            {visibles < resultados.length ? `Mostrando ${visibles} de ${resultados.length} resultados` : `${resultados.length} resultado${resultados.length !== 1 ? 's' : ''}`} · {totalFichas} en total
+            {!historicoCompleto && <span className="ml-1 text-gray-400">· cargando histórico…</span>}
           </p>
           {hayFiltros && (
             <button onClick={limpiarFiltros}
@@ -973,9 +969,9 @@ export default function ClientesPage() {
           Sin resultados para tu búsqueda o filtro.
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 max-h-[640px] overflow-y-auto">
+        <div ref={scrollRef} className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-4 max-h-[640px] overflow-y-auto">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pr-1">
-          {resultados.map(c => {
+          {mostrados.map(c => {
             const resumen = resumenServicio(c)
             return (
             <button
@@ -1095,6 +1091,16 @@ export default function ClientesPage() {
             )
           })}
         </div>
+        {/* Sentinela del scroll infinito + salida manual por si el observer no
+            corre (navegador viejo, o la lista entra entera sin scrollear). */}
+        {visibles < resultados.length && (
+          <div ref={sentinelaRef} className="pt-4 pb-1 text-center">
+            <button onClick={() => setVisibles(v => Math.min(v + PAGINA, resultados.length))}
+              className="px-4 py-2 rounded-lg text-xs font-semibold border-2 border-gray-300 bg-white text-gray-700 hover:border-brand hover:bg-brand/10 transition-colors">
+              Ver más · {resultados.length - visibles} restante{resultados.length - visibles === 1 ? '' : 's'}
+            </button>
+          </div>
+        )}
         </div>
       )}
 
