@@ -1111,6 +1111,25 @@ async function consultarEstadoMascota(a: AccionConsultaEstado): Promise<string> 
   else if (estado === 'borrador') estadoLegible = 'EN INGRESO — el equipo está terminando de registrar la ficha'
   else estadoLegible = 'EN PROCESO de cremación — ya la recibimos y está en proceso'
 
+  // ¿Sale en la ruta de HOY? Si la mascota está en un despacho no terminado cuya
+  // fecha es hoy (o cuya ruta ya arrancó), la entrega es hoy: eso cambia la
+  // respuesta a "¿a qué hora llegan?" (ver SEGUIMIENTO en el prompt del agente).
+  let enRutaHoy = false
+  if (estado !== 'despachado' && estado !== 'borrador' && codigoServ !== 'SD') {
+    try {
+      const hoy = fechaChileISO()
+      const despachos = await getSheetData('despachos')
+      for (const d of despachos) {
+        const ruta = d.estado_ruta || 'guardada'
+        if (ruta === 'terminada') continue
+        let ids: unknown[] = []
+        try { ids = JSON.parse(d.mascotas_ids || '[]') } catch { ids = [] }
+        if (!ids.some(x => String(x) === String(c.id))) continue
+        if (ruta === 'en_curso' || (d.fecha ? formatDateForSheet(d.fecha) : '') === hoy) { enRutaHoy = true; break }
+      }
+    } catch { /* sin datos de ruta: se responde con el plazo normal */ }
+  }
+
   // Fecha de entrega MÁXIMA (días hábiles). No aplica a Sin Devolución (no hay
   // entrega) ni a fichas ya despachadas o en borrador (sin fecha de retiro firme).
   let entregaTxt = ''
@@ -1134,11 +1153,19 @@ async function consultarEstadoMascota(a: AccionConsultaEstado): Promise<string> 
     } catch { /* sin fecha disponible */ }
   }
 
+  const horaTxt = enRutaHoy
+    ? `ENTREGA HOY: ${nombre} va en la ruta de HOY, el ánfora se entrega hoy. Si pregunta a qué HORA llegan, dile ` +
+      `que el chofer ha tenido una ruta larga hoy y ya va en camino, que no podemos confirmarle una hora exacta pero ` +
+      `SÍ que la entrega se hace HOY, y pídele que esté atento al teléfono. NUNCA inventes una hora, un rango ni cuántas paradas faltan. NO escales por esto. `
+    : `Si pregunta a qué HORA se hace la entrega, dile que no podemos confirmar una hora específica porque las rutas son largas, ` +
+      `pero que le llegará un CORREO cuando vayamos en camino y le avisaremos cuando estemos próximos a llegar. NO escales por esto. `
+
   return `Datos REALES de la mascota (código ${c.codigo}): nombre "${nombre}", estado: ${estadoLegible}.${entregaTxt} ` +
     `Respóndele al cliente de forma cálida y clara contándole en qué parte del proceso está ${nombre}. ` +
     `Si preguntó por la fecha de entrega, dásela ACLARANDO que es en días hábiles. ` +
-    `Si pregunta a qué HORA se hace la entrega, dile que no podemos confirmar una hora específica porque las rutas son largas, ` +
-    `pero que le llegará un CORREO cuando vayamos en camino y le avisaremos cuando estemos próximos a llegar. NO escales por esto. ` +
+    horaTxt +
+    `Si pregunta por el CERTIFICADO de cremación o por el VIDEO, dile que ambos le llegan por correo el mismo día de la entrega ` +
+    `(el video solo si lo pidió con el botón del correo de registro). ` +
     `Usá SOLO estos datos; no inventes fechas ni estados.`
 }
 
