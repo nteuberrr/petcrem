@@ -14,7 +14,8 @@
  */
 import './_env-preload'
 import Anthropic from '@anthropic-ai/sdk'
-import { isGoogleAdsConfigurado, resumenCampanas, serieDiariaGoogle } from '../lib/google-ads'
+import { isGoogleAdsConfigurado, resumenCampanas, serieDiariaGoogle, listarConversionActions } from '../lib/google-ads'
+import { resumenAtribucion } from '../lib/ads-clicks'
 import { isInsightsConfigurado, resumenAds, serieDiariaMeta } from '../lib/meta-insights'
 import { calcularRentabilidad, rangoDePeriodo, type PeriodoRentabilidad } from '../lib/marketing-rentabilidad'
 import { getMarketingParams } from '../lib/marketing-params'
@@ -51,9 +52,10 @@ REGLAS DE LECTURA (salieron de auditar el informe del 10-08-2026 contra los dato
 2. LAS \`conversiones\` DE GOOGLE NO SON FICHAS. Son mayormente clics al WhatsApp; la ficha real está en \`rentabilidad_real.fichasDirectas\` y el dinero en \`ingresosDirectos\`. Contrasta siempre una contra otra. Si las conversiones de plataforma se mueven fuerte con el gasto casi igual, eso es un CAMBIO DE MEDICIÓN, no una mejora de rendimiento: dilo así. Para ver si el negocio mejoró de verdad, compara las fichas de \`evolucion_30d\` (últimos días del período vs los previos), no las conversiones.
 3. PÉRDIDA POR RANKING = Ad Rank = puja × CALIDAD (CTR esperado, relevancia, landing). El dato NO separa las dos. No lo llames "subpuja" ni concluyas que falta puja: si el CTR de la campaña es alto, la relevancia no es el problema y apunta más a landing/calidad. Nombra las dos causas posibles.
 4. NADA DE MAGNITUDES INVENTADAS. Prohibido poner un porcentaje, monto o plazo en una acción si no sale de los datos ("subir pujas 30%", "duplicar presupuesto", "en 2 semanas"). Di QUÉ hacer y con qué dato se justifica; el cuánto lo decide quien opera.
-5. PRIORIDAD: LA MEDICIÓN VA PRIMERO. Si \`conversionesValor\` es muy bajo frente a \`fichasDirectas\`, el algoritmo está optimizando a ciegas: arreglar la señal de conversión es prioridad ALTA y va ANTES que cualquier cambio de puja o presupuesto. Subirle la puja a una cuenta que optimiza hacia una señal rota es al revés.
-6. MIRA EL REPARTO ENTRE CAMPAÑAS, no solo cada una por separado: si la campaña con MEJOR CPA pierde impresiones por presupuesto mientras otra con peor CPA se lleva la mayor parte del gasto, el traspaso de presupuesto entre ellas es una acción concreta y barata.
-7. USA LA BRECHA CPA plataforma vs \`cpaReal\`, y la \`tasaCierrePct\` (leads de WhatsApp que terminan en ficha). Mover el cierre suele valer más que cualquier ajuste de puja, y casi nunca se nombra.
+5. LA SEÑAL DE VALOR NO ES LA VENTA. \`conversionesValor\` es lo que Google CREE que valen sus conversiones, y sale de valores por defecto cargados a mano en acciones de CLIC (ver \`conversion_actions\`), no de ventas. Compáralo contra \`ingresosDirectos\`, que es la plata real. En \`conversion_actions\` mira cuáles están en \`primaryForGoal\` (esas son las que guían la puja) y si la acción de ficha offline está entre ellas. Si la que representa la venta real NO es principal, dilo — pero NO recomiendes ascenderla si \`atribucion\` muestra pocas conversiones acumuladas: el smart bidding necesita del orden de 30 al mes para calibrar, y dejarlo con menos lo deja peor que ahora. Ahí la recomendación correcta es esperar volumen, no cambiar el flag.
+6. NO JUZGUES UNA MÉTRICA MÁS NUEVA QUE SU MEDICIÓN. Compara \`atribucion.midiendoDesde\` con \`atribucion.periodo_desde\`: si la medición arrancó DESPUÉS, sus números cubren solo esos días, no el período. No leas un número bajo ahí como avería; dilo explícitamente ("la atribución lleva N días midiendo") y no propongas arreglarla sin evidencia.
+7. MIRA EL REPARTO ENTRE CAMPAÑAS, no solo cada una por separado: si la campaña con MEJOR CPA pierde impresiones por presupuesto mientras otra con peor CPA se lleva la mayor parte del gasto, el traspaso de presupuesto entre ellas es una acción concreta y barata.
+8. USA LA BRECHA CPA plataforma vs \`cpaReal\`, y la \`tasaCierrePct\` (leads de WhatsApp que terminan en ficha). Mover el cierre suele valer más que cualquier ajuste de puja, y casi nunca se nombra.
 
 Responde SOLO con JSON válido (sin markdown), forma exacta:
 {"resumen":"...","lecturas":[{"titulo":"2-4 palabras","detalle":"..."}],"acciones":[{"prioridad":"Alta|Media|Baja","accion":"...","motivo":"...","esfuerzo":"Bajo|Medio|Alto"}]}
@@ -89,7 +91,12 @@ async function main() {
   const { desde, hasta } = rangoDePeriodo(PERIODO)
   console.log(`Informe de ads ${desde} → ${hasta} (${PERIODO}) → ${DESTINO}\n`)
 
-  const [g, m, r, params, contacto, serG, serM, clientes] = await Promise.all([
+  // Estado REAL de la medición, para que el análisis no diagnostique a ciegas:
+  // qué acciones de conversión guían la puja (`primaryForGoal`) y cómo viene el
+  // embudo de atribución clic→ficha. Sin esto el informe recomendaba "implementar
+  // seguimiento de fichas" cuando ya existe, y leía un valor bajo como avería
+  // cuando en realidad la medición llevaba dos días viva (10-08-2026).
+  const [g, m, r, params, contacto, serG, serM, clientes, convActions, atribucion] = await Promise.all([
     isGoogleAdsConfigurado() ? resumenCampanas(PERIODO).catch(e => { console.warn('Google:', e.message); return null }) : Promise.resolve(null),
     isInsightsConfigurado() ? resumenAds({ datePreset: PERIODO }).catch(e => { console.warn('Meta:', e.message); return null }) : Promise.resolve(null),
     calcularRentabilidad(PERIODO),
@@ -98,6 +105,8 @@ async function main() {
     isGoogleAdsConfigurado() ? serieDiariaGoogle('last_30d').catch(() => []) : Promise.resolve([]),
     isInsightsConfigurado() ? serieDiariaMeta('last_30d').catch(() => []) : Promise.resolve([]),
     getSheetData('clientes').catch(() => [] as Record<string, string>[]),
+    isGoogleAdsConfigurado() ? listarConversionActions().catch(() => []) : Promise.resolve([]),
+    resumenAtribucion(rangoDePeriodo(PERIODO).desde).catch(() => null),
   ])
 
   // Serie diaria de fichas directas (últimos 30 días)
@@ -135,6 +144,14 @@ async function main() {
     rentabilidad_real: r,
     evolucion_30d: serie,
     objetivos: { cpa_objetivo: objCpa, cpl_objetivo: objCpl },
+    // Qué acciones guían la puja hoy (primaryForGoal) y con qué valor por defecto.
+    conversion_actions: convActions.map(a => ({
+      nombre: a.nombre, principal: a.primaryForGoal, tipo: a.tipo, valor_default: a.valorDefault,
+    })),
+    // Embudo de la atribución propia (clic con gclid → identificado → ficha) en
+    // el período. `midiendoDesde` es cuándo empezó a existir esta medición: si es
+    // posterior al inicio del período, los números cubren menos días — regla 6.
+    atribucion: atribucion ? { periodo_desde: desde, ...atribucion } : 'sin datos',
   })
 
   console.log('Pidiendo análisis a la IA…')

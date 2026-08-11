@@ -172,20 +172,31 @@ export async function marcarSubidos(ids: number[]): Promise<void> {
   }
 }
 
-/** Resumen para el informe semanal: cuántos clics medidos y cuántos cerraron ficha. */
-export async function resumenAtribucion(desdeIso: string): Promise<{ clics: number; conTelefono: number; conFicha: number } | null> {
+/**
+ * Resumen para el informe semanal: cuántos clics medidos y cuántos cerraron ficha.
+ *
+ * Devuelve además `midiendoDesde`: la fecha del PRIMER clic registrado, que es
+ * cuando esta medición empezó a existir. Sin ese dato el informe leía "5 fichas
+ * en 14 días" como un embudo pésimo, cuando la atribución llevaba dos días viva
+ * (se desplegó el 08-08-2026). Una métrica más nueva que su ventana no se juzga.
+ */
+export async function resumenAtribucion(desdeIso: string): Promise<{
+  clics: number; conTelefono: number; conFicha: number; midiendoDesde: string | null
+} | null> {
   try {
     const sb = getSupabase()
     const desde = () => sb.from(TABLA).select('id', { count: 'exact', head: true }).gte('created_at', desdeIso)
-    const [todos, conTel, conFicha] = await Promise.all([
+    const [todos, conTel, conFicha, primero] = await Promise.all([
       desde(),
       desde().not('telefono', 'is', null),
       desde().not('cliente_id', 'is', null),
+      sb.from(TABLA).select('created_at').order('created_at', { ascending: true }).limit(1),
     ])
     return {
       clics: todos.count ?? 0,
       conTelefono: conTel.count ?? 0,
       conFicha: conFicha.count ?? 0,
+      midiendoDesde: (primero.data?.[0] as { created_at?: string } | undefined)?.created_at?.slice(0, 10) ?? null,
     }
   } catch {
     return null

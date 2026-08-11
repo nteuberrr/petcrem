@@ -174,6 +174,15 @@ function whereFecha(periodo: string): string {
 function num(v: unknown): number { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 /** Google Ads expresa montos en MICROS (1.000.000 micros = 1 unidad de la moneda de la cuenta). */
 function clp(micros: unknown): number { return Math.round(num(micros) / 1_000_000) }
+/**
+ * ⚠️ `conversions_value` NO viene en micros — es un double en la MONEDA de la
+ * cuenta, a diferencia de `cost_micros`, `average_cpc` y los presupuestos.
+ * Pasarlo por `clp()` lo dividía por un millón: 14 días con ~$2.000.000 de valor
+ * de conversión se informaban como **$2**, y de ahí salía la conclusión de que
+ * "el algoritmo no tiene señal de valor" — tanto en el panel de Marketing como
+ * en el informe de ads. Descubierto el 10-08-2026.
+ */
+function valorConv(v: unknown): number { return Math.round(num(v)) }
 
 let monedaCache: { ts: number; moneda: string } | null = null
 async function monedaCuenta(): Promise<string> {
@@ -285,7 +294,7 @@ async function totalesPeriodo(where: string): Promise<{ gasto: number; conversio
     const m = (r.metrics || {}) as Record<string, unknown>
     gasto += clp(m.costMicros)
     conversiones += num(m.conversions)
-    conversionesValor += clp(m.conversionsValue)
+    conversionesValor += valorConv(m.conversionsValue)
   }
   return { gasto, conversiones: Math.round(conversiones * 10) / 10, conversionesValor }
 }
@@ -320,7 +329,7 @@ export async function resumenCampanas(periodo: string): Promise<ResumenGoogleAds
       ctr: num(m.ctr) * 100,
       cpc: clp(m.averageCpc),
       conversiones,
-      conversionesValor: clp(m.conversionsValue),
+      conversionesValor: valorConv(m.conversionsValue),
       costoPorConversion: cpa(gasto, conversiones),
       impressionShare: pctIS(m.searchImpressionShare),
       perdidoPorPresupuesto: pctIS(m.searchBudgetLostImpressionShare),
