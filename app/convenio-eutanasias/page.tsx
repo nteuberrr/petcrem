@@ -245,7 +245,10 @@ export default function ConvenioEutanasiasPage() {
                   className={inputCls}
                 />
               </FormField>
-              <FormField label="Teléfono" required hint="9 dígitos, sin +56">
+              {/* El aviso del WhatsApp va acá, junto al dato que se recoge: las
+                  solicitudes se avisan por ese número (plantilla + coordinación),
+                  y Meta pide que el consentimiento se informe al pedir el dato. */}
+              <FormField label="Teléfono (WhatsApp)" required hint="9 dígitos, sin +56 — te avisamos las solicitudes por aquí">
                 <input
                   type="tel" required
                   value={form.telefono}

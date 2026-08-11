@@ -133,6 +133,18 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
     texto: 'Hola {{1}}, un veterinario de nuestra red confirmó la visita para acompañar a {{2}}. Se pondrá en contacto contigo a la brevedad para coordinar los detalles. Responde este mensaje si necesitas algo. — Crematorio Alma Animal',
     ejemplos: ['María', 'Rocky'],
   },
+  eutanasia_solicitud_vet: {
+    nombre: 'eutanasia_solicitud_vet',
+    categoria: 'UTILITY',
+    // Invitación a la red de eutanasias, en paralelo al correo. La invitación es
+    // una CARRERA (la toma el primero que confirme) y un correo se ve cuando se
+    // ve: por WhatsApp la respuesta llega en minutos. Va sin dirección ni
+    // teléfono del tutor a propósito — esos datos salen recién cuando UNO la
+    // toma (ahí el botón abre la ventana de 24h y se mandan por texto libre).
+    texto: '🐾 Nueva solicitud de eutanasia a domicilio.\n\nHola {{1}}, tenemos un caso que calza con tus comunas y horarios.\n\nMascota: {{2}}\nComuna: {{3}}\nFecha y hora: {{4}}\nPago al veterinario: {{5}}\n\nLa toma el primero que confirme. Si la tomas, te enviamos por aquí los datos de la familia para que la contactes.',
+    ejemplos: ['Dra. Millas', 'Rocky (perro, 12 kg)', 'Ñuñoa', '14-08-2026 a las 18:00', '$45.000'],
+    botones: ['Puedo tomarla', 'No puedo'],
+  },
   solicitud_retiro: {
     nombre: 'solicitud_retiro',
     categoria: 'UTILITY',

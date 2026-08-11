@@ -10,6 +10,7 @@ import { getConsultaEutanasia, getFijoEutanasia, getRecargoFueraHorario, recargo
 import { crearClienteBorrador } from './cliente-borrador'
 import { capitalizarNombre } from './nombres'
 import { enviarTextoWhatsapp, isWhatsappConfigured, avisarAdminsWhatsapp } from './whatsapp'
+import { invitarVetsPorWhatsapp } from './eutanasia-whatsapp'
 import { incluyeCremacion } from './eutanasia-cremacion'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -158,6 +159,16 @@ export async function enviarCotizacionAVets(opts: {
   if (Object.keys(partial).length > 0) {
     await updateRow(SHEET_COTI, idxCot, { ...c, ...partial })
   }
+
+  // Invitación por WhatsApp, EN PARALELO al correo (no lo reemplaza). La toma del
+  // caso es una carrera y el correo se ve cuando se ve; por WhatsApp responden en
+  // minutos. Va después de dejar la cotización en 'enviada': el botón del vet
+  // acepta contra ese estado. Best-effort — si falla, queda el correo.
+  try {
+    const cWa = { ...c, ...partial, id: String(c.id) }
+    const wa = await invitarVetsPorWhatsapp({ c: cWa, vets: vetsAEnviar })
+    if (wa.enviados || wa.fallidos) console.log(`[eutanasia] invitación WhatsApp: ${wa.enviados} enviadas, ${wa.fallidos} fallidas`)
+  } catch (e) { console.warn('[eutanasia] invitación por WhatsApp falló:', e) }
 
   return { enviados: okCount, fallidos: failCount, total: vetsAEnviar.length }
 }

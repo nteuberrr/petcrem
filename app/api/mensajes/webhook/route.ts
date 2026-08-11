@@ -11,6 +11,7 @@ import { isInstagramMensajesConfigurado, enviarTextoInstagram, enviarImagenInsta
 import { isAgenteConfigurado, generarRespuesta, redactarRelayCliente } from '@/lib/agente-mensajes'
 import { handlersAgente } from '@/lib/agente-acciones'
 import { buscarRelayPendientePorMsg, buscarRelayPendienteUnico, marcarRelayRespondida } from '@/lib/relay-retiro'
+import { procesarBotonVetEutanasia, procesarTextoVetEutanasia } from '@/lib/eutanasia-whatsapp'
 import { resolverSolicitudRetiro } from '@/lib/solicitudes-retiro'
 import { leerMarcador, limpiarMarcador, vincularTelefono } from '@/lib/ads-clicks'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
@@ -601,8 +602,14 @@ export async function POST(req: NextRequest) {
           // 'interactive' = aviso dentro de la ventana; 'button' = quick-reply de
           // la plantilla solicitud_retiro (fuera de la ventana de 24h).
           if ((msg.type === 'interactive' || msg.type === 'button') && await procesarBotonAdmin(msg)) continue
+          // Red de eutanasias: el VET tocó "Puedo tomarla" / "No puedo" en la
+          // invitación (plantilla eutanasia_solicitud_vet).
+          if ((msg.type === 'interactive' || msg.type === 'button') && await procesarBotonVetEutanasia(msg)) continue
           // Relay: el admin respondió (citando) un aviso de ETA → reenviar al cliente.
           if (msg.type === 'text' && await procesarRelayAdmin(msg)) continue
+          // Red de eutanasias: el vet que tomó un caso nos responde con la hora
+          // que acordó con la familia. Va ANTES del agente de tutores a propósito.
+          if (msg.type === 'text' && await procesarTextoVetEutanasia(msg)) continue
           await procesarEntrante(value, msg)
         }
         // Coexistence: mensajes que enviaste TÚ desde la WhatsApp Business app.
