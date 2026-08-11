@@ -145,31 +145,9 @@ export default function ConfiguracionPage() {
     else alert('Error al eliminar')
   }
 
-  // Seguimiento en vivo de correos (BCC de transaccionales a un correo personal)
-  const [segActivo, setSegActivo] = useState(false)
-  const [segEmail, setSegEmail] = useState('')
-  const [segSaving, setSegSaving] = useState(false)
-  const [segMsg, setSegMsg] = useState<{ ok: boolean; texto: string } | null>(null)
-
-  async function guardarSeguimiento() {
-    const correos = segEmail.split(',').map((c) => c.trim()).filter(Boolean)
-    if (segActivo && (correos.length === 0 || !correos.every((c) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c)))) {
-      setSegMsg({ ok: false, texto: 'Ingresa uno o más correos válidos separados por coma para activar el seguimiento.' })
-      return
-    }
-    setSegSaving(true); setSegMsg(null)
-    try {
-      const res = await fetch('/api/empresa-config', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email_seguimiento_activo: segActivo ? 'TRUE' : 'FALSE', email_seguimiento: correos.join(', ') }),
-      })
-      const d = await res.json()
-      if (res.ok) setSegMsg({ ok: true, texto: 'Guardado.' })
-      else setSegMsg({ ok: false, texto: d?.error || 'Error al guardar' })
-    } catch (e) {
-      setSegMsg({ ok: false, texto: String(e) })
-    } finally { setSegSaving(false) }
-  }
+  // La casilla de seguimiento (BCC de los transaccionales) se configura dentro de
+  // CorreosConfig → pestaña Ajustes: vivía suelta al final de esta página, tres
+  // pantallas más abajo del aviso que la mencionaba.
 
   const [productos, setProductos] = useState<Producto[]>([])
   const [categoriasProd, setCategoriasProd] = useState<CategoriaProducto[]>([])
@@ -289,13 +267,6 @@ export default function ConfiguracionPage() {
 
   useEffect(() => { fetchAll() }, [fetchAll])
   useEffect(() => { fetchJornada() }, [fetchJornada])
-  useEffect(() => {
-    fetch('/api/empresa-config').then(r => r.json()).then(d => {
-      setSegActivo(String(d?.email_seguimiento_activo || '').toUpperCase() === 'TRUE')
-      setSegEmail(d?.email_seguimiento || '')
-    }).catch(() => {})
-  }, [])
-
   // Detecta a partir de la URL qué hoja refrescar después de mutar (evita refetchear todo)
   function refreshKeyForUrl(url: string): RefreshKey {
     if (url.includes('/api/productos') || url.includes('/api/categorias-productos')) return 'productos'
@@ -1078,36 +1049,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
       {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'agentes' && <AgentesPanel />}
       {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'consumo' && <ConsumoIA />}
       {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'avisos' && <AvisosConfig />}
-      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'correos' && (
-        <div className="space-y-6">
-          <CorreosConfig />
-
-          {/* Seguimiento en vivo de correos enviados (BCC a un correo personal) */}
-          <div className="bg-white rounded-xl shadow-md border-2 border-gray-300 p-6 max-w-3xl">
-            <h2 className="text-base font-bold text-gray-900 mb-1">Seguimiento en vivo de correos electrónicos enviados</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Si está activo, llega una <b>copia oculta (BCC)</b> a los correos configurados de <b>cada email transaccional</b> que envíe el sistema (registro, inicio de cremación, despachos, eutanasias, informes de veterinaria…). <b>No incluye</b> el mailing masivo.
-            </p>
-            <div className="flex items-center gap-3 mb-4">
-              <Toggle checked={segActivo} onChange={setSegActivo} />
-              <span className="text-sm font-medium text-gray-700">{segActivo ? 'Activado' : 'Desactivado'}</span>
-            </div>
-            <label className="text-xs font-semibold text-gray-700">Reenviar copia a estos correos</label>
-            <input type="text" value={segEmail} onChange={e => setSegEmail(e.target.value)}
-              placeholder="uno o varios separados por coma"
-              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-            <p className="text-[11px] text-gray-500 mt-1">Puedes poner <b>varios correos separados por coma</b> y la copia le llega a todos.</p>
-            <div className="flex items-center gap-3 mt-4">
-              <button onClick={guardarSeguimiento} disabled={segSaving}
-                className="bg-brand hover:bg-brand-dark text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors disabled:opacity-50">
-                {segSaving ? 'Guardando…' : 'Guardar'}
-              </button>
-              {segMsg && <span className={`text-sm ${segMsg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{segMsg.texto}</span>}
-            </div>
-            <p className="text-[11px] text-gray-400 mt-2">El cambio puede tardar hasta ~1 minuto en aplicarse a los envíos.</p>
-          </div>
-        </div>
-      )}
+      {tab === 'Configuración Avanzada' && isAdminTotal && avanzadaTab === 'correos' && <CorreosConfig />}
 
       {/* Comisiones por derivación: SOLO el dueño (define pagos y escribe costo en el EERR). */}
       {tab === 'Descuentos Convenios' && isAdminTotal && <DescuentosConvenios />}

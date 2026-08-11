@@ -49,6 +49,12 @@ export interface CorreoDef {
   audiencia: 'Tutor' | 'Veterinario' | 'Empleado'
   /** Breve descripción de cuándo se envía. */
   cuando: string
+  /**
+   * Lo dispara un BOTÓN del sistema, no un hito automático. Importa al pausarlo
+   * (Configuración → Correos): el botón va a seguir ahí y no va a enviar nada,
+   * así que la pantalla lo advierte antes de apagarlo.
+   */
+  manual?: boolean
   build: (m: MuestraCorreo, contacto: Contacto) => CorreoRender
 }
 
@@ -122,6 +128,7 @@ export const CORREOS: CorreoDef[] = [
     modulo: 'Clientes',
     audiencia: 'Tutor',
     cuando: 'Al enviar el certificado por correo.',
+    manual: true,
     build: (m, c) => pick(buildCertificado({ email: m.email, nombreMascota: m.nombreMascota, nombreTutor: m.nombreTutor, fechaCremacion: m.fechaCremacion, conVideo: false }, c)),
   },
   {
@@ -130,6 +137,7 @@ export const CORREOS: CorreoDef[] = [
     modulo: 'Clientes',
     audiencia: 'Tutor',
     cuando: 'Al presionar "Enviar cobro de la diferencia" en la ficha (peso real en tramo superior). Adjunta la foto de evidencia.',
+    manual: true,
     build: (m, c) => pick(buildCobroDiferencia({
       email: m.email, nombreMascota: m.nombreMascota, nombreTutor: m.nombreTutor,
       pesoDeclarado: 8, pesoIngreso: 11.4, monto: 15000,
@@ -181,6 +189,7 @@ export const CORREOS: CorreoDef[] = [
     modulo: 'Eutanasias',
     audiencia: 'Veterinario',
     cuando: 'Al presionar "Enviar datos a Vet" en Servicios → Veterinarios.',
+    manual: true,
     build: (m, c) => ({
       subject: 'Revisa y actualiza tus datos del convenio - Alma Animal',
       html: renderEditarDatos({
@@ -203,6 +212,7 @@ export const CORREOS: CorreoDef[] = [
     modulo: 'Eutanasias',
     audiencia: 'Veterinario',
     cuando: 'Al enviar una cotización a la red.',
+    manual: true,
     build: (m, c) => {
       const cot = cMuestra(m)
       return {
@@ -345,6 +355,7 @@ export const CORREOS: CorreoDef[] = [
     modulo: 'Veterinarias',
     audiencia: 'Veterinario',
     cuando: 'Al enviar el informe de facturación a la veterinaria.',
+    manual: true,
     build: (m, c) => ({
       subject: 'Informe de facturación — Veterinaria San Francisco',
       html: renderInformeFacturacionEmail({
@@ -363,6 +374,7 @@ export const CORREOS: CorreoDef[] = [
     modulo: 'Remuneraciones',
     audiencia: 'Empleado',
     cuando: 'Al apretar «Enviar liquidación» en Remuneraciones → Histórico.',
+    manual: true,
     build: (_m, c) => ({
       subject: asuntoLiquidacion('julio 2026'),
       html: renderLiquidacionEmail({

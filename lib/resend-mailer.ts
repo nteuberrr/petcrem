@@ -173,6 +173,13 @@ export interface SendResult {
   ok: boolean
   message_id?: string
   error?: string
+  /**
+   * No se envió: el tipo de correo está PAUSADO en Configuración → Correos.
+   * `ok` viene en true a propósito — no es una falla, es una decisión del equipo,
+   * y los llamadores best-effort no deben loguear error. Los envíos que dispara
+   * un botón (certificado, cobro, informe) sí lo miran para avisar en pantalla.
+   */
+  omitido?: boolean
 }
 
 /**
@@ -253,7 +260,13 @@ function buildAttachmentsPayload(attachments: AttachmentSpec[] | undefined) {
  * SOLO a los items con `bccSeguimiento: true` (opt-in) — así cubre los correos
  * de etapa al tutor sin inundar la casilla con las campañas masivas.
  */
-interface SeguimientoConfig { activo: boolean; emails: string[]; tipos: Record<string, boolean> }
+interface SeguimientoConfig {
+  activo: boolean
+  emails: string[]
+  tipos: Record<string, boolean>
+  /** Correos PAUSADOS: {clave: true}. No se envían al destinatario. */
+  desactivados: Record<string, boolean>
+}
 let segCache: { ts: number; cfg: SeguimientoConfig } | null = null
 
 /** Parsea uno o VARIOS correos de seguimiento (separados por coma o punto y coma). */
@@ -279,13 +292,42 @@ async function getSeguimientoConfig(): Promise<SeguimientoConfig> {
       const parsed = JSON.parse(row?.seguimiento_tipos || '{}')
       if (parsed && typeof parsed === 'object') tipos = parsed as Record<string, boolean>
     } catch { /* JSON inválido → se asume todos los tipos ON */ }
-    const cfg: SeguimientoConfig = { activo, emails, tipos }
+    let desactivados: Record<string, boolean> = {}
+    try {
+      const parsed = JSON.parse(row?.correos_desactivados || '{}')
+      if (parsed && typeof parsed === 'object') desactivados = parsed as Record<string, boolean>
+    } catch { /* JSON inválido → no se pausa nada (fail-open: mejor enviar de más) */ }
+    const cfg: SeguimientoConfig = { activo, emails, tipos, desactivados }
     segCache = { ts: Date.now(), cfg }
     return cfg
   } catch (e) {
     console.warn('[resend-mailer] no se pudo leer seguimiento de correos:', e)
-    return { activo: false, emails: [], tipos: {} }
+    return { activo: false, emails: [], tipos: {}, desactivados: {} }
   }
+}
+
+/**
+ * ¿Este tipo de correo está PAUSADO desde Configuración → Correos?
+ *
+ * Se consulta acá y no en cada mailer a propósito: todos los transaccionales
+ * pasan por sendEmail/sendBatch con su `seguimiento.tipo`, así que un solo
+ * chequeo los cubre venga el envío de donde venga. Sin `tipo` (campañas de
+ * mailing, pruebas del catálogo) nunca se pausa.
+ */
+export async function correoPausado(tipo?: string): Promise<boolean> {
+  if (!tipo) return false
+  try {
+    return (await getSeguimientoConfig()).desactivados[tipo] === true
+  } catch {
+    return false
+  }
+}
+
+/** Resultado de un envío que no salió porque el correo está pausado. */
+async function omitirPorPausa(opts: SendOpts, html: string): Promise<SendResult> {
+  await logSeguimiento(opts, html, { ok: false, omitido: true })
+  console.info(`[resend-mailer] correo "${opts.seguimiento?.tipo}" pausado — no se envía a ${opts.to}`)
+  return { ok: true, omitido: true }
 }
 
 /**
@@ -303,11 +345,12 @@ async function getSeguimientoBcc(tipo?: string): Promise<string[] | null> {
 async function logSeguimiento(
   opts: SendOpts,
   html: string,
-  res: { ok: boolean; messageId?: string; error?: string },
+  res: { ok: boolean; messageId?: string; error?: string; omitido?: boolean },
 ): Promise<void> {
   const s = opts.seguimiento
   if (!s) return
   await registrarCorreoLog({
+    omitido: res.omitido,
     tipo: s.tipo,
     audiencia: s.audiencia,
     destinatario: opts.to,
@@ -338,6 +381,7 @@ async function logBatchSeguimiento(
 
 export async function sendEmail(opts: SendOpts): Promise<SendResult> {
   const html = prepararHtml(opts)
+  if (await correoPausado(opts.seguimiento?.tipo)) return omitirPorPausa(opts, html)
   try {
     const client = getClient()
     const bcc = opts.noBcc ? null : await getSeguimientoBcc(opts.seguimiento?.tipo)
@@ -425,6 +469,21 @@ export async function sendBatch(emails: SendOpts[]): Promise<SendResult[]> {
     }
   })
   if (validos.length === 0) return results
+
+  // Correos PAUSADOS (Configuración → Correos): salen del lote antes de armar el
+  // payload, con el mismo criterio que sendEmail. Solo se consulta si algún item
+  // es transaccional — las campañas de mailing no traen `seguimiento.tipo` y
+  // nunca se pausan por acá.
+  if (validos.some(v => v.opts.seguimiento?.tipo)) {
+    const cfgPausa = await getSeguimientoConfig()
+    for (let i = validos.length - 1; i >= 0; i--) {
+      const tipo = validos[i].opts.seguimiento?.tipo
+      if (!tipo || cfgPausa.desactivados[tipo] !== true) continue
+      const [v] = validos.splice(i, 1)
+      results[v.idx] = await omitirPorPausa(v.opts, prepararHtml(v.opts))
+    }
+    if (validos.length === 0) return results
+  }
 
   // HTML preparado por item (fuera del try → disponible para el logging en todos
   // los caminos de retorno, incluido el catch).

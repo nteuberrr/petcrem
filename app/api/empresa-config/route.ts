@@ -5,7 +5,7 @@ import { getSheetData, appendRow, updateRow, ensureSheet, ensureColumns, isSheet
 import { todayISO } from '@/lib/dates'
 
 const SHEET = 'empresa_config'
-const COLS = ['id', 'nombre', 'rut', 'giro', 'direccion', 'comuna', 'telefono', 'correo', 'web', 'instagram', 'facebook', 'google_review_url', 'email_seguimiento', 'email_seguimiento_activo', 'seguimiento_tipos', 'titular_cuenta', 'banco', 'tipo_cuenta', 'numero_cuenta', 'fecha_actualizacion']
+const COLS = ['id', 'nombre', 'rut', 'giro', 'direccion', 'comuna', 'telefono', 'correo', 'web', 'instagram', 'facebook', 'google_review_url', 'email_seguimiento', 'email_seguimiento_activo', 'seguimiento_tipos', 'correos_desactivados', 'titular_cuenta', 'banco', 'tipo_cuenta', 'numero_cuenta', 'fecha_actualizacion']
 
 type EmpresaConfig = {
   id?: string
@@ -26,6 +26,8 @@ type EmpresaConfig = {
   email_seguimiento_activo?: string
   /** JSON {key_correo: bool}: activa/desactiva la copia de seguimiento POR TIPO (vacío = todos ON). */
   seguimiento_tipos?: string
+  /** JSON {key_correo: true} con los correos PAUSADOS: no se envían al destinatario (vacío = todos se envían). */
+  correos_desactivados?: string
   /** Datos de transferencia bancaria (correos de cobro: diferencia y adicionales). */
   titular_cuenta?: string
   banco?: string
@@ -41,7 +43,7 @@ const EMPTY: EmpresaConfig = {
   web: '', instagram: '', facebook: '',
   google_review_url: '',
   email_seguimiento: '', email_seguimiento_activo: 'FALSE',
-  seguimiento_tipos: '',
+  seguimiento_tipos: '', correos_desactivados: '',
   titular_cuenta: '', banco: '', tipo_cuenta: '', numero_cuenta: '',
   fecha_actualizacion: '',
 }

@@ -234,6 +234,10 @@ export const SHEETS: Record<string, string[]> = {
     // seguimiento_tipos: JSON {key_correo: bool} para activar/desactivar la copia
     // de seguimiento POR TIPO de correo (vacío = todos los tipos copian).
     'seguimiento_tipos',
+    // correos_desactivados: JSON {key_correo: true} con los correos PAUSADOS —
+    // no se le envían al destinatario. Solo guarda los apagados: vacío = todos
+    // se envían. Lo aplica lib/resend-mailer para cualquier transaccional.
+    'correos_desactivados',
     // Datos de transferencia bancaria (correo de cobro de diferencia de peso).
     'titular_cuenta', 'banco', 'tipo_cuenta', 'numero_cuenta',
     'fecha_actualizacion',

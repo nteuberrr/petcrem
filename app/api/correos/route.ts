@@ -26,20 +26,26 @@ async function getEmailSeguimiento(): Promise<string> {
   } catch { return '' }
 }
 
-/** Config de seguimiento completa: email + master on/off + map por-tipo. */
-async function getSeguimientoCfg(): Promise<{ email: string; activo: boolean; tipos: Record<string, boolean> }> {
+/** Config de correos: seguimiento (email + master + por-tipo) y los PAUSADOS. */
+async function getSeguimientoCfg(): Promise<{
+  email: string; activo: boolean; tipos: Record<string, boolean>; desactivados: Record<string, boolean>
+}> {
+  const json = (raw: string | undefined): Record<string, boolean> => {
+    try {
+      const p = JSON.parse(raw || '{}')
+      return p && typeof p === 'object' ? p as Record<string, boolean> : {}
+    } catch { return {} }
+  }
   try {
     const rows = await getSheetData('empresa_config')
     const r = rows.find(x => x.id === '1') || rows[0]
-    const email = (r?.email_seguimiento || '').trim()
-    const activo = String(r?.email_seguimiento_activo || '').toUpperCase() === 'TRUE'
-    let tipos: Record<string, boolean> = {}
-    try {
-      const p = JSON.parse(r?.seguimiento_tipos || '{}')
-      if (p && typeof p === 'object') tipos = p as Record<string, boolean>
-    } catch { /* */ }
-    return { email, activo, tipos }
-  } catch { return { email: '', activo: false, tipos: {} } }
+    return {
+      email: (r?.email_seguimiento || '').trim(),
+      activo: String(r?.email_seguimiento_activo || '').toUpperCase() === 'TRUE',
+      tipos: json(r?.seguimiento_tipos),
+      desactivados: json(r?.correos_desactivados),
+    }
+  } catch { return { email: '', activo: false, tipos: {}, desactivados: {} } }
 }
 
 /** Datos de muestra: el último cliente registrado (para que la prueba se vea real). */
@@ -81,6 +87,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       correos: listarCorreos(), muestra,
       seguimiento: cfg.email, seguimientoActivo: cfg.activo, seguimientoTipos: cfg.tipos,
+      correosDesactivados: cfg.desactivados,
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

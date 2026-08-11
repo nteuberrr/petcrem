@@ -24,6 +24,12 @@ export interface CorreoLogEntry {
   ok: boolean
   error?: string
   html?: string
+  /**
+   * El correo NO se envió porque su tipo está PAUSADO en Configuración → Correos.
+   * Queda igual en el registro (estado 'omitido') para que apagar un correo no
+   * sea un agujero negro: si alguien pregunta por qué no llegó, está la respuesta.
+   */
+  omitido?: boolean
 }
 
 function nowISO(): string {
@@ -45,8 +51,10 @@ export async function registrarCorreoLog(e: CorreoLogEntry): Promise<void> {
       codigo: e.codigo || '',
       nombre: e.nombre || '',
       message_id: e.messageId || '',
-      estado: e.ok ? 'enviado' : 'fallido',
-      motivo: e.ok ? '' : (e.error || '').slice(0, 500),
+      estado: e.omitido ? 'omitido' : e.ok ? 'enviado' : 'fallido',
+      motivo: e.omitido
+        ? 'Correo pausado en Configuración → Correos: no se envió.'
+        : e.ok ? '' : (e.error || '').slice(0, 500),
       html: e.html || '',
       fecha_creacion: ts,
     })
