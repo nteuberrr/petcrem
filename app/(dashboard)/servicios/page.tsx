@@ -7,6 +7,8 @@ import { Toggle } from '@/components/ui/Toggle'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import ComunaPicker from '@/components/ui/ComunaPicker'
+import { NoRealizadaModal } from '@/components/eutanasias/NoRealizadaModal'
+import type { MotivoNoRealizada } from '@/lib/eutanasia-motivos'
 import { fmtPrecio } from '@/lib/format'
 import { incluyeCremacion } from '@/lib/eutanasia-cremacion'
 import { formatDate, formatHoraDia, todayISO } from '@/lib/dates'
@@ -247,6 +249,7 @@ function ServiciosEutanasiasContenido() {
   // Confirmación del resultado (realizada / no realizada) desde la ficha.
   const [guardandoResultado, setGuardandoResultado] = useState(false)
   const [resultadoMsg, setResultadoMsg] = useState('')
+  const [modalNoRealizada, setModalNoRealizada] = useState(false)
 
   const cargarCotis = useCallback(async () => {
     setLoadingCotis(true)
@@ -600,29 +603,20 @@ function ServiciosEutanasiasContenido() {
    * veterinario lo marque con su enlace por correo — pasa seguido que no lo hace
    * y el equipo queda sin poder cerrar el caso).
    */
-  async function marcarResultado(id: string, estado: 'realizada' | 'no_realizada') {
-    const aviso = estado === 'realizada'
-      ? '¿Confirmar que la eutanasia SÍ se realizó?\n\nSe le envía al tutor el agradecimiento con la reseña y el pago al veterinario queda pendiente.'
-      : '¿Confirmar que la eutanasia NO se realizó?\n\nSe le paga la consulta al veterinario y se elimina el borrador de la ficha de cremación.\n\n(Si la mascota falleció antes y la cremación sigue, usa "Servicio cancelado".)'
-    if (!confirm(aviso)) return
-    guardarResultado(id, { estado })
+  async function marcarRealizada(id: string) {
+    if (!confirm('¿Confirmar que la eutanasia SÍ se realizó?\n\nSe le envía al tutor el agradecimiento con la reseña y el pago al veterinario queda pendiente.')) return
+    guardarResultado(id, { estado: 'realizada' })
   }
 
   /**
-   * SERVICIO CANCELADO — la misma tercera salida que la ficha del dashboard: la
-   * eutanasia no corre y no se le cobra a nadie, pero la ficha de cremación
-   * queda abierta (caso típico: la mascota falleció antes de la visita).
-   * No confundir con "Cancelar", que solo cierra la cotización.
+   * NO SE REALIZÓ → el motivo elegido en el modal decide el cierre: si también
+   * se cae la cremación, si hay pago fijo al veterinario y si la ficha sigue
+   * viva (ver lib/eutanasia-motivos). Misma decisión que en la ficha del
+   * dashboard: la resuelve el mismo endpoint.
    */
-  async function cancelarServicio(id: string, vetNombre?: string) {
-    if (!confirm(
-      '¿Cancelar el servicio de eutanasia?\n\n' +
-      '· No se le paga nada a la veterinaria ni se le cobra al tutor por la eutanasia.\n' +
-      '· La ficha de cremación queda ABIERTA para seguir con ese servicio.\n' +
-      (vetNombre ? `· Le avisamos por correo a ${vetNombre}.\n` : '') +
-      '\nSi la cremación tampoco se hace, elimina la ficha desde /clientes.',
-    )) return
-    guardarResultado(id, { accion: 'cancelar_servicio' })
+  async function confirmarNoRealizada(id: string, motivo: MotivoNoRealizada) {
+    await guardarResultado(id, { accion: 'no_realizada', motivo })
+    setModalNoRealizada(false)
   }
 
   async function guardarResultado(id: string, body: Record<string, unknown>) {
@@ -636,6 +630,7 @@ function ServiciosEutanasiasContenido() {
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { setResultadoMsg(j?.error || 'No se pudo guardar el resultado.'); return }
+      if (j?.aviso) alert(j.aviso)
       await cargarCotis()
       cerrarDetalleCotizacion()
     } catch {
@@ -1554,28 +1549,22 @@ function ServiciosEutanasiasContenido() {
                 </p>
                 <div className="flex flex-wrap gap-2 mt-3">
                   <button
-                    onClick={() => marcarResultado(detalleCoti.id, 'realizada')}
+                    onClick={() => marcarRealizada(detalleCoti.id)}
                     disabled={guardandoResultado}
                     className="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-600/40 text-white font-semibold rounded-lg">
                     {guardandoResultado ? 'Guardando…' : '✓ Sí, se realizó'}
                   </button>
                   <button
-                    onClick={() => marcarResultado(detalleCoti.id, 'no_realizada')}
+                    onClick={() => setModalNoRealizada(true)}
                     disabled={guardandoResultado}
                     className="px-4 py-2 text-sm bg-slate-600 hover:bg-slate-700 disabled:bg-slate-600/40 text-white font-semibold rounded-lg">
                     ✗ No se realizó
                   </button>
-                  <button
-                    onClick={() => cancelarServicio(detalleCoti.id, detalleCoti.vet_nombre_asignado)}
-                    disabled={guardandoResultado}
-                    className="px-4 py-2 text-sm bg-amber-600 hover:bg-amber-700 disabled:bg-amber-600/40 text-white font-semibold rounded-lg">
-                    <Ban className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Servicio cancelado
-                  </button>
                 </div>
                 <p className="text-[11px] text-gray-500 mt-2 leading-snug">
                   Realizada: se le envía el agradecimiento al tutor y el pago al vet queda pendiente.
-                  No realizada: se le paga la consulta al vet y se elimina el borrador de la ficha de cremación.
-                  Servicio cancelado: no se le paga al vet ni se le cobra al tutor, y la ficha de cremación queda abierta.
+                  Si no se realizó te preguntamos por qué (se canceló · el veterinario decidió no realizarla ·
+                  la mascota falleció antes): de eso dependen el pago al vet y si la cremación sigue.
                 </p>
                 {resultadoMsg && (
                   <p className="text-xs text-red-600 mt-2">{resultadoMsg}</p>
@@ -1712,6 +1701,17 @@ function ServiciosEutanasiasContenido() {
           </div>
         )}
       </Modal>
+
+      {/* Motivo de "no se realizó" — se abre SOBRE la ficha para no perder el
+          contexto de la cotización que se está cerrando. */}
+      <NoRealizadaModal
+        open={modalNoRealizada && !!detalleCoti}
+        onClose={() => setModalNoRealizada(false)}
+        onConfirmar={motivo => { if (detalleCoti) confirmarNoRealizada(detalleCoti.id, motivo) }}
+        vetNombre={detalleCoti?.vet_nombre_asignado}
+        procesando={guardandoResultado}
+        error={resultadoMsg}
+      />
 
       {/* Modal vet */}
       <Modal open={showVetModal} onClose={() => setShowVetModal(false)} title={editingVet ? 'Editar veterinario' : 'Nuevo veterinario'}>

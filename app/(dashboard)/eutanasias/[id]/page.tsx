@@ -1,9 +1,11 @@
 'use client'
-import { Ban, Stethoscope } from 'lucide-react'
+import { Stethoscope } from 'lucide-react'
 import { use, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PageHeader, Card, Button } from '@/components/ui/kit'
 import { Badge } from '@/components/ui/Badge'
+import { NoRealizadaModal } from '@/components/eutanasias/NoRealizadaModal'
+import type { MotivoNoRealizada } from '@/lib/eutanasia-motivos'
 import { fmtPrecio } from '@/lib/format'
 import { formatDate, formatHoraDia } from '@/lib/dates'
 import { useAccionUnica } from '@/lib/use-accion-unica'
@@ -41,6 +43,8 @@ type Ficha = {
   vet_telefono: string
   fecha_realizacion: string
   cobro: { concepto: string; base: number; recargo: number; total: number }
+  /** Advertencia del cierre (ej. la ficha de cremación ya estaba registrada). */
+  aviso?: string
 }
 
 type ColorBadge = 'gray' | 'blue' | 'yellow' | 'green' | 'red'
@@ -69,6 +73,8 @@ export default function FichaEutanasiaPage({ params }: { params: Promise<{ id: s
   const [ficha, setFicha] = useState<Ficha | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+  const [modalNoRealizada, setModalNoRealizada] = useState(false)
+  const [aviso, setAviso] = useState('')
   const { ejecutar, procesando } = useAccionUnica()
 
   const cargar = useCallback(async () => {
@@ -88,33 +94,24 @@ export default function FichaEutanasiaPage({ params }: { params: Promise<{ id: s
 
   useEffect(() => { cargar() }, [cargar])
 
-  function confirmarResultado(resultado: 'realizada' | 'no_realizada') {
-    const aviso = resultado === 'realizada'
-      ? '¿Confirmar que la eutanasia SÍ se realizó?\n\nSe le envía al tutor el agradecimiento con la reseña y el pago al veterinario queda pendiente.'
-      : '¿Confirmar que la eutanasia NO se realizó?\n\nLa mascota sigue viva: se le paga la consulta al veterinario y se ELIMINA el borrador de la ficha de cremación.\n\n(Si la mascota falleció antes y la cremación sigue, usa el otro botón.)'
-    if (!confirm(aviso)) return
-    enviarResultado({ resultado })
+  function confirmarRealizada() {
+    if (!confirm('¿Confirmar que la eutanasia SÍ se realizó?\n\nSe le envía al tutor el agradecimiento con la reseña y el pago al veterinario queda pendiente.')) return
+    enviarResultado({ resultado: 'realizada' })
   }
 
   /**
-   * SERVICIO CANCELADO: la eutanasia no corre y no se le cobra a nadie, pero la
-   * ficha de cremación queda abierta (caso típico: la mascota falleció antes de
-   * la visita y la familia igual quiere la cremación).
+   * NO SE REALIZÓ → el motivo elegido en el modal decide el cierre: si se cae
+   * también la cremación, si hay pago fijo al veterinario y si la ficha sigue
+   * viva (ver lib/eutanasia-motivos).
    */
-  function confirmarServicioCancelado() {
-    if (!confirm(
-      '¿Cancelar el servicio de eutanasia?\n\n' +
-      '· No se le paga nada a la veterinaria ni se le cobra al tutor por la eutanasia.\n' +
-      '· La ficha de cremación queda ABIERTA para seguir con ese servicio.\n' +
-      (ficha?.vet_nombre ? `· Le avisamos por correo a ${ficha.vet_nombre}.\n` : '') +
-      '\nSi la cremación tampoco se hace, elimina la ficha desde /clientes.',
-    )) return
-    enviarResultado({ resultado: 'cancelado' })
+  function confirmarNoRealizada(motivo: MotivoNoRealizada) {
+    enviarResultado({ resultado: 'no_realizada', motivo }, () => setModalNoRealizada(false))
   }
 
-  function enviarResultado(body: Record<string, unknown>) {
+  function enviarResultado(body: Record<string, unknown>, alGuardar?: () => void) {
     ejecutar(async () => {
       setError('')
+      setAviso('')
       try {
         const r = await fetch(`/api/eutanasias/ficha/${id}`, {
           method: 'POST',
@@ -124,6 +121,8 @@ export default function FichaEutanasiaPage({ params }: { params: Promise<{ id: s
         const d = await r.json().catch(() => ({}))
         if (!r.ok) { setError(d?.error || 'No se pudo guardar el resultado.'); return }
         setFicha(d as Ficha)
+        if (typeof d?.aviso === 'string') setAviso(d.aviso)
+        alGuardar?.()
       } catch {
         setError('Error de red. Intenta de nuevo.')
       }
@@ -172,6 +171,7 @@ export default function FichaEutanasiaPage({ params }: { params: Promise<{ id: s
       />
 
       {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-2">{error}</p>}
+      {aviso && <p className="text-sm text-amber-900 bg-amber-50 border border-amber-300 rounded-xl px-4 py-2">⚠️ {aviso}</p>}
 
       <Card className="p-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -194,26 +194,33 @@ export default function FichaEutanasiaPage({ params }: { params: Promise<{ id: s
           </p>
           <div className="flex flex-wrap gap-2 mt-3">
             <button
-              onClick={() => confirmarResultado('realizada')}
+              onClick={confirmarRealizada}
               disabled={procesando}
               className="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold rounded-xl">
               {procesando ? 'Guardando…' : '✓ Sí, se realizó'}
             </button>
             <button
-              onClick={() => confirmarResultado('no_realizada')}
+              onClick={() => setModalNoRealizada(true)}
               disabled={procesando}
               className="px-4 py-2 text-sm bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white font-semibold rounded-xl">
               ✗ No se realizó
             </button>
-            <button
-              onClick={confirmarServicioCancelado}
-              disabled={procesando}
-              className="px-4 py-2 text-sm bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-xl">
-              <Ban className="w-3.5 h-3.5 shrink-0 inline-block align-[-2px]" aria-hidden="true" /> Servicio cancelado
-            </button>
           </div>
+          <p className="text-[11px] text-gray-500 mt-2 leading-snug">
+            Al marcar que no se realizó te preguntamos por qué: se canceló · el veterinario decidió no realizarla ·
+            la mascota falleció antes. De eso dependen el pago al veterinario y si la cremación sigue.
+          </p>
         </Card>
       )}
+
+      <NoRealizadaModal
+        open={modalNoRealizada}
+        onClose={() => setModalNoRealizada(false)}
+        onConfirmar={confirmarNoRealizada}
+        vetNombre={ficha.vet_nombre}
+        procesando={procesando}
+        error={error}
+      />
 
       {ficha.estado === 'realizada' && (
         <Card className="p-5 bg-emerald-50 border-emerald-300">
@@ -228,6 +235,16 @@ export default function FichaEutanasiaPage({ params }: { params: Promise<{ id: s
       {ficha.estado === 'no_realizada' && (
         <Card className="p-5 bg-slate-50 border-slate-300">
           <p className="text-sm text-slate-800">✗ Evaluada: no correspondía realizarla. Se le paga la consulta al veterinario.</p>
+        </Card>
+      )}
+      {ficha.estado === 'cancelada' && (
+        <Card className="p-5 bg-red-50 border-red-300">
+          <p className="text-sm text-red-900">
+            🚫 Eutanasia cancelada: no se le paga al veterinario ni se le cobra al tutor.
+            {ficha.cliente_id
+              ? ' La ficha de cremación sigue abierta (revísala si tampoco corresponde).'
+              : ' Sin ficha de cremación asociada.'}
+          </p>
         </Card>
       )}
 

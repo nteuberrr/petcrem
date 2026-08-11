@@ -7,7 +7,8 @@ import { enviarCoordinarConFamilia, enviarClienteVetAsignado, enviarVetEutanasia
 import { avisarClienteVetConfirmado } from '@/lib/eutanasia-avisos'
 import { formatDate } from '@/lib/dates'
 import { crearClienteBorrador } from '@/lib/cliente-borrador'
-import { camposResultado, efectosResultado, esResultado, cancelarEutanasiaConservandoFicha } from '@/lib/eutanasia-resultado'
+import { camposResultado, efectosResultado, esResultado, aplicarNoRealizada, cancelarEutanasiaConservandoFicha } from '@/lib/eutanasia-resultado'
+import { esMotivoNoRealizada } from '@/lib/eutanasia-motivos'
 import { sincronizarFichaDeEutanasia, horaRetiroDeEutanasia } from '@/lib/eutanasia-sync'
 import { retiroTrasEutanasia } from '@/lib/agenda'
 
@@ -55,10 +56,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const idx = rows.findIndex(r => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
 
-    // SERVICIO CANCELADO: la tercera salida del bloque de resultado, la misma
-    // que la ficha del dashboard (sin pago al vet ni cobro al tutor, la ficha de
-    // cremación sigue viva y el retiro pendiente vuelve a la agenda). No es lo
-    // mismo que el "Cancelar" de la cotización, que solo la cierra.
+    // NO SE REALIZÓ: el motivo decide el cierre (pago al vet + cremación), igual
+    // que en la ficha del dashboard. Fuente única: lib/eutanasia-resultado.
+    if (body?.accion === 'no_realizada') {
+      if (!esMotivoNoRealizada(body?.motivo)) {
+        return NextResponse.json({ error: 'Falta el motivo por el que no se realizó.' }, { status: 400 })
+      }
+      const r = await aplicarNoRealizada(String(id), body.motivo)
+      if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
+      return NextResponse.json({ ...r.cotizacion, ...(r.aviso ? { aviso: r.aviso } : {}) })
+    }
+
+    // SERVICIO CANCELADO: la salida "la mascota falleció antes" (sin pago al vet
+    // ni cobro al tutor, la ficha de cremación sigue viva y el retiro pendiente
+    // vuelve a la agenda). No es lo mismo que el "Cancelar" de la cotización,
+    // que solo la cierra. Se mantiene por compatibilidad con el contrato previo.
     if (body?.accion === 'cancelar_servicio') {
       const r = await cancelarEutanasiaConservandoFicha(String(id), {
         motivo: typeof body?.motivo === 'string' ? body.motivo : undefined,

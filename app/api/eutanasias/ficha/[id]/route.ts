@@ -4,7 +4,11 @@
  * lib/permisos), a diferencia del panel completo de Servicios.
  *
  *  GET  → datos de la cotización para mostrarla (sin exponer la tabla completa).
- *  POST → { resultado: 'realizada' | 'no_realizada' } cierra el caso.
+ *  POST → cierra el caso:
+ *         { resultado: 'realizada' }
+ *         { resultado: 'no_realizada', motivo: 'cancelado' | 'vet_no_realizo' |
+ *           'mascota_fallecio' }  ← cada motivo resuelve distinto el pago al vet
+ *           y la cremación (ver lib/eutanasia-motivos).
  *
  * El POST existe porque el veterinario muchas veces no marca el enlace que le
  * llega por correo: sin esto el equipo no puede cerrar la ficha ni el pago.
@@ -14,7 +18,8 @@ import { getSheetData } from '@/lib/datastore'
 import { sesionConAcceso } from '@/lib/permisos-server'
 import { getConfigCobroEutanasia, cobroClienteCon } from '@/lib/eutanasia-precios'
 import { incluyeCremacion } from '@/lib/eutanasia-cremacion'
-import { aplicarResultadoEutanasia, esResultado, cancelarEutanasiaConservandoFicha } from '@/lib/eutanasia-resultado'
+import { aplicarResultadoEutanasia, esResultado, aplicarNoRealizada, cancelarEutanasiaConservandoFicha } from '@/lib/eutanasia-resultado'
+import { esMotivoNoRealizada } from '@/lib/eutanasia-motivos'
 
 const SHEET = 'cotizaciones_eutanasia'
 const RUTA = '/api/eutanasias/ficha'
@@ -88,8 +93,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params
     const body = await req.json().catch(() => ({}))
     const resultado = body?.resultado
-    // Tercera salida: SERVICIO CANCELADO. La eutanasia no corre y no se le cobra
-    // a nadie, pero la ficha de cremación queda abierta — ver lib/eutanasia-resultado.
+    // NO SE REALIZÓ → el motivo decide el cierre (pago al vet + cremación).
+    if (resultado === 'no_realizada' && esMotivoNoRealizada(body?.motivo)) {
+      const r = await aplicarNoRealizada(String(id), body.motivo)
+      if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
+      return NextResponse.json({ ...(await armarFicha(r.cotizacion)), ...(r.aviso ? { aviso: r.aviso } : {}) })
+    }
+    // Compatibilidad: 'cancelado' era la tercera salida antes del modal de
+    // motivos (= 'mascota_fallecio', la ficha de cremación queda abierta).
     if (resultado === 'cancelado') {
       const r = await cancelarEutanasiaConservandoFicha(String(id), {
         motivo: typeof body?.motivo === 'string' ? body.motivo : undefined,
@@ -98,7 +109,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json(await armarFicha(r.cotizacion))
     }
     if (!esResultado(resultado)) {
-      return NextResponse.json({ error: "Resultado inválido (usa 'realizada', 'no_realizada' o 'cancelado')" }, { status: 400 })
+      return NextResponse.json({ error: "Resultado inválido (usa 'realizada' o 'no_realizada' + motivo)" }, { status: 400 })
     }
     const r = await aplicarResultadoEutanasia(String(id), resultado)
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })

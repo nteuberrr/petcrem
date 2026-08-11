@@ -17,6 +17,33 @@ const SIZE_CLASS: Record<NonNullable<ModalProps['size']>, string> = {
   '3xl': 'max-w-3xl',
 }
 
+/**
+ * PILA de modales abiertos. Con dos anidados (ej. el motivo de "no se realizó"
+ * sobre la ficha de la cotización) hay que saber cuál está ARRIBA:
+ *  · solo el de arriba responde a Escape y atrapa el Tab;
+ *  · el scroll del fondo se libera recién cuando se cierra el ÚLTIMO — si cada
+ *    modal restaurara el overflow que encontró al abrirse, el cleanup del que
+ *    corre después dejaba el body bloqueado sin ningún modal a la vista.
+ */
+const pilaModales: symbol[] = []
+let overflowPrevio = ''
+
+function apilarModal(id: symbol) {
+  if (pilaModales.length === 0) {
+    overflowPrevio = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+  }
+  pilaModales.push(id)
+}
+
+function desapilarModal(id: symbol) {
+  const i = pilaModales.lastIndexOf(id)
+  if (i !== -1) pilaModales.splice(i, 1)
+  if (pilaModales.length === 0) document.body.style.overflow = overflowPrevio
+}
+
+const esModalDeArriba = (id: symbol) => pilaModales[pilaModales.length - 1] === id
+
 export function Modal({ open, onClose, title, children, size = 'lg' }: ModalProps) {
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -32,9 +59,9 @@ export function Modal({ open, onClose, title, children, size = 'lg' }: ModalProp
   useEffect(() => {
     if (!open) return
     prevFocus.current = document.activeElement as HTMLElement | null
-    // Bloquea el scroll del fondo mientras el modal está abierto.
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    // Bloquea el scroll del fondo mientras haya algún modal abierto.
+    const id = Symbol('modal')
+    apilarModal(id)
     // Mueve el foco al panel al abrir (accesibilidad / lectores de pantalla).
     panelRef.current?.focus()
 
@@ -48,6 +75,9 @@ export function Modal({ open, onClose, title, children, size = 'lg' }: ModalProp
         : []
 
     const handleKey = (e: KeyboardEvent) => {
+      // Con modales anidados, el teclado lo maneja solo el de arriba (si no, un
+      // Escape cerraba también el de atrás).
+      if (!esModalDeArriba(id)) return
       if (e.key === 'Escape') { onCloseRef.current(); return }
       // Focus trap: mantiene el Tab dentro del diálogo.
       if (e.key === 'Tab') {
@@ -63,7 +93,7 @@ export function Modal({ open, onClose, title, children, size = 'lg' }: ModalProp
     document.addEventListener('keydown', handleKey)
     return () => {
       document.removeEventListener('keydown', handleKey)
-      document.body.style.overflow = prevOverflow
+      desapilarModal(id)
       prevFocus.current?.focus?.()
     }
   }, [open])
