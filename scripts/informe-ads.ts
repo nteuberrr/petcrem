@@ -36,7 +36,7 @@ async function analizar(ctx: string): Promise<Analisis | null> {
   if (!key) return null
   const client = new Anthropic({ apiKey: key })
   const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6'
-  const sys = `Eres un media buyer senior (Google Ads + Meta) analizando la cuenta de "Crematorio Alma Animal" (crematorio de mascotas, Santiago de Chile, cobertura RM). El negocio mide su éxito por FICHAS de tutores e INGRESOS reales, no por métricas de plataforma. El "vs mercado" en Google se lee del IMPRESSION SHARE y del % de impresiones perdidas por PRESUPUESTO (falta plata) vs por RANKING (calidad/puja). No inventes benchmarks que no estén en los datos.
+  const sys = `Eres un media buyer senior (Google Ads + Meta) analizando la cuenta de "Crematorio Alma Animal" (crematorio de mascotas, Santiago de Chile, cobertura RM). El negocio mide su éxito por FICHAS de tutores e INGRESOS reales, no por métricas de plataforma. El "vs mercado" en Google se lee del IMPRESSION SHARE y del % de impresiones perdidas por PRESUPUESTO (falta plata) vs por RANKING. No inventes benchmarks que no estén en los datos.
 
 REGLA DE ESTILO — MÁXIMA BREVEDAD (esto es clave, va a un PDF ejecutivo):
 - resumen: 2 frases, directo.
@@ -45,6 +45,15 @@ REGLA DE ESTILO — MÁXIMA BREVEDAD (esto es clave, va a un PDF ejecutivo):
 Nada de relleno ni floritura.
 
 EXACTITUD: usa EXACTAMENTE los números del JSON (fichas directas, gasto, %, CPA); no los redondees a otro valor ni inventes cifras que no estén.
+
+REGLAS DE LECTURA (salieron de auditar el informe del 10-08-2026 contra los datos; cada una tapa un error real):
+1. NO COMBINES CIFRAS PARA CREAR OTRAS. El \`roasBlended\` del JSON se calcula sobre \`ingresosDirectos\` únicamente. Si nombras ingresos junto al ROAS, usa \`ingresosDirectos\`: sumarle \`ingresosConvenio\` da un número que no produce ese ROAS. Y los ingresos de convenio los derivan las clínicas veterinarias, NO los anuncios — nunca los atribuyas a la publicidad.
+2. LAS \`conversiones\` DE GOOGLE NO SON FICHAS. Son mayormente clics al WhatsApp; la ficha real está en \`rentabilidad_real.fichasDirectas\` y el dinero en \`ingresosDirectos\`. Contrasta siempre una contra otra. Si las conversiones de plataforma se mueven fuerte con el gasto casi igual, eso es un CAMBIO DE MEDICIÓN, no una mejora de rendimiento: dilo así. Para ver si el negocio mejoró de verdad, compara las fichas de \`evolucion_30d\` (últimos días del período vs los previos), no las conversiones.
+3. PÉRDIDA POR RANKING = Ad Rank = puja × CALIDAD (CTR esperado, relevancia, landing). El dato NO separa las dos. No lo llames "subpuja" ni concluyas que falta puja: si el CTR de la campaña es alto, la relevancia no es el problema y apunta más a landing/calidad. Nombra las dos causas posibles.
+4. NADA DE MAGNITUDES INVENTADAS. Prohibido poner un porcentaje, monto o plazo en una acción si no sale de los datos ("subir pujas 30%", "duplicar presupuesto", "en 2 semanas"). Di QUÉ hacer y con qué dato se justifica; el cuánto lo decide quien opera.
+5. PRIORIDAD: LA MEDICIÓN VA PRIMERO. Si \`conversionesValor\` es muy bajo frente a \`fichasDirectas\`, el algoritmo está optimizando a ciegas: arreglar la señal de conversión es prioridad ALTA y va ANTES que cualquier cambio de puja o presupuesto. Subirle la puja a una cuenta que optimiza hacia una señal rota es al revés.
+6. MIRA EL REPARTO ENTRE CAMPAÑAS, no solo cada una por separado: si la campaña con MEJOR CPA pierde impresiones por presupuesto mientras otra con peor CPA se lleva la mayor parte del gasto, el traspaso de presupuesto entre ellas es una acción concreta y barata.
+7. USA LA BRECHA CPA plataforma vs \`cpaReal\`, y la \`tasaCierrePct\` (leads de WhatsApp que terminan en ficha). Mover el cierre suele valer más que cualquier ajuste de puja, y casi nunca se nombra.
 
 Responde SOLO con JSON válido (sin markdown), forma exacta:
 {"resumen":"...","lecturas":[{"titulo":"2-4 palabras","detalle":"..."}],"acciones":[{"prioridad":"Alta|Media|Baja","accion":"...","motivo":"...","esfuerzo":"Bajo|Medio|Alto"}]}
@@ -138,11 +147,20 @@ async function main() {
   })
 
   // Modo debug: `... [correo] [periodo] --save <ruta>` guarda el PDF y NO envía.
+  // Deja además, al lado, los DATOS que se le pasaron a la IA (`.datos.json`) y
+  // lo que respondió (`.analisis.json`) + el análisis por consola: es la única
+  // forma de auditar si lo que afirma el informe se sostiene en las cifras.
   const saveIdx = process.argv.indexOf('--save')
   if (saveIdx > 0 && process.argv[saveIdx + 1]) {
+    const ruta = process.argv[saveIdx + 1]
     const { writeFileSync } = await import('fs')
-    writeFileSync(process.argv[saveIdx + 1], pdf)
-    console.log(`PDF guardado en ${process.argv[saveIdx + 1]} (${(pdf.byteLength / 1024).toFixed(0)}KB) — no se envió correo.`)
+    writeFileSync(ruta, pdf)
+    const base = ruta.replace(/\.pdf$/i, '')
+    writeFileSync(`${base}.datos.json`, JSON.stringify(JSON.parse(ctx), null, 2))
+    writeFileSync(`${base}.analisis.json`, JSON.stringify(analisis, null, 2))
+    console.log(`PDF guardado en ${ruta} (${(pdf.byteLength / 1024).toFixed(0)}KB) — no se envió correo.`)
+    console.log(`Datos → ${base}.datos.json · Análisis → ${base}.analisis.json\n`)
+    console.log(JSON.stringify(analisis, null, 2))
     return
   }
 
