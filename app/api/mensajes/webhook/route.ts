@@ -14,7 +14,7 @@ import { buscarRelayPendientePorMsg, buscarRelayPendienteUnico, marcarRelayRespo
 import { procesarBotonVetEutanasia, procesarTextoVetEutanasia } from '@/lib/eutanasia-whatsapp'
 import { resolverSolicitudRetiro } from '@/lib/solicitudes-retiro'
 import { manejarAvisoFallido } from '@/lib/avisos-equipo'
-import { leerMarcador, limpiarMarcador, vincularTelefono } from '@/lib/ads-clicks'
+import { leerMarcador, limpiarMarcador, vincularTelefono, registrarClickCtwa } from '@/lib/ads-clicks'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 
 export const dynamic = 'force-dynamic'
@@ -223,6 +223,9 @@ interface MetaMsg {
   button?: { text?: string; payload?: string }
   /** Presente cuando el mensaje es una RESPUESTA citando otro (id = wamid citado). */
   context?: { id?: string; from?: string }
+  /** Lo adjunta Meta cuando el cliente llegó desde un anuncio click-to-WhatsApp.
+   *  Viene en TODOS los mensajes de las primeras 24 h tras el clic. */
+  referral?: { ctwa_clid?: string; source_id?: string; source_type?: string; headline?: string }
   [k: string]: unknown
 }
 
@@ -337,6 +340,17 @@ async function procesarEntrante(value: Record<string, unknown>, msg: MetaMsg) {
       await actualizarConversacion(conv.id, { estado: 'activo' })
     }
   } catch (e) { console.warn('[webhook] auto-clasificación falló:', e) }
+
+  // ATRIBUCIÓN META (click-to-WhatsApp): cuando el cliente llega tocando un
+  // anuncio que abre WhatsApp, Meta adjunta `referral.ctwa_clid` al mensaje. Es
+  // el ÚNICO momento en que ese identificador existe — no pasa por el sitio, así
+  // que el `fbclid` de la web nunca lo ve. Registrarlo acá deja la conversión
+  // lista para informarla por la Conversions API (lib/meta-offline).
+  // Hoy las campañas van a LINK_CLICKS y esto no se dispara; el día que se
+  // prendan campañas de Mensajes, la medición ya está puesta.
+  if (msg.referral?.ctwa_clid) {
+    try { await registrarClickCtwa(msg.referral.ctwa_clid, msg.from) } catch { /* medición, no bloquea */ }
+  }
 
   const tipo = tipoInterno(msg.type)
   let cuerpo: string | null = null

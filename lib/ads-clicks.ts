@@ -1,17 +1,25 @@
 import { getSupabase } from './supabase'
 
 /**
- * ATRIBUCIÓN DE GOOGLE ADS — capa de datos de `ads_clicks`.
+ * ATRIBUCIÓN DE ANUNCIOS — capa de datos de `ads_clicks`.
  *
  * Cierra el hueco entre el clic en el anuncio y la ficha real. El recorrido
  * completo está documentado en supabase/migracion-ads-clicks.sql; acá van las
- * cinco operaciones que lo sostienen:
+ * operaciones que lo sostienen:
  *
- *   registrarClick()        la landing vio un gclid  → devuelve el código corto
+ *   registrarClick()        la landing vio un gclid/fbclid → devuelve el código
+ *   registrarClickCtwa()    llegó un WhatsApp desde un anuncio click-to-WhatsApp
  *   vincularTelefono()      llegó un WhatsApp con ese código
  *   vincularClientePorTelefono()  ese teléfono terminó en una ficha
- *   pendientesDeSubir()     fichas listas para informar a Ads
- *   marcarSubidos()         ya informadas
+ *   pendientesDeSubir()     fichas listas para informar a Google Ads
+ *   pendientesMetaLead() / pendientesMetaCompra()   lo mismo, para Meta
+ *   marcarSubidos() / marcarMetaLead() / marcarMetaCompra()  ya informadas
+ *
+ * DOS PLATAFORMAS, LA MISMA CAÑERÍA. Una fila puede traer un identificador de
+ * Google (`gclid`/`gbraid`/`wbraid`), uno de Meta (`fbclid` desde la web,
+ * `ctwa_clid` desde un anuncio click-to-WhatsApp) o los dos. Cada plataforma
+ * tiene su propia marca de "ya informado", porque se suben por separado y una
+ * no puede tapar a la otra.
  *
  * ⚠️ TODO acá es best-effort y NUNCA lanza: si la tabla todavía no existe (el
  * DDL se corre a mano en Supabase, ver CLAUDE.md) o Supabase está caído, la
@@ -24,11 +32,19 @@ export interface AdsClick {
   gclid: string | null
   gbraid: string | null
   wbraid: string | null
+  /** Identificador de clic de Meta (web). Se convierte en `fbc` al informar. */
+  fbclid: string | null
+  /** Identificador de clic de un anuncio click-to-WhatsApp (lo manda el webhook). */
+  ctwa_clid: string | null
   landing: string | null
   telefono: string | null
   cliente_id: string | null
   vinculado_at: string | null
   subido_at: string | null
+  /** Cuándo se informó el «Lead» a Meta (null = pendiente). */
+  meta_lead_at: string | null
+  /** Cuándo se informó la «Purchase» a Meta (null = pendiente). */
+  meta_compra_at: string | null
   created_at: string
 }
 
@@ -71,29 +87,72 @@ export async function registrarClick(d: {
   gclid?: string | null
   gbraid?: string | null
   wbraid?: string | null
+  fbclid?: string | null
   landing?: string | null
 }): Promise<string | null> {
-  if (!d.gclid && !d.gbraid && !d.wbraid) return null
+  if (!d.gclid && !d.gbraid && !d.wbraid && !d.fbclid) return null
   try {
     const sb = getSupabase()
+    // Si la columna `fbclid` todavía no existe (el DDL se corre a mano en
+    // Supabase), PostgREST rechaza el insert ENTERO — y con él se caería también
+    // la atribución de Google, que venía funcionando. Ante ese error puntual se
+    // reintenta sin el campo: se pierde el clic de Meta, no los dos.
+    let conFbclid = true
     // Reintentos por si el código sorteado ya existía (colisión del índice único).
-    for (let intento = 0; intento < 4; intento++) {
+    for (let intento = 0; intento < 5; intento++) {
       const codigo = nuevoCodigo()
       const { error } = await sb.from(TABLA).insert({
         codigo,
         gclid: d.gclid || null,
         gbraid: d.gbraid || null,
         wbraid: d.wbraid || null,
+        ...(conFbclid ? { fbclid: d.fbclid || null } : {}),
         landing: (d.landing || '').slice(0, 300) || null,
       })
       if (!error) return codigo
       const msg = String(error.message || '').toLowerCase()
+      if (conFbclid && msg.includes('fbclid')) {
+        console.warn('[ads-clicks] falta la columna fbclid — corré supabase/atribucion-meta-y-seguimiento.sql')
+        conFbclid = false
+        continue
+      }
       if (!msg.includes('duplicate') && !msg.includes('unique')) throw new Error(error.message)
     }
     return null
   } catch (e) {
     console.warn('[ads-clicks] registrarClick:', e instanceof Error ? e.message : e)
     return null
+  }
+}
+
+/**
+ * El cliente escribió por WhatsApp desde un anuncio click-to-WhatsApp: Meta
+ * manda el `ctwa_clid` en el propio webhook, así que acá no hay código corto ni
+ * paso por la web — el teléfono se conoce desde el minuto cero.
+ *
+ * Idempotente por `ctwa_clid`: Meta repite el bloque `referral` en TODOS los
+ * mensajes de las primeras 24 h después del clic, y sin este chequeo cada
+ * mensaje del cliente crearía una fila nueva y la conversión se informaría
+ * varias veces.
+ */
+export async function registrarClickCtwa(ctwaClid: string, telefono: string): Promise<void> {
+  const clid = (ctwaClid || '').trim().slice(0, 512)
+  const t = tel9(telefono)
+  if (!clid || t.length !== 9) return
+  try {
+    const sb = getSupabase()
+    const { data } = await sb.from(TABLA).select('id').eq('ctwa_clid', clid).limit(1)
+    if (data?.length) return
+    for (let intento = 0; intento < 4; intento++) {
+      const { error } = await sb.from(TABLA).insert({
+        codigo: nuevoCodigo(), ctwa_clid: clid, telefono: t, landing: 'ctwa',
+      })
+      if (!error) return
+      const msg = String(error.message || '').toLowerCase()
+      if (!msg.includes('duplicate') && !msg.includes('unique')) throw new Error(error.message)
+    }
+  } catch (e) {
+    console.warn('[ads-clicks] registrarClickCtwa:', e instanceof Error ? e.message : e)
   }
 }
 
@@ -144,7 +203,17 @@ export async function vincularClientePorTelefono(telefono: string, clienteId: st
   }
 }
 
-/** Clics con ficha asociada que todavía no se informaron a Google Ads. */
+/** Los identificadores de clic de cada plataforma, para filtrar en PostgREST. */
+const HAY_ID_GOOGLE = 'gclid.not.is.null,gbraid.not.is.null,wbraid.not.is.null'
+const HAY_ID_META = 'fbclid.not.is.null,ctwa_clid.not.is.null'
+
+/**
+ * Clics con ficha asociada que todavía no se informaron a Google Ads.
+ *
+ * Filtra por identificador de GOOGLE: desde que la tabla también guarda clics de
+ * Meta, una fila con solo `fbclid` no tiene nada que Google pueda reconocer y la
+ * API la rechazaría en cada corrida, para siempre.
+ */
 export async function pendientesDeSubir(limite = 200): Promise<AdsClick[]> {
   try {
     const sb = getSupabase()
@@ -152,6 +221,7 @@ export async function pendientesDeSubir(limite = 200): Promise<AdsClick[]> {
       .select('*')
       .not('cliente_id', 'is', null)
       .is('subido_at', null)
+      .or(HAY_ID_GOOGLE)
       .order('created_at', { ascending: true })
       .limit(limite)
     if (error) throw new Error(error.message)
@@ -162,13 +232,59 @@ export async function pendientesDeSubir(limite = 200): Promise<AdsClick[]> {
   }
 }
 
+/**
+ * Clics de Meta con TELÉFONO y sin «Lead» informado: la conversación empezó.
+ *
+ * Es el evento de optimización real de las campañas. Va sobre el teléfono y no
+ * sobre la ficha a propósito: con ~46 fichas al mes, una campaña alimentada solo
+ * con compras nunca junta la señal que Meta necesita para salir de aprendizaje.
+ */
+export async function pendientesMetaLead(limite = 200): Promise<AdsClick[]> {
+  return pendientesMeta('meta_lead_at', 'telefono', limite)
+}
+
+/** Clics de Meta con FICHA y sin «Purchase» informada: se cerró la venta. */
+export async function pendientesMetaCompra(limite = 200): Promise<AdsClick[]> {
+  return pendientesMeta('meta_compra_at', 'cliente_id', limite)
+}
+
+async function pendientesMeta(marca: string, requiere: string, limite: number): Promise<AdsClick[]> {
+  try {
+    const sb = getSupabase()
+    const { data, error } = await sb.from(TABLA)
+      .select('*')
+      .not(requiere, 'is', null)
+      .is(marca, null)
+      .or(HAY_ID_META)
+      .order('created_at', { ascending: true })
+      .limit(limite)
+    if (error) throw new Error(error.message)
+    return (data ?? []) as AdsClick[]
+  } catch (e) {
+    console.warn(`[ads-clicks] pendientesMeta(${marca}):`, e instanceof Error ? e.message : e)
+    return []
+  }
+}
+
 export async function marcarSubidos(ids: number[]): Promise<void> {
+  await marcar('subido_at', ids)
+}
+
+export async function marcarMetaLead(ids: number[]): Promise<void> {
+  await marcar('meta_lead_at', ids)
+}
+
+export async function marcarMetaCompra(ids: number[]): Promise<void> {
+  await marcar('meta_compra_at', ids)
+}
+
+async function marcar(columna: string, ids: number[]): Promise<void> {
   if (!ids.length) return
   try {
     const sb = getSupabase()
-    await sb.from(TABLA).update({ subido_at: new Date().toISOString() }).in('id', ids)
+    await sb.from(TABLA).update({ [columna]: new Date().toISOString() }).in('id', ids)
   } catch (e) {
-    console.warn('[ads-clicks] marcarSubidos:', e instanceof Error ? e.message : e)
+    console.warn(`[ads-clicks] marcar(${columna}):`, e instanceof Error ? e.message : e)
   }
 }
 

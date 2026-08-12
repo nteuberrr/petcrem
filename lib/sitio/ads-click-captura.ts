@@ -1,13 +1,15 @@
 /**
- * ATRIBUCIÓN DE GOOGLE ADS en el sitio público — la mitad del navegador.
+ * ATRIBUCIÓN DE ANUNCIOS en el sitio público — la mitad del navegador.
  *
  * El problema que resuelve: el contacto ocurre en WhatsApp, fuera del sitio, así
  * que el clic del anuncio y la venta nunca se tocaban. Google terminaba pujando
  * hacia «alguien apretó el botón de WhatsApp», sin saber cuáles de esos clics
- * traían una mascota y por cuánto.
+ * traían una mascota y por cuánto. Con Meta era peor: `fbclid` no se guardaba en
+ * ninguna parte, así que la señal se cortaba en la visita.
  *
  * Lo que hace este bloque, en dos tiempos:
- *   1. Si la URL trae gclid / gbraid / wbraid, lo manda a /api/ads/click y guarda
+ *   1. Si la URL trae gclid / gbraid / wbraid / fbclid, lo manda a
+ *      /api/ads/click y guarda
  *      el CÓDIGO corto que devuelve (90 días en localStorage — la ventana de
  *      atribución de Google es de 90, y una despedida se decide en días).
  *   2. Le agrega ese código al texto prellenado de todo link de WhatsApp, para
@@ -55,14 +57,17 @@ function marcarTodos(){
 }
 
 // 1. ¿Venimos de un anuncio? Registrar y guardar el código.
+//    fbclid es el de Meta: el pixel del sitio solo ve la visita, y la venta
+//    ocurre después en WhatsApp — sin esto, Meta nunca se entera de cuál clic
+//    trajo una mascota (por eso las campañas pujaban por clics).
 try{
   var p=new URLSearchParams(location.search);
-  var g=p.get('gclid'),gb=p.get('gbraid'),wb=p.get('wbraid');
-  if(g||gb||wb){
+  var g=p.get('gclid'),gb=p.get('gbraid'),wb=p.get('wbraid'),fb=p.get('fbclid');
+  if(g||gb||wb||fb){
     fetch('/api/ads/click',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({gclid:g,gbraid:gb,wbraid:wb,landing:location.pathname}),
+      body:JSON.stringify({gclid:g,gbraid:gb,wbraid:wb,fbclid:fb,landing:location.pathname}),
       keepalive:true
     }).then(function(r){return r.json()}).then(function(j){
       if(j&&j.codigo){guardar(j.codigo);marcarTodos();}

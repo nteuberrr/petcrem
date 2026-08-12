@@ -7,6 +7,7 @@ import { archivarConversacionesInactivas } from '@/lib/mensajes'
 import { enviarSeguimientosPendientes } from '@/lib/seguimiento-leads'
 import { vigilanciaGoogleAds } from '@/lib/gads-vigilancia'
 import { subirConversionesOffline } from '@/lib/ads-offline'
+import { subirConversionesMeta } from '@/lib/meta-offline'
 import { pingHealthcheck } from '@/lib/healthcheck'
 
 /**
@@ -18,8 +19,9 @@ import { pingHealthcheck } from '@/lib/healthcheck'
  *     más de 2 días sin actividad. Las de negocio (cliente/cerrado) o vets no se tocan.
  *  3) VIGILANCIA GOOGLE ADS (lib/gads-vigilancia): guardia diaria silenciosa (solo
  *     avisa al ADMIN_WHATSAPP si hay algo urgente) + informe semanal los lunes.
- *  4) CONVERSIONES OFFLINE (lib/ads-offline): informa a Google Ads las fichas
- *     reales, con su precio, de los clics de anuncio que terminaron en venta.
+ *  4) CONVERSIONES OFFLINE: informa a Google Ads (lib/ads-offline) y a Meta
+ *     (lib/meta-offline) las conversaciones y las fichas reales, con su precio,
+ *     de los clics de anuncio que terminaron en venta.
  * Corre en horario hábil de Chile para que los mensajes salgan a buena hora.
  * Auth: Bearer CRON_SECRET (Vercel) o sesión admin.
  */
@@ -54,8 +56,12 @@ export async function GET(req: NextRequest) {
     //    los clics de anuncio que cerraron venta (lib/ads-offline). Best-effort.
     let offline = null
     try { offline = await subirConversionesOffline() } catch (e) { console.error('[cron-archivar] conversiones offline', e) }
+    // 5) Lo mismo para Meta: «Lead» al empezar la conversación y «Purchase» con
+    //    el precio real de la ficha (lib/meta-offline). Best-effort.
+    let offlineMeta = null
+    try { offlineMeta = await subirConversionesMeta() } catch (e) { console.error('[cron-archivar] conversiones meta', e) }
     await pingHealthcheck('HEALTHCHECK_URL_ARCHIVAR')
-    return NextResponse.json({ ok: true, archivadas: n, seguimiento, vigilancia, offline })
+    return NextResponse.json({ ok: true, archivadas: n, seguimiento, vigilancia, offline, offlineMeta })
   } catch (e) {
     console.error('[cron-archivar]', e)
     await pingHealthcheck('HEALTHCHECK_URL_ARCHIVAR', { fail: true })
