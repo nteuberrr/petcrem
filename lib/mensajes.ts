@@ -55,8 +55,10 @@ export interface Conversacion {
   ultimo_mensaje_at: string | null
   /** true si llegó un mensaje entrante que aún no se abrió en el inbox. */
   no_leido: boolean
-  /** Cuándo se le envió el mensaje de seguimiento automático (null = nunca). */
+  /** Cuándo se le envió el ÚLTIMO mensaje de seguimiento automático (null = nunca). */
   seguimiento_at: string | null
+  /** Cuántos toques de seguimiento se enviaron (0 = ninguno; el tope es 2). */
+  seguimiento_n: number
   created_at: string
 }
 
@@ -226,10 +228,58 @@ export async function contarNoLeidos(): Promise<number> {
   } catch { return 0 }
 }
 
-/** Marca que ya se envió el seguimiento automático (idempotencia del barrido). */
-export async function marcarSeguimientoEnviado(id: number): Promise<void> {
+/**
+ * Registra un toque de seguimiento: la fecha del ÚLTIMO enviado y cuántos van.
+ *
+ * El contador es lo que permite el segundo toque. Con solo `seguimiento_at` la
+ * pregunta que se podía responder era "¿ya se le escribió?"; ahora es "¿cuántas
+ * veces?", que es lo que decide si corresponde el siguiente y cuándo parar.
+ */
+export async function marcarSeguimientoEnviado(id: number, n = 1): Promise<void> {
   const sb = getMensajesSupabase()
-  const { error } = await sb.from(T_CONV).update({ seguimiento_at: new Date().toISOString() }).eq('id', id)
+  const { error } = await sb.from(T_CONV)
+    .update({ seguimiento_at: new Date().toISOString(), seguimiento_n: n })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+/**
+ * Las conversaciones que el barrido de seguimiento ya CLASIFICÓ, para medir el
+ * experimento: `seguimiento_n >= 1` recibió mensajes, `-1` es el grupo de
+ * control (era elegible y se dejó a propósito sin escribir).
+ *
+ * Solo devuelve las que el barrido tocó, así que las dos ramas son comparables:
+ * pasaron por el mismo filtro de elegibilidad el mismo día.
+ */
+export async function conversacionesClasificadas(desdeIso: string): Promise<
+  Array<{ id: number; seguimiento_n: number; telefono: string | null }>
+> {
+  try {
+    const sb = getMensajesSupabase()
+    const { data, error } = await sb.from(T_CONV)
+      .select('id, seguimiento_n, contacto:mensajes_contactos(telefono, wa_id)')
+      .not('seguimiento_at', 'is', null)
+      .gte('seguimiento_at', desdeIso)
+      .limit(2000)
+    if (error) throw new Error(error.message)
+    type Fila = { id: number; seguimiento_n: number | null; contacto?: { telefono?: string | null; wa_id?: string | null } | null }
+    return ((data ?? []) as unknown as Fila[]).map(r => ({
+      id: Number(r.id),
+      seguimiento_n: Number(r.seguimiento_n ?? 0),
+      telefono: r.contacto?.wa_id || r.contacto?.telefono || null,
+    }))
+  } catch (e) {
+    console.warn('[mensajes] conversacionesClasificadas:', e instanceof Error ? e.message : e)
+    return []
+  }
+}
+
+/** Marca una conversación como grupo de CONTROL del seguimiento (no se le escribe). */
+export async function marcarSeguimientoControl(id: number): Promise<void> {
+  const sb = getMensajesSupabase()
+  const { error } = await sb.from(T_CONV)
+    .update({ seguimiento_at: new Date().toISOString(), seguimiento_n: -1 })
+    .eq('id', id)
   if (error) throw new Error(error.message)
 }
 

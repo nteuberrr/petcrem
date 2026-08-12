@@ -32,8 +32,13 @@ export async function construirAvisoSaludWhatsapp(): Promise<AvisoRenderizado> {
   ])
   const hoy = formatDate(fechaChileISO())
 
+  // La calidad del número: verde es lo normal, amarillo ya es una advertencia
+  // (Meta la baja por feedback de los usuarios) y rojo estrangula los envíos.
+  // UNKNOWN no es una alarma: es lo que devuelve mientras no hay volumen.
+  const calidadMala = salud.calidad === 'YELLOW' || salud.calidad === 'RED'
+
   // Todo bien y sin avisos caídos → nada que reportar (con "omitir vacío" no sale).
-  const vacio = salud.consultado && salud.puedeEnviar && sinEntregar.length === 0
+  const vacio = salud.consultado && salud.puedeEnviar && !calidadMala && sinEntregar.length === 0
   if (vacio) {
     return {
       subject: `WhatsApp operativo — ${hoy}`,
@@ -93,6 +98,29 @@ export async function construirAvisoSaludWhatsapp(): Promise<AvisoRenderizado> {
       </table>`)
   }
 
+  if (calidadMala) {
+    const rojo = salud.calidad === 'RED'
+    bloques.push(`
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;background:${rojo ? '#fef2f2' : '#fff7ed'};border-left:4px solid ${rojo ? '#dc2626' : BRAND.amber};border-radius:12px;margin-bottom:16px">
+        <tr><td style="padding:20px">
+          <div style="font-size:18px;font-weight:800;color:${rojo ? '#991b1b' : BRAND.navy};margin-bottom:6px">
+            Calidad del número en ${rojo ? 'ROJO' : 'AMARILLO'}
+          </div>
+          <p style="margin:0;font-size:14px;color:#374151;line-height:1.5">
+            Meta bajó la calificación del número porque hay gente bloqueándonos o marcando nuestros mensajes
+            como no deseados. ${rojo
+              ? 'En rojo <strong>reduce el límite de clientes nuevos por día</strong> y, si se sostiene, suspende el número.'
+              : 'Todavía no limita nada, pero es el paso previo al rojo.'}
+          </p>
+          <p style="margin:12px 0 0;font-size:13px;color:#374151">
+            Casi siempre viene de escribirle a quien no lo pidió o de insistir de más: revisá las plantillas de
+            marketing y el seguimiento automático antes de mandar nada nuevo.
+            ${salud.limite ? `<br>Límite actual de conversaciones iniciadas: <strong>${escapeHtml(salud.limite)}</strong>.` : ''}
+          </p>
+        </td></tr>
+      </table>`)
+  }
+
   if (sinEntregar.length) {
     const filas = sinEntregar.slice(0, 20).map(a => `
       <tr>
@@ -113,10 +141,16 @@ export async function construirAvisoSaludWhatsapp(): Promise<AvisoRenderizado> {
     ? 'No se pudo consultar el estado de WhatsApp.'
     : !salud.puedeEnviar
       ? `WhatsApp bloqueado: ${salud.bloqueos.map(b => b.codigo || b.entidad).join(', ')}`
-      : `${sinEntregar.length} aviso(s) sin entregar`
+      : calidadMala
+        ? `Calidad del número en ${salud.calidad}`
+        : `${sinEntregar.length} aviso(s) sin entregar`
 
   return {
-    subject: salud.puedeEnviar ? `⚠️ Avisos sin entregar por WhatsApp — ${hoy}` : `🔴 WhatsApp no está entregando — ${hoy}`,
+    subject: !salud.puedeEnviar
+      ? `🔴 WhatsApp no está entregando — ${hoy}`
+      : calidadMala
+        ? `⚠️ Calidad del número de WhatsApp en ${salud.calidad} — ${hoy}`
+        : `⚠️ Avisos sin entregar por WhatsApp — ${hoy}`,
     vacio: false,
     resumen,
     html: renderEmailLayout({ titulo: TITULO, contexto: CONTEXTO, contacto, bodyHtml: bloques.join('') }),

@@ -30,6 +30,16 @@ export interface SaludWhatsapp {
   puedeEnviar: boolean
   /** Qué bloquea el envío, entidad por entidad. */
   bloqueos: BloqueoWhatsapp[]
+  /**
+   * Calidad del número según el feedback de los usuarios: GREEN | YELLOW | RED
+   * (o UNKNOWN mientras no hay volumen suficiente). Es el OTRO modo de falla, y
+   * es progresivo: en rojo Meta baja el límite de mensajes y, si se sostiene,
+   * suspende el número. A diferencia del bloqueo por pago, acá no hay un corte
+   * seco — se degrada, y por eso conviene enterarse en amarillo.
+   */
+  calidad: string | null
+  /** Cuántos clientes distintos se pueden iniciar por día (TIER_1K, TIER_10K…). */
+  limite: string | null
   error?: string
 }
 
@@ -44,18 +54,24 @@ export async function consultarSaludWhatsapp(): Promise<SaludWhatsapp> {
   const token = process.env.WHATSAPP_TOKEN
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID
   if (!token || !phoneId) {
-    return { consultado: false, puedeEnviar: false, bloqueos: [], error: 'WhatsApp no configurado' }
+    return { consultado: false, puedeEnviar: false, bloqueos: [], calidad: null, limite: null, error: 'WhatsApp no configurado' }
   }
   const version = process.env.WHATSAPP_API_VERSION || 'v22.0'
   try {
+    // Los tres campos viajan en la MISMA llamada: `health_status` dice si se
+    // puede enviar y `quality_rating` cómo está reaccionando la gente. Son fallas
+    // distintas —una corta de golpe, la otra estrangula de a poco— y mirar solo
+    // la primera deja pasar la segunda hasta que ya hay número suspendido.
     const res = await fetch(
-      `https://graph.facebook.com/${version}/${phoneId}?fields=health_status`,
+      `https://graph.facebook.com/${version}/${phoneId}?fields=health_status,quality_rating,messaging_limit_tier`,
       { headers: { Authorization: `Bearer ${token}` } },
     )
     const j = await res.json().catch(() => ({}))
     if (!res.ok) {
-      return { consultado: false, puedeEnviar: false, bloqueos: [], error: j?.error?.message || `HTTP ${res.status}` }
+      return { consultado: false, puedeEnviar: false, bloqueos: [], calidad: null, limite: null, error: j?.error?.message || `HTTP ${res.status}` }
     }
+    const calidad = j?.quality_rating ? String(j.quality_rating).toUpperCase() : null
+    const limite = j?.messaging_limit_tier ? String(j.messaging_limit_tier) : null
     const h = j?.health_status
     const entidades = Array.isArray(h?.entities) ? h.entities : []
     const bloqueos: BloqueoWhatsapp[] = []
@@ -80,8 +96,10 @@ export async function consultarSaludWhatsapp(): Promise<SaludWhatsapp> {
       consultado: true,
       puedeEnviar: String(h?.can_send_message || '') === 'AVAILABLE' && bloqueos.length === 0,
       bloqueos,
+      calidad,
+      limite,
     }
   } catch (e) {
-    return { consultado: false, puedeEnviar: false, bloqueos: [], error: e instanceof Error ? e.message : String(e) }
+    return { consultado: false, puedeEnviar: false, bloqueos: [], calidad: null, limite: null, error: e instanceof Error ? e.message : String(e) }
   }
 }

@@ -5,6 +5,7 @@ import {
 import { auditarCuenta, type Hallazgo } from './google-ads-audit'
 import { calcularRentabilidad } from './marketing-rentabilidad'
 import { resumenAtribucion } from './ads-clicks'
+import { medirLiftSeguimiento } from './seguimiento-leads'
 import { avisarAdminsWhatsapp, isWhatsappConfigured } from './whatsapp'
 
 /**
@@ -122,12 +123,16 @@ export async function terminosQueQuemanPlata(): Promise<{ lineas: string[]; tota
 /** Arma el texto del informe semanal (lunes). */
 export async function armarInformeSemanal(): Promise<string> {
   const hace7d = new Date(Date.now() - 7 * 86_400_000).toISOString()
-  const [resumen, rentab, hallazgos, quema, atribucion] = await Promise.all([
+  // El seguimiento se mide a 90 días, no a 7: con ~46 fichas al mes y un 10% de
+  // control, una semana no alcanza ni para dos leads en el grupo de control.
+  const hace90d = new Date(Date.now() - 90 * 86_400_000).toISOString()
+  const [resumen, rentab, hallazgos, quema, atribucion, lift] = await Promise.all([
     resumenCampanas('last_7d'),
     calcularRentabilidad('last_7d').catch(() => null),
     auditarCuenta().catch(() => [] as Hallazgo[]),
     terminosQueQuemanPlata(),
     resumenAtribucion(hace7d),
+    medirLiftSeguimiento(hace90d).catch(() => null),
   ])
 
   const c = resumen.cuenta
@@ -161,6 +166,16 @@ export async function armarInformeSemanal(): Promise<string> {
   if (atribucion && atribucion.clics > 0) {
     partes.push(`\n🔗 *Atribución (7d):* ${atribucion.clics} clics de anuncio medidos · ` +
       `${atribucion.conTelefono} escribieron por WhatsApp · ${atribucion.conFicha} terminaron en ficha`)
+  }
+
+  // Seguimiento de leads contra su grupo de control. Solo se muestra cuando el
+  // control tiene tamaño suficiente para que la comparación signifique algo: con
+  // 3 leads de control, la diferencia es ruido y publicarla invita a decidir mal.
+  if (lift && lift.control >= 10 && lift.tratados >= 10) {
+    const pct = (a: number, b: number) => `${Math.round((a / b) * 100)}%`
+    partes.push(`\n📨 *Seguimiento de leads (90d):* con mensaje ${lift.tratadosConFicha}/${lift.tratados} (${pct(lift.tratadosConFicha, lift.tratados)}) · ` +
+      `sin mensaje ${lift.controlConFicha}/${lift.control} (${pct(lift.controlConFicha, lift.control)})` +
+      `${lift.liftPuntos != null ? ` → ${lift.liftPuntos >= 0 ? '+' : ''}${lift.liftPuntos} pts` : ''}`)
   }
 
   if (quema.lineas.length) {
