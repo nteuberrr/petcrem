@@ -31,11 +31,15 @@ type Cliente = {
   tipo_servicio: string; codigo_servicio: string
   estado: string; estado_pago?: string; tipo_pago?: string
   fecha_retiro: string; hora_retiro?: string; fecha_creacion: string; ciclo_id: string
+  fecha_defuncion?: string; fecha_nacimiento?: string
   direccion_retiro?: string; direccion_despacho?: string; comuna?: string; depto?: string
   adicionales?: string
-  veterinaria_id?: string; notas?: string; origen?: string
+  veterinaria_id?: string; tipo_precios?: string; notas?: string; origen?: string
+  fecha_pago?: string; despacho_id?: string; boleta_id?: string; omitir_evaluacion?: string
   fotos_cuadro?: string; videos_servicio?: string; video_solicitado?: string
-  correo_diferencia_fecha?: string
+  fotos_mascota?: string; fotos_evidencia?: string; fotos_entrega?: string
+  memorial_consentimiento?: string; memorial_comentario?: string; memorial_publicado_at?: string
+  correo_diferencia_fecha?: string; correo_diferencia_monto?: string
   precio_servicio?: string; precio_adicionales?: string; precio_total?: string
   /** Rebaja manual del total hecha por el dueño (positivo = resta). */
   ajuste_admin?: string; ajuste_admin_motivo?: string
@@ -117,6 +121,47 @@ const SERVICIOS = [
   { nombre: 'Cremación Premium', codigo: 'CP' },
   { nombre: 'Cremación Sin Devolución', codigo: 'SD' },
 ]
+
+/**
+ * Los campos que una ficha necesita para poder registrarse, con su etiqueta.
+ * Son los MISMOS que mira `tieneDatosPendientes` (lib/fichas-alertas): el chip
+ * "Datos pendientes" cuenta con ese predicado y el resumen los nombra con esta
+ * lista, así que si se agrega un obligatorio va en los dos lados o el chip y el
+ * detalle dicen cosas distintas.
+ */
+const CAMPOS_REQUERIDOS: { campo: keyof Cliente; label: string }[] = [
+  { campo: 'nombre_mascota', label: 'Nombre de la mascota' },
+  { campo: 'nombre_tutor', label: 'Nombre del tutor' },
+  { campo: 'email', label: 'Email' },
+  { campo: 'telefono', label: 'Teléfono' },
+  { campo: 'direccion_retiro', label: 'Dirección de retiro' },
+  { campo: 'direccion_despacho', label: 'Dirección de despacho' },
+  { campo: 'comuna', label: 'Comuna' },
+  { campo: 'fecha_retiro', label: 'Fecha de retiro' },
+  { campo: 'especie', label: 'Especie' },
+  { campo: 'peso_declarado', label: 'Peso declarado' },
+  { campo: 'codigo_servicio', label: 'Servicio' },
+  { campo: 'tipo_pago', label: 'Forma de pago' },
+  { campo: 'estado_pago', label: 'Estado de pago' },
+]
+
+/** Nombre legible de un movimiento de plata (tabla `cobros`). */
+const NOMBRE_COBRO: Record<string, string> = {
+  diferencia: 'Diferencia de peso por cobrar',
+  saldo: 'Saldo pendiente (pago parcial)',
+  adicional: 'Productos adicionales por cobrar',
+  devolucion: 'Devolución al tutor',
+}
+
+const LABEL_ESTADO: Record<string, string> = {
+  borrador: 'Por ingresar', pendiente: 'Retirado', cremado: 'Cremado', despachado: 'Entregado',
+}
+const LABEL_PAGO: Record<string, string> = {
+  pendiente: 'Pendiente de pago', parcial: 'Pago parcial', pagado: 'Pagado',
+}
+const LABEL_TIPO_PRECIOS: Record<string, string> = {
+  general: 'Precios generales', convenio: 'Precios convenio', especial: 'Precios especiales',
+}
 
 /** Cuántas fichas se PINTAN por tanda (ver `visibles`). */
 const PAGINA = 40
@@ -201,7 +246,7 @@ export default function ClientesPage() {
   // Cobros NO pagados (tabla `cobros`): diferencia de peso o producto adicional que
   // ya se cobró al tutor pero todavía no se marca como pagado. Alimenta el chip
   // "pendiente de cobro" (distinto de la diferencia SUGERIDA, que es pre-cobro).
-  const [cobrosPend, setCobrosPend] = useState<{ cliente_id: string; monto: string; detalle: string; tipo: string }[]>([])
+  const [cobrosPend, setCobrosPend] = useState<{ id?: string; cliente_id: string; monto: string; detalle: string; tipo: string; estado?: string }[]>([])
 
   /** ¿Ya llegó el histórico completo, o estamos con la primera tanda? */
   const [historicoCompleto, setHistoricoCompleto] = useState(false)
@@ -707,6 +752,75 @@ export default function ClientesPage() {
     return Math.max(0, Math.round(base + cobros))
   }
 
+  /** Nombre de la veterinaria de convenio de una ficha ('' si es cliente general). */
+  function nombreVet(id?: string): string {
+    const v = (id || '').trim()
+    if (!v) return ''
+    // La lista trae solo las activas: si la ficha apunta a una dada de baja,
+    // igual hay que mostrar algo en vez de dejar el campo vacío.
+    return veterinarias.find(x => String(x.id) === v)?.nombre || `Veterinaria #${v}`
+  }
+
+  /** Cuántos archivos guarda una columna JSON de la ficha (fotos / videos). */
+  const cuentaJson = (s?: string) => { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a.length : 0 } catch { return 0 } }
+
+  /** Los campos obligatorios que esta ficha todavía no tiene. */
+  function faltantesDe(c: Cliente): { campo: keyof Cliente; label: string }[] {
+    const vacio = (v?: string) => !v || !String(v).trim()
+    return CAMPOS_REQUERIDOS.filter(({ campo }) => campo === 'peso_declarado'
+      ? parsePeso(c.peso_declarado) <= 0
+      : vacio(c[campo]))
+  }
+
+  /** Cuánto más habría que cobrar por el tramo del peso real (0 si no hay diferencia). */
+  function montoDiferenciaPeso(c: Cliente): number {
+    const tabla = c.veterinaria_id ? preciosConvenio : preciosGenerales
+    const cod = c.codigo_servicio || 'CI'
+    return Math.max(0, precioDelTramo(encontrarTramo(tabla, parsePeso(c.peso_ingreso)), cod)
+      - precioDelTramo(encontrarTramo(tabla, parsePeso(c.peso_declarado)), cod))
+  }
+
+  /**
+   * Todo lo que queda por hacer en una ficha, en una sola lista. Las situaciones
+   * las deciden los MISMOS predicados que cuentan los chips (lib/fichas-alertas):
+   * si el chip dice que esta ficha tiene el peso pendiente, el resumen tiene que
+   * decir lo mismo.
+   */
+  function alertasFicha(c: Cliente): { texto: string; detalle?: string; monto?: string; tono?: 'rojo' | 'violeta' }[] {
+    const out: { texto: string; detalle?: string; monto?: string; tono?: 'rojo' | 'violeta' }[] = []
+    if (c.estado === 'borrador') out.push({ texto: 'Ficha por ingresar', detalle: 'todavía no tiene código: complétala y regístrala' })
+    const faltan = faltantesDe(c)
+    if (faltan.length) out.push({
+      texto: `Falta${faltan.length === 1 ? '' : 'n'} ${faltan.length} dato${faltan.length === 1 ? '' : 's'} obligatorio${faltan.length === 1 ? '' : 's'}`,
+      detalle: faltan.map(f => f.label).join(' · '),
+    })
+    if (cumpleFiltro(c, 'falta_peso', ctxAlertas)) out.push({ texto: 'Falta el peso de ingreso', detalle: 'es el que manda para el precio' })
+    if (cumpleFiltro(c, 'diferencia', ctxAlertas)) {
+      const d = montoDiferenciaPeso(c)
+      out.push({ texto: 'Diferencia de peso sin cobrar', detalle: 'el peso real cae en un tramo más caro', monto: d > 0 ? fmtPrecio(d) : undefined })
+    }
+    // El servicio impago solo cuenta acá si no es un pago parcial: en ese caso el
+    // resto ya vive como un cobro 'saldo' y se lista abajo (si no, se ve dos veces).
+    const ep = (c.estado_pago || '').toLowerCase()
+    if (c.estado !== 'borrador' && ep !== 'pagado' && ep !== 'parcial') {
+      out.push({ texto: 'Servicio sin pagar', detalle: c.tipo_pago ? `forma de pago: ${c.tipo_pago}` : 'sin forma de pago definida', monto: fmtPrecio(valorFicha(c).total) })
+    }
+    for (const cb of cobrosPend.filter(x => String(x.cliente_id) === String(c.id))) {
+      const monto = fmtPrecio(parseFloat(String(cb.monto).replace(/[^\d.-]/g, '')) || 0)
+      const detalle = [cb.detalle, cb.estado === 'cliente_confirmo' ? 'el tutor dice que ya transfirió' : ''].filter(Boolean).join(' · ')
+      out.push(cb.tipo === 'devolucion'
+        ? { texto: 'Devolución al tutor', detalle: detalle || undefined, monto, tono: 'violeta' }
+        : { texto: NOMBRE_COBRO[cb.tipo] ?? 'Cobro pendiente', detalle: detalle || undefined, monto })
+    }
+    const correoMalo = correosMalos.find(x => String(x.cliente_id) === String(c.id))
+    if (correoMalo) out.push({ texto: 'El correo del tutor no llega', detalle: `${correoMalo.email} · ${correoMalo.estado} — corrígelo en la ficha` })
+    if (cumpleFiltro(c, 'video_pendiente', ctxAlertas)) out.push({ texto: 'Video del proceso pendiente', detalle: 'el tutor lo pidió y todavía no está cargado' })
+    if (esPremiumCuadro(c) && !jsonTieneItems(c.fotos_cuadro)) out.push({ texto: 'Falta la foto del cuadro conmemorativo', detalle: 'la Cremación Premium lo incluye' })
+    if (esComunaNoCubierta(c.comuna)) out.push({ texto: 'Comuna fuera de cobertura', detalle: c.comuna })
+    if (ep === 'pagado' && !(c.fecha_pago || '').trim()) out.push({ texto: 'Falta la fecha de pago', detalle: 'sin ella la venta no se puede cuadrar en Ventas POS' })
+    return out
+  }
+
   const vetSeleccionada = !noEsVeterinaria ? veterinarias.find(v => v.id === form.veterinaria_id) : undefined
   const tipoPrecios: 'general' | 'convenio' | 'especial' = !vetSeleccionada
     ? 'general'
@@ -1104,133 +1218,225 @@ export default function ClientesPage() {
         </div>
       )}
 
-      {/* Modal preview de cliente seleccionado */}
-      <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.nombre_mascota ?? ''}>
-        {selected && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-xs text-brand font-bold bg-brand/10 px-2 py-0.5 rounded">{selected.codigo}</span>
-              <Badge variant={selected.estado === 'cremado' ? 'green' : selected.estado === 'despachado' ? 'blue' : 'yellow'}>{selected.estado && selected.estado !== 'pendiente' ? selected.estado : 'retirado'}</Badge>
-              {selected.estado_pago === 'pagado' ? (
-                <Badge variant="green">Pagado</Badge>
-              ) : (
-                <Badge variant="yellow">
-                  {selected.estado_pago === 'parcial' ? 'Saldo pendiente' : 'Pago pendiente'}
-                  {montoPendiente(selected) > 0 ? ` · ${fmtPrecio(montoPendiente(selected))}` : ''}
+      {/* RESUMEN DE LA FICHA. Muestra TODO lo que la ficha guarda, agrupado igual
+          que la ficha completa (tutor · mascota · servicio · pago · valor ·
+          proceso · archivos) y con los pendientes en rojo arriba, para decidir sin
+          tener que abrirla. Los datos salen de la fila que ya trajo la lista: no
+          pide nada al servidor. */}
+      <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.nombre_mascota || 'Ficha sin nombre'} size="2xl">
+        {selected && (() => {
+          const c = selected
+          const faltan = new Set(faltantesDe(c).map(f => f.campo))
+          const alertas = alertasFicha(c)
+          const resumen = resumenServicio(c)
+          const pendiente = montoPendiente(c)
+          const devolucion = devolucionPorFicha.get(String(c.id)) ?? 0
+          const correoMalo = correosMalos.find(x => String(x.cliente_id) === String(c.id))
+          const pesoIng = parsePeso(c.peso_ingreso)
+          const pesoDec = parsePeso(c.peso_declarado)
+          const hayDiferencia = pesoIng > 0 && pesoDec > 0 && pesoIng !== pesoDec
+          const nFotosTutor = cuentaJson(c.fotos_mascota)
+          const nFotosCuadro = cuentaJson(c.fotos_cuadro)
+          const nVideos = cuentaJson(c.videos_servicio)
+          const nEvidencia = cuentaJson(c.fotos_evidencia)
+          const nEntrega = cuentaJson(c.fotos_entrega)
+          const memorialOk = String(c.memorial_consentimiento || '').toUpperCase() === 'TRUE'
+          const hayArchivos = nFotosTutor + nFotosCuadro + nVideos + nEvidencia + nEntrega > 0
+            || memorialOk || !!c.memorial_comentario || esPremiumCuadro(c) || solicitoVideo(c)
+          return (
+            <div className="space-y-4">
+              {/* Identificación */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${c.codigo ? 'text-brand bg-brand/10' : 'text-red-700 bg-red-50 border border-red-200'}`}>
+                  {c.codigo || 'sin código'}
+                </span>
+                <Badge variant={c.estado === 'cremado' ? 'green' : c.estado === 'despachado' ? 'blue' : c.estado === 'borrador' ? 'gray' : 'yellow'}>
+                  {LABEL_ESTADO[c.estado] || LABEL_ESTADO.pendiente}
                 </Badge>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-              <PreviewField label="Tutor" value={selected.nombre_tutor} />
-              <PreviewField label="Especie" value={selected.especie} />
-              <PreviewField label="Email" value={selected.email || '—'} />
-              <PreviewField label="Teléfono" value={selected.telefono || '—'} />
-              <PreviewField label="Peso" value={fmtKg(parsePeso(selected.peso_ingreso) || parsePeso(selected.peso_declarado))} />
-              <PreviewField label="Servicio" value={`${selected.tipo_servicio} (${selected.codigo_servicio})`} />
-              <PreviewField label="Fecha de retiro" value={fmtFecha(selected.fecha_retiro)} />
-              <PreviewField label="Comuna" value={selected.comuna || '—'} />
-              <PreviewField label="Forma de pago" value={selected.tipo_pago || '—'} />
-              <PreviewField label="Cómo nos conoció" value={labelOrigen(selected.origen)} />
-              <PreviewField label="Estado de pago" value={selected.estado_pago || 'pendiente'} />
-              <PreviewField
-                label={`Monto total${valorFicha(selected).estimado ? ' (estimado)' : ''}`}
-                value={fmtPrecio(valorFicha(selected).total)}
-              />
-              {selected.estado_pago !== 'pagado' && (
-                <PreviewField label="Monto pendiente" value={fmtPrecio(montoPendiente(selected))} />
-              )}
-              <div className="sm:col-span-2">
-                <PreviewField
-                  label="Dirección de retiro"
-                  value={`${selected.direccion_retiro || '—'}${selected.depto ? ` · Depto ${selected.depto}` : ''}`}
-                />
+                {c.estado_pago === 'pagado' ? (
+                  <Badge variant="green">Pagado</Badge>
+                ) : (
+                  <Badge variant="yellow">
+                    {c.estado_pago === 'parcial' ? 'Saldo pendiente' : 'Pago pendiente'}
+                    {pendiente > 0 ? ` · ${fmtPrecio(pendiente)}` : ''}
+                  </Badge>
+                )}
+                {c.veterinaria_id && <Badge variant="purple">{nombreVet(c.veterinaria_id)}</Badge>}
               </div>
-              {selected.direccion_despacho && selected.direccion_despacho !== selected.direccion_retiro && (
-                <div className="sm:col-span-2">
-                  <PreviewField label="Dirección de despacho" value={selected.direccion_despacho} />
+
+              {/* Pendientes y alertas: lo único accionable del resumen, todo junto
+                  y arriba. La devolución va en violeta porque es plata que sale,
+                  no que entre — igual que en la tarjeta de la lista. */}
+              {alertas.length > 0 && (
+                <div className="rounded-xl border-2 border-red-200 bg-red-50 px-3 py-2.5">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-red-800">
+                    Pendientes y alertas · {alertas.length}
+                  </p>
+                  <ul className="mt-1.5 space-y-1">
+                    {alertas.map((a, i) => (
+                      <li key={i} className={`flex items-start justify-between gap-3 text-xs ${a.tono === 'violeta' ? 'text-violet-800' : 'text-red-800'}`}>
+                        <span className="min-w-0">
+                          <span className="font-semibold">{a.tono === 'violeta' ? '↩' : '⚠'} {a.texto}</span>
+                          {a.detalle && <span className="opacity-80"> · {a.detalle}</span>}
+                        </span>
+                        {a.monto && <span className="shrink-0 font-bold whitespace-nowrap">{a.monto}</span>}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
-            </div>
 
-            {(() => {
-              let items: AdicionalItem[] = []
-              try { items = JSON.parse(selected.adicionales || '[]') } catch {}
-              if (!Array.isArray(items) || items.length === 0) return null
-              // CP incluye UNA ánfora premium; las adicionales se cobran.
-              const catMap = new Map(productosDisp.map(p => [String(p.id), String(p.categoria ?? '')]))
-              const repByItem = new Map(repartirAnforasPremium(selected.codigo_servicio, items, catMap).map(r => [r.item, r]))
-              const lineaAdic = (a: AdicionalItem) => {
-                const r = repByItem.get(a)
-                const qtyCobrable = r ? r.qtyCobrable : (a.qty || 1)
-                const qtyIncluida = r ? r.qtyIncluida : 0
-                return { incluidaTotal: qtyIncluida > 0 && qtyCobrable === 0, qtyIncluida, monto: Math.max(0, a.precio || 0) * qtyCobrable }
-              }
-              const total = items.reduce((s, a) => s + lineaAdic(a).monto, 0)
-              const productos = items.filter(a => a.tipo === 'producto')
-              const servicios = items.filter(a => a.tipo === 'servicio')
-              return (
-                <div className="border-t-2 border-gray-300 pt-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Adicionales</p>
-                    <span className="bg-brand/10 text-brand text-xs font-semibold px-2 py-0.5 rounded-full">
-                      {items.length} ítem(s) · {fmtPrecio(total)}
+              <PreviewGrupo titulo="Tutor">
+                <PreviewDato label="Nombre" valor={c.nombre_tutor} falta={faltan.has('nombre_tutor')} />
+                <PreviewDato label="Email" valor={c.email} falta={faltan.has('email')} alerta={!!correoMalo}
+                  nota={correoMalo ? `El correo ${correoMalo.estado === 'rebotado' ? 'rebotó' : correoMalo.estado === 'spam' ? 'fue marcado como spam' : 'falló'}` : undefined} />
+                <PreviewDato label="Teléfono" valor={c.telefono} falta={faltan.has('telefono')} />
+                <PreviewDato label="Comuna" valor={c.comuna} falta={faltan.has('comuna')} alerta={esComunaNoCubierta(c.comuna)}
+                  nota={esComunaNoCubierta(c.comuna) ? 'Fuera de la zona de cobertura' : undefined} />
+                <PreviewDato full label="Dirección de retiro" valor={c.direccion_retiro} falta={faltan.has('direccion_retiro')}
+                  nota={c.depto ? `Depto ${c.depto}` : undefined} />
+                <PreviewDato full label="Dirección de despacho" valor={c.direccion_despacho} falta={faltan.has('direccion_despacho')}
+                  nota={c.direccion_despacho && c.direccion_despacho === c.direccion_retiro ? 'La misma del retiro' : undefined} />
+              </PreviewGrupo>
+
+              <PreviewGrupo titulo="Mascota">
+                <PreviewDato label="Nombre" valor={c.nombre_mascota} falta={faltan.has('nombre_mascota')} />
+                <PreviewDato label="Especie" valor={c.especie} falta={faltan.has('especie')} />
+                <PreviewDato label="Fecha de nacimiento" valor={c.fecha_nacimiento ? fmtFecha(c.fecha_nacimiento) : ''} />
+                <PreviewDato label="Fecha de defunción" valor={c.fecha_defuncion ? fmtFecha(c.fecha_defuncion) : ''} />
+                <PreviewDato label="Peso declarado" valor={pesoDec > 0 ? fmtKg(pesoDec) : ''} falta={faltan.has('peso_declarado')} />
+                {/* El peso de ingreso es el que manda para el precio: si la ficha
+                    ya está en proceso y no lo tiene, es un pendiente, no un vacío. */}
+                <PreviewDato label="Peso de ingreso" valor={pesoIng > 0 ? fmtKg(pesoIng) : ''}
+                  falta={cumpleFiltro(c, 'falta_peso', ctxAlertas)}
+                  alerta={cumpleFiltro(c, 'diferencia', ctxAlertas)}
+                  nota={hayDiferencia ? `${pesoIng > pesoDec ? '+' : ''}${(pesoIng - pesoDec).toFixed(1).replace('.', ',')} kg vs el declarado` : undefined} />
+              </PreviewGrupo>
+
+              <PreviewGrupo titulo="Servicio">
+                <PreviewDato full label="Tipo de servicio"
+                  valor={c.codigo_servicio ? `${NOMBRE_MODALIDAD[(c.codigo_servicio || '').toUpperCase()] || c.tipo_servicio} (${c.codigo_servicio})` : ''}
+                  falta={faltan.has('codigo_servicio')} />
+                <PreviewDato label="Fecha de retiro" valor={c.fecha_retiro ? fmtFecha(c.fecha_retiro) : ''} falta={faltan.has('fecha_retiro')} />
+                <PreviewDato label="Hora de retiro" valor={c.hora_retiro} />
+                <PreviewDato label="Veterinaria" valor={nombreVet(c.veterinaria_id) || 'Cliente general (sin convenio)'} />
+                <PreviewDato label="Tabla de precios" valor={LABEL_TIPO_PRECIOS[(c.tipo_precios || '').trim()] || (c.veterinaria_id ? 'Precios convenio' : 'Precios generales')} />
+                <PreviewDato label="Cómo nos conoció" valor={labelOrigen(c.origen)} />
+                <PreviewDato label="Ficha creada" valor={c.fecha_creacion ? fmtFecha(c.fecha_creacion) : ''} />
+              </PreviewGrupo>
+
+              <PreviewGrupo titulo="Pago">
+                <PreviewDato label="Forma de pago" valor={c.tipo_pago} falta={faltan.has('tipo_pago')} />
+                <PreviewDato label="Estado de pago" valor={LABEL_PAGO[(c.estado_pago || '').toLowerCase()] || c.estado_pago} falta={faltan.has('estado_pago')} />
+                <PreviewDato label="Fecha de pago" valor={c.fecha_pago ? fmtFecha(c.fecha_pago) : ''}
+                  falta={(c.estado_pago || '').toLowerCase() === 'pagado' && !(c.fecha_pago || '').trim()} />
+                <PreviewDato label="Boleta emitida" valor={c.boleta_id ? `N° ${c.boleta_id}` : ''} />
+                {(c.correo_diferencia_fecha || '').trim() && (
+                  <PreviewDato full label="Cobro de diferencia enviado"
+                    valor={`${fmtFecha(c.correo_diferencia_fecha)}${c.correo_diferencia_monto ? ` · ${fmtPrecio(intCLP(c.correo_diferencia_monto))}` : ''}`} />
+                )}
+              </PreviewGrupo>
+
+              {/* Valor a cobrar: el mismo desglose de la tarjeta (cremación +
+                  adicionales + descuento + ajuste + eutanasia), que es también el
+                  del encabezado de la ficha. */}
+              <section className="rounded-xl border border-gray-300 overflow-hidden">
+                <h3 className="flex items-center justify-between gap-2 bg-gray-50 border-b border-gray-200 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-brand">
+                  <span>Valor a cobrar</span>
+                  {valorFicha(c).estimado && (
+                    <span className="rounded border border-amber-200 bg-amber-100 px-1.5 py-px text-[10px] font-bold normal-case tracking-normal text-amber-900"
+                      title="Calculado con las tablas de precios vigentes. Se congela al registrar la ficha.">
+                      estimado
                     </span>
+                  )}
+                </h3>
+                <div className="p-3 space-y-1 bg-cream">
+                  {resumen ? resumen.lineas.map((l, i) => (
+                    <div key={i} className="flex justify-between gap-3 text-sm">
+                      <span className={l.tono === 'verde' ? 'text-emerald-700' : l.tono === 'rojo' ? 'text-red-600' : 'text-gray-700'}>{l.nombre}</span>
+                      <span className={`shrink-0 font-semibold ${l.tono === 'verde' ? 'text-emerald-700' : l.tono === 'rojo' ? 'text-red-600' : 'text-gray-900'}`}>{l.valor}</span>
+                    </div>
+                  )) : (
+                    <p className="text-sm text-gray-500">Esta ficha todavía no tiene un valor calculado.</p>
+                  )}
+                  <div className="flex justify-between gap-3 border-t border-gray-300 pt-1.5 mt-1.5 text-base">
+                    <span className="font-bold text-gray-800">Total</span>
+                    <span className="font-extrabold text-brand">{fmtPrecio(resumen ? resumen.total : valorFicha(c).total)}</span>
                   </div>
-                  {productos.length > 0 && (
-                    <div className="mb-2">
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Productos</p>
-                      <div className="space-y-1">
-                        {productos.map(a => (
-                          <div key={`p-${a.id}`} className="flex items-center justify-between text-sm">
-                            <span className="text-gray-800">
-                              {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
-                            </span>
-                            {(() => { const L = lineaAdic(a); return L.incluidaTotal
-                              ? <span className="font-medium text-emerald-600">Incluida</span>
-                              : L.qtyIncluida > 0
-                                ? <span className="text-gray-700"><span className="font-medium text-emerald-600">{L.qtyIncluida} incluida</span> · {fmtPrecio(L.monto)}</span>
-                                : <span className="text-gray-700">{fmtPrecio(L.monto)}</span> })()}
-                          </div>
-                        ))}
-                      </div>
+                  {pendiente > 0 && (
+                    <div className="flex justify-between gap-3 text-sm">
+                      <span className="font-semibold text-red-700">Por cobrar</span>
+                      <span className="font-bold text-red-700">{fmtPrecio(pendiente)}</span>
                     </div>
                   )}
-                  {servicios.length > 0 && (
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Otros servicios</p>
-                      <div className="space-y-1">
-                        {servicios.map(a => (
-                          <div key={`s-${a.id}`} className="flex items-center justify-between text-sm">
-                            <span className="text-gray-800">
-                              {a.nombre}{a.qty > 1 && <span className="text-gray-400"> × {a.qty}</span>}
-                            </span>
-                            <span className="text-gray-700">{fmtPrecio(a.precio * (a.qty || 1))}</span>
-                          </div>
-                        ))}
-                      </div>
+                  {devolucion > 0 && (
+                    <div className="flex justify-between gap-3 text-sm">
+                      <span className="font-semibold text-violet-800">Por devolver al tutor</span>
+                      <span className="font-bold text-violet-800">{fmtPrecio(devolucion)}</span>
                     </div>
                   )}
+                  {resumen?.nota && <p className="text-xs font-medium text-red-700">⚠ {resumen.nota}</p>}
                 </div>
-              )
-            })()}
+              </section>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setSelected(null)}
-                className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors"
-              >
-                Cerrar
-              </button>
-              <Link
-                href={`/clientes/${selected.id}`}
-                className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold text-center shadow-md transition-colors"
-              >
-                Abrir ficha completa
-              </Link>
+              <PreviewGrupo titulo="Proceso">
+                <PreviewDato label="Estado" valor={LABEL_ESTADO[c.estado] || LABEL_ESTADO.pendiente} />
+                <PreviewDato label="Ciclo de cremación" valor={c.ciclo_id ? `N° ${c.ciclo_id}` : ''} />
+                <PreviewDato label="Despacho" valor={c.despacho_id ? `N° ${c.despacho_id}` : ''} />
+                {String(c.omitir_evaluacion || '').toUpperCase() === 'TRUE' && (
+                  <PreviewDato label="Evaluación" valor="No se le pide reseña al entregar" />
+                )}
+              </PreviewGrupo>
+
+              {hayArchivos && (
+                <PreviewGrupo titulo="Archivos y recuerdos">
+                  {esPremiumCuadro(c) && (
+                    <PreviewDato label="Foto para el cuadro" valor={nFotosCuadro > 0 ? `${nFotosCuadro} cargada${nFotosCuadro === 1 ? '' : 's'}` : ''}
+                      falta={nFotosCuadro === 0} nota={nFotosCuadro === 0 ? 'La Premium incluye el cuadro conmemorativo' : undefined} />
+                  )}
+                  {solicitoVideo(c) && (
+                    <PreviewDato label="Video del proceso" valor={nVideos > 0 ? `${nVideos} cargado${nVideos === 1 ? '' : 's'}` : ''}
+                      falta={nVideos === 0} nota={nVideos === 0 ? 'El tutor lo solicitó' : undefined} />
+                  )}
+                  {!solicitoVideo(c) && nVideos > 0 && <PreviewDato label="Videos del servicio" valor={`${nVideos}`} />}
+                  {nFotosTutor > 0 && <PreviewDato label="Fotos del tutor (certificado)" valor={`${nFotosTutor}`} />}
+                  {nEvidencia > 0 && <PreviewDato label="Fotos de evidencia del peso" valor={`${nEvidencia}`} />}
+                  {nEntrega > 0 && <PreviewDato label="Fotos de la entrega" valor={`${nEntrega}`} />}
+                  {(memorialOk || c.memorial_publicado_at) && (
+                    <PreviewDato label="Memorial en redes"
+                      valor={c.memorial_publicado_at ? `Publicado el ${fmtFecha(c.memorial_publicado_at)}` : 'Autorizado por el tutor'} />
+                  )}
+                  {(c.memorial_comentario || '').trim() && (
+                    <PreviewDato full label="Dedicatoria del tutor" valor={c.memorial_comentario} />
+                  )}
+                </PreviewGrupo>
+              )}
+
+              {(c.notas || '').trim() && (
+                <PreviewGrupo titulo="Notas del equipo" cols={1}>
+                  <p className="whitespace-pre-wrap text-sm text-gray-800">{c.notas}</p>
+                </PreviewGrupo>
+              )}
+
+              {/* Pegado al pie: con la ficha completa a la vista el resumen es
+                  largo, y "Abrir ficha completa" no puede quedar a un scroll. */}
+              <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col gap-3 border-t border-gray-200 bg-white px-6 py-3 sm:flex-row">
+                <button
+                  onClick={() => setSelected(null)}
+                  className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors"
+                >
+                  Cerrar
+                </button>
+                <Link
+                  href={`/clientes/${c.id}`}
+                  className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold text-center shadow-md transition-colors"
+                >
+                  Abrir ficha completa
+                </Link>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </Modal>
 
       {/* Modal "Nueva ficha" */}
@@ -1760,11 +1966,37 @@ export default function ClientesPage() {
   )
 }
 
-function PreviewField({ label, value }: { label: string; value: string }) {
+/**
+ * Un bloque del resumen de la ficha. Mismos grupos que la ficha completa, para
+ * que quien pasa de uno al otro busque cada dato en el mismo lugar.
+ */
+function PreviewGrupo({ titulo, cols = 2, children }: { titulo: string; cols?: 1 | 2; children: React.ReactNode }) {
   return (
-    <div>
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className="text-sm text-gray-900 font-medium mt-0.5 break-words">{value || '—'}</p>
+    <section className="rounded-xl border border-gray-300 overflow-hidden">
+      <h3 className="bg-gray-50 border-b border-gray-200 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-brand">{titulo}</h3>
+      <div className={`p-3 grid grid-cols-1 gap-x-4 gap-y-3 ${cols === 2 ? 'sm:grid-cols-2' : ''}`}>{children}</div>
+    </section>
+  )
+}
+
+/**
+ * Un dato del resumen. La distinción importa: `falta` es un campo que la ficha
+ * NECESITA y no tiene (sale "Falta" en rojo), mientras que un opcional vacío
+ * sale como un guion gris. `alerta` pinta en rojo un valor que sí está pero
+ * exige atención (el correo que rebota, el peso que cambió de tramo).
+ */
+function PreviewDato({ label, valor, falta = false, alerta = false, nota, full = false }: {
+  label: string; valor?: string | null; falta?: boolean; alerta?: boolean; nota?: string; full?: boolean
+}) {
+  const vacio = !valor || !String(valor).trim()
+  const rojo = falta || alerta
+  return (
+    <div className={full ? 'sm:col-span-2' : undefined}>
+      <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{label}</p>
+      <p className={`mt-0.5 text-sm font-medium break-words ${rojo ? 'text-red-700' : vacio ? 'text-gray-400' : 'text-gray-900'}`}>
+        {vacio ? (falta ? 'Falta' : '—') : valor}
+      </p>
+      {nota && <p className={`mt-0.5 text-[11px] ${rojo ? 'text-red-600' : 'text-gray-500'}`}>{nota}</p>}
     </div>
   )
 }
