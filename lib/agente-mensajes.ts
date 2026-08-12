@@ -965,6 +965,18 @@ async function bloqueFichaEnProceso(waId: string): Promise<string> {
  * whatsapp = TRUE). El modelo elige por ID con la herramienta enviar_fotos. Si
  * no hay ninguna, devuelve '' y la herramienta NO se ofrece.
  */
+/**
+ * Cuántas fotos puede mandar el agente de una sola vez.
+ *
+ * Cada imagen es un MENSAJE de WhatsApp aparte. Hoy las respuestas dentro de la
+ * ventana de 24 h son gratis, pero desde el 1 de octubre de 2026 Meta vuelve a
+ * cobrar los mensajes de servicio: ahí una tanda de seis fotos deja de ser una
+ * decisión de diseño y pasa a ser seis cobros por cada persona que pregunta por
+ * las ánforas. Tres alcanzan para mostrar; para ver TODO está el catálogo en PDF,
+ * que es un solo mensaje (y por eso el prompt lo prefiere).
+ */
+const MAX_FOTOS_POR_TURNO = 3
+
 function bloqueImagenesWhatsapp(imgs: ImagenBanco[]): string {
   if (imgs.length === 0) return ''
   const lista = imgs.slice(0, 40).map(i => {
@@ -1003,6 +1015,48 @@ export async function generarRespuesta(
   // —p.ej. un echo o evento de estado que gatilló el webhook—), no generamos nada:
   // evita el 400 "does not support assistant message prefill" y una respuesta espuria.
   if (base[base.length - 1].role !== 'user') return { mensaje: '', escalar: false, acciones: [] }
+  const { system, tools, imgsWa, bloqueos, dispo } = await construirPrefijo(opts)
+
+  // ── De acá para abajo, lo que cambia en cada llamada (nunca se cachea) ──
+  // Fecha actual (dinámica) → para resolver "mañana", "el viernes", etc.
+  system.push({ type: 'text', text: bloqueFechaChile(bloqueos, dispo) })
+  // Si el cliente ya tiene una ficha de retiro en proceso (borrador visible en
+  // /clientes), evita que el agente registre otra.
+  if (opts.ctx?.waId) {
+    const notaFicha = await bloqueFichaEnProceso(opts.ctx.waId)
+    if (notaFicha) system.push({ type: 'text', text: notaFicha })
+  }
+  // Canal Instagram: el agente informa/cotiza pero NO agenda (los flujos de
+  // retiro/eutanasia corren por WhatsApp: botones al admin + links firmados).
+  if (opts.ctx?.canal === 'instagram') {
+    system.push({
+      type: 'text', text: `CANAL: estás respondiendo un mensaje directo de INSTAGRAM (no WhatsApp).
+- Responde igual que siempre (voz de marca, precios de la tabla, breve y cálido).
+- Para AGENDAR un retiro o una eutanasia NO puedes registrar la solicitud por este canal: pídele al cliente su número de WhatsApp (o invítalo a escribirnos al +56 9 6312 6603) y usa "escalar_a_humano" con el resumen y el teléfono para que el equipo lo contacte de inmediato. Dile que por WhatsApp coordinamos el retiro al tiro.
+- No prometas enviar links ni botones por Instagram.`,
+    })
+  }
+
+  return ejecutarLoop(base, system, tools, imgsWa, opts, ctxAgente)
+}
+
+/**
+ * EL PREFIJO CACHEADO: herramientas + los bloques estables del system, con la
+ * marca de caché en el último.
+ *
+ * Vive en su propia función porque lo comparten DOS llamadores —`generarRespuesta`
+ * y el keep-alive (`pingCacheAgente`, más abajo)— y tienen que producirlo byte por byte
+ * idéntico: si difieren en un solo carácter, el ping no renueva la caché del bot,
+ * escribe una segunda y encima cuesta el doble. Todo lo que cambie por mensaje
+ * (hora, agenda, ficha en proceso, canal) va FUERA, en el llamador.
+ */
+async function construirPrefijo(opts: OpcionesAgente): Promise<{
+  system: Anthropic.TextBlockParam[]
+  tools: Anthropic.Tool[]
+  imgsWa: ImagenBanco[]
+  bloqueos: BloqueoAgenda[]
+  dispo: DisponibilidadDia[]
+}> {
   const [tarifas, recargos, productos, express, descuentos, transferencia, cfg, imgsWa, bloqueos, dispo] = await Promise.all([
     bloqueTarifas(),
     bloqueRecargos(),
@@ -1065,26 +1119,6 @@ ${cfg.instrucciones.trim()}`,
       : { type: 'text' as const, text }
   ))
 
-  // ── De acá para abajo, lo que cambia en cada llamada (nunca se cachea) ──
-  // Fecha actual (dinámica) → para resolver "mañana", "el viernes", etc.
-  system.push({ type: 'text', text: bloqueFechaChile(bloqueos, dispo) })
-  // Si el cliente ya tiene una ficha de retiro en proceso (borrador visible en
-  // /clientes), evita que el agente registre otra.
-  if (opts.ctx?.waId) {
-    const notaFicha = await bloqueFichaEnProceso(opts.ctx.waId)
-    if (notaFicha) system.push({ type: 'text', text: notaFicha })
-  }
-  // Canal Instagram: el agente informa/cotiza pero NO agenda (los flujos de
-  // retiro/eutanasia corren por WhatsApp: botones al admin + links firmados).
-  if (opts.ctx?.canal === 'instagram') {
-    system.push({
-      type: 'text', text: `CANAL: estás respondiendo un mensaje directo de INSTAGRAM (no WhatsApp).
-- Responde igual que siempre (voz de marca, precios de la tabla, breve y cálido).
-- Para AGENDAR un retiro o una eutanasia NO puedes registrar la solicitud por este canal: pídele al cliente su número de WhatsApp (o invítalo a escribirnos al +56 9 6312 6603) y usa "escalar_a_humano" con el resumen y el teléfono para que el equipo lo contacte de inmediato. Dile que por WhatsApp coordinamos el retiro al tiro.
-- No prometas enviar links ni botones por Instagram.`,
-    })
-  }
-
   const tools: Anthropic.Tool[] = [TOOL_ESCALAR]
   if (opts.handlers?.solicitarRetiro) tools.push(TOOL_RETIRO)
   if (opts.handlers?.reprogramarRetiro) tools.push(TOOL_REPROGRAMAR)
@@ -1099,6 +1133,72 @@ ${cfg.instrucciones.trim()}`,
   if (opts.handlers?.cancelarAgendamiento) tools.push(TOOL_CANCELAR)
   if (imgsWa.length > 0) tools.push(TOOL_FOTOS)
 
+  return { system, tools, imgsWa, bloqueos, dispo }
+}
+
+/**
+ * KEEP-ALIVE de la caché del prompt.
+ *
+ * Cada lectura de caché RENUEVA su vida útil, así que basta una llamada mínima
+ * de vez en cuando para que el prefijo de ~25k tokens no expire nunca durante el
+ * día. Importa porque re-escribirlo cuesta 2× la entrada ($6/M) mientras leerlo
+ * cuesta 0,1× ($0,30/M): medido sobre 7 días de producción, las re-escrituras
+ * eran el 27% de todo el gasto del bot (~US$0,78 al día) contra US$0,10 que
+ * cuesta mantenerla viva.
+ *
+ * Manda el MISMO prefijo que `generarRespuesta` (por eso ambos salen de
+ * `construirPrefijo`) y un mensaje de un carácter con max_tokens 1: no genera
+ * respuesta, no toca ninguna conversación y no le escribe a nadie.
+ */
+export async function pingCacheAgente(): Promise<{ ok: boolean; leidos: number; escritos: number; error?: string }> {
+  if (!isAgenteConfigurado()) return { ok: false, leidos: 0, escritos: 0, error: 'agente no configurado' }
+  try {
+    const { system, tools } = await construirPrefijo(opts_ping)
+    const res = await getClient().messages.create({
+      model: MODEL, max_tokens: 1, system, tools,
+      messages: [{ role: 'user', content: '.' }],
+    })
+    await registrarUso('bot-inbox', MODEL, res.usage, 'keep-alive')
+    return {
+      ok: true,
+      leidos: res.usage?.cache_read_input_tokens ?? 0,
+      escritos: res.usage?.cache_creation_input_tokens ?? 0,
+    }
+  } catch (e) {
+    return { ok: false, leidos: 0, escritos: 0, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/**
+ * Las herramientas forman parte del prefijo cacheado, así que el ping tiene que
+ * declarar EXACTAMENTE las mismas que el webhook. Son los handlers de WhatsApp
+ * (el canal con volumen); alcanza con que la propiedad exista.
+ *
+ * El tipo es `Required<HandlersAgente>` A PROPÓSITO: si mañana se agrega una
+ * herramienta nueva al agente y no se la suma acá, el ping mandaría una lista de
+ * tools distinta a la del webhook y —como la caché se acierta por prefijo exacto—
+ * escribiría una SEGUNDA entrada en vez de refrescar la del bot: el gasto subiría
+ * en silencio, que es justo lo que este ping viene a evitar. Con Required, eso no
+ * compila y salta en `npm run build`.
+ */
+const opts_ping: OpcionesAgente & { handlers: Required<HandlersAgente> } = {
+  handlers: {
+    solicitarRetiro: async () => 'ok', reprogramarRetiro: async () => 'ok', solicitarRetiroVet: async () => 'ok',
+    cotizarCremacion: async () => 'ok', cotizarEutanasia: async () => 'ok', agendarEutanasia: async () => 'ok',
+    consultarEtaRetiro: async () => 'ok', consultarEstadoMascota: async () => 'ok', enviarCatalogo: async () => 'ok',
+    agregarAdicional: async () => 'ok', cancelarAgendamiento: async () => 'ok',
+  },
+}
+
+/** El loop agéntico: manda el prompt, ejecuta las herramientas y arma la respuesta. */
+async function ejecutarLoop(
+  base: Anthropic.MessageParam[],
+  system: Anthropic.TextBlockParam[],
+  tools: Anthropic.Tool[],
+  imgsWa: ImagenBanco[],
+  opts: OpcionesAgente,
+  ctxAgente: CtxAgente,
+): Promise<RespuestaAgente> {
   const convo: Anthropic.MessageParam[] = [...base]
   const acciones: string[] = []
   const imagenesAEnviar: { url: string; alt?: string }[] = []
@@ -1142,10 +1242,10 @@ ${cfg.instrucciones.trim()}`,
           if (elegidas.length === 0) {
             resultText = 'No encontré esas fotos en el banco. No menciones fotos que no existan; si el cliente necesita ver algo más, ofrécele coordinar con el equipo.'
           } else {
-            for (const im of elegidas.slice(0, 6)) {
+            for (const im of elegidas.slice(0, MAX_FOTOS_POR_TURNO)) {
               if (!imagenesAEnviar.some(x => x.url === im.url)) imagenesAEnviar.push({ url: im.url, alt: im.alt || im.descripcion || '' })
             }
-            resultText = `Listo, se enviarán ${imagenesAEnviar.length} foto(s) al cliente (${elegidas.slice(0, 6).map(e => e.descripcion || e.alt || `ID ${e.id}`).join('; ')}). Estas fotos son SOLO un complemento visual de referencia: en tu mensaje de texto responde lo que el cliente pidió y, si estás cotizando o te preguntó el precio, incluye SIEMPRE los MONTOS EXACTOS de las TRES modalidades (Individual, Premium y Sin Devolución) del tramo de peso —súmale los recargos si aplican—. NUNCA reemplaces la cotización por una simple presentación de las fotos, ni respondas un pedido de precio solo con fotos y pidiendo nombre/dirección. No describas detalles que no se vean en las fotos.`
+            resultText = `Listo, se enviarán ${imagenesAEnviar.length} foto(s) al cliente (${elegidas.slice(0, MAX_FOTOS_POR_TURNO).map(e => e.descripcion || e.alt || `ID ${e.id}`).join('; ')}). Estas fotos son SOLO un complemento visual de referencia: en tu mensaje de texto responde lo que el cliente pidió y, si estás cotizando o te preguntó el precio, incluye SIEMPRE los MONTOS EXACTOS de las TRES modalidades (Individual, Premium y Sin Devolución) del tramo de peso —súmale los recargos si aplican—. NUNCA reemplaces la cotización por una simple presentación de las fotos, ni respondas un pedido de precio solo con fotos y pidiendo nombre/dirección. No describas detalles que no se vean en las fotos.`
           }
         } else if (tu.name === 'solicitar_retiro_cremacion' && opts.handlers?.solicitarRetiro) {
           resultText = await opts.handlers.solicitarRetiro(tu.input as unknown as AccionRetiro, ctxAgente)
@@ -1266,27 +1366,58 @@ REGLAS
 - Devuelve SOLO el texto del mensaje al cliente: sin comillas, sin prefijos, sin firmar.`
 
 /**
+ * El SEGUNDO toque es otro mensaje, no el mismo repetido.
+ *
+ * Un tutor que ya recibió un recordatorio y no contestó, o se fue con otro o no
+ * está en condiciones de responder. Insistir con argumentos de venta ahí no
+ * convierte: molesta, y en este rubro molestar sale caro. El manual de
+ * e-commerce manda un tercer toque con descuento acotado en el tiempo — acá eso
+ * está prohibido: no somos una tienda y el cliente acaba de enterrar a su
+ * mascota. Este mensaje CIERRA con dignidad: deja la puerta abierta, ofrece
+ * hacerlo por teléfono si escribir cuesta, y no vuelve a preguntar nada.
+ */
+const SYSTEM_SEGUIMIENTO_2 = `Eres el asistente de WhatsApp del Crematorio Alma Animal. Escribes el ÚLTIMO mensaje a un tutor que consultó, ya recibió un primer recordatorio y no volvió a responder.
+
+QUÉ ES ESTE MENSAJE
+- Es un CIERRE amable, no un intento de venta. Puede que ya haya resuelto con otro lugar, o que simplemente no esté con ánimo de responder: las dos cosas están bien y el mensaje tiene que sonar así.
+- Objetivo: dejar la puerta abierta sin pedir nada a cambio.
+
+REGLAS
+- Tuteo, cálido y sobrio. MUY BREVE: 1–2 frases. Una sola respuesta.
+- A la mascota por su NOMBRE si lo sabes; genérico "tu mascota" (nunca "su mascota", ni clichés del rubro: nada de "puente del arcoíris", "angelito", "ya no sufre").
+- PROHIBIDO: descuentos, promociones, ofertas por tiempo limitado, urgencia ("últimos cupos", "solo por hoy"), culpa, y volver a preguntar datos o repetir la cotización.
+- Sí puedes: decir que quedamos disponibles a cualquier hora (atendemos todos los días) y ofrecer llamarlo si prefiere coordinar por teléfono en vez de escribir.
+- Sin emojis tristes (nada de 😔😢💔). A lo sumo una huellita 🐾.
+- Formato WhatsApp: para resaltar usa UN solo asterisco (*así*), nunca dos.
+- No sabes qué día es hoy: no nombres días ni fechas.
+- Devuelve SOLO el texto del mensaje al cliente: sin comillas, sin prefijos, sin firmar.`
+
+/**
  * Redacta UN mensaje de seguimiento para un lead que se enfrió sin cerrar, a
- * partir del historial reciente. Lo usa el barrido diario de seguimiento
+ * partir del historial reciente. Lo usa el barrido de seguimiento
  * (lib/seguimiento-leads). Best-effort: si falla, el caller no envía nada.
+ *
+ * `toque` elige la voz: 1 = retomar el contacto (a la hora), 2 = cierre amable
+ * (al día siguiente). Son mensajes distintos a propósito — ver SYSTEM_SEGUIMIENTO_2.
  */
 export async function redactarSeguimiento(
   historial: TurnoMensaje[],
-  info: { mascota?: string; nombreCliente?: string } = {},
+  info: { mascota?: string; nombreCliente?: string; toque?: 1 | 2 } = {},
 ): Promise<string> {
   const base = construirMensajes(historial.slice(-20))
   if (base.length === 0) return ''
   const ctx = `${info.mascota ? `Mascota: ${info.mascota}. ` : ''}${info.nombreCliente ? `Cliente: ${info.nombreCliente}. ` : ''}`.trim()
+  const segundo = info.toque === 2
+  const nota = segundo
+    ? `[Nota interna, no la respondas literal] ${ctx ? ctx + ' ' : ''}Ya se le escribió una vez y no respondió. Redacta el ÚLTIMO mensaje: un cierre breve y amable que deje la puerta abierta, sin ofertas ni preguntas.`
+    : `[Nota interna, no la respondas literal] ${ctx ? ctx + ' ' : ''}El cliente lleva un rato sin responder y no cerró. Redacta UN mensaje breve de seguimiento para retomar el contacto, según dónde quedó la conversación.`
   const res = await getClient().messages.create({
     model: MODEL,
     max_tokens: 300,
-    system: SYSTEM_SEGUIMIENTO,
-    messages: [
-      ...base,
-      { role: 'user', content: `[Nota interna, no la respondas literal] ${ctx ? ctx + ' ' : ''}El cliente lleva un rato sin responder y no cerró. Redacta UN mensaje breve de seguimiento para retomar el contacto, según dónde quedó la conversación.` },
-    ],
+    system: segundo ? SYSTEM_SEGUIMIENTO_2 : SYSTEM_SEGUIMIENTO,
+    messages: [...base, { role: 'user', content: nota }],
   })
-  await registrarUso('bot-seguimiento', MODEL, res.usage)
+  await registrarUso('bot-seguimiento', MODEL, res.usage, segundo ? 'toque 2' : 'toque 1')
   return limpiarTexto(res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim())
 }
 

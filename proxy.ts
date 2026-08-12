@@ -101,6 +101,10 @@ export async function proxy(req: NextRequest) {
     // UF y UTM del mes para Remuneraciones (Vercel Cron diario; misma auth
     // interna Bearer CRON_SECRET o sesión admin).
     pathname === '/api/cron/remuneraciones' ||
+    // Keep-alive de la caché del prompt del bot (Vercel Cron cada 15 min; misma
+    // auth interna). Evita que el prefijo de ~25k tokens se enfríe y haya que
+    // re-escribirlo a 2× — era el 27% del gasto del agente.
+    pathname === '/api/cron/cache-agente' ||
     pathname.startsWith('/api/mailing/pixel/') ||
     pathname.startsWith('/api/mailing/click/') ||
     pathname === '/convenio-eutanasias' ||

@@ -169,6 +169,29 @@ export async function registrarUsoFijo(
   })
 }
 
+/**
+ * Minutos desde la última llamada registrada de un módulo (null si no hay
+ * ninguna o si Supabase no está configurado).
+ *
+ * Lo usa el keep-alive de la caché del bot para no gastar de más: si el prefijo
+ * ya lo tocó una conversación real hace un rato, la caché sigue viva sola y el
+ * ping no hace falta. El propio ping se registra como `bot-inbox`, así que
+ * también cuenta como "toque" y no se dispara uno tras otro.
+ */
+export async function minutosDesdeUltimoUso(modulo: ModuloIA): Promise<number | null> {
+  if (!isSupabaseConfigured()) return null
+  try {
+    const { data, error } = await getSupabase().from(TABLE)
+      .select('ts').eq('modulo', modulo).order('id', { ascending: false }).limit(1)
+    if (error || !data?.length) return null
+    const t = Date.parse((data[0] as { ts?: string }).ts || '')
+    if (!Number.isFinite(t)) return null
+    return (Date.now() - t) / 60_000
+  } catch {
+    return null
+  }
+}
+
 // ─── Lectura (panel) ─────────────────────────────────────────────────────────
 
 interface FilaUso {
