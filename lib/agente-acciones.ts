@@ -96,6 +96,7 @@ async function avisarRetiroAlEquipo(av: AvisoRetiro): Promise<{ ok: boolean; err
   const intentar = async (fn: () => Promise<EnvioResult>): Promise<EnvioResult> => {
     try { return await fn() } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
   }
+  const { registrarAvisoEquipo } = await import('./avisos-equipo')
   for (const num of await destinatariosRetiros()) {
     let env = await intentar(() => enviarBotonesWhatsapp(num, av.resumen, av.botones))
     if (!env.ok && env.fuera_de_ventana) {
@@ -106,6 +107,15 @@ async function avisarRetiroAlEquipo(av: AvisoRetiro): Promise<{ ok: boolean; err
     }
     if (env.ok) ok = true
     else error = env.error || error
+    // Registrar el envío es lo que permite ENTERARSE de que no se entregó: Meta
+    // acepta el mensaje y recién después reporta el fallo (ver lib/avisos-equipo).
+    // Con los datos de la plantilla guardados, el reintento sale con sus botones.
+    if (env.ok && env.message_id) {
+      await registrarAvisoEquipo({
+        numero: num, tipo: 'retiro', cuerpo: av.resumen, providerMessageId: env.message_id,
+        reintento: { plantilla: 'solicitud_retiro', vars: av.vars, payloads: av.botones.map(b => b.id) },
+      })
+    }
   }
   // Que NADIE se haya enterado es grave: el retiro queda comprometido con el
   // cliente y esperando en el panel. Va como error, no como warning.

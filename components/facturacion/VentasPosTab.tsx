@@ -28,6 +28,8 @@ interface VentaPos {
   tipo_pago: 'pos' | 'link'
   bruto: number
   saldo_excluido: number
+  /** Parte del bruto que es la eutanasia a domicilio (va fuera de boleta, pero por la misma tarjeta). */
+  eutanasia: number
   comision_neta: number
   comision_iva: number
   comision_bruta: number
@@ -328,6 +330,12 @@ export default function VentasPosTab() {
                                         <span className="block text-[10px] font-semibold text-gray-500"
                                           title="Pago parcial: el saldo se recibió por transferencia, así que no pasa por el procesador">
                                           abono · saldo {fmtPrecio(v.saldo_excluido)} por transferencia
+                                        </span>
+                                      )}
+                                      {v.eutanasia > 0 && (
+                                        <span className="block text-[10px] font-semibold text-gray-500"
+                                          title="La eutanasia a domicilio va fuera de la boleta, pero se cobró en la misma tarjeta: pasó por la máquina y paga comisión">
+                                          incluye eutanasia {fmtPrecio(v.eutanasia)}
                                         </span>
                                       )}
                                     </td>

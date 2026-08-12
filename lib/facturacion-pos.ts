@@ -26,6 +26,14 @@ import { parseDecimalOr0 } from './numbers'
  * estando en 'parcial' —el abono ya se cobró— y cuando el saldo se confirma no
  * cambia nada: el monto y el día siguen siendo los del abono.
  *
+ * EUTANASIA A DOMICILIO: si la ficha tiene una asociada, su valor SE SUMA al
+ * bruto. La eutanasia no va en la boleta (`SE_DOCUMENTA` en lib/eerr-ingresos:
+ * se cobra aparte), pero el tutor la paga en la MISMA tarjeta junto con la
+ * cremación — así que sí pasó por la máquina, el procesador cobró comisión sobre
+ * ella y Haulmer la tiene que abonar. Leerla solo del documento dejaba el abono
+ * corto todos los meses. Ojo con la diferencia: la conciliación con el SII sigue
+ * sin contarla (ahí lo que se compara es lo boleteado), esto es plata del POS.
+ *
  * Haulmer abona al DÍA HÁBIL SIGUIENTE, así que lo del viernes, sábado y domingo
  * llega junto el lunes. Eso lo resuelve `agregarDiasHabiles(dia, 1)`, que además
  * salta los feriados.
@@ -63,6 +71,8 @@ export interface VentaPos {
   bruto: number
   /** Saldo de un pago parcial descontado del bruto (0 si no hubo). */
   saldo_excluido: number
+  /** Parte del bruto que corresponde a la eutanasia a domicilio (0 si no hubo). */
+  eutanasia: number
   comision_neta: number
   comision_iva: number
   comision_bruta: number
@@ -189,6 +199,33 @@ async function saldosPorFicha(): Promise<Map<string, number>> {
   return m
 }
 
+/**
+ * Ficha → valor de su eutanasia a domicilio, con la MISMA regla que usa la ficha
+ * en /clientes (`cobroClienteCon`: precio + recargo fuera de horario, o la
+ * consulta si no se realizó; 0 si se canceló). La config se lee UNA vez y el
+ * cálculo va en memoria — nunca un await por cotización dentro del loop.
+ */
+async function eutanasiasPorFicha(): Promise<Map<string, number>> {
+  const m = new Map<string, number>()
+  try {
+    const cotis = await getSheetData('cotizaciones_eutanasia')
+    const conFicha = cotis.filter(c => String(c.cliente_id || '').trim())
+    if (!conFicha.length) return m
+    const { getConfigCobroEutanasia, cobroClienteCon } = await import('./eutanasia-precios')
+    const cfg = await getConfigCobroEutanasia()
+    for (const cot of conFicha) {
+      const total = cobroClienteCon(cot, cfg).total
+      if (total > 0) {
+        const id = String(cot.cliente_id)
+        m.set(id, (m.get(id) ?? 0) + total)
+      }
+    }
+  } catch (e) {
+    console.warn('[facturacion-pos] no se pudo calcular el valor de las eutanasias:', e)
+  }
+  return m
+}
+
 async function cargarTablas(): Promise<{ g: Tramo[]; c: Tramo[] }> {
   const [generales, convenio] = await Promise.all([
     getSheetData('precios_generales'),
@@ -217,12 +254,13 @@ export interface ResumenPos {
  * no dependa del reloj (mismo criterio que el motor de remuneraciones).
  */
 export async function resumenVentasPos(f: FiltrosPos = {}): Promise<ResumenPos> {
-  const [clientes, tablas, docs, config, saldos] = await Promise.all([
+  const [clientes, tablas, docs, config, saldos, eutanasias] = await Promise.all([
     getSheetData('clientes'),
     cargarTablas(),
     mapaDocumentos(),
     getConfigPos(),
     saldosPorFicha(),
+    eutanasiasPorFicha(),
   ])
 
   const conFecha: VentaPos[] = []
@@ -248,7 +286,11 @@ export async function resumenVentasPos(f: FiltrosPos = {}): Promise<ResumenPos> 
     const precio = calcularPrecioFicha(c, undefined, { generales: tablas.g, convenio: tablas.c, especialesDeVet: [] })
     const cobrado = doc && doc.monto_total > 0 ? doc.monto_total : precio.total
     const saldo = Math.min(saldos.get(String(c.id)) ?? 0, cobrado)
-    const bruto = cobrado - saldo
+    // La eutanasia va fuera de la boleta pero por la misma tarjeta: suma al bruto
+    // DESPUÉS del saldo (el parcial es un abono de la cremación) y por eso también
+    // paga comisión. Es la única parte del cobro que el documento no refleja.
+    const eutanasia = eutanasias.get(String(c.id)) ?? 0
+    const bruto = cobrado - saldo + eutanasia
     if (bruto <= 0) continue
 
     const fechaPago = formatDateForSheet(c.fecha_pago) || ''
@@ -265,6 +307,7 @@ export async function resumenVentasPos(f: FiltrosPos = {}): Promise<ResumenPos> 
       tipo_pago: tipo === 'link' ? 'link' : 'pos',
       bruto,
       saldo_excluido: saldo,
+      eutanasia,
       ...calcularComision(bruto, config),
       fecha_estimada: !fechaPago && !!fechaDoc,
     }

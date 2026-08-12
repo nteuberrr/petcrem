@@ -13,6 +13,7 @@ import { handlersAgente } from '@/lib/agente-acciones'
 import { buscarRelayPendientePorMsg, buscarRelayPendienteUnico, marcarRelayRespondida } from '@/lib/relay-retiro'
 import { procesarBotonVetEutanasia, procesarTextoVetEutanasia } from '@/lib/eutanasia-whatsapp'
 import { resolverSolicitudRetiro } from '@/lib/solicitudes-retiro'
+import { manejarAvisoFallido } from '@/lib/avisos-equipo'
 import { leerMarcador, limpiarMarcador, vincularTelefono } from '@/lib/ads-clicks'
 import { uploadToR2 } from '@/lib/cloudflare-r2'
 
@@ -594,8 +595,18 @@ export async function POST(req: NextRequest) {
           await avisarCoexistence(change.field)
           continue
         }
-        for (const st of (value.statuses as Array<{ id?: string; status?: string }>) ?? []) {
-          if (st.id && st.status && ESTADO_MAP[st.status]) await marcarEstadoMensaje(st.id, ESTADO_MAP[st.status])
+        type MetaStatus = { id?: string; status?: string; errors?: Array<{ code?: number; title?: string; message?: string }> }
+        for (const st of (value.statuses as MetaStatus[]) ?? []) {
+          if (!st.id || !st.status || !ESTADO_MAP[st.status]) continue
+          await marcarEstadoMensaje(st.id, ESTADO_MAP[st.status])
+          // Un mensaje al EQUIPO que Meta no entregó: se reintenta por plantilla
+          // y, si tampoco sale, se avisa por correo. Solo se consulta ante un
+          // fallo (son excepcionales) para no pegarle a la base en cada estado.
+          if (ESTADO_MAP[st.status] === 'fallido') {
+            const e = st.errors?.[0]
+            const detalle = [e?.code, e?.title || e?.message].filter(Boolean).join(': ')
+            await manejarAvisoFallido(st.id, detalle)
+          }
         }
         for (const msg of (value.messages as MetaMsg[]) ?? []) {
           // Flujo A: respuesta del admin a una solicitud de retiro (botón ✅/❌).

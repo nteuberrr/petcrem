@@ -3,6 +3,7 @@ import { fechaChileISO, horaChile } from './dates'
 import { sendEmail, isResendConfigured } from './resend-mailer'
 import { construirAvisoPagosPendientes, type AvisoRenderizado } from './aviso-pagos-pendientes'
 import { construirAvisoAgendamientos } from './aviso-agendamientos'
+import { construirAvisoSaludWhatsapp } from './aviso-whatsapp-salud'
 
 /**
  * AVISOS AUTOMÁTICOS (Configuración Avanzada → Avisos).
@@ -43,6 +44,12 @@ export const AVISOS: AvisoMeta[] = [
     titulo: 'Agendamientos sin resolver',
     descripcion: 'Solicitudes de retiro que nadie confirmó ni rechazó (bloquean el horario y dejan al cliente esperando), eutanasias que ningún veterinario tomó todavía, y el listado de lo confirmado para hoy y mañana.',
     construir: construirAvisoAgendamientos,
+  },
+  {
+    clave: 'whatsapp_salud',
+    titulo: 'WhatsApp: estado de la cuenta',
+    descripcion: 'Vigila que WhatsApp esté ENTREGANDO. Con «omitir si está vacío» no manda nada mientras todo funcione: llega solo el día que Meta bloquea la cuenta (lo más común, un problema con el método de pago) o que un aviso al equipo se pierde. Va por correo a propósito: es el único canal que sirve cuando el que falla es WhatsApp.',
+    construir: construirAvisoSaludWhatsapp,
   },
 ]
 

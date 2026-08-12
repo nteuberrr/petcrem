@@ -502,6 +502,14 @@ export const SHEETS: Record<string, string[]> = {
     'id', 'clave', 'activo', 'destinatarios', 'hora',
     'omitir_vacio', 'ultimo_envio', 'fecha_actualizacion',
   ],
+  // Registro de los avisos que el bot manda al EQUIPO por WhatsApp: es lo que
+  // permite enterarse de que uno NO se entregó (Meta lo acepta y recién después
+  // reporta `failed`). Ver supabase/avisos-equipo.sql y lib/avisos-equipo.ts.
+  avisos_equipo: [
+    'id', 'numero', 'tipo', 'cuerpo', 'provider_message_id',
+    'estado', 'error', 'reintento_json', 'es_reintento',
+    'fecha_creacion', 'fecha_estado',
+  ],
   // ── Módulo Remuneraciones (RRHH) ────────────────────────────────────────────
   // Reemplaza el Excel con Solver que se corría a mano cada mes. DDL completo
   // (con índices y el enganche al EERR) en supabase/remuneraciones.sql.

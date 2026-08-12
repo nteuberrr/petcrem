@@ -394,14 +394,27 @@ export async function esDestinatarioRetiros(num: string): Promise<boolean> {
   return (await destinatariosRetiros()).includes((num || '').replace(/\D/g, ''))
 }
 
-/** Texto a una lista de números, con fallback a la plantilla aviso_operativo si la ventana cerró. */
+/**
+ * Texto a una lista de números del EQUIPO, con fallback a la plantilla
+ * aviso_operativo si la ventana cerró.
+ *
+ * Cada envío queda REGISTRADO en `avisos_equipo`: Meta acepta mensajes que no va
+ * a entregar (devuelve 200 + id y reporta `failed` ~10 s después por webhook), y
+ * sin ese registro el fracaso se descartaba y el aviso se daba por enviado. Con
+ * la fila, el webhook lo reintenta por plantilla y, si tampoco sale, lo manda por
+ * correo. Ver lib/avisos-equipo.
+ */
 async function avisarNumeros(nums: string[], body: string): Promise<EnvioResult[]> {
   const out: EnvioResult[] = []
+  const { registrarAvisoEquipo } = await import('./avisos-equipo')
   for (const num of nums) {
     try {
       let r = await enviarTextoWhatsapp(num, body)
       if (!r.ok && r.fuera_de_ventana && (await plantillasAprobadas()).has('aviso_operativo')) {
         r = await enviarPlantillaWhatsapp(num, 'aviso_operativo', [body.slice(0, 500)])
+      }
+      if (r.ok && r.message_id) {
+        await registrarAvisoEquipo({ numero: num, tipo: 'operativo', cuerpo: body, providerMessageId: r.message_id })
       }
       out.push(r)
     } catch (e) { out.push({ ok: false, error: e instanceof Error ? e.message : String(e) }) }
