@@ -164,11 +164,9 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
   foto_mascota: {
     nombre: 'foto_mascota',
     categoria: 'UTILITY',
-    // El link para subir la foto salía SOLO por correo, y el guion del bot ya
-    // daba por perdido ese camino: «si el link no le funciona, es lo más común».
-    // Cada caso terminaba con un humano reenviándolo — y con certificados sin
-    // foto y cuadros Premium que nunca se hicieron. Con el botón llega por el
-    // canal que la persona sí mira.
+    // ⛔ NO SE USA (decisión del dueño, 13-08-2026): la foto se pide solo por
+    // CORREO. Queda aprobada en Meta por si se retoma; el link corto /p/<token>
+    // sirve igual para pasárselo a un tutor dentro de la conversación.
     texto: 'Hola {{1}}, ya tenemos a {{2}} con nosotros y estamos preparando su despedida. Si quieres, puedes subir una foto suya {{3}} con el botón de aquí abajo. Es opcional y puedes hacerlo hasta el día de la entrega. — Crematorio Alma Animal',
     ejemplos: ['María', 'Rocky', 'para incluirla en su certificado'],
     botonUrl: {

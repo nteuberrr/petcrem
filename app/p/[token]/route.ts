@@ -8,6 +8,11 @@ import { accionDeToken } from '@/lib/tutor-token'
  * de un parámetro aparte: un botón de URL de Meta solo puede agregar un sufijo al
  * final de la base aprobada, así que no hay dónde colgar un `&tipo=`.
  *
+ * Hoy NINGÚN envío automático la usa: el pedido de foto va solo por correo, con
+ * el link largo de siempre (decisión del dueño, 13-08-2026). Se conserva porque
+ * es la forma corta del mismo link y sirve para pasárselo a un tutor por
+ * WhatsApp dentro de la conversación, sin plantilla y sin costo.
+ *
  * No valida nada — el destino verifica la firma y muestra la pantalla que
  * corresponda si el link venció.
  *
