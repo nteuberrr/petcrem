@@ -72,7 +72,7 @@ Escribes el GUION de la locución de un video corto de Crematorio Alma Animal (R
 QUÉ ES UN GUION DE LOCUCIÓN (y no un post):
 - Se ESCUCHA, no se lee. Frases cortas, de una idea cada una, en el orden en que se entienden al oírlas.
 - Nada de listas, viñetas, emojis, hashtags, "link en bio", paréntesis ni comillas: la voz no los pronuncia.
-- Números y horarios EN PALABRAS ("cuatro días hábiles", "de nueve de la mañana a diez de la noche"), así la voz no los lee mal.
+- Números y horarios EN PALABRAS ("de nueve de la mañana a diez de la noche", "menos de tres horas"), así la voz no los lee mal. El PLAZO DE ENTREGA escríbelo también en palabras, tomándolo del plazo oficial que se te entrega — nunca de memoria.
 - Arranca por lo que le importa a quien escucha, no por el nombre de la marca.
 - Cierra con UNA sola acción concreta (escribir por WhatsApp, llamar, visitar el sitio). Sin urgencia falsa ni promociones.
 - Tono: ${audiencia === 'veterinarios'

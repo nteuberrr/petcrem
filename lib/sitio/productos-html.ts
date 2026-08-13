@@ -1,4 +1,5 @@
 import { fmtPrecio } from '@/lib/format'
+import { expressDisponible } from '@/lib/plazo-entrega'
 
 /**
  * Sitio público — render de la página /anforas, agrupada por categoría:
@@ -120,7 +121,10 @@ export function renderProductosWeb(productos: Prod[], otrosServicios: Prod[] = [
   }).join('')
 
   // Otros productos / servicios (recargos + express), desde otros_servicios activos.
-  const serviciosActivos = otrosServicios.filter(s => String(s.activo || '').toUpperCase() === 'TRUE' && (s.nombre || '').trim())
+  const serviciosActivos = otrosServicios
+    .filter(s => String(s.activo || '').toUpperCase() === 'TRUE' && (s.nombre || '').trim())
+    // El Express se esconde mientras una ventana de alta demanda lo suspenda.
+    .filter(s => expressDisponible() || !/express/i.test(s.nombre || ''))
   let bloqueServicios = ''
   if (serviciosActivos.length) {
     const cards = serviciosActivos.map(tarjetaServicio).join('')

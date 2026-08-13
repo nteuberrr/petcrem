@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/Modal'
 import { TablaScroll, THEAD_STICKY, HistorialPie } from '@/components/ui/TablaScroll'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { proximosDiasHabiles, agregarDiasHabiles, isoFecha, tieneExpress, EXPRESS_DIAS } from '@/lib/dias-habiles'
+import { plazoParaRetiro } from '@/lib/plazo-entrega'
 
 type TipoServicio = { id: string; codigo: string; plazo_entrega_dias: string; activo: string }
 
@@ -162,8 +163,9 @@ export default function DespachosTab() {
       if (!isoRetiro) continue
       const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
       if (isNaN(fechaRetiro.getTime())) continue
-      // Servicio Express → 2 días hábiles; si no, el plazo del tipo de servicio.
-      const plazo = tieneExpress(c.adicionales) ? EXPRESS_DIAS : (plazoMap.get(codigo) ?? 4)
+      // Servicio Express → 2 días hábiles; si no, el plazo del tipo de servicio,
+      // alargado si el retiro cayó dentro de una ventana de alta demanda.
+      const plazo = tieneExpress(c.adicionales) ? EXPRESS_DIAS : plazoParaRetiro(isoRetiro, plazoMap.get(codigo))
       const fechaObjetivo = agregarDiasHabiles(fechaRetiro, plazo)
       const isoObj = isoFecha(fechaObjetivo)
       const enriched: ClienteEnFecha = { ...c, fecha_objetivo_iso: isoObj }

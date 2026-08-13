@@ -13,6 +13,7 @@
  */
 
 import { type DatosPrecios, filasCremacion, desdeDe, fmtCLP } from './precios-html'
+import { ENTREGA_TXT } from '@/lib/plazo-entrega'
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
@@ -38,8 +39,8 @@ const TARJETAS: { titulo: string; texto: string }[] = [
     texto: 'Retiramos a tu mascota en tu casa o en la clínica veterinaria, en toda la Región Metropolitana, coordinando el retiro dentro de las siguientes 3 horas.',
   },
   {
-    titulo: 'Cenizas de vuelta en 4 días hábiles',
-    texto: 'Entregamos el ánfora con las cenizas de tu mascota en un máximo de 4 días hábiles — uno de los plazos más rápidos de Santiago.',
+    titulo: `Cenizas de vuelta ${ENTREGA_TXT}`,
+    texto: `Entregamos el ánfora con las cenizas de tu mascota ${ENTREGA_TXT} — uno de los plazos más rápidos de Santiago.`,
   },
   {
     titulo: 'Atención todos los días, de 9:00 a 22:00',
@@ -89,7 +90,7 @@ function faqs(d: DatosPrecios): { q: string; a: string }[] {
     },
     {
       q: '¿Cuánto demora la entrega de las cenizas?',
-      a: 'Entregamos el ánfora con las cenizas en un máximo de 4 días hábiles desde la cremación. El retiro de tu mascota lo coordinamos dentro de las siguientes 3 horas, todos los días entre 9:00 y 22:00.',
+      a: `Entregamos el ánfora con las cenizas ${ENTREGA_TXT} desde la cremación. El retiro de tu mascota lo coordinamos dentro de las siguientes 3 horas, todos los días entre 9:00 y 22:00.`,
     },
     {
       q: '¿Hacen retiro a domicilio o en la clínica veterinaria?',
@@ -152,7 +153,7 @@ export function renderConfianzaStrip(): string {
     'Autorización sanitaria y patente al día',
     'Cremación individual garantizada',
     'Retiro en ~3 horas en toda la RM',
-    'Cenizas en 4 días hábiles',
+    `Cenizas ${ENTREGA_TXT}`,
     'Video de ingreso incluido',
     'Todos los días, 9:00 a 22:00',
   ]
@@ -193,7 +194,7 @@ export function renderPorqueElegirnos(d: DatosPrecios): string {
   return CSS
     + '<section class="aa-porque" id="por-que-elegirnos"><div class="aa-porque-inner">'
     + '<h2>¿Por qué elegir Alma Animal para la cremación de tu mascota en Santiago?</h2>'
-    + '<p class="aa-porque-sub">Somos un crematorio de mascotas en Recoleta con cobertura en toda la Región Metropolitana. Cremación de perros, gatos y otras mascotas con trazabilidad total, certificado con firma digital y entrega de cenizas en 4 días hábiles.</p>'
+    + `<p class="aa-porque-sub">Somos un crematorio de mascotas en Recoleta con cobertura en toda la Región Metropolitana. Cremación de perros, gatos y otras mascotas con trazabilidad total, certificado con firma digital y entrega de cenizas ${ENTREGA_TXT}.</p>`
     + `<div class="aa-porque-grid">${cards}</div>`
     + '<div class="aa-faq" id="preguntas-frecuentes">'
     + '<h2>Preguntas frecuentes sobre cremación de mascotas</h2>'

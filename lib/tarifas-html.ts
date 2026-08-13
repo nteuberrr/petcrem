@@ -1,6 +1,7 @@
 import { getSheetData } from './datastore'
 import { fmtPrecio } from './format'
 import { BRAND } from './email-layout'
+import { ENTREGA_TXT } from './plazo-entrega'
 
 /**
  * Contexto de TARIFAS de cremación para los generadores de contenido (agente de
@@ -76,7 +77,7 @@ export async function getTarifasContexto(): Promise<TarifasContexto> {
     const nombres = ts.map(t => `${t.codigo}=${t.nombre}`).join(', ')
 
     return {
-      texto: `TARIFAS GENERALES de cremación (para TUTORES; CLP, por peso):\n${textoDe(gen)}\nTipos de servicio: ${nombres}. Entrega en hasta 4 días hábiles.`,
+      texto: `TARIFAS GENERALES de cremación (para TUTORES; CLP, por peso):\n${textoDe(gen)}\nTipos de servicio: ${nombres}. Entrega ${ENTREGA_TXT}.`,
       tablaHtml: tablaDe(gen),
       hayTarifas: true,
       textoConvenio: conv.length ? `TARIFAS DE CONVENIO (preferentes, para VETERINARIOS/clínicas; CLP, por peso):\n${textoDe(conv)}` : '',

@@ -4,6 +4,7 @@ import { MARCA_VISUAL, MARCA_GRAFICO, recetasVariadas } from './marca-visual'
 import { GUIA_SOCIAL, GUIA_QA } from './marketing-guia'
 import { construirPlantilla, PLANTILLAS, PLANTILLAS_INFO, PLANTILLAS_MEMORIAL, PLANTILLA_TOOL_DESC, SLOTS_TOOL_PROPS, familiaDe, llevaFoto, sugerenciasParaTanda, type SlotsPlantilla, type FamiliaPlantilla } from './marketing-plantillas'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
+import { ENTREGA_TXT } from './plazo-entrega'
 import { REGLAS_INVIOLABLES } from './marca-voz'
 import { lintCopy, extraerTextoHtml } from './marketing-lint'
 import { listarImagenes, generarYGuardarImagen, estamparLogoEnUrl, asignarCampania, reducirParaVision, eliminarImagenPorUrl, type ImagenBanco } from './mailing-images'
@@ -93,7 +94,7 @@ const BANCO_VISIBLE = 40
 
 const VOZ_AUDIENCIA: Record<string, string> = {
   tutores: `AUDIENCIA: TUTORES (B2C), adultos que perdieron a su mascota o van a perderla. Voz: tuteo cálido, cercano y humano, natural y POCO FORMAL — como alguien que sabe del tema y de verdad quiere ayudar, no como una empresa ni un folleto. Profesional en lo importante, sin rigidez corporativa. Inspira confianza y acompañamiento, NO lástima. Sin clichés del rubro ("puente del arcoíris", "angelito", "ya no sufre"), sin humor, sin religión. A la mascota por su nombre cuando aplique; genérico "tu mascota".`,
-  veterinarios: `AUDIENCIA: VETERINARIOS / CLÍNICAS (B2B). Voz: profesional y cercana, de socio confiable — directa, cálida y eficiente (datos, plazos, procesos), sin acartonarse. Los argumentos que MANDAN, en este orden (dueño): retiro en menos de 3 horas, operamos de lunes a domingo, entrega en 4 días hábiles, precios convenientes y trazabilidad total; complementos: instalaciones propias y red de eutanasia a domicilio.`,
+  veterinarios: `AUDIENCIA: VETERINARIOS / CLÍNICAS (B2B). Voz: profesional y cercana, de socio confiable — directa, cálida y eficiente (datos, plazos, procesos), sin acartonarse. Los argumentos que MANDAN, en este orden (dueño): retiro en menos de 3 horas, operamos de lunes a domingo, entrega ${ENTREGA_TXT}, precios convenientes y trazabilidad total; complementos: instalaciones propias y red de eutanasia a domicilio.`,
   ambos: `AUDIENCIA: MIXTA (tutores y veterinarios). Voz cercana, humana y profesional, poco formal, español neutro de Chile. Sin clichés del rubro, sin humor, sin religión.`,
 }
 

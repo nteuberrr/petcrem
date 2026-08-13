@@ -8,12 +8,13 @@
  * ads) NO vive acá sino en lib/marketing-params.ts, para poder ajustarlo sin tocar
  * código. Acá van solo las reglas cualitativas estables.
  */
+import { ENTREGA_TXT, expressDisponible } from './plazo-entrega'
 
 /** Reglas para el redactor/diseñador de piezas sociales (IG/FB). */
 export const GUIA_SOCIAL = `GUÍA DE CONTENIDO SOCIAL (Instagram/Facebook 2026 — reglas de calidad, aplicalas):
 PRUEBA DE VALOR (lo PRIMERO: pasá cada pieza por acá antes de entregarla; si falla algún punto, cambiá la pieza, no la maquilles)
 1. ¿QUÉ SE LLEVA quien la ve? Tiene que haber UNA cosa concreta: un dato, un plazo, un precio de referencia, un paso del proceso, la respuesta a una duda real, una historia/testimonio o una oferta clara. Si la respuesta es "que existimos" o "que somos cálidos", NO SIRVE: es contenido de relleno y el dueño no lo publica.
-2. ¿PODRÍA FIRMARLA CUALQUIER CREMATORIO? Si sí, es genérica. Metele lo que solo nosotros podemos decir: entrega en 4 días hábiles (48 horas hábiles con el Servicio Express), retiro habitualmente en menos de 3 horas, abiertos los 7 días de 09:00 a 22:00, instalaciones propias sin externalizar, trazabilidad con código y certificado.
+2. ¿PODRÍA FIRMARLA CUALQUIER CREMATORIO? Si sí, es genérica. Metele lo que solo nosotros podemos decir: entrega ${ENTREGA_TXT}${expressDisponible() ? ' (48 horas hábiles con el Servicio Express)' : ''}, retiro habitualmente en menos de 3 horas, abiertos los 7 días de 09:00 a 22:00, instalaciones propias sin externalizar, trazabilidad con código y certificado.
 3. ¿EL TITULAR SE ENTIENDE SOLO, sin leer el caption? Una frase decorativa sin sujeto ("Un adiós con amor", "Siempre en tu corazón") NO es un titular: no informa ni engancha.
 4. ¿YA LO DIJIMOS ASÍ en las últimas piezas? Si el ángulo, el titular o el molde se repiten, cambialos.
 CREATIVIDAD (el dueño la pide EXPRESAMENTE — no te quedes en lo seguro)

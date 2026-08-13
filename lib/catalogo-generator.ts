@@ -4,6 +4,7 @@ import { getSheetData } from './datastore'
 import { listarImagenes, type ImagenBanco } from './mailing-images'
 import { getContacto, LOGO_URL, SELLO_URL } from './email-layout'
 import { fmtPrecio } from './format'
+import { ENTREGA_TXT, expressDisponible } from './plazo-entrega'
 import { LETTER, C, embedBrandFonts, wrapText, fitText, type BrandFonts } from './pdf-brand'
 
 /**
@@ -112,7 +113,7 @@ const SERVICIOS: Servicio[] = [
       'Botellita con mechón de pelo',
       'Etiqueta de madera con el nombre',
       'Retiro en domicilio o clínica',
-      'Entrega en 4 días hábiles',
+      `Entrega ${ENTREGA_TXT}`,
     ],
     fotoCodigo: 'i-11',
     fotoCaption: 'Kit incluido (referencial)',
@@ -150,7 +151,7 @@ const COMPARA: [string, string, string, string][] = [
   ['Botellita con mechón de pelo', 'Sí', 'Sí', '—'],
   ['Etiqueta de madera con el nombre', 'Sí', 'Sí', '—'],
   ['Cuadro en acuarela conmemorativo', '—', 'Sí', '—'],
-  ['Entrega de cenizas', '4 días hábiles', '4 días hábiles', '—'],
+  ['Entrega de cenizas', ENTREGA_TXT, ENTREGA_TXT, '—'],
 ]
 
 export async function generarCatalogoPdf(): Promise<Buffer> {
@@ -377,7 +378,9 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
   }
   page.drawLine({ start: { x: MARGIN, y: y }, end: { x: MARGIN + CONTENT_W, y }, thickness: 1, color: C.navy })
   gap(10)
-  for (const ln of wrapText('El valor final se determina por el peso de tu mascota según la tarifa vigente. El Servicio Express (entrega en 48 horas hábiles) está disponible como adicional.', f.regular, 8.5, CONTENT_W)) {
+  const notaTarifa = 'El valor final se determina por el peso de tu mascota según la tarifa vigente.'
+    + (expressDisponible() ? ' El Servicio Express (entrega en 48 horas hábiles) está disponible como adicional.' : '')
+  for (const ln of wrapText(notaTarifa, f.regular, 8.5, CONTENT_W)) {
     text(ln, MARGIN, y, 8.5, f.regular, C.muted); gap(12)
   }
   gap(10)
@@ -445,6 +448,8 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
   // ── 4. Servicios adicionales (otros_servicios activos: recargos + express) ──
   const servicios = (otrosRows as Record<string, string>[])
     .filter(s => String(s.activo || '').toUpperCase() === 'TRUE' && (s.nombre || '').trim())
+    // Con el Express suspendido no se ofrece en el catálogo que le mandamos al tutor.
+    .filter(s => expressDisponible() || !/express/i.test(s.nombre || ''))
   if (servicios.length) {
     tituloSeccion('Servicios adicionales', 'Servicios opcionales que pueden sumarse a la cremación. Los recargos de retiro se avisan siempre antes de coordinar.', 44)
     for (const s of servicios) {

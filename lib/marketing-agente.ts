@@ -9,6 +9,7 @@ import { MARCA_VISUAL, MARCA_GRAFICO, recetasVariadas } from './marca-visual'
 import { GUIA_SOCIAL, GUIA_EMAIL, GUIA_PERFIL } from './marketing-guia'
 import { getMarketingParams, bloqueParametros } from './marketing-params'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
+import { ENTREGA_TXT, ENTREGA_DIAS_MAX } from './plazo-entrega'
 import { REGLAS_INVIOLABLES } from './marca-voz'
 import { lintCopy, extraerTextoHtml } from './marketing-lint'
 import { getContacto } from './email-layout'
@@ -110,18 +111,18 @@ VOZ DE MARCA (según la audiencia de cada pieza)
 - Veterinarios (B2B): profesional y cercana, de socio confiable — directa, cálida y eficiente (datos, plazos, procesos), sin acartonarse.
 - SIEMPRE: sin humor, sin religión, sin clichés del rubro ("puente del arcoíris", "angelito", "ya no sufre"). A la mascota por su nombre cuando aplique; genérico "tu mascota" (nunca "compañero/a" ni el frío "su mascota").
 - EJEMPLOS DE TONO (la diferencia entre bien y mal):
-  · Tutor ✅ "Cuidamos cada detalle de la despedida de Mora. En 4 días hábiles tienes de vuelta sus cenizas, acompañado en todo el proceso." — ❌ "Sabemos lo difícil que es perder a tu mejor amigo peludo 🐾💕; tu angelito ya cruzó el puente del arcoíris."
-  · Veterinario ✅ "Cremación con retiro coordinado, trazabilidad documentada y entrega en 4 días hábiles. Convenio con tarifas preferentes para clínicas asociadas." — ❌ "Somos partners para cuidar a las mascotitas que ya no están, con todo el amor del mundo 💖🐾."
+  · Tutor ✅ "Cuidamos cada detalle de la despedida de Mora. En ${ENTREGA_DIAS_MAX} días hábiles tienes de vuelta sus cenizas, acompañado en todo el proceso." — ❌ "Sabemos lo difícil que es perder a tu mejor amigo peludo 🐾💕; tu angelito ya cruzó el puente del arcoíris."
+  · Veterinario ✅ "Cremación con retiro coordinado, trazabilidad documentada y entrega ${ENTREGA_TXT}. Convenio con tarifas preferentes para clínicas asociadas." — ❌ "Somos partners para cuidar a las mascotitas que ya no están, con todo el amor del mundo 💖🐾."
 SOBRE EL NEGOCIO Y EL SERVICIO (úsalo para que los ángulos y el copy sean concretos, no genéricos; nunca inventes precios)
 - Crematorio de mascotas en Recoleta (Santiago), cobertura Región Metropolitana, de lunes a domingo, 09:00–22:00.
 - Instalaciones PROPIAS y CERTIFICADAS en Recoleta: horno certificado, cámara de refrigeración y vehículo habilitado. NO se externaliza nada → control directo y trazabilidad total.
-- Proceso (5 pasos): 1) contacto y coordinación, 2) retiro a domicilio o desde la clínica en vehículo habilitado (en menos de 3 horas), 3) la mascota se mantiene en cámara de refrigeración hasta el momento de la cremación, 4) cremación en horno certificado, con código de seguimiento, 5) entrega de cenizas + certificado digital en máximo 4 días hábiles. Si el tutor lo solicita, grabamos el video del INGRESO de la mascota al horno (se ve la mascota con su etiqueta identificadora) — no es un video de la cremación completa.
+- Proceso (5 pasos): 1) contacto y coordinación, 2) retiro a domicilio o desde la clínica en vehículo habilitado (en menos de 3 horas), 3) la mascota se mantiene en cámara de refrigeración hasta el momento de la cremación, 4) cremación en horno certificado, con código de seguimiento, 5) entrega de cenizas + certificado digital ${ENTREGA_TXT}. Si el tutor lo solicita, grabamos el video del INGRESO de la mascota al horno (se ve la mascota con su etiqueta identificadora) — no es un video de la cremación completa.
 ${MODALIDADES_SERVICIOS}
 - Eutanasia a domicilio (RED DE CONVENIO) — es un servicio de EVALUACIÓN a domicilio: un veterinario de la red va a la casa del tutor, EVALÚA a la mascota y, si corresponde, realiza la eutanasia; si se realiza, se coordina junto con la cremación. Es un servicio aparte (precio propio, no las tarifas de cremación). Para el TUTOR hay dos precios: si SE REALIZA la eutanasia, el valor por peso; si al evaluar NO corresponde, solo el valor de la consulta. (El reparto interno vet/Alma NO se comunica a los tutores; nunca inventes montos.)
   · CÓMO FUNCIONA EL CONVENIO (úsalo para campañas que buscan SUMAR veterinarios a la red): el vet se inscribe gratis en la landing pública (crematorioalmaanimal.cl/convenio-eutanasias) indicando las comunas que cubre y sus horarios. Cuando entra una solicitud en su zona/horario, le llega un email para aceptarla (el primero que acepta se la queda); coordina con la familia, va, evalúa y marca directamente el resultado ("eutanasia realizada" o "no realizada"); carga sus datos bancarios una sola vez y se le paga por cada visita: la tarifa según el tramo de peso si la realiza, o el valor de la consulta si al evaluar no correspondía. NO tiene que loguearse a ningún sistema ni administrar nada: todo pasa por links en el correo.
   · PROPUESTA DE VALOR PARA EL VET (el ángulo de la campaña de captación): ingreso adicional por eutanasias a domicilio sin tener que buscar pacientes (le derivamos los casos de su zona), se le paga incluso cuando al evaluar no corresponde realizarla (valor de la consulta), cero burocracia (todo por email), pago claro por servicio, y un partner serio que además se encarga de la cremación con trazabilidad. Para estas campañas: objetivo=captacion_vets, audiencia=veterinarios, voz B2B (profesional, concreta, de socio).
 - Recargo de $20.000 en comunas fuera de la zona habitual (Lampa, Buin, Colina, Calera de Tango, Paine).
-- Diferenciadores para comunicar: instalaciones propias, trazabilidad total con código de seguimiento, retiro a domicilio/clínica, entrega en 4 días hábiles, certificado digital, tecnología de punta, red de eutanasia a domicilio para clínicas.
+- Diferenciadores para comunicar: instalaciones propias, trazabilidad total con código de seguimiento, retiro a domicilio/clínica, entrega ${ENTREGA_TXT}, certificado digital, tecnología de punta, red de eutanasia a domicilio para clínicas.
 
 ${LINKS_PUBLICOS()}
 (Usalos como CTA cuando el objetivo calce — ej. campaña de captación de clínicas → botón/link a la inscripción del convenio de cremación. No inventes otras URLs.)
@@ -210,7 +211,7 @@ async function bloqueTarifas(): Promise<string> {
     const bloqueConv = conv
       ? `\n\nTARIFAS DE CONVENIO (preferentes, para VETERINARIOS/clínicas; en campañas a veterinarios usá ESTAS, NO las generales):\n${conv}`
       : ''
-    return `TARIFAS GENERALES de cremación (para TUTORES; CLP, por peso):\n${gen}\n\nTipos de servicio: ${nombres}. Entrega en hasta 4 días hábiles.${bloqueConv}`
+    return `TARIFAS GENERALES de cremación (para TUTORES; CLP, por peso):\n${gen}\n\nTipos de servicio: ${nombres}. Entrega ${ENTREGA_TXT}.${bloqueConv}`
   } catch {
     return 'TARIFAS: (no disponibles ahora — no inventes precios).'
   }

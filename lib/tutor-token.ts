@@ -11,7 +11,8 @@ import crypto from 'crypto'
  * ── TTL: 15 DÍAS, no 48 horas ───────────────────────────────────────────────
  * Eran 48 h (decisión del cliente 2026-07-13, subiéndolo desde 24) y ese plazo
  * es estructuralmente demasiado corto: el link se manda al REGISTRAR la ficha y
- * el certificado se emite unos 4 días hábiles después, así que el tutor que se
+ * el certificado se emite varios días hábiles después (más aún durante una
+ * ventana de alta demanda, ver lib/plazo-entrega), así que el tutor que se
  * demora dos días en elegir la foto se encuentra con un link muerto. El propio
  * guion del bot lo da por hecho — «si el link no le funciona: es lo más común» —
  * y cada caso termina en un humano reenviándolo a mano. 15 días cubren el

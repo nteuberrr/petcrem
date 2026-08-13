@@ -4,6 +4,7 @@ import { crearRelayPendiente } from './relay-retiro'
 import { geocodeAddress, coordEnChile } from './google-maps'
 import { formatDate, formatDateConDia, formatDateForSheet, fechaChileISO } from './dates'
 import { agregarDiasHabiles, isoFecha, tieneExpress, EXPRESS_DIAS } from './dias-habiles'
+import { plazoParaRetiro } from './plazo-entrega'
 import { fmtPrecio } from './format'
 import { precioClienteEutanasia, getConsultaEutanasia, getRecargoFueraHorario, recargoEutanasiaPara } from './eutanasia-precios'
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
@@ -1172,8 +1173,10 @@ async function consultarEstadoMascota(a: AccionConsultaEstado): Promise<string> 
       const t = tipos.find(x => (x.codigo || '').toUpperCase() === codigoServ)
       const n = parseInt(t?.plazo_entrega_dias || '4', 10)
       const express = tieneExpress(c.adicionales)
-      const plazo = express ? EXPRESS_DIAS : (Number.isFinite(n) && n > 0 ? n : 4)
       const isoRetiro = c.fecha_retiro ? formatDateForSheet(c.fecha_retiro) : ''
+      // El plazo depende de CUÁNDO se retiró: durante una ventana de alta demanda
+      // es más largo, y las fichas de antes conservan el que se les prometió.
+      const plazo = express ? EXPRESS_DIAS : plazoParaRetiro(isoRetiro, Number.isFinite(n) && n > 0 ? n : undefined)
       if (isoRetiro) {
         const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
         if (!isNaN(fechaRetiro.getTime())) {

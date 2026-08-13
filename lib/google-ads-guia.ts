@@ -7,6 +7,7 @@
  * Lo CUANTITATIVO específico de la cuenta (nombres/ids de campañas, gasto real) NO
  * vive acá — se lee en vivo con lib/google-ads.ts. Acá van solo las reglas estables.
  */
+import { ENTREGA_DIAS_MAX } from './plazo-entrega'
 
 export const GUIA_GADS_ESTRUCTURA = `ESTRUCTURA DE CUENTA — los 9 defaults correctos (y qué hacer cuando Google empuja lo contrario):
 1. Tipo de campaña: SOLO Red de Búsqueda (Search). Nunca Display, Search Partners ni Performance Max para este rubro — diluyen presupuesto en tráfico de peor calidad.
@@ -42,7 +43,7 @@ ESTRUCTURA
 - Pinning: SOLO 3 titulares con variantes de la keyword, fijados (pinned) en la POSICIÓN 1 — nunca en la 2. El resto (12 titulares) NUNCA pinneados: se deja que el Smart Bidding rote y encuentre la mejor combinación. Pinnear la posición 2 además de la 1 (dual-pin) reduce las combinaciones efectivas de ~43.000 a ~3.000 y empeora el resultado 10-15% — es una práctica de 2018-2021 ya obsoleta.
 6 ÁNGULOS QUE DEBEN CUBRIR LOS 15 TITULARES (mínimo 5 de los 6, para variedad real — 15 titulares casi idénticos no le dan nada nuevo que testear al algoritmo):
 1. Keyword + ubicación (los 3 pinneados en slot 1): ej. "Cremación de Mascotas RM", "Crematorio Mascotas Santiago", "Cremación Urgente Mascotas".
-2. Oferta/diferenciador (sin pinnear): ej. "Entrega en 4 Días Hábiles", "Instalaciones Propias RM", "Retiro a Domicilio Incluido".
+2. Oferta/diferenciador (sin pinnear): ej. "Entrega en ${ENTREGA_DIAS_MAX} Días Hábiles", "Instalaciones Propias RM", "Retiro a Domicilio Incluido".
 3. Confianza/prueba social (sin pinnear): ej. "Trazabilidad Total Certificada", años en el rubro, si hay reseñas reales con nota.
 4. Urgencia (sin pinnear, solo si es real): ej. "Retiro en Menos de 3 Horas", "Atención Todos los Días".
 5. Garantía/promesa concreta (sin pinnear): ej. "Certificado Digital Incluido", "Sin Costos Ocultos".

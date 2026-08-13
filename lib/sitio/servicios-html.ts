@@ -7,6 +7,7 @@
 
 import { BASE_URL } from './render'
 import { waLink } from './landings'
+import { expressDisponible } from '@/lib/plazo-entrega'
 
 type Serv = Record<string, string>
 
@@ -83,7 +84,9 @@ export function renderServiciosWeb(servicios: Serv[], desdePorSlug: Record<strin
     + '</style>'
   // El chip es el CTA: abre WhatsApp con el mensaje ya escrito, así el agente
   // sabe de entrada que viene por el Express y cotiza la cremación incluyéndolo.
-  const express = '<div class="aa-express">'
+  // Mientras una ventana de alta demanda lo suspenda, la franja NO se muestra:
+  // sería el peor lugar donde prometer 48 h (ver lib/plazo-entrega).
+  const express = !expressDisponible() ? '' : '<div class="aa-express">'
     + '<span class="aa-express-ico" aria-hidden="true">⚡</span>'
     + '<div class="aa-express-txt">Contrata nuestro Servicio Express y te entregamos en 48 horas hábiles'
     + '<small>Un adicional para quien necesita las cenizas antes. Escríbenos y lo coordinamos.</small></div>'

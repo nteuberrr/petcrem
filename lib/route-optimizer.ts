@@ -1,5 +1,8 @@
 import { getSheetData } from '@/lib/datastore'
 import { agregarDiasHabiles, isoFecha, proximosDiasHabiles, tieneExpress, EXPRESS_DIAS } from '@/lib/dias-habiles'
+// El plazo NO es fijo: durante una ventana de alta demanda se alarga, y cada
+// ficha conserva el que le tocó por su fecha de retiro. Ver lib/plazo-entrega.
+import { plazoParaRetiro } from '@/lib/plazo-entrega'
 import { formatDate, formatDateForSheet } from '@/lib/dates'
 import { geocodeAddress, computeRoute, buildGoogleMapsUrl, type LatLng } from '@/lib/google-maps'
 
@@ -125,7 +128,7 @@ async function clasificarClientes(opts: { dias_recomendadas: number; fecha_base_
     if (!isoRetiro) continue
     const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
     if (isNaN(fechaRetiro.getTime())) continue
-    const plazo = tieneExpress(c.adicionales) ? EXPRESS_DIAS : (plazoMap.get(codigo) ?? 4)
+    const plazo = tieneExpress(c.adicionales) ? EXPRESS_DIAS : plazoParaRetiro(isoRetiro, plazoMap.get(codigo))
     const fechaObjetivo = agregarDiasHabiles(fechaRetiro, plazo)
     const isoObj = isoFecha(fechaObjetivo)
 
@@ -171,7 +174,7 @@ function toParada(
   const codigo = (c.row.codigo_servicio || 'CI').toUpperCase()
   const isoRetiro = formatDateForSheet(c.row.fecha_retiro) || ''
   const fechaRetiro = new Date(`${isoRetiro}T12:00:00`)
-  const plazo = tieneExpress(c.row.adicionales) ? EXPRESS_DIAS : (plazoMap.get(codigo) ?? 4)
+  const plazo = tieneExpress(c.row.adicionales) ? EXPRESS_DIAS : plazoParaRetiro(isoRetiro, plazoMap.get(codigo))
   const fechaObjetivo = agregarDiasHabiles(fechaRetiro, plazo)
   const isoObj = isoFecha(fechaObjetivo)
   return {
