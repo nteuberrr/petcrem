@@ -26,7 +26,7 @@ const Schema = z.object({
   fecha_retiro: z.string().min(1, 'Fecha de retiro requerida'),
   hora_retiro: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/, 'Hora inválida (HH:MM)'),
   peso: z.union([z.string(), z.number()]).optional(),
-  /** El equipo vio el conflicto de horario y decidió agendar igual. */
+  /** Se ignora: quedó de cuando el choque de horario bloqueaba el guardado. */
   forzar: z.boolean().optional(),
 })
 
@@ -35,24 +35,36 @@ export async function POST(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
   try {
     const d = Schema.parse(await req.json())
+    // El número se valida ENTERO, no "que tenga al menos 8 dígitos". Un móvil
+    // chileno son 9 dígitos empezando en 9 (o 11 con el 56 adelante). Con la
+    // regla vieja, un número al que le faltaba un dígito se guardaba igual y la
+    // confirmación se mandaba al vacío: Meta responde 200 y no entrega, así que
+    // el equipo daba por avisado a un tutor que nunca supo nada (caso real
+    // 11-08-2026, solicitud #114). Adivinar el dígito que falta no es opción
+    // —se le escribiría a un desconocido—, así que se rechaza y se corrige.
     const tel = d.telefono.replace(/\D/g, '')
-    if (tel.length < 8) return NextResponse.json({ error: 'El WhatsApp no es válido.' }, { status: 400 })
-    // Guardamos con código país (56) para que la confirmación por WhatsApp salga bien.
-    const wa = tel.length === 9 ? `56${tel}` : tel
-
-    // Validación de horario EN EL SERVIDOR. Antes la única defensa era el aviso
-    // visual del modal, que además se traga los errores de red: si la consulta
-    // fallaba, el equipo guardaba creyendo que estaba libre. Ahora el choque
-    // vuelve como 409 y solo pasa con `forzar` explícito.
-    if (!d.forzar) {
-      const slot = await evaluarSlotRetiro(d.fecha_retiro, d.hora_retiro)
-      if (!slot.ok) {
-        return NextResponse.json(
-          { error: slot.motivo || 'Ese horario no está disponible.', conflicto: true, motivo: slot.motivo, libres: slot.libres },
-          { status: 409 },
-        )
-      }
+    const wa = tel.length === 9 && tel.startsWith('9') ? `56${tel}`
+      : tel.length === 11 && tel.startsWith('569') ? tel
+      : ''
+    if (!wa) {
+      return NextResponse.json(
+        { error: `El WhatsApp «${d.telefono}» no es un móvil chileno válido: son 9 dígitos empezando en 9 (por ejemplo 961217925).` },
+        { status: 400 },
+      )
     }
+
+    // El horario se EVALÚA pero NO se bloquea (decisión del dueño 2026-08-12).
+    // Lo que el bot no puede hacer solo, el equipo sí: una familia que necesita
+    // el retiro a esa hora vale más que la separación de 30/45 minutos, y quien
+    // agenda a mano está mirando la ruta. El sistema informa y agenda igual; la
+    // superposición queda visible en morado en la agenda (lib/agenda →
+    // `superpuesto`), que es donde sirve. Antes esto devolvía 409 y obligaba a
+    // guardar dos veces.
+    let aviso: string | null = null
+    try {
+      const slot = await evaluarSlotRetiro(d.fecha_retiro, d.hora_retiro)
+      if (!slot.ok) aviso = slot.motivo || 'Ese horario choca con otra reserva.'
+    } catch (e) { console.warn('[agendamiento-manual] no se pudo evaluar el horario:', e) }
 
     const id = await getNextId('solicitudes_retiro')
     await appendRow('solicitudes_retiro', {
@@ -74,7 +86,7 @@ export async function POST(req: NextRequest) {
     // Mismo flujo que el botón "Confirmar" del panel: crea el borrador y manda la
     // confirmación por WhatsApp al tutor (con el link válido firmado en prod).
     const r = await resolverSolicitudRetiro(String(id), true)
-    return NextResponse.json({ ok: true, solicitud_id: id, ...r })
+    return NextResponse.json({ ok: true, solicitud_id: id, aviso, ...r })
   } catch (e) {
     if (e instanceof z.ZodError) {
       return NextResponse.json({ error: e.issues[0]?.message || 'Datos inválidos.' }, { status: 400 })

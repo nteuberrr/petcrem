@@ -2,8 +2,8 @@ import { getSheetData, updateByIdIf, updateById } from './datastore'
 import { crearClienteBorrador } from './cliente-borrador'
 import { createBorradorToken } from './borrador-token'
 import { enviarRetiroConfirmadoVet } from './vet-cremacion-mailer'
-import { enviarTextoWhatsapp, enviarPlantillaWhatsapp, renderPlantillaWa, plantillasAprobadas } from './whatsapp'
-import { upsertContacto, getOrCreateConversacion, insertarMensaje, marcarConversacionPorTelefono } from './mensajes'
+import { enviarTextoWhatsapp, enviarPlantillaWhatsapp, enviarPlantillaUrlWhatsapp, renderPlantillaWa, plantillasAprobadas, BASE_PUBLICA } from './whatsapp'
+import { upsertContacto, getOrCreateConversacion, insertarMensaje, marcarConversacionPorTelefono, ventanaAbierta } from './mensajes'
 import { formatDate, todayISO, formatDateForSheet } from './dates'
 import { conflictosEnAgenda, describirConflictos } from './agenda'
 
@@ -163,6 +163,9 @@ export async function resolverSolicitudRetiro(
   // Ficha borrador creada al confirmar; se linkea a la solicitud para que el
   // dashboard oculte el cuadro verde cuando la ficha se registre.
   let borradorId = ''
+  /** Token del link para adelantar datos: va como link en el texto libre y como
+   *  sufijo del botón en la plantilla (Meta solo deja variar el final del link). */
+  let tokenFicha = ''
 
   if (confirmado && esVet) {
     // ── Retiro de VETERINARIO: borrador asociado al vet + correo de confirmación B2B.
@@ -225,7 +228,11 @@ export async function resolverSolicitudRetiro(
         origen: 'bot_retiro',
         notas: 'Creado desde una solicitud de retiro del bot de WhatsApp.',
       })
-      linkFicha = `${base}/registro-mascota?ficha=${createBorradorToken(borradorId)}`
+      tokenFicha = createBorradorToken(borradorId)
+      // El MISMO token en sus dos formas: link completo para el texto libre y
+      // sufijo suelto para el botón de la plantilla (Meta solo deja variar el
+      // final de una URL aprobada).
+      linkFicha = `${BASE_PUBLICA}/f/${tokenFicha}`
     } catch (e) { console.warn('[solicitudes-retiro] no se pudo crear cliente borrador:', e) }
 
     msgCliente = `Tu retiro quedó confirmado para el ${formatDate(sol.fecha_retiro)} a las ${sol.hora_retiro}.\n\n` +
@@ -249,27 +256,76 @@ export async function resolverSolicitudRetiro(
     } catch (e) { console.warn('[solicitudes-retiro] no se pudo linkear cliente_id:', e) }
   }
 
-  // Avisar por WhatsApp a quien pidió el retiro + registrar en su conversación.
-  // Si la ventana de 24h ya cerró (p. ej. el admin confirmó al día siguiente),
-  // cae a la plantilla aprobada `retiro_confirmado` (sin el link: al responder,
-  // la persona reabre la ventana y ahí se le puede mandar).
+  // ── Avisarle por WhatsApp a quien pidió el retiro ──────────────────────────
+  //
+  // ⚠️ La VENTANA se consulta ANTES de enviar, no se deduce del error. Con la
+  // ventana cerrada Meta responde 200 con message_id y descarta el mensaje: el
+  // respaldo por plantilla —que se disparaba con `fuera_de_ventana`— nunca
+  // corría, y el mensaje quedaba «enviado» en el inbox para siempre.
+  //
+  // Eso rompía justo el caso del agendamiento MANUAL: ahí el tutor nos habló por
+  // teléfono y NUNCA nos escribió por WhatsApp, así que no hay ventana que valga.
+  // Comprobado el 12-08-2026 con Inna: se le mandó la confirmación a las 21:21 y
+  // a las 21:58 escribió «coordiné para hoy el servicio…», como si nadie le
+  // hubiera contestado — porque nadie le había llegado. Los retiros que vienen
+  // del bot no lo sufrían: ahí el tutor acababa de escribir.
   if (waCliente) {
-    let env = await enviarTextoWhatsapp(waCliente, msgCliente)
-    let cuerpoEnviado = msgCliente
-    if (!env.ok && env.fuera_de_ventana && confirmado && (await plantillasAprobadas()).has('retiro_confirmado')) {
-      const tutor = (sol.cliente_nombre || '').trim().split(/\s+/)[0] || '👋'
-      const vars = [tutor, sol.nombre_mascota || 'tu mascota', `el ${formatDate(sol.fecha_retiro)} a las ${sol.hora_retiro}`]
-      const envP = await enviarPlantillaWhatsapp(waCliente, 'retiro_confirmado', vars)
-      if (envP.ok) { env = envP; cuerpoEnviado = renderPlantillaWa('retiro_confirmado', vars) }
-    }
+    let convId: number | null = null
+    let abierta = false
     try {
       const cont = await upsertContacto({ wa_id: waCliente, telefono: waCliente, audiencia: 'A' })
       const conv = await getOrCreateConversacion(cont.id, 'whatsapp', cont.audiencia, 'whatsapp')
-      await insertarMensaje({
-        conversacion_id: conv.id, direccion: 'saliente', cuerpo: cuerpoEnviado,
-        tipo: 'texto', estado: env.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
-      })
-    } catch (e) { console.warn('[solicitudes-retiro] no se pudo registrar aviso al cliente:', e) }
+      convId = conv.id
+      abierta = await ventanaAbierta(conv.id)
+    } catch (e) { console.warn('[solicitudes-retiro] no se pudo resolver la conversación:', e) }
+
+    let env: { ok: boolean; message_id?: string; error?: string; fuera_de_ventana?: boolean } = { ok: false }
+    let cuerpoEnviado = msgCliente
+    // Con la ventana abierta va el texto libre: es gratis y lleva el link para
+    // adelantar los datos, que la plantilla no puede llevar.
+    if (abierta) env = await enviarTextoWhatsapp(waCliente, msgCliente)
+    // Cerrada (o el texto libre rebotó): plantilla aprobada, lo ÚNICO que Meta
+    // entrega fuera de la ventana. Se paga, pero llega — y con el botón de link
+    // llega también el acceso para adelantar los datos.
+    const aprobadas = (!abierta || (!env.ok && env.fuera_de_ventana)) ? await plantillasAprobadas() : new Set<string>()
+    if (!abierta || (!env.ok && env.fuera_de_ventana)) {
+      const tutor = (sol.cliente_nombre || '').trim().split(/\s+/)[0] || '👋'
+      const vars = [tutor, sol.nombre_mascota || 'tu mascota', `el ${formatDate(sol.fecha_retiro)} a las ${sol.hora_retiro}`]
+      // Preferida: la que lleva el link en un BOTÓN, así el tutor puede adelantar
+      // los datos sin depender de que responda primero. Si todavía no está
+      // aprobada por Meta, cae a la de siempre (avisa, pero sin link).
+      if (confirmado && tokenFicha && aprobadas.has('retiro_confirmado_link')) {
+        const envP = await enviarPlantillaUrlWhatsapp(waCliente, 'retiro_confirmado_link', vars, tokenFicha)
+        if (envP.ok) {
+          env = envP
+          cuerpoEnviado = `${renderPlantillaWa('retiro_confirmado_link', vars)}\n[Botón: Completar datos → ${BASE_PUBLICA}/f/${tokenFicha}]`
+        } else if (!env.ok) env = envP
+      }
+      if (!env.ok && confirmado && aprobadas.has('retiro_confirmado')) {
+        const envP = await enviarPlantillaWhatsapp(waCliente, 'retiro_confirmado', vars)
+        if (envP.ok) { env = envP; cuerpoEnviado = renderPlantillaWa('retiro_confirmado', vars) }
+        else env = envP
+      }
+      if (!env.ok && !abierta) {
+        // Sin plantilla no hay forma de llegarle: se intenta igual (por si la
+        // ventana estaba abierta y no lo vimos) pero el acuse lo tiene que decir.
+        env = await enviarTextoWhatsapp(waCliente, msgCliente)
+        if (!env.ok) alerta += `\n⚠️ No se le pudo avisar por WhatsApp (${env.error || 'sin ventana de 24h y sin plantilla'}). Llámalo.`
+      }
+    }
+
+    if (convId != null) {
+      try {
+        // El provider_message_id es lo que permite que el webhook de estados
+        // escriba acá si Meta después falla el mensaje. Sin él, el inbox mostraba
+        // «enviado» aunque no hubiera llegado nunca: ese era el punto ciego.
+        await insertarMensaje({
+          conversacion_id: convId, direccion: 'saliente', cuerpo: cuerpoEnviado,
+          tipo: 'texto', estado: env.ok ? 'enviado' : 'fallido', enviado_por: 'agente',
+          provider_message_id: env.message_id ?? null,
+        })
+      } catch (e) { console.warn('[solicitudes-retiro] no se pudo registrar aviso al cliente:', e) }
+    }
   }
 
   // Al AGENDAR (confirmar) un retiro de TUTOR, su conversación pasa a 'cliente'.

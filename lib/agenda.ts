@@ -253,6 +253,12 @@ export interface AgendaItem {
    * única de lib/ficha-retiro: ficha registrada + la hora de retiro ya pasada.
    */
   retirada?: boolean
+  /**
+   * Quedó pisado con otro agendamiento del mismo día (misma regla que usa el bot
+   * para no ofrecer esa hora). Pasa cuando el equipo agenda a mano encima de una
+   * reserva: se permite a propósito, pero tiene que verse en la agenda.
+   */
+  superpuesto?: boolean
   /** Valor a cobrar por lo agendado (cremación + eutanasia si corresponde). */
   valor?: number
   /** true mientras el precio no esté congelado en la ficha (es una estimación). */
@@ -422,8 +428,45 @@ export async function listarAgenda(
     })
   }
 
-  return out.sort((a, b) =>
-    a.fecha.localeCompare(b.fecha) || (a.hora || '').localeCompare(b.hora || ''))
+  return marcarSuperpuestos(out.sort((a, b) =>
+    a.fecha.localeCompare(b.fecha) || (a.hora || '').localeCompare(b.hora || '')))
+}
+
+/**
+ * Marca los agendamientos que quedaron pisados entre sí, con la MISMA regla que
+ * usa el bot para no agendar ahí (`conflictosEnAgenda`: 30 min antes / 45
+ * después, sobre la hora en que se ocupa el CHOFER).
+ *
+ * Existe porque el equipo puede agendar a mano encima de otra reserva —a veces
+ * hay que hacerlo, y desde 2026-08-12 el sistema ya no lo impide— y esa
+ * superposición tiene que verse en la agenda, no descubrirse el día del retiro.
+ *
+ * Se marcan LOS DOS lados. La regla no es simétrica (30 antes, 45 después), así
+ * que un retiro puede chocar con otro sin que el otro choque con él; para una
+ * etiqueta visual eso sería absurdo: si se pisan, se pisan los dos.
+ */
+function marcarSuperpuestos(items: AgendaItem[]): AgendaItem[] {
+  const porDia = new Map<string, AgendaItem[]>()
+  for (const it of items) {
+    const arr = porDia.get(it.fecha)
+    if (arr) arr.push(it); else porDia.set(it.fecha, [it])
+  }
+  const choca = (a: number, b: number) => a > b - SEP_ANTES && a < b + SEP_DESPUES
+  for (const delDia of porDia.values()) {
+    for (let i = 0; i < delDia.length; i++) {
+      const ma = horaMin(delDia[i].horaOcupa)
+      if (ma == null) continue
+      for (let j = i + 1; j < delDia.length; j++) {
+        const mb = horaMin(delDia[j].horaOcupa)
+        if (mb == null) continue
+        if (choca(ma, mb) || choca(mb, ma)) {
+          delDia[i].superpuesto = true
+          delDia[j].superpuesto = true
+        }
+      }
+    }
+  }
+  return items
 }
 
 /**

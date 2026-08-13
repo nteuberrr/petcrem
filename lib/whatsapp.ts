@@ -82,7 +82,36 @@ export interface PlantillaWa {
    * ⚠️ Sin emojis — Meta los rechaza en el texto de un botón (en el cuerpo sí van).
    */
   botones?: string[]
+  /**
+   * Botón que ABRE UN LINK. Es la única forma de meter un link ACCIONABLE en una
+   * plantilla: Meta no acepta URLs sueltas en el cuerpo, así que sin esto un
+   * mensaje fuera de la ventana de 24h no puede llevar a ninguna parte.
+   *
+   * ⚠️ Meta aprueba la URL, no solo el texto: la base es FIJA y lo único que
+   * puede cambiar por envío es un SUFIJO al final. Por eso el link corto del
+   * borrador (`/f/<token>`) encaja justo — la base es `…/f/` y el sufijo, el
+   * token. Con el formato viejo (un token de 105 caracteres dentro de un query
+   * string) esto no era viable.
+   */
+  botonUrl?: {
+    /** Etiqueta del botón (≤25 caracteres, sin emojis: Meta los rechaza). */
+    texto: string
+    /** Parte FIJA del link, tal cual queda aprobada. Termina en '/' si hay sufijo. */
+    urlBase: string
+    /** true si al final va un sufijo variable ({{1}}); false = link fijo. */
+    variable?: boolean
+    /** Sufijo de ejemplo, para que Meta apruebe el link variable. */
+    ejemploSufijo?: string
+  }
 }
+
+/**
+ * Dominio PÚBLICO para los links que se le mandan al cliente. Es el de la marca,
+ * no el de Vercel: un tutor en duelo que recibe un link a «petcrem.vercel.app»
+ * tiene todo el derecho a desconfiar. Además es el que queda aprobado dentro de
+ * las plantillas con botón de URL, así que cambiarlo obliga a re-aprobarlas.
+ */
+export const BASE_PUBLICA = (process.env.PUBLIC_BASE_URL || 'https://www.crematorioalmaanimal.cl').replace(/\/$/, '')
 
 export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
   retomar_conversacion: {
@@ -102,6 +131,25 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
     categoria: 'UTILITY',
     texto: 'Hola {{1}}, confirmamos el retiro de {{2}} para {{3}}. Ante cualquier cambio, respóndenos por aquí. Gracias por confiar en Crematorio Alma Animal.',
     ejemplos: ['María', 'Rocky', 'hoy a las 18:00'],
+  },
+  retiro_confirmado_link: {
+    nombre: 'retiro_confirmado_link',
+    categoria: 'UTILITY',
+    // La MISMA confirmación, pero con el link para adelantar los datos dentro de
+    // un botón. Es la que se usa cuando la ventana de 24h está cerrada — el caso
+    // del agendamiento MANUAL, donde el tutor llamó por teléfono y nunca nos
+    // escribió por WhatsApp. Hasta el 12-08-2026 ahí se mandaba texto libre: Meta
+    // respondía 200 y lo tiraba, así que 12 de 14 tutores no recibieron nada.
+    // `retiro_confirmado` (sin botón) queda como respaldo por si esta no está
+    // aprobada todavía.
+    texto: 'Hola {{1}}, confirmamos el retiro de {{2}} para {{3}}. Si quieres, puedes adelantar los datos de tu mascota con el botón de aquí abajo; no es obligatorio, si no alcanzas te los pedimos al momento del retiro. Ante cualquier cambio, respóndenos por aquí. Gracias por confiar en Crematorio Alma Animal.',
+    ejemplos: ['María', 'Rocky', 'hoy a las 18:00'],
+    botonUrl: {
+      texto: 'Completar datos',
+      urlBase: `${BASE_PUBLICA}/f/`,
+      variable: true,
+      ejemploSufijo: 'b8.tl857x.kJqN7xo0121g51Vt',
+    },
   },
   entrega_en_camino: {
     nombre: 'entrega_en_camino',
@@ -241,6 +289,40 @@ export async function enviarPlantillaBotonesWhatsapp(
   })
 }
 
+/**
+ * Envía una plantilla con BOTÓN DE LINK, completando el sufijo variable de la
+ * URL (el token, el folio, lo que sea que cambie por envío).
+ *
+ * Es lo que permite que un mensaje fuera de la ventana de 24h lleve a alguna
+ * parte: sin botón, la plantilla solo puede decir «respóndenos por aquí».
+ */
+export async function enviarPlantillaUrlWhatsapp(
+  to: string, nombre: string, variables: string[], sufijoUrl = '',
+): Promise<EnvioResult> {
+  const p = PLANTILLAS_WA[nombre]
+  if (!p) return { ok: false, error: `Plantilla desconocida: ${nombre}` }
+  if (!p.botonUrl) return { ok: false, error: `La plantilla ${nombre} no tiene botón de link` }
+  const esperadas = (p.texto.match(/\{\{\d+\}\}/g) || []).length
+  if (variables.length < esperadas) return { ok: false, error: `La plantilla ${nombre} espera ${esperadas} variable(s), llegaron ${variables.length}.` }
+  const components: Record<string, unknown>[] = []
+  if (esperadas > 0) {
+    components.push({ type: 'body', parameters: variables.slice(0, esperadas).map(v => ({ type: 'text', text: limpiarParam(v) })) })
+  }
+  // El sufijo va como parámetro del botón 0. Si la URL es fija (sin {{1}}) Meta
+  // rechaza el component, así que solo se manda cuando corresponde.
+  if (p.botonUrl.variable) {
+    components.push({
+      type: 'button', sub_type: 'url', index: '0',
+      parameters: [{ type: 'text', text: limpiarParam(sufijoUrl) }],
+    })
+  }
+  return postMensaje({
+    to: to.replace(/[^\d]/g, ''),
+    type: 'template',
+    template: { name: nombre, language: { code: IDIOMA_PLANTILLAS }, components },
+  })
+}
+
 export interface PlantillaEstado {
   nombre: string
   estado: string // APPROVED | PENDING | REJECTED | …
@@ -302,6 +384,14 @@ export async function crearPlantillasFaltantes(): Promise<{ nombre: string; resu
         type: 'BUTTONS',
         buttons: p.botones.slice(0, 3).map(t => ({ type: 'QUICK_REPLY', text: t.slice(0, 25) })),
       })
+    }
+    if (p.botonUrl) {
+      // La URL se aprueba junto con el texto. Con sufijo variable va como
+      // `base{{1}}` + un ejemplo completo, que es lo que Meta revisa.
+      const url = p.botonUrl.variable ? `${p.botonUrl.urlBase}{{1}}` : p.botonUrl.urlBase
+      const boton: Record<string, unknown> = { type: 'URL', text: p.botonUrl.texto.slice(0, 25), url }
+      if (p.botonUrl.variable) boton.example = [`${p.botonUrl.urlBase}${p.botonUrl.ejemploSufijo || 'ejemplo'}`]
+      components.push({ type: 'BUTTONS', buttons: [boton] })
     }
     try {
       const res = await fetch(`${GRAPH}/${version()}/${waba}/message_templates`, {

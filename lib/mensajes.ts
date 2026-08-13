@@ -405,6 +405,33 @@ export async function existeMensajePorProvider(providerMessageId: string): Promi
 }
 
 /** Marca el estado de un mensaje saliente por su provider_message_id (status webhook). */
+/**
+ * ¿La ventana de 24 h de Meta sigue abierta en esta conversación? Es decir:
+ * ¿podemos escribirle TEXTO LIBRE, o hay que usar una plantilla?
+ *
+ * Hay que preguntarlo ANTES de enviar, no deducirlo del error: cuando la ventana
+ * está cerrada Meta responde **200 con message_id** y descarta el mensaje sin
+ * entregarlo (mismo comportamiento del incidente del 11-08). O sea que "salió
+ * bien" no significa nada, y el respaldo por plantilla —que se disparaba con el
+ * error sincrónico— nunca corría. Así se perdieron confirmaciones de retiro
+ * agendadas a mano, donde el tutor NUNCA nos había escrito.
+ *
+ * Ante un error de lectura devuelve `false`: mejor pagar una plantilla de más
+ * que dar por avisado a alguien que no recibió nada.
+ */
+export async function ventanaAbierta(conversacionId: number, horas = 23): Promise<boolean> {
+  try {
+    const sb = getMensajesSupabase()
+    const { data, error } = await sb.from(T_MSG).select('ts')
+      .eq('conversacion_id', conversacionId).eq('direccion', 'entrante')
+      .order('id', { ascending: false }).limit(1)
+    if (error) return false
+    const ts = ((data ?? [])[0] as { ts?: string } | undefined)?.ts
+    if (!ts) return false // nunca nos escribió → jamás hubo ventana
+    return (Date.now() - new Date(ts).getTime()) / 3_600_000 < horas
+  } catch { return false }
+}
+
 export async function marcarEstadoMensaje(providerMessageId: string, estado: string): Promise<void> {
   const sb = getMensajesSupabase()
   await sb.from(T_MSG).update({ estado }).eq('provider_message_id', providerMessageId)

@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { esAdmin } from '@/lib/roles'
 import { getSheetData } from '@/lib/datastore'
-import { createBorradorToken } from '@/lib/borrador-token'
+import { linkBorrador } from '@/lib/borrador-token'
 import { enviarTextoWhatsapp, isWhatsappConfigured } from '@/lib/whatsapp'
 import { upsertContacto, getOrCreateConversacion, insertarMensaje } from '@/lib/mensajes'
 
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!isWhatsappConfigured()) return NextResponse.json({ error: 'WhatsApp no configurado' }, { status: 400 })
 
   const base = (process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://petcrem.vercel.app').replace(/\/+$/, '')
-  const link = `${base}/registro-mascota?ficha=${createBorradorToken(String(id))}`
+  const link = linkBorrador(id, base)
   const soloLink = await req.json().then((b: { soloLink?: boolean }) => b?.soloLink !== false).catch(() => true)
   const cuerpo = soloLink ? link : `Para completar los datos de ${c.nombre_mascota || 'tu mascota'}, entra aquí:\n${link}`
   const wa = `56${tel}`

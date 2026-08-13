@@ -53,11 +53,10 @@ export default function NuevaSolicitudModal({
   // ── Aviso de tope horario ────────────────────────────────────────────────
   // Al elegir fecha+hora consultamos la MISMA regla que respeta el bot (ventana
   // 09:00–21:10, bloqueos manuales y 30 min antes / 45 después de otra reserva).
-  // Es solo una ADVERTENCIA: el equipo puede guardar igual.
+  // Es solo INFORMATIVO: agendando a mano se guarda igual, quede como quede. El
+  // bot no puede pisar una reserva; el equipo sí, mirando la ruta.
   const [aviso, setAviso] = useState<{ motivo: string; libres: string[] } | null>(null)
   const [revisando, setRevisando] = useState(false)
-  // Choque devuelto por el SERVIDOR al guardar (409): hay que decidir explícitamente.
-  const [choque, setChoque] = useState<{ motivo: string; libres: string[] } | null>(null)
   const { fecha_retiro, hora_retiro } = form
 
   useEffect(() => {
@@ -107,30 +106,30 @@ export default function NuevaSolicitudModal({
     }
   }
 
-  function cerrar() { setError(''); setAviso(null); setChoque(null); setComunaAuto(false); setComunaAviso(''); onClose() }
+  function cerrar() { setError(''); setAviso(null); setComunaAuto(false); setComunaAviso(''); onClose() }
 
-  async function submit(e: React.SyntheticEvent, forzar = false) {
+  async function submit(e: React.SyntheticEvent) {
     e.preventDefault()
     if (guardandoRef.current) return
     guardandoRef.current = true
-    setGuardando(true); setError(''); setChoque(null)
+    setGuardando(true); setError('')
     try {
       const res = await fetch('/api/clientes/agendamiento-manual', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, forzar }),
+        body: JSON.stringify(form),
       })
       const data = await res.json().catch(() => ({}))
-      // 409 = el servidor detectó el choque de horario (el aviso del formulario
-      // es solo informativo y puede fallar por red). Se muestra y se decide.
-      if (res.status === 409) {
-        setChoque({ motivo: data?.motivo || 'Ese horario choca con otra reserva.', libres: Array.isArray(data?.libres) ? data.libres : [] })
-        return
-      }
       if (!res.ok) { setError(data?.error || 'No se pudo registrar el agendamiento.'); return }
       const mascota = form.nombre_mascota
       onClose()
       await onCreada?.()
-      alert(`✅ Agendamiento registrado. Se creó la ficha "Por ingresar" de ${mascota} y se le envió la confirmación por WhatsApp al tutor.`)
+      // El choque ya no impide guardar: se avisa DESPUÉS, con el retiro agendado,
+      // y en la agenda queda en morado.
+      alert(`✅ Agendamiento registrado. Se creó la ficha "Por ingresar" de ${mascota} y se le envió la confirmación por WhatsApp al tutor.`
+        + (data?.aviso ? `
+
+⚠️ Quedó superpuesto: ${data.aviso}
+En la agenda se ve en morado. Revisa la ruta del chofer.` : ''))
     } catch {
       setError('Error de red. Intenta de nuevo.')
     } finally {
@@ -217,7 +216,9 @@ export default function NuevaSolicitudModal({
                 ))}
               </p>
             )}
-            <p className="mt-1 text-[11px] text-amber-800/80">Puedes guardar igual: esto es solo un aviso.</p>
+            <p className="mt-1 text-[11px] text-amber-800/80">
+              Se agenda igual — es un aviso, no un bloqueo. Si guardas así, el retiro queda <span className="font-semibold text-violet-800">superpuesto</span> y en la agenda se ve en morado.
+            </p>
           </div>
         )}
 
@@ -231,27 +232,6 @@ export default function NuevaSolicitudModal({
           </button>
         </div>
 
-        {choque && (
-          <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
-            <p className="text-sm font-semibold text-amber-900">No se registró: ese horario choca</p>
-            <p className="text-xs text-amber-900">{choque.motivo}</p>
-            {choque.libres.length > 0 && (
-              <p className="text-xs text-amber-900">
-                <span className="font-semibold">Horas libres ese día:</span> {choque.libres.join(' · ')}
-              </p>
-            )}
-            <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setChoque(null)}
-                className="flex-1 border-2 border-amber-400 text-amber-900 rounded-lg py-2 text-xs font-semibold hover:bg-amber-100 transition-colors">
-                Cambiar la hora
-              </button>
-              <button type="button" disabled={guardando} onClick={e => submit(e, true)}
-                className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg py-2 text-xs font-semibold disabled:opacity-50 transition-colors">
-                Agendar igual
-              </button>
-            </div>
-          </div>
-        )}
       </form>
     </Modal>
   )

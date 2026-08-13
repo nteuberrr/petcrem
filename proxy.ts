@@ -119,6 +119,10 @@ export async function proxy(req: NextRequest) {
     // código y correo de bienvenida sin que hubiéramos retirado a la mascota) se
     // eliminó por decisión del dueño (2026-07-28) — nunca se usó.
     pathname === '/registro-mascota' ||
+    // Ruta CORTA del mismo link (/f/<token> → /registro-mascota?ficha=…): el
+    // link va por WhatsApp y el largo importa. Solo redirige; la firma se
+    // verifica igual del otro lado.
+    pathname.startsWith('/f/') ||
     // Completar el borrador desde el link firmado del WhatsApp de retiro
     // confirmado (auth = token HMAC; NO genera código, solo enriquece el borrador).
     pathname === '/api/clientes/completar-borrador' ||

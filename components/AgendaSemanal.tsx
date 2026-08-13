@@ -14,6 +14,8 @@ type Item = {
   horaEutanasia?: string; esperandoHoraVet?: boolean; sinCremacion?: boolean
   /** La mascota ya está con nosotros (retiro hecho) → etiqueta azul "listo". */
   retirada?: boolean
+  /** Quedó pisado con otro agendamiento del día → etiqueta morada. */
+  superpuesto?: boolean
   /** Valor a cobrar por lo agendado (lo calcula /api/agenda). */
   valor?: number; valorEstimado?: boolean
 }
@@ -168,8 +170,13 @@ function lunesDe(offsetSemanas: number): Date {
  *
  *   gris   → eutanasia sin cremación (solo recordatorio, no hay retiro)
  *   azul   → LISTO: la mascota ya fue retirada, está con nosotros
+ *   morado → SUPERPUESTO: quedó pisado con otro agendamiento del día
  *   ámbar  → por confirmar
  *   verde  → confirmado, pendiente de retirar
+ *
+ * El morado va DESPUÉS del azul: una vez que la mascota está con nosotros la
+ * superposición ya no es un problema que resolver, es historia. Antes del ámbar
+ * y del verde porque sí lo es: hay que reordenar la ruta o llamar.
  */
 function estiloDe(it: Item): { cls: string; hover: string; listo: boolean } {
   if (it.tipo === 'eutanasia' && it.sinCremacion) {
@@ -177,6 +184,9 @@ function estiloDe(it: Item): { cls: string; hover: string; listo: boolean } {
   }
   if (it.retirada) {
     return { cls: 'bg-blue-100 border-blue-400 text-blue-900', hover: 'hover:bg-blue-200', listo: true }
+  }
+  if (it.superpuesto) {
+    return { cls: 'bg-violet-100 border-violet-400 text-violet-900', hover: 'hover:bg-violet-200', listo: false }
   }
   if (it.estado === 'pendiente') {
     return { cls: 'bg-amber-100 border-amber-300 text-amber-900', hover: 'hover:bg-amber-200', listo: false }
@@ -202,6 +212,10 @@ function detalle(it: Item): string {
       ? `Valor a cobrar: ${fmtPrecio(it.valor)}${it.valorEstimado ? ' (estimado)' : ''}`
       : 'Valor a cobrar: falta el peso para calcularlo'),
     (it.direccion || it.comuna) && `${[it.direccion, it.comuna].filter(Boolean).join(', ')}`,
+    // El estado sigue estando acá aunque la etiqueta se vea morada.
+    it.superpuesto && !it.retirada && !eutSinCrem
+      ? '⚠ SUPERPUESTO con otro agendamiento del día (menos de 30 min antes o 45 después). Revisa la ruta del chofer.'
+      : null,
     eutSinCrem
       ? 'Sin retiro del crematorio: el chofer no pasa a buscarla. No bloquea la agenda.'
       : it.retirada
@@ -493,6 +507,7 @@ export default function AgendaSemanal() {
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-200 border border-amber-400" /> Por confirmar</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-200 border border-emerald-400" /> Por retirar</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-200 border border-blue-400" /> Listo (ya retirada)</span>
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-violet-200 border border-violet-400" /> Superpuesto</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-200 border border-gray-400" /> Eutanasia sin cremación (recordatorio)</span>
         <span className="hidden md:inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-gray-300" style={{ background: SOMBRA_BG }} /> Bloqueo 30 min</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-red-300" style={{ background: BLOQUEO_BG }} /> Agenda bloqueada</span>
