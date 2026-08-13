@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   LayoutDashboard, PawPrint, MessageCircle, Flame, Clock, Receipt, Stethoscope,
   HeartHandshake, Megaphone, FileText, HandCoins, Globe, Wallet, Settings, LineChart,
@@ -31,6 +31,12 @@ const nav: { href: string; label: string; icon: LucideIcon; modulo: string; colo
   { href: '/configuracion', label: 'Configuración', icon: Settings, modulo: 'configuracion', color: 'text-slate-300' },
   { href: '/reportes', label: 'Reportes', icon: LineChart, modulo: 'reportes', color: 'text-purple-400' },
 ]
+
+// Hasta esta altura la página cuenta como "arriba del todo": el <main> reserva
+// 76px para la barra de móvil (56px) y el título vive a partir de los ~96px, así
+// que desplazada menos que esto todavía se lee entero. Pasado ese punto la barra
+// fija empieza a comerse el título, y por eso se esconde.
+const TOPE_ARRIBA = 32
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -104,6 +110,47 @@ export default function Sidebar() {
     return () => { document.body.style.overflow = previo }
   }, [open])
 
+  // ¿La navegación fue un "atrás"/"adelante"? Ahí NO forzamos el scroll: volver
+  // a la lista donde uno la había dejado es justamente lo que se espera.
+  const volviendo = useRef(false)
+  useEffect(() => {
+    const alVolver = () => { volviendo.current = true }
+    window.addEventListener('popstate', alVolver)
+    return () => window.removeEventListener('popstate', alVolver)
+  }, [])
+
+  // AL ENTRAR A UNA SECCIÓN, ARRIBA DEL TODO.
+  // Next NO scrollea al navegar si el comienzo de la página nueva ya se ve en el
+  // viewport — "the default scrolling behavior of <Link> is to maintain scroll
+  // position ... as long as the Page is visible in the viewport" (docs de Next
+  // 16, <Link scroll>). Como el <main> reserva 76px para la barra, venir
+  // scrolleado ~60px de la sección anterior cae JUSTO en ese caso: la sección
+  // nueva abre a esa misma altura y la barra fija tapa la mitad del título. Ese
+  // era el "el título sale cortado" que sobrevivió a los arreglos de padding y
+  // de restauración de scroll: ninguno tocaba la navegación entre secciones.
+  useEffect(() => {
+    if (volviendo.current) { volviendo.current = false; return }
+    let tocado = false
+    const marcar = () => { tocado = true }
+    window.addEventListener('touchstart', marcar, { passive: true })
+    window.addEventListener('wheel', marcar, { passive: true })
+    // Safari (y los navegadores embebidos de WhatsApp/Instagram) restauran la
+    // posición DESPUÉS de pintar, así que una sola pasada no alcanza. Las
+    // repasadas solo corrigen desplazamientos chicos y se cancelan si el dedo ya
+    // tocó la pantalla: nunca le arrebatan el scroll a alguien que está bajando.
+    const arriba = () => { if (!tocado && window.scrollY > 0 && window.scrollY < 200) window.scrollTo(0, 0) }
+    window.scrollTo(0, 0)
+    setBarraOculta(false)
+    const frame = requestAnimationFrame(arriba)
+    const timer = setTimeout(arriba, 250)
+    return () => {
+      cancelAnimationFrame(frame)
+      clearTimeout(timer)
+      window.removeEventListener('touchstart', marcar)
+      window.removeEventListener('wheel', marcar)
+    }
+  }, [pathname])
+
   // La barra de móvil se esconde al bajar y vuelve al subir. Si se queda fija,
   // TAPA el contenido que pasa por debajo (en /mensajes no se notaba porque el
   // inbox scrollea en su propio contenedor y la página no se mueve). Así nada
@@ -115,12 +162,16 @@ export default function Sidebar() {
     // navegando dentro de la app el scroll sí vuelve a 0). Arrancamos siempre
     // arriba, que además es lo que uno espera al abrir una sección.
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
-    if (window.scrollY > 64) window.scrollTo(0, 0)
+
+    // Si aun así arrancamos a media altura, la barra empieza ESCONDIDA: que se
+    // lea el contenido importa más que tener el menú a la vista, y vuelve con un
+    // gesto hacia arriba. Antes empezaba visible y era ella la que tapaba.
+    setBarraOculta(window.scrollY > TOPE_ARRIBA)
 
     let ultimo = window.scrollY
     const alScrollear = () => {
       const y = window.scrollY
-      if (y <= 64) setBarraOculta(false)               // arriba del todo: siempre visible
+      if (y <= TOPE_ARRIBA) setBarraOculta(false)      // arriba del todo: siempre visible
       else if (y > ultimo + 4) setBarraOculta(true)    // bajando: se va
       else if (y < ultimo - 4) setBarraOculta(false)   // subiendo: vuelve
       ultimo = y
@@ -128,9 +179,6 @@ export default function Sidebar() {
     window.addEventListener('scroll', alScrollear, { passive: true })
     return () => window.removeEventListener('scroll', alScrollear)
   }, [])
-
-  // Al cambiar de sección se arranca arriba: la barra tiene que estar visible.
-  useEffect(() => { setBarraOculta(false) }, [pathname])
 
   return (
     <>
