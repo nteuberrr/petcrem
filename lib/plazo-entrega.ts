@@ -86,6 +86,21 @@ export const ENTREGA_FRASE = VENTANA.activa
   ? `${ENTREGA_TXT} (plazo excepcional durante ${VENTANA.periodo} por ${VENTANA.motivo})`
   : ENTREGA_TXT
 
+/**
+ * Los templates del sitio (lib/sitio/templates/*.html) son el EXPORT de Webflow
+ * y traen el plazo escrito a mano, tanto en las meta descriptions como en el
+ * badge del hero. Editarlos se perdería en la próxima exportación, así que el
+ * plazo se reemplaza al vuelo, al servir la página. Si algún día se cambia la
+ * redacción del template, hay que sumar el patrón nuevo acá.
+ */
+export function aplicarPlazoEntrega(html: string): string {
+  if (!VENTANA.activa) return html
+  return html
+    .replace(/en 4 días hábiles/g, ENTREGA_TXT)
+    .replace(/dentro de 4 días hábiles/g, `dentro de ${PLAZO_TXT}`)
+    .replace(/en un máximo de 4 días hábiles/g, ENTREGA_TXT)
+}
+
 /** Bloque para los prompts de los agentes (WhatsApp y marketing). */
 export const PLAZO_AGENTES = VENTANA.activa
   ? `PLAZO DE ENTREGA — VIGENTE, es el ÚNICO que puedes prometer:

@@ -9,6 +9,7 @@ import { renderPorqueElegirnos, renderConfianzaStrip } from '@/lib/sitio/porque-
 import { getFijoEutanasia } from '@/lib/eutanasia-precios'
 import { renderPostsWeb, renderPostDetalle, buscarPost } from '@/lib/sitio/blog-html'
 import { renderTextos } from '@/lib/sitio/paginas-html'
+import { aplicarPlazoEntrega } from '@/lib/plazo-entrega'
 import { LANDINGS, renderLanding } from '@/lib/sitio/landings'
 import { inyectarConversiones } from '@/lib/sitio/ads-conversion'
 import { inyectarCapturaAds } from '@/lib/sitio/ads-click-captura'
@@ -67,8 +68,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   //  · ads-click-captura: guarda el gclid del anuncio y lo arrastra hasta el
   //    mensaje de WhatsApp, para poder atribuir la FICHA real al clic
   //    (ver supabase/migracion-ads-clicks.sql).
+  // El plazo de entrega viene escrito a mano en el export de Webflow (meta
+  // descriptions y el badge del hero, en 14 templates). Se reemplaza acá, en la
+  // salida, para que una ventana de alta demanda mueva TAMBIÉN el sitio sin
+  // editar unos archivos que la próxima exportación pisaría igual. Va dentro de
+  // `fin` porque el blog y las páginas de servicio salen por otros returns.
   const fin = (html: string) => new NextResponse(
-    inyectarCapturaAds(inyectarConversiones(prefijar ? prefijarLinksSitio(html) : html)) + scriptMedicionVelocidad(),
+    inyectarCapturaAds(inyectarConversiones(aplicarPlazoEntrega(prefijar ? prefijarLinksSitio(html) : html))) + scriptMedicionVelocidad(),
     { status: 200, headers: HTML_HEADERS },
   )
 
