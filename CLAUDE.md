@@ -158,6 +158,7 @@ scripts/
                           #   generar-favicon — regenera app/favicon.ico desde app/icon.svg (la huella de marca); correr si se toca el SVG
                           #   verificar-hoja-ruta — token de la hoja de ruta (ida y vuelta + rechazos) + armado de las paradas contra una ruta real
                           #   preview-correos-cliente — send sample client + vet emails (real data, redirected to a test inbox) to preview templates
+                          #   verificar-instagram — salud del canal IG (suscripciones, page token, permisos, DMs recibidos + prueba de acceso avanzado). Correrlo cuando "el bot no responde por Instagram": si Meta no entrega el webhook NO hay error en ninguna parte
 ```
 
 ## Eutanasias a domicilio (vet network)
