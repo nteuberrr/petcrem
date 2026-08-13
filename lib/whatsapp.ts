@@ -154,6 +154,10 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
   entrega_en_camino: {
     nombre: 'entrega_en_camino',
     categoria: 'UTILITY',
+    // ⛔ NO SE USA (decisión del dueño, 13-08-2026): «vamos en camino» va solo
+    // por CORREO. Antes existía en el código pero casi nunca llegaba (ventana
+    // cerrada); al arreglar eso habría pasado a salir siempre y pagada.
+    // Aprobada en Meta por si se retoma.
     texto: 'Hola {{1}}, vamos en camino a entregar las cenizas de {{2}}. Te avisaremos cuando estemos por llegar. — Crematorio Alma Animal',
     ejemplos: ['María', 'Rocky'],
   },
@@ -177,9 +181,11 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
   certificado_listo: {
     nombre: 'certificado_listo',
     categoria: 'UTILITY',
-    // Versión con botón de `certificado_disponible`. La de antes decía «fue
-    // enviado a tu correo; si no lo recibes, respóndenos» — o sea, daba por
-    // supuesto que iba a caer en spam. Con el botón el tutor lo abre de una.
+    // ⛔ NO SE USA (decisión del dueño, 13-08-2026): el certificado va solo por
+    // CORREO. Queda aprobada en Meta por si se retoma, y el link corto
+    // /c/<token> sirve igual para mandárselo a un tutor que diga que no le
+    // llegó — dentro de la conversación y gratis.
+    // Versión con botón de `certificado_disponible`.
     texto: 'Hola {{1}}, el certificado de cremación de {{2}} ya está listo. Puedes verlo y descargarlo con el botón de aquí abajo; también te lo enviamos a tu correo. Gracias por confiar en Crematorio Alma Animal.',
     ejemplos: ['María', 'Rocky'],
     botonUrl: {
@@ -192,6 +198,7 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
   certificado_disponible: {
     nombre: 'certificado_disponible',
     categoria: 'UTILITY',
+    // ⛔ NO SE USA: la reemplazó `certificado_listo`, que tampoco se usa (ver arriba).
     texto: 'Hola {{1}}, el certificado de cremación de {{2}} ya está emitido y fue enviado a tu correo. Si no lo recibes, respóndenos por aquí y te lo reenviamos.',
     ejemplos: ['María', 'Rocky'],
   },

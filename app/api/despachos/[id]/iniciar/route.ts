@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { enviarInicioDespacho } from '@/lib/cliente-mailer'
 import { resolverVet, enviarInicioRutaVet } from '@/lib/vet-cremacion-mailer'
-import { avisarClienteWhatsapp } from '@/lib/whatsapp-avisos'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,18 +47,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         .map(c => ({ email: c.email, nombreMascota: c.nombre_mascota, nombreTutor: c.nombre_tutor, clienteId: c.id }))
       await enviarInicioDespacho(destinatarios)
 
-      // Aviso por WhatsApp a cada tutor (texto libre → plantilla entrega_en_camino
-      // si la ventana está cerrada). Best-effort por mascota.
-      for (const c of mascotas) {
-        if (!c.telefono) continue
-        const tutor = (c.nombre_tutor || '').trim().split(/\s+/)[0] || '👋'
-        const mascota = c.nombre_mascota || 'tu mascota'
-        await avisarClienteWhatsapp(
-          c.telefono,
-          `Hola ${tutor}, vamos en camino a entregar las cenizas de ${mascota}. Te avisaremos cuando estemos por llegar. — Crematorio Alma Animal`,
-          { nombre: 'entrega_en_camino', variables: [tutor, mascota] },
-        )
-      }
+      // SIN aviso por WhatsApp: «vamos en camino» va solo por CORREO (decisión
+      // del dueño, 13-08-2026). Hasta ahora este WhatsApp existía en el código
+      // pero casi nunca llegaba —la ruta arranca días después del último mensaje
+      // del tutor, o sea con la ventana de 24h cerrada, y Meta descartaba el
+      // texto libre en silencio—. Al arreglar eso habría pasado a salir siempre,
+      // como plantilla paga y en un momento en que no aporta: el tutor no puede
+      // hacer nada con el dato y el correo ya se lo dice.
+      // La plantilla `entrega_en_camino` queda aprobada en Meta por si se retoma.
 
       // Y a los veterinarios de convenio asociados a las mascotas de la ruta
       // (best-effort). Leemos `veterinarios` una sola vez.
