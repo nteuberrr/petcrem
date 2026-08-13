@@ -7,6 +7,8 @@ import { getContacto } from '@/lib/email-layout'
 import { buildCertificado } from '@/lib/cliente-mailer'
 import { registrarEnvio } from '@/lib/correos-log'
 import { avisarClienteWhatsapp } from '@/lib/whatsapp-avisos'
+import { createTutorToken } from '@/lib/tutor-token'
+import { BASE_PUBLICA } from '@/lib/whatsapp'
 
 const CERT_COLS = [
   'id', 'cliente_id', 'codigo_mascota', 'nombre_mascota',
@@ -123,15 +125,21 @@ export async function POST(
     }
     await registrarEnvio({ clienteId: cliente.id, tipo: 'certificado', email: cliente.email, messageId: res.message_id, ok: true })
 
-    // Aviso por WhatsApp al tutor (texto libre → plantilla certificado_disponible
-    // si la ventana de 24h está cerrada). Best-effort: el correo ya salió.
+    // Aviso por WhatsApp al tutor, con el certificado a un toque. El correo cae
+    // en spam lo suficiente como para que el mensaje anterior tuviera que decir
+    // «si no lo recibes, respóndenos»: ahora va el link directo al PDF (ruta
+    // corta /c/<token>, y en la plantilla como botón). Best-effort.
     if (cliente.telefono) {
       const tutor = (cliente.nombre_tutor || '').trim().split(/\s+/)[0] || '👋'
       const mascota = cliente.nombre_mascota || 'tu mascota'
+      const token = createTutorToken(String(cliente.id), 'ver_certificado')
       await avisarClienteWhatsapp(
         cliente.telefono,
-        `Hola ${tutor}, el certificado de cremación de ${mascota} ya está emitido y fue enviado a tu correo (${cliente.email}). Si no lo recibes, respóndenos por aquí y te lo reenviamos. — Crematorio Alma Animal`,
-        { nombre: 'certificado_disponible', variables: [tutor, mascota] },
+        `Hola ${tutor}, el certificado de cremación de ${mascota} ya está listo. Puedes verlo y descargarlo aquí:
+${BASE_PUBLICA}/c/${token}
+
+También te lo enviamos a tu correo (${cliente.email}). — Crematorio Alma Animal`,
+        { nombre: 'certificado_listo', variables: [tutor, mascota], sufijoUrl: token },
       )
     }
 

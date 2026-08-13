@@ -10,6 +10,7 @@ import { ahoraChile } from '@/lib/agenda'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 import { generarCodigo } from '@/lib/codigo-generator'
 import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-mailer'
+import { avisarFotoMascota } from '@/lib/aviso-foto-mascota'
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin, esAdminTotal } from '@/lib/roles'
 import { NOMBRE_SERVICIO } from '@/lib/cliente-borrador'
@@ -415,6 +416,15 @@ export async function PATCH(
       } catch (e) {
         console.warn('[clientes PATCH] fallo mail registro (no bloqueante):', e)
       }
+    }
+    if (codigoGenerado) {
+      // Mismo pedido de foto que en el alta manual: se dispara al REGISTRAR,
+      // que es el momento en que la mascota ya está con nosotros.
+      await avisarFotoMascota({
+        id: String(updated.id || ''), telefono: String(updated.telefono || ''),
+        nombre_tutor: String(updated.nombre_tutor || ''), nombre_mascota: String(updated.nombre_mascota || ''),
+        codigo_servicio: String(updated.codigo_servicio || ''),
+      })
     }
 
     // COBRO por productos adicionales agregados a una ficha cuyo servicio YA

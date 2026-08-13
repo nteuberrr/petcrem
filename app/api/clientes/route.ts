@@ -13,6 +13,7 @@ import { capitalizarNombre } from '@/lib/nombres'
 import { sincronizarSaldoParcial } from '@/lib/cobros'
 import { emitirBoletaSiCorresponde } from '@/lib/facturacion'
 import { vincularClientePorTelefono } from '@/lib/ads-clicks'
+import { avisarFotoMascota } from '@/lib/aviso-foto-mascota'
 
 const ClienteSchema = z.object({
   nombre_mascota: z.string().min(1, 'Nombre de mascota requerido'),
@@ -290,6 +291,13 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       console.warn('[clientes POST] fallo mail registro (no bloqueante):', e)
     }
+
+    // Y por WhatsApp, el link para subir la foto: el del correo se pierde
+    // demasiado seguido (ver lib/aviso-foto-mascota). Best-effort.
+    await avisarFotoMascota({
+      id, telefono: row.telefono, nombre_tutor: row.nombre_tutor,
+      nombre_mascota: row.nombre_mascota, codigo_servicio: String(row.codigo_servicio || ''),
+    })
 
     // Si la ficha está asociada a un veterinario de convenio, también le avisamos
     // a él con el código (best-effort, no bloqueante).

@@ -123,6 +123,10 @@ export async function proxy(req: NextRequest) {
     // link va por WhatsApp y el largo importa. Solo redirige; la firma se
     // verifica igual del otro lado.
     pathname.startsWith('/f/') ||
+    // Las otras dos rutas cortas del tutor: /p/ = subir la foto (certificado o
+    // cuadro), /c/ = ver su certificado. Auth = el token HMAC del propio link.
+    pathname.startsWith('/p/') ||
+    pathname.startsWith('/c/') ||
     // Completar el borrador desde el link firmado del WhatsApp de retiro
     // confirmado (auth = token HMAC; NO genera código, solo enriquece el borrador).
     pathname === '/api/clientes/completar-borrador' ||

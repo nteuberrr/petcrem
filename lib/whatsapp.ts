@@ -157,6 +157,38 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
     texto: 'Hola {{1}}, vamos en camino a entregar las cenizas de {{2}}. Te avisaremos cuando estemos por llegar. — Crematorio Alma Animal',
     ejemplos: ['María', 'Rocky'],
   },
+  foto_mascota: {
+    nombre: 'foto_mascota',
+    categoria: 'UTILITY',
+    // El link para subir la foto salía SOLO por correo, y el guion del bot ya
+    // daba por perdido ese camino: «si el link no le funciona, es lo más común».
+    // Cada caso terminaba con un humano reenviándolo — y con certificados sin
+    // foto y cuadros Premium que nunca se hicieron. Con el botón llega por el
+    // canal que la persona sí mira.
+    texto: 'Hola {{1}}, ya tenemos a {{2}} con nosotros y estamos preparando su despedida. Si quieres, puedes subir una foto suya {{3}} con el botón de aquí abajo. Es opcional y puedes hacerlo hasta el día de la entrega. — Crematorio Alma Animal',
+    ejemplos: ['María', 'Rocky', 'para incluirla en su certificado'],
+    botonUrl: {
+      texto: 'Subir foto',
+      urlBase: `${BASE_PUBLICA}/p/`,
+      variable: true,
+      ejemploSufijo: 'b8.f.tl857x.kJqN7xo0121g51Vt',
+    },
+  },
+  certificado_listo: {
+    nombre: 'certificado_listo',
+    categoria: 'UTILITY',
+    // Versión con botón de `certificado_disponible`. La de antes decía «fue
+    // enviado a tu correo; si no lo recibes, respóndenos» — o sea, daba por
+    // supuesto que iba a caer en spam. Con el botón el tutor lo abre de una.
+    texto: 'Hola {{1}}, el certificado de cremación de {{2}} ya está listo. Puedes verlo y descargarlo con el botón de aquí abajo; también te lo enviamos a tu correo. Gracias por confiar en Crematorio Alma Animal.',
+    ejemplos: ['María', 'Rocky'],
+    botonUrl: {
+      texto: 'Ver certificado',
+      urlBase: `${BASE_PUBLICA}/c/`,
+      variable: true,
+      ejemploSufijo: 'b8.x.u9zk4a.kJqN7xo0121g51Vt',
+    },
+  },
   certificado_disponible: {
     nombre: 'certificado_disponible',
     categoria: 'UTILITY',

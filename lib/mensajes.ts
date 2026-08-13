@@ -432,6 +432,31 @@ export async function ventanaAbierta(conversacionId: number, horas = 23): Promis
   } catch { return false }
 }
 
+/**
+ * Lo mismo que `ventanaAbierta`, pero partiendo del teléfono y SIN crear nada:
+ * si esa persona no existe en el inbox es que nunca nos escribió, o sea que la
+ * ventana está cerrada. Lo usan los avisos al tutor, que solo tienen el número.
+ */
+export async function ventanaAbiertaPorTelefono(telefono: string, horas = 23): Promise<boolean> {
+  const wa = (telefono || '').replace(/\D/g, '')
+  if (!wa) return false
+  try {
+    const sb = getMensajesSupabase()
+    const { data: cont } = await sb.from(T_CONTACTOS).select('id').or(`wa_id.eq.${wa},telefono.eq.${wa}`).limit(1)
+    const cid = ((cont ?? [])[0] as { id?: number } | undefined)?.id
+    if (!cid) return false
+    const { data: convs } = await sb.from(T_CONV).select('id').eq('contacto_id', cid)
+    const ids = (convs ?? []).map((c: { id: number }) => c.id)
+    if (!ids.length) return false
+    const { data } = await sb.from(T_MSG).select('ts')
+      .in('conversacion_id', ids).eq('direccion', 'entrante')
+      .order('id', { ascending: false }).limit(1)
+    const ts = ((data ?? [])[0] as { ts?: string } | undefined)?.ts
+    if (!ts) return false
+    return (Date.now() - new Date(ts).getTime()) / 3_600_000 < horas
+  } catch { return false }
+}
+
 export async function marcarEstadoMensaje(providerMessageId: string, estado: string): Promise<void> {
   const sb = getMensajesSupabase()
   await sb.from(T_MSG).update({ estado }).eq('provider_message_id', providerMessageId)
