@@ -131,6 +131,8 @@ type ClienteDetalle = {
   notas: string
   tipo_pago: string
   estado_pago: string
+  /** 'TRUE' = el dueño decidió no emitir boleta por este servicio. */
+  sin_boleta?: string
   /** ISO. Día en que se cobró (lo cuadra Facturación → Ventas POS). */
   fecha_pago?: string
   /** Rebaja manual del total que solo hace el dueño (positivo = resta). */
@@ -1988,6 +1990,28 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 vacía— porque Facturación → Ventas POS la necesita para armar el
                 día y cuadrar el abono de Haulmer. Sigue viajando en el form. */}
           </div>
+
+          {/* NO EMITIR BOLETA — solo el DUEÑO (esAdminTotal). Es una decisión
+              tributaria: esa venta no llega al SII. El ingreso se registra igual
+              y en BRUTO (sin boleta no hay IVA que remesar), no aparece en
+              "Pagadas sin boleta" y la Conciliación no la cuenta como diferencia.
+              El servidor revalida el rol: la UI sola no alcanza para un flag así. */}
+          {esDueno && (
+            <label className="mt-3 flex items-start gap-2 rounded-xl border-2 border-gray-300 bg-gray-50 px-4 py-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={String(form.sin_boleta ?? '').toUpperCase() === 'TRUE'}
+                onChange={e => setForm(f => ({ ...f, sin_boleta: e.target.checked ? 'TRUE' : 'FALSE' }))}
+                className="mt-0.5"
+              />
+              <span className="text-sm">
+                <span className="font-semibold text-gray-900">No emitir boleta por este servicio</span>
+                <span className="block text-xs text-gray-600 mt-0.5">
+                  Al marcarla pagada no se emite el documento al SII. El ingreso se registra igual (y sin IVA), no queda como pendiente de boleta ni aparece como diferencia en la conciliación.
+                </span>
+              </span>
+            </label>
+          )}
 
           {/* Pago parcial: box para indicar cuánto abonó → queda un saldo pendiente.
               El total A COBRAR incluye la eutanasia asociada (fuera de boleta). */}

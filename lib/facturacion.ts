@@ -1,4 +1,5 @@
 import { getSheetData, appendRow, updateByIdIf, getNextId } from './datastore'
+import { sinBoleta } from './eerr-ingresos'
 import { todayISO } from './dates'
 import { uploadToR2 } from './cloudflare-r2'
 import { enviarBoletaCliente } from './cliente-mailer'
@@ -268,6 +269,10 @@ export async function emitirBoletaSiCorresponde(
   const fichaRegistrada = String(ficha.estado || '') !== 'borrador' && !!String(ficha.codigo || '').trim()
   const yaTieneBoleta = !!String(ficha.boleta_id || '').trim()
   const estaPagada = String(ficha.estado_pago || '').toLowerCase() === 'pagado'
+  // El dueño marcó "no emitir boleta por este servicio". No se emite ni se avisa:
+  // es una decisión suya, no una falla. El ingreso igual se registra (en BRUTO,
+  // ver lib/eerr-ingresos) y la Conciliación no lo cuenta como diferencia.
+  if (sinBoleta(ficha)) return { emitida: false }
   if (!esTutor || !fichaRegistrada || yaTieneBoleta || !estaPagada) return { emitida: false }
   const nombre = String(ficha.nombre_mascota || ficha.codigo || ficha.id || '')
   const avisar = (extra: string) => avisarAdminsWhatsapp(

@@ -182,6 +182,20 @@ export async function PATCH(
       ? motivoGuardado
       : String(normalizedBody.ajuste_admin_motivo ?? '')
 
+    // NO EMITIR BOLETA: decisión del DUEÑO, no de cualquiera con acceso a la
+    // ficha. La UI solo le muestra el checkbox a él, pero eso no alcanza — el
+    // PATCH acepta el body completo, así que la regla se aplica ACÁ: si el que
+    // guarda no es el admin total, el flag conserva lo que ya tenía la fila.
+    // Es una decisión tributaria (esa venta no llega al SII), no una preferencia.
+    if (normalizedBody.sin_boleta !== undefined) {
+      const sesionFlag = await getServerSession(authOptions)
+      if (!esAdminTotal((sesionFlag?.user as { role?: string } | undefined)?.role)) {
+        normalizedBody.sin_boleta = rows[idx].sin_boleta ?? 'FALSE'
+      } else {
+        normalizedBody.sin_boleta = String(normalizedBody.sin_boleta).toUpperCase() === 'TRUE' ? 'TRUE' : 'FALSE'
+      }
+    }
+
     if (ajustePedido !== ajusteGuardado || motivoPedido !== motivoGuardado) {
       const session = await getServerSession(authOptions)
       const usuario = session?.user as { role?: string; name?: string; email?: string } | undefined

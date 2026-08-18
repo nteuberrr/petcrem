@@ -204,6 +204,14 @@ El botón **Sincronizar SII** (Estado de Resultados → Compras: mes/año + bot�
   - Verificación: **`npx tsx scripts/verificar-periodo-sii.ts <RCV_COMPRA_REGISTRO_*.csv>`** contrasta documento por documento contra el archivo real del SII (el período sale del nombre del archivo).
 - ⚠️ **Las notas de crédito de compra RESTAN.** Para leer el monto de una fila de `eerr_gastos_sii` usar SIEMPRE `netoDeCompra(f)` / `ivaDeCompra(f)` de [lib/eerr-compras-ingesta.ts](lib/eerr-compras-ingesta.ts), que niegan los tipos 60/61 — nunca sumar `monto_neto + monto_exento` a mano. Sumarlas al derecho costaba caro: 13 NC por $1.929.577 entraban como gasto, así que el resultado cargaba **$3.859.154** de costos inexistentes (nov-2025 solo, $2,64 M) y el F29 mostraba **$733.234** de IVA crédito de más. Consumidores: `/api/eerr/integral`, `/api/eerr/balance` (F29) y `/api/eerr/movimientos`. Ojo también con el guard de `add()` en integral: acepta negativos a propósito, si vuelve a exigir `monto > 0` las NC se caen del cálculo en silencio.
 
+### Ventas SIN boleta (decisión del dueño)
+
+En la ficha, bajo el bloque de Pago, hay un checkbox **«No emitir boleta por este servicio»** que **solo ve el admin total** (el dueño). Marcado: al pasar la ficha a *pagada* NO se emite el DTE, la ficha NO aparece en Facturación → «Pagadas sin boleta» (no es un olvido) y la **Conciliación no la cuenta como diferencia** contra el SII. El **ingreso SÍ se registra**, y en **BRUTO**: sin boleta no hay IVA que remesar, así que dividir por 1,19 subestimaría el resultado en un 19% de esa venta — mismo criterio que las eutanasias, que también se cobran fuera de boleta. Piezas: columna `clientes.sin_boleta`, helper `sinBoleta()` en [lib/eerr-ingresos.ts](lib/eerr-ingresos.ts) (fuente única) + el corte en `emitirBoletaSiCorresponde` ([lib/facturacion.ts](lib/facturacion.ts)) + la serie `no_documentado` que la Conciliación resta.
+
+⚠️ **El rol se revalida en el servidor.** La UI le esconde el checkbox al resto, pero el PATCH de la ficha acepta el body completo: si quien guarda no es admin total, `sin_boleta` conserva el valor de la fila. Es una decisión tributaria, no una preferencia de UI.
+
+⚠️ **DDL a mano:** [supabase/sin-boleta.sql](supabase/sin-boleta.sql) hay que correrlo en Supabase **antes** de desplegar; si no, guardar una ficha falla con *«Could not find the 'sin_boleta' column»*.
+
 ### Acuse de facturas de compra (aceptar / reclamar ante el SII)
 
 Arriba de la tabla de Compras, el panel **«Facturas por aceptar»** ([components/eerr/AcusePendientes.tsx](components/eerr/AcusePendientes.tsx)) lista las facturas recibidas sin acuse y permite aceptarlas o reclamarlas sin salir del sistema. Existe por el **plazo**: hay **8 días corridos** desde que el SII recibe la factura para reclamarla (Ley 19.983); vencido, opera el *acuse tácito* y queda irrevocablemente aceptada con mérito ejecutivo. Sin el panel ese reloj corre a ciegas — así se pasó una factura de $511.201.

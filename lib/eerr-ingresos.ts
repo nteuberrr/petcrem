@@ -34,7 +34,16 @@ export const IVA = 1.19
 /** Las cuatro claves de ingreso; calzan con `eerr_partidas.clave` (tipo 'ingreso'). */
 export type ClaveIngreso = 'general' | 'convenio' | 'adicionales' | 'eutanasias'
 
-export type IngresosPorClave = Record<ClaveIngreso, number[]>
+export type IngresosPorClave = Record<ClaveIngreso, number[]> & {
+  /**
+   * Parte de esos ingresos que va SIN BOLETA por decisión del dueño (ver
+   * `sinBoleta`). Va aparte y no como una quinta clave porque no es un tipo de
+   * venta: es la misma venta general/convenio/adicionales, marcada para no
+   * documentarse. La Conciliación se la RESTA a lo que debería aparecer en el
+   * SII; si no, marcaría una diferencia todos los meses.
+   */
+  no_documentado: number[]
+}
 
 interface Tramo { id?: string; peso_min: string; peso_max: string; precio_ci: string; precio_cp: string; precio_sd: string; veterinaria_id?: string }
 type Cli = Record<string, string>
@@ -85,7 +94,7 @@ export async function calcularIngresos(
   const zeros = () => new Array(n).fill(0)
   const { clientes, eutanasias, cfgEut, tablaDe } = await cargarBase()
 
-  const general = zeros(), convenio = zeros(), adicionales = zeros()
+  const general = zeros(), convenio = zeros(), adicionales = zeros(), noDoc = zeros()
   for (const c of clientes) {
     if (c.estado === 'borrador') continue
     const p = periodIdx(c.fecha_retiro || c.fecha_creacion)
@@ -94,6 +103,7 @@ export async function calcularIngresos(
     if (m.convenio) convenio[p] += m.serv
     else general[p] += m.serv
     adicionales[p] += m.adic
+    if (sinBoleta(c)) noDoc[p] += m.serv + m.adic
   }
 
   // EUTANASIAS: el ingreso es el MARGEN (cobrado al cliente − pagado al
@@ -108,7 +118,7 @@ export async function calcularIngresos(
     eutan[p] += m.margen / IVA
   }
 
-  return { general, convenio, adicionales, eutanasias: eutan }
+  return { general, convenio, adicionales, eutanasias: eutan, no_documentado: noDoc }
 }
 
 /** Datos y tablas de precio que necesitan tanto el total como el detalle. */
@@ -166,11 +176,28 @@ function montosDeFicha(c: Cli, tablaDe: (c: Cli) => Tramo[]): { serv: number; ad
     total = Math.max(0, serv + adic - descuentoMonto(c, serv))
   }
   const base = serv + adic
+  // SIN BOLETA (el dueño la marcó así): no se emite documento, así que no hay
+  // IVA que remesar y la plata que queda es el monto COMPLETO. Dividir por 1,19
+  // una venta que nunca pagó IVA subestima el resultado en un 19% de esa venta.
+  // Mismo criterio que las eutanasias, que también se cobran fuera de boleta.
+  const divisor = sinBoleta(c) ? 1 : IVA
   return {
-    serv: (base > 0 ? total * (serv / base) : total) / IVA,
-    adic: (base > 0 ? total * (adic / base) : 0) / IVA,
+    serv: (base > 0 ? total * (serv / base) : total) / divisor,
+    adic: (base > 0 ? total * (adic / base) : 0) / divisor,
     convenio: esConvenio(c),
   }
+}
+
+/**
+ * ¿La ficha se cobró SIN emitir boleta? Es una decisión explícita del dueño,
+ * marcada en la ficha (checkbox que solo él ve). Cambia tres cosas:
+ *   · no se emite la boleta al marcarla pagada;
+ *   · no aparece en "Pagadas sin boleta" (no es un olvido);
+ *   · en la Conciliación NO cuenta como diferencia: el SII no debería tenerla.
+ * El ingreso sí se registra, y en BRUTO (ver arriba).
+ */
+export function sinBoleta(c: { sin_boleta?: string }): boolean {
+  return String(c.sin_boleta ?? '').toUpperCase() === 'TRUE'
 }
 
 /** Una línea del desglose: de dónde sale el monto y si tiene respaldo tributario. */
@@ -232,6 +259,9 @@ export async function detalleIngresos(periodo: string): Promise<ItemIngreso[]> {
     if (String(c.tipo_pago || '').toLowerCase() === 'pos') {
       return { ok: true, label: 'Boleta del POS (TUU)', origen: 'pos' }
     }
+    // Marcada SIN BOLETA por el dueño: no es un olvido, es una decisión. Cuenta
+    // como resuelta para que no ensucie el listado de "faltan documentos".
+    if (sinBoleta(c)) return { ok: true, label: 'Sin boleta (decisión)', origen: 'ninguno' }
     return { ok: false, label: 'Sin documento', origen: 'ninguno' }
   }
 

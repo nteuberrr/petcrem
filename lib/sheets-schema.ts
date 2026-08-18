@@ -29,6 +29,11 @@ export const SHEETS: Record<string, string[]> = {
     // la que Ventas POS arma cada día y calcula el abono de Haulmer (día hábil
     // siguiente); sin ella no hay forma de cuadrar contra la liquidación.
     'notas', 'tipo_pago', 'estado_pago', 'fecha_pago',
+    // sin_boleta ('TRUE'/'FALSE'): el DUEÑO decidió no emitir boleta por este
+    // servicio. No se emite el DTE ni aparece en "Pagadas sin boleta"; el ingreso
+    // SÍ se registra y en BRUTO (no hay IVA que remesar), y la Conciliación no lo
+    // cuenta como diferencia contra el SII. Checkbox visible solo para el admin.
+    'sin_boleta',
     // Si 'TRUE', el correo de entrega va SIN el pedido de evaluación (clientes conflictivos).
     'omitir_evaluacion',
     // JSON array de URLs (R2) de fotos que el tutor sube desde /subir-foto para

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { sinBoleta } from '@/lib/eerr-ingresos'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData } from '@/lib/datastore'
@@ -25,7 +26,10 @@ export async function GET() {
       !String(c.veterinaria_id || '').trim() &&      // solo tutor (vets se facturan mensual/manual)
       String(c.estado || '') !== 'borrador' &&
       !!String(c.codigo || '').trim() &&
-      !String(c.boleta_id || '').trim()
+      !String(c.boleta_id || '').trim() &&
+      // Marcada "no emitir boleta" por el dueño: no es un pendiente, es una
+      // decisión. Listarla acá invitaría a emitirla de todas formas.
+      !sinBoleta(c)
     )
     .map(c => ({
       id: c.id,

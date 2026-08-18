@@ -63,9 +63,13 @@ async function ladoSistema(periodo: string): Promise<LadoSistema> {
     adicionales: Math.round(ing.adicionales[0]),
     eutanasias: Math.round(ing.eutanasias[0]),
   }
+  // Lo que DEBERÍA tener respaldo en el SII: las claves documentables, menos las
+  // ventas que el dueño marcó para no boletear (no son un descuadre, son una
+  // decisión; sin restarlas la conciliación marcaría una diferencia falsa).
+  const noDocumentado = Math.round(ing.no_documentado[0])
   const documentable = (Object.keys(ingresos) as ClaveIngreso[])
     .filter(k => SE_DOCUMENTA[k])
-    .reduce((s, k) => s + ingresos[k], 0)
+    .reduce((s, k) => s + ingresos[k], 0) - noDocumentado
 
   const emitido = { boletas: vacioDoc(), facturas: vacioDoc(), notas_credito: vacioDoc(), neto_venta: 0 }
   for (const d of docs) {

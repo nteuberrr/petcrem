@@ -1256,3 +1256,7 @@ alter table "clientes" add column if not exists "ajuste_admin_fecha" text not nu
 alter table "clientes" add column if not exists "fotos_entrega" text not null default '';
 
 notify pgrst, 'reload schema';
+
+-- Ventas sin boleta (ver supabase/sin-boleta.sql).
+alter table public.clientes
+  add column if not exists sin_boleta text not null default 'FALSE';
