@@ -114,13 +114,28 @@ function parse(dateStr: string | Date | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
-/** Hoy en formato YYYY-MM-DD para usar en <input type="date"> — evita UTC shift */
+/**
+ * Hoy en CHILE, formato YYYY-MM-DD.
+ *
+ * ⚠️ Va anclado a America/Santiago a propósito, no al reloj local. Antes usaba
+ * los getters locales de `new Date()`: en el navegador daba bien (el equipo está
+ * en Chile) pero en el SERVIDOR daba la fecha UTC, porque las funciones de Vercel
+ * corren con TZ=UTC. Chile es UTC−4, así que **entre las 20:00 y la medianoche
+ * todo lo que el servidor fechaba "hoy" quedaba fechado MAÑANA**, en plena franja
+ * de trabajo (se atiende hasta las 22:00).
+ *
+ * No era teórico: la ficha de Alex (retiro 16-08 a las 20:15, tarjeta pasada ahí
+ * mismo) quedó con fecha_pago 17-08, y Ventas POS —que arma el día por esa fecha
+ * y deriva el abono de Haulmer al día hábil siguiente— la mostró como venta del
+ * 17 con depósito el 18. La misma huella tenía G140-CP (retiro 20:22 → pago al
+ * día siguiente). Lo usan 65 archivos del servidor, así que el corrimiento
+ * afectaba fechas de pago, de creación y de todo lo que se sella "hoy".
+ */
 export function todayISO(): string {
-  const d = new Date()
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Santiago',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date())
 }
 
 /** Para mostrar: "15-01-2025" */
