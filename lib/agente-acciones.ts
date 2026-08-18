@@ -10,14 +10,14 @@ import { precioClienteEutanasia, getConsultaEutanasia, getRecargoFueraHorario, r
 import { agendarEutanasiaAutomatico } from './eutanasia-cotizaciones'
 import { sincronizarFichaDeEutanasia } from './eutanasia-sync'
 import { enviarVetCambioFechaEutanasia } from './eutanasia-mailer'
-import { evaluarSlotRetiro, evaluarHoraEutanasia, horaLibreEnFranja, ahoraChile, retiroTrasEutanasia, proximoRetiroPosible, horaRetiroDeEutanasia, type RetiroTrasEutanasia } from './agenda'
+import { evaluarSlotRetiro, evaluarHoraEutanasia, horaLibreEnFranja, ahoraChile, retiroTrasEutanasia, proximoRetiroPosible, type RetiroTrasEutanasia } from './agenda'
 import { capitalizarNombre } from './nombres'
 import { calcularSnapshotFicha } from './price-calculator'
 import { dispararCobroAdicional, correspondeCobrarAdicional } from './cobros'
 import { repartirAnforasPremium } from './anforas-premium'
 import { esComunaNoCubierta } from './cobertura'
 import { findTramo, precioDelTramo } from './tramos'
-import { aplicaReglaAuto, cremacionLlevaRecargoFueraHorario } from './adicionales-auto'
+import { aplicaReglaAuto, cremacionLlevaRecargoFueraHorario, esFueraDeHorario } from './adicionales-auto'
 import { ajustarStockAdicionales } from './stock'
 import { generarCatalogoPdf } from './catalogo-generator'
 import { uploadToR2 } from './cloudflare-r2'
@@ -814,13 +814,21 @@ async function cotizarCremacion(a: AccionCotizarCremacion): Promise<string> {
     } catch { /* sin agenda: se cotiza sin recargo horario, como antes */ }
   }
   const ctx = { fecha, hora, comuna: String(a.comuna || '') }
+  // ¿La eutanasia asociada ya se lleva el recargo? Lo decide la HORA del
+  // procedimiento, no el modelo: pedirle un booleano ("¿ya lo cobra la
+  // eutanasia?") era pedirle que razonara sobre plata, y lo erraba — de ahí que
+  // el recargo terminara sumado a la cremación. El flag viejo queda de respaldo
+  // para cuando no venga la hora.
+  const eutanasiaCobraRecargo = a.hora_eutanasia
+    ? esFueraDeHorario(fecha, String(a.hora_eutanasia))
+    : !!a.eutanasia_fuera_horario
   const recargos: { nombre: string; monto: number }[] = []
   for (const s of otros.filter(r => activo(r) && (r.auto_regla || '').trim())) {
     const esFueraHorario = (s.auto_regla || '').trim() === 'fuera_horario'
     const aplica = esFueraHorario
       ? cremacionLlevaRecargoFueraHorario({
           retiroFueraHorario: aplicaReglaAuto(s, ctx),
-          hayEutanasia: !!a.eutanasia_fuera_horario,
+          eutanasiaYaCobraRecargo: eutanasiaCobraRecargo,
         })
       : aplicaReglaAuto(s, ctx)
     if (aplica) recargos.push({ nombre: s.nombre || (esFueraHorario ? 'Retiro fuera de horario' : 'Adicional por distancia'), monto: parseInt(s.precio, 10) || 0 })
@@ -842,7 +850,7 @@ async function cotizarCremacion(a: AccionCotizarCremacion): Promise<string> {
   // Con eutanasia fuera de horario el recargo YA se cobra con la eutanasia: la
   // cremación no lo suma, pero el cliente igual tiene que oírlo UNA vez (si no,
   // lo descubre al pagar). Nunca dos veces.
-  const notaEut = a.eutanasia_fuera_horario
+  const notaEut = eutanasiaCobraRecargo
     ? `\nATENCIÓN: la eutanasia ya lleva el recargo fuera de horario, así que la cremación NO lo suma (el recargo se cobra UNA sola vez en toda la atención, no dos). Igual dile al cliente que hay UN recargo por fuera de horario y que va con la eutanasia — que no lo descubra al pagar.`
     : ''
 
@@ -878,15 +886,12 @@ async function cotizarEutanasia(a: AccionCotizarEutanasia): Promise<string> {
   const fecha = formatDateForSheet(a.fecha || '') || ahora.iso
   const hora = (a.hora || '').trim() || `${String(Math.floor(ahora.min / 60)).padStart(2, '0')}:${String(ahora.min % 60).padStart(2, '0')}`
   const asumido = !a.fecha
-  // El retiro para la cremación va 30 min después: si la eutanasia queda justo
-  // antes de las 18:00 el retiro se pasa, y como el recargo lo lleva SIEMPRE la
-  // eutanasia (nunca la cremación), tiene que aparecer acá o no lo cobra nadie.
-  const recargoFuera = recargoEutanasiaPara(fecha, hora, recargo, horaRetiroDeEutanasia(hora))
+  const recargoFuera = recargoEutanasiaPara(fecha, hora, recargo)
   const totalRealizada = cliente + recargoFuera
   const totalConsulta = consulta.total + recargoFuera
   const notaAsumido = asumido ? ` (calculado para HOY ${formatDateConDia(fecha)}; si acuerdan otra fecha, vuelve a cotizar con esa fecha)` : ''
   const detalleRecargo = recargoFuera > 0
-    ? `\nRECARGO fuera de horario: ${fmtPrecio(recargoFuera)}${notaAsumido}. Va INCLUIDO en los dos totales de arriba, se nombra UNA sola vez y se suma UNA sola vez en TODA la atención. Si además hay cremación, NO lo cobres de nuevo ahí: el recargo va SIEMPRE del lado de la eutanasia. Cotiza la cremación con "cotizar_cremacion" pasándole eutanasia_fuera_horario=true y usa los montos que devuelva.`
+    ? `\nRECARGO fuera de horario: ${fmtPrecio(recargoFuera)}${notaAsumido}. Va INCLUIDO en los dos totales de arriba, se nombra UNA sola vez y se suma UNA sola vez en TODA la atención. Si además hay cremación, NO lo cobres de nuevo ahí: esta eutanasia ya se lo lleva. Cotiza la cremación pasándole hora_eutanasia a "cotizar_cremacion" y usa los montos que devuelva.`
     : `\nNO aplica recargo fuera de horario${notaAsumido}. Es la respuesta definitiva: no lo menciones ni lo deduzcas del día o la hora.`
 
   // ⚠️ El escenario "no corresponde" NO lleva cremación, y hay que decirlo con
@@ -997,9 +1002,7 @@ async function agendarEutanasia(a: AccionEutanasia, ctx: CtxAgente): Promise<str
     (sinCremacion ? ' SIN cremación (el tutor no la quiere).' : (a.tipo_servicio_cremacion ? ` Cremación elegida: ${a.tipo_servicio_cremacion}.` : ''))
 
   const [{ cliente: precioBase }, recargoMonto] = await Promise.all([precioClienteEutanasia(peso), getRecargoFueraHorario()])
-  // Mismo criterio que al cotizar: si hay cremación, el retiro va 30 min
-  // después y su recargo lo lleva la eutanasia (ver lib/adicionales-auto).
-  const recargoFuera = recargoEutanasiaPara(a.fecha, hora, recargoMonto, sinCremacion ? undefined : horaRetiroDeEutanasia(hora))
+  const recargoFuera = recargoEutanasiaPara(a.fecha, hora, recargoMonto)
   const cliente = precioBase + recargoFuera
 
   let res

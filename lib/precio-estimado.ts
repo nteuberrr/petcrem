@@ -2,6 +2,7 @@ import { getSheetData } from './datastore'
 import { findTramo, precioDelTramo, numTramo } from './tramos'
 import { repartirAnforasPremium } from './anforas-premium'
 import { aplicaReglaAuto, cremacionLlevaRecargoFueraHorario } from './adicionales-auto'
+import { getConfigCobroEutanasia, recargoEutanasiaPara } from './eutanasia-precios'
 import { leerSnapshotFicha, type AdicionalItem } from './price-calculator'
 import { parsePeso } from './numbers'
 import { formatDateForSheet } from './dates'
@@ -80,31 +81,35 @@ function parseAdicionales(json: string | undefined): AdicionalItem[] {
  * releer las tablas por fila.
  */
 export async function crearEstimadorFichas(): Promise<(row: Fila) => EstimacionFicha> {
-  const [generales, convenio, especiales, productos, otros, cotis] = await Promise.all([
+  const [generales, convenio, especiales, productos, otros, cotis, cfgEut] = await Promise.all([
     getSheetData('precios_generales').catch(() => [] as Fila[]),
     getSheetData('precios_convenio').catch(() => [] as Fila[]),
     getSheetData('precios_especiales').catch(() => [] as Fila[]),
     getSheetData('productos').catch(() => [] as Fila[]),
     getSheetData('otros_servicios').catch(() => [] as Fila[]),
     getSheetData('cotizaciones_eutanasia').catch(() => [] as Fila[]),
+    getConfigCobroEutanasia().catch(() => null),
   ])
   const categoriaPorProducto = new Map(productos.map(p => [String(p.id), String(p.categoria ?? '')]))
   const serviciosAuto = otros.filter(
     s => String(s.activo ?? 'TRUE').toUpperCase() !== 'FALSE' && (s.auto_regla || '').trim(),
   )
 
-  // Eutanasia asociada a la ficha: (a) si la hay, el recargo fuera de horario lo
-  // lleva SIEMPRE ella y la cremación no lo suma (no se factura y se cobra igual
-  // sin cremación — ver lib/adicionales-auto); (b) mientras la ficha no tenga
+  // Eutanasia asociada a la ficha: (a) si ELLA cae fuera de horario ya cobra el
+  // recargo (fuera de boleta) y la cremación no vuelve a sumarlo; si la eutanasia
+  // quedó dentro de horario y el retiro se pasa de las 18:00, lo cobra la
+  // cremación (ver lib/adicionales-auto); (b) mientras la ficha no tenga
   // fecha/hora de retiro propias, el retiro es el que coordinó el veterinario
-  // (`hora_retiro_crematorio`), que además es lo que hace que el recargo del
-  // retiro tardío aparezca del lado de la eutanasia.
-  const eutPorCliente = new Map<string, { fecha: string; hora: string }>()
+  // (`hora_retiro_crematorio`), así el recargo del retiro tardío no se pierde por
+  // tener la ficha en blanco.
+  const eutPorCliente = new Map<string, { yaCobraRecargo: boolean; fecha: string; hora: string }>()
   for (const c of cotis) {
     const clienteId = String(c.cliente_id || '')
     if (!clienteId) continue
     if (['cancelada', 'no_realizada'].includes(String(c.estado || ''))) continue
+    const recargo = cfgEut ? recargoEutanasiaPara(c.fecha_servicio, c.hora_servicio, cfgEut.recargoMonto) : 0
     eutPorCliente.set(clienteId, {
+      yaCobraRecargo: recargo > 0,
       fecha: String(c.fecha_servicio || ''),
       hora: String(c.hora_retiro_crematorio || ''),
     })
@@ -140,18 +145,18 @@ export async function crearEstimadorFichas(): Promise<(row: Fila) => EstimacionF
     }
     for (const s of serviciosAuto) {
       const esFueraHorario = (s.auto_regla || '').trim() === 'fuera_horario'
-      // Recargo fuera de horario: UNO SOLO por atención, y si hay eutanasia lo
-      // lleva ella (no la cremación), se pase de las 18:00 la eutanasia o el retiro.
+      // Recargo fuera de horario: UNO SOLO por atención. Si la eutanasia asociada
+      // ya lo cobra (fuera de boleta), la cremación no vuelve a sumarlo.
       const aplica = esFueraHorario
         ? cremacionLlevaRecargoFueraHorario({
             retiroFueraHorario: aplicaReglaAuto(s, ctx),
-            hayEutanasia: !!eut,
+            eutanasiaYaCobraRecargo: !!eut?.yaCobraRecargo,
           })
         : aplicaReglaAuto(s, ctx)
       const yaEsta = items.some(a => a.tipo === 'servicio' && String(a.id) === String(s.id))
       if (aplica && !yaEsta) {
         items.push({ tipo: 'servicio', id: String(s.id), nombre: s.nombre || '', precio: numTramo(s.precio), qty: 1 })
-      } else if (!aplica && yaEsta && esFueraHorario && eut) {
+      } else if (!aplica && yaEsta && esFueraHorario && eut?.yaCobraRecargo) {
         // Venía persistido en los adicionales pero lo cobra la eutanasia → fuera
         // (así el cobro doble tampoco se arrastra desde una ficha guardada).
         const i = items.findIndex(a => a.tipo === 'servicio' && String(a.id) === String(s.id))

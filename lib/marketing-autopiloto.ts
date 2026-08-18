@@ -4,7 +4,10 @@ import { listarCalendario, crearItems, actualizarItem, type NuevoItem, type Item
 import { generarPieza } from './marketing-pieza'
 import { DIFERENCIADORES, MODALIDADES_SERVICIOS } from './diferenciadores'
 import { ENTREGA_TXT } from './plazo-entrega'
-import { avisarAdminsWhatsapp, isWhatsappConfigured } from './whatsapp'
+// Los avisos del autopiloto son de GESTIÓN de marketing, no de operación: van
+// solo al dueño, igual que el informe semanal de Ads (decisión 2026-08-17).
+// Para un operario, "planifiqué 5 piezas" es ruido.
+import { avisarDuenoWhatsapp, isWhatsappConfigured } from './whatsapp'
 import { registrarUso } from './uso-ia'
 
 /**
@@ -189,7 +192,7 @@ export async function correrAutopilotoSemanal(opts: { maxGenerar?: number } = {}
       await updateMarketingParams({ autopiloto_ultima_semana: lunes })
       if (planificadas > 0 && isWhatsappConfigured()) {
         try {
-          await avisarAdminsWhatsapp(`🗓️ Autopiloto: planifiqué ${planificadas} pieza(s) para la semana del ${lunes}. Quedan como propuestas; las voy generando y te aviso cuando estén para revisar en Campañas. Nada se publica solo.`)
+          await avisarDuenoWhatsapp(`🗓️ Autopiloto: planifiqué ${planificadas} pieza(s) para la semana del ${lunes}. Quedan como propuestas; las voy generando y te aviso cuando estén para revisar en Campañas. Nada se publica solo.`)
         } catch { /* best-effort */ }
       }
     } catch (e) {
@@ -228,7 +231,7 @@ export async function correrAutopilotoSemanal(opts: { maxGenerar?: number } = {}
     // ¿Se terminó de generar toda la semana en este tick? Avisar que está lista.
     if (generadas > 0 && pendientes <= 0 && isWhatsappConfigured()) {
       try {
-        await avisarAdminsWhatsapp(`✅ Autopiloto: el plan de la semana del ${lunes} está listo para tu revisión en Campañas${observaciones.length ? ` (${observaciones.length} pieza(s) con observaciones de QA)` : ''}. Aprobá y programá las que te gusten — nada se publica sin tu OK.`)
+        await avisarDuenoWhatsapp(`✅ Autopiloto: el plan de la semana del ${lunes} está listo para tu revisión en Campañas${observaciones.length ? ` (${observaciones.length} pieza(s) con observaciones de QA)` : ''}. Aprobá y programá las que te gusten — nada se publica sin tu OK.`)
       } catch { /* best-effort */ }
     }
   } catch (e) {
