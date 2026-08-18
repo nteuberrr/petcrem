@@ -1,5 +1,4 @@
 import { avisarClienteWhatsapp } from './whatsapp-avisos'
-import { createToken } from './eutanasia-tokens'
 
 /**
  * Aviso por WhatsApp al TUTOR cuando un veterinario de la red CONFIRMA la
@@ -24,11 +23,12 @@ export async function avisarClienteVetConfirmado(args: {
   /** Nombre completo del vet, tal como se le muestra al tutor. */
   vetNombre: string
   vetTelefono?: string
-  /** Base del sitio para el link de "ya coordiné con el veterinario". Opcional. */
+  /** Se aceptan por compatibilidad con los llamadores; ya no se usan (el tutor
+   *  no confirma nada — ver la nota más abajo). */
   baseUrl?: string
   vetId?: string
 }): Promise<void> {
-  const { c, vetNombre, vetTelefono, baseUrl, vetId } = args
+  const { c, vetNombre, vetTelefono } = args
   // El wa_id manda (la cotización nació del bot); si no, el teléfono que dejó el
   // tutor. Antes solo se miraba el wa_id, así que una cotización cargada a mano
   // por el equipo nunca avisaba por WhatsApp.
@@ -38,16 +38,17 @@ export async function avisarClienteVetConfirmado(args: {
   const tutor = (c.cliente_nombre || '').trim().split(/\s+/)[0] || '👋'
   const mascota = c.mascota_nombre || 'tu mascota'
   const tel9 = (vetTelefono || '').replace(/\D/g, '').slice(-9)
-  const idVet = vetId || c.vet_id_asignado || ''
-  const linkConf = baseUrl && idVet
-    ? `${baseUrl.replace(/\/+$/, '')}/eutanasia/cliente-confirma/${createToken(c.id, idVet, 'cliente_confirmar')}`
-    : ''
+  // NO se le pide al tutor que "confirme" la visita (decisión del dueño
+  // 2026-08-17). Quien confirma es el VETERINARIO, y ya lo hizo: pedirle al
+  // tutor que confirme algo que no depende de él lo confunde, y al equipo le
+  // llegaba un aviso ("el cliente confirmó la visita") que no significaba nada.
+  // El link ya no se genera; la página y el endpoint siguen vivos solo por los
+  // enlaces que alcanzaron a salir.
 
   const texto =
     `Buenas noticias 🐾 Un veterinario de nuestra red confirmó la visita para acompañar a ${mascota}.\n\n` +
     `Se pondrá en contacto contigo a la brevedad para coordinar:\n` +
     `${vetNombre}${tel9 ? ` · +56 ${tel9}` : ''}\n\n` +
-    (linkConf ? `Cuando hayas coordinado la visita con el veterinario, confírmanos aquí:\n${linkConf}\n\n` : '') +
     `Cualquier duda, escríbenos por aquí.`
 
   try {

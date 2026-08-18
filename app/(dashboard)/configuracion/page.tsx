@@ -1771,9 +1771,7 @@ Los tramos actuales quedan como su tarifa propia y dejan de seguir a la tabla ba
                   className="mt-0.5" />
                 <span>
                   <span className="font-medium">Recibe avisos por WhatsApp</span><br />
-                  {esAdminRol
-                    ? 'Recibe todo lo del bot: solicitudes de retiro con botones ✅/❌, escalamientos, relays y avisos operativos; puede confirmar/rechazar.'
-                    : 'Como Operador, recibe SOLO las solicitudes de retiro con botones ✅/❌ (y puede confirmar/rechazar). El resto de los mensajes del bot es solo para Admin y General.'}
+                  Recibe TODO lo del bot, sin importar el rol: solicitudes de retiro con botones ✅/❌, eutanasias agendadas, escalamientos, relays y avisos operativos; y puede confirmar/rechazar. Lo único que no se reparte es el informe semanal de Google Ads, que va solo al dueño.
                 </span>
               </label>
             )

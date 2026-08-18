@@ -469,49 +469,58 @@ export function esAdminWhatsapp(num: string): boolean {
 }
 
 /**
- * Dos niveles de destinatarios de los mensajes del sistema (Configuración →
- * Usuarios; usuarios ACTIVOS con celular y avisos_whatsapp=TRUE, más el env
- * ADMIN_WHATSAPP siempre):
- *  - `admins`  → roles admin/admin2 y Operario Nivel 2 (operador2). Reciben todo
- *    lo del bot/inbox (escalamientos, relays de ETA, avisos operativos). El
- *    Operario Nivel 1 (operador) NO — solo recibe las solicitudes de retiro.
- *  - `retiros` → TODO el equipo con avisos ON, incluidos ambos niveles de
- *    operario. Reciben las SOLICITUDES DE RETIRO con botones ✅/❌ y cualquiera
- *    puede resolverlas (decisión del dueño 2026-07-11).
+ * Destinatarios de los mensajes del sistema: TODO el equipo con avisos ON
+ * (Configuración → Usuarios: usuarios ACTIVOS, con celular y avisos_whatsapp=TRUE)
+ * más el env ADMIN_WHATSAPP siempre.
+ *
+ * UNA SOLA LISTA (decisión del dueño 2026-08-17). Antes había dos niveles y el
+ * Operario Nivel 1 solo recibía las solicitudes de retiro: el resultado en la
+ * práctica fue que al equipo le llegaban los retiros de cremación y nada más —
+ * una eutanasia agendada, un escalamiento o un aviso operativo los veía solo el
+ * dueño. Si alguien está en la lista de avisos, recibe todo lo del bot.
+ *
+ * `destinatariosInforme` es la ÚNICA excepción: el informe semanal de Google Ads
+ * va solo al dueño (es un reporte de gestión, no un aviso operativo).
+ *
  * Cache 60s: un cambio en la tabla aplica al minuto.
  */
-let equipoCache: { ts: number; admins: string[]; retiros: string[] } | null = null
-async function cargarEquipo(): Promise<{ admins: string[]; retiros: string[] }> {
-  if (equipoCache && Date.now() - equipoCache.ts < 60_000) return equipoCache
-  const admins = new Set(adminsWhatsapp())
-  const retiros = new Set(adminsWhatsapp())
+let equipoCache: { ts: number; equipo: string[] } | null = null
+async function cargarEquipo(): Promise<string[]> {
+  if (equipoCache && Date.now() - equipoCache.ts < 60_000) return equipoCache.equipo
+  const equipo = new Set(adminsWhatsapp())
   try {
-    const [{ getSheetData }, { esAdmin }] = await Promise.all([import('./datastore'), import('./roles')])
+    const { getSheetData } = await import('./datastore')
     for (const u of await getSheetData('usuarios')) {
       if (u.activo !== 'TRUE' || u.avisos_whatsapp !== 'TRUE') continue
       const t = (u.telefono || '').replace(/\D/g, '').slice(-9)
       if (t.length !== 9) continue
-      retiros.add(`56${t}`)
-      // admin/admin2 y el Operario Nivel 2 reciben TODOS los avisos del sistema;
-      // el Operario Nivel 1 (operador) queda solo en `retiros`.
-      if (esAdmin(u.rol) || u.rol === 'operador2') admins.add(`56${t}`)
+      equipo.add(`56${t}`)
     }
   } catch (e) { console.warn('[whatsapp] no se pudo leer usuarios para los avisos (sigue solo el env):', e) }
-  equipoCache = { ts: Date.now(), admins: [...admins], retiros: [...retiros] }
-  return equipoCache
+  equipoCache = { ts: Date.now(), equipo: [...equipo] }
+  return equipoCache.equipo
 }
 
-/** Destinatarios del grueso de los avisos del bot/inbox: env + admin/admin2 + Operario Nivel 2. */
+/** Destinatarios de TODOS los avisos del bot/inbox: env + equipo con avisos ON. */
 export async function destinatariosAvisos(): Promise<string[]> {
-  return (await cargarEquipo()).admins
+  return cargarEquipo()
 }
 
-/** Destinatarios de las SOLICITUDES DE RETIRO: env + todo el equipo con avisos ON. */
+/** Destinatarios de las SOLICITUDES DE RETIRO. Misma lista: el equipo es uno solo. */
 export async function destinatariosRetiros(): Promise<string[]> {
-  return (await cargarEquipo()).retiros
+  return cargarEquipo()
 }
 
-/** ¿Puede recibir/resolver los avisos generales del sistema? (admin/admin2 + Operario Nivel 2 + env). */
+/**
+ * Destinatarios del INFORME SEMANAL de Google Ads: solo el dueño (env
+ * ADMIN_WHATSAPP). Es la única pieza que no se reparte al equipo — un reporte de
+ * gestión con gasto, CPA y decisiones de presupuesto, no un aviso de operación.
+ */
+export function destinatariosInforme(): string[] {
+  return adminsWhatsapp()
+}
+
+/** ¿Puede recibir/resolver los avisos del sistema? (todo el equipo con avisos ON). */
 export async function esDestinatarioAvisos(num: string): Promise<boolean> {
   return (await destinatariosAvisos()).includes((num || '').replace(/\D/g, ''))
 }
@@ -557,6 +566,11 @@ async function avisarNumeros(nums: string[], body: string): Promise<EnvioResult[
  */
 export async function avisarAdminsWhatsapp(body: string): Promise<EnvioResult[]> {
   return avisarNumeros(await destinatariosAvisos(), body)
+}
+
+/** Aviso SOLO al dueño (informe semanal de Ads). Ver destinatariosInforme. */
+export async function avisarDuenoWhatsapp(body: string): Promise<EnvioResult[]> {
+  return avisarNumeros(destinatariosInforme(), body)
 }
 
 /** Igual que avisarAdminsWhatsapp pero al equipo AMPLIO de retiros (acuses de solicitudes). */

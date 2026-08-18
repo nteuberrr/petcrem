@@ -769,7 +769,10 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   // suma. Si la eutanasia quedó dentro de horario pero el retiro no, lo cobra la
   // cremación. Mientras la ficha no tenga fecha/hora propias, el retiro es el que
   // coordinó el veterinario (hora_retiro_crematorio de la eutanasia).
-  const eutanasiaCobraRecargo = (cliente?.eutanasia?.recargo_fuera_horario ?? 0) > 0
+  // Si la ficha viene de una EUTANASIA, el recargo fuera de horario lo lleva
+  // ella y la cremación nunca lo suma — se pase de las 18:00 la eutanasia o el
+  // retiro (no se factura y se cobra igual sin cremación, ver lib/adicionales-auto).
+  const hayEutanasia = !!cliente?.eutanasia
   const eutFecha = cliente?.eutanasia?.fecha_servicio || ''
   const eutHoraRetiro = cliente?.eutanasia?.hora_retiro_crematorio || ''
   useEffect(() => {
@@ -787,14 +790,14 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
         const aplica = esFueraHorario
           ? cremacionLlevaRecargoFueraHorario({
               retiroFueraHorario: aplicaReglaAuto(s, ctx),
-              eutanasiaYaCobraRecargo: eutanasiaCobraRecargo,
+              hayEutanasia,
             })
           : aplicaReglaAuto(s, ctx)
         const presente = next.some(a => a.tipo === 'servicio' && a.id === s.id)
         if (aplica && !presente && !autoQuitadosRef.current.has(s.id)) {
           autoAgregadosRef.current.add(s.id)
           next = [...next, { tipo: 'servicio' as const, id: s.id, nombre: s.nombre, precio: parseFloat(s.precio) || 0, qty: 1 }]
-        } else if (!aplica && presente && (autoAgregadosRef.current.has(s.id) || (esFueraHorario && eutanasiaCobraRecargo))) {
+        } else if (!aplica && presente && (autoAgregadosRef.current.has(s.id) || (esFueraHorario && hayEutanasia))) {
           // Se saca si lo agregamos nosotros, o SIEMPRE si es el recargo fuera de
           // horario y ese recargo ya lo cobra la eutanasia — aunque viniera
           // persistido en los adicionales guardados (corrige el cobro doble).
@@ -804,7 +807,7 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
       }
       return next
     })
-  }, [cliente?.estado, form.fecha_retiro, form.hora_retiro, form.comuna, otrosServicios, eutanasiaCobraRecargo, eutFecha, eutHoraRetiro])
+  }, [cliente?.estado, form.fecha_retiro, form.hora_retiro, form.comuna, otrosServicios, hayEutanasia, eutFecha, eutHoraRetiro])
 
   function toggleAdicional(tipo: 'producto' | 'servicio', item: { id: string; nombre: string; precio: string }) {
     const existing = adicionales.find(a => a.tipo === tipo && a.id === item.id)

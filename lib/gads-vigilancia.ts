@@ -6,7 +6,7 @@ import { auditarCuenta, type Hallazgo } from './google-ads-audit'
 import { calcularRentabilidad } from './marketing-rentabilidad'
 import { resumenAtribucion } from './ads-clicks'
 import { medirLiftSeguimiento } from './seguimiento-leads'
-import { avisarAdminsWhatsapp, isWhatsappConfigured } from './whatsapp'
+import { avisarAdminsWhatsapp, avisarDuenoWhatsapp, isWhatsappConfigured } from './whatsapp'
 
 /**
  * Vigilancia automática de Google Ads (pedida por el dueño 2026-07-15). Dos niveles,
@@ -227,7 +227,9 @@ export async function vigilanciaGoogleAds(opts: { enviar?: boolean } = {}): Prom
     try {
       out.informe.mensaje = await armarInformeSemanal()
       if (enviar && isWhatsappConfigured()) {
-        await avisarAdminsWhatsapp(out.informe.mensaje)
+        // Solo al dueño: es el ÚNICO mensaje del sistema que no se reparte al
+        // equipo (gasto, CPA y decisiones de presupuesto, no operación).
+        await avisarDuenoWhatsapp(out.informe.mensaje)
         out.informe.enviado = true
       }
     } catch (e) { console.warn('[gads-vigilancia] informe semanal:', e) }

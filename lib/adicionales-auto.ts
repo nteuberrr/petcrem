@@ -81,26 +81,32 @@ export function aplicaReglaAuto(
  *
  * El recargo se cobra UNA SOLA VEZ por atención, aunque caigan fuera de horario
  * las DOS partes del servicio (la eutanasia a domicilio y el retiro para la
- * cremación). Es decir:
- *   - solo la eutanasia fuera de horario  → $10.000 (va con la eutanasia)
- *   - solo el retiro fuera de horario     → $10.000 (va en la cremación)
- *   - las dos fuera de horario            → $10.000, NO $20.000
+ * cremación).
  *
- * Prioridad: si la eutanasia YA lo está cobrando (su recargo va fuera de boleta,
- * ver lib/eutanasia-precios), la cremación NO vuelve a sumarlo. Si la eutanasia
- * quedó dentro de horario pero el retiro no, lo cobra la cremación.
+ * HAY EUTANASIA → EL RECARGO VA CON LA EUTANASIA, SIEMPRE (decisión del dueño
+ * 2026-08-17). No importa cuál de las dos partes se pasó de las 18:00: si la
+ * atención incluye eutanasia, la cremación NUNCA lo suma. Dos motivos, y los dos
+ * son de plata, no de estética:
+ *   1. NO SE FACTURA. La boleta cubre la cremación; el recargo se cobra fuera de
+ *      ella, igual que el resto del cobro de la eutanasia. Ponerlo en la
+ *      cremación lo mete adentro de la boleta, donde no corresponde.
+ *   2. SE COBRA IGUAL SIN CREMACIÓN. Una eutanasia sola fuera de horario también
+ *      lo paga, así que es un cargo del servicio de eutanasia, no del retiro.
+ * Del lado de la eutanasia el recargo se decide mirando su hora Y la del retiro
+ * que la sigue (ver `recargoEutanasiaPara` en lib/eutanasia-precios): así el caso
+ * real de eutanasia a las 17:45 con retiro a las 18:15 se sigue cobrando — solo
+ * que del lado correcto.
  *
- * Antes la ficha simplemente NUNCA sumaba el recargo cuando venía de una
- * eutanasia: eso evitaba el cobro doble pero dejaba SIN cobrar el caso real de
- * eutanasia a las 15:45 con retiro a las 19:00.
+ * Sin eutanasia de por medio la regla es la de siempre: lo lleva la cremación si
+ * el retiro cae fuera de horario.
  */
 export function cremacionLlevaRecargoFueraHorario(ctx: {
   /** El retiro para la cremación cae fuera de horario. */
   retiroFueraHorario: boolean
-  /** La eutanasia asociada ya está cobrando su propio recargo fuera de horario. */
-  eutanasiaYaCobraRecargo: boolean
+  /** La atención incluye una eutanasia a domicilio (ella se lleva el recargo). */
+  hayEutanasia: boolean
 }): boolean {
-  return ctx.retiroFueraHorario && !ctx.eutanasiaYaCobraRecargo
+  return ctx.retiroFueraHorario && !ctx.hayEutanasia
 }
 
 /** Etiqueta corta de la regla (UI de Configuración y hints de la ficha). */

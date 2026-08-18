@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, updateRow } from '@/lib/datastore'
 import { verifyToken } from '@/lib/eutanasia-tokens'
-import { isWhatsappConfigured, avisarAdminsWhatsapp } from '@/lib/whatsapp'
-import { formatDate, formatHoraDia } from '@/lib/dates'
 
 const SHEET_COTI = 'cotizaciones_eutanasia'
 
@@ -13,7 +11,6 @@ const SHEET_COTI = 'cotizaciones_eutanasia'
  * Endpoint PÚBLICO. El CLIENTE (tutor) llega desde el link "confirma aquí" que
  * recibió por WhatsApp cuando un veterinario tomó su caso. Al confirmar:
  *  - Marca la cotización: cliente_confirmo = TRUE + fecha_cliente_confirmacion.
- *  - Avisa al admin por WhatsApp que el cliente confirmó la visita.
  *
  * Token firmado (HMAC, accion='cliente_confirmar'); el token ES la autenticación.
  */
@@ -57,16 +54,10 @@ export async function POST(req: NextRequest) {
       const ahora = new Date().toISOString()
       await updateRow(SHEET_COTI, idx, { ...c, cliente_confirmo: 'TRUE', fecha_cliente_confirmacion: ahora })
 
-      // Avisar al admin por WhatsApp (best-effort).
-      if (isWhatsappConfigured()) {
-        const msg =
-          `✅ *El cliente confirmó la visita de eutanasia* (N° ${c.id})\n\n` +
-          `Mascota: ${c.mascota_nombre}\n` +
-          `Tutor: ${c.cliente_nombre}${c.cliente_telefono ? ` · +56 ${c.cliente_telefono}` : ''}\n` +
-          `Veterinario: ${c.vet_nombre_asignado || '—'}\n` +
-          `Fecha: ${formatDate(c.fecha_servicio)} a las ${formatHoraDia(c.hora_servicio)} · ${c.comuna}`
-        try { await avisarAdminsWhatsapp(msg) } catch (e) { console.warn('[cliente-confirmar] aviso admin falló:', e) }
-      }
+      // NO se avisa al equipo: quien confirma la visita es el VETERINARIO, y ese
+      // aviso ya salió cuando aceptó. Este endpoint quedó solo para los links que
+      // alcanzaron a enviarse antes de sacar la confirmación del tutor (decisión
+      // del dueño 2026-08-17): marca la fila y no molesta a nadie.
     }
 
     return NextResponse.json({

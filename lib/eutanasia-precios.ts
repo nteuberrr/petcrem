@@ -122,9 +122,22 @@ export async function setRecargoFueraHorario(monto: number): Promise<void> {
  * agendado para `fecha`/`hora` (0 si cae dentro de horario). El `monto` es el
  * recargo configurado — pásalo desde `getRecargoFueraHorario()` para no leer la
  * config dos veces cuando ya la tienes.
+ *
+ * `horaRetiro` (la del retiro para la cremación, que va después de la eutanasia)
+ * también cuenta: cuando la atención incluye eutanasia, el recargo lo lleva
+ * SIEMPRE ella —no se factura y se cobra igual sin cremación, ver
+ * `cremacionLlevaRecargoFueraHorario`—, así que si la eutanasia queda dentro de
+ * horario pero el retiro se pasa de las 18:00, el cargo tiene que aparecer acá o
+ * no lo cobra nadie. Es el caso real de eutanasia 17:45 / retiro 18:15.
  */
-export function recargoEutanasiaPara(fecha: string | undefined, hora: string | undefined, monto: number): number {
-  return esFueraDeHorario(fecha, hora) ? Math.max(0, Math.round(monto)) : 0
+export function recargoEutanasiaPara(
+  fecha: string | undefined,
+  hora: string | undefined,
+  monto: number,
+  horaRetiro?: string | undefined,
+): number {
+  const fuera = esFueraDeHorario(fecha, hora) || (!!horaRetiro && esFueraDeHorario(fecha, horaRetiro))
+  return fuera ? Math.max(0, Math.round(monto)) : 0
 }
 
 /**
@@ -234,7 +247,10 @@ export interface ValorCotizacionDesglose {
   total: number
 }
 
-type CotValor = { peso?: string; precio_snapshot?: string; fecha_servicio?: string; hora_servicio?: string }
+// `hora_retiro_crematorio`: la hora del retiro que sigue a la eutanasia. Entra
+// en el cálculo porque el recargo fuera de horario lo lleva SIEMPRE la
+// eutanasia, también cuando el que se pasa de las 18:00 es el retiro.
+type CotValor = { peso?: string; precio_snapshot?: string; fecha_servicio?: string; hora_servicio?: string; hora_retiro_crematorio?: string }
 
 /**
  * Config de cobro leída UNA vez, para desglosar muchas cotizaciones sin releer
@@ -303,7 +319,7 @@ export function cobroClienteCon(cot: CotCobro, cfg: ConfigCobroEutanasia): Cobro
     base = precioVet > 0 ? precioVet + cfg.fijo : 0
   }
   if (base <= 0) return { concepto: 'ninguno', base: 0, recargo: 0, total: 0 }
-  const recargo = recargoEutanasiaPara(cot.fecha_servicio, cot.hora_servicio, cfg.recargoMonto)
+  const recargo = recargoEutanasiaPara(cot.fecha_servicio, cot.hora_servicio, cfg.recargoMonto, cot.hora_retiro_crematorio)
   return { concepto, base, recargo, total: base + recargo }
 }
 
@@ -377,7 +393,7 @@ export async function desgloseValorCotizacion(cot: CotValor): Promise<ValorCotiz
     base = peso > 0 ? (await precioVetEutanasia(peso)) + fijo : 0
   }
   if (base <= 0) return { base: 0, recargo: 0, total: 0 }
-  const recargo = recargoEutanasiaPara(cot.fecha_servicio, cot.hora_servicio, recargoMonto)
+  const recargo = recargoEutanasiaPara(cot.fecha_servicio, cot.hora_servicio, recargoMonto, cot.hora_retiro_crematorio)
   return { base, recargo, total: base + recargo }
 }
 

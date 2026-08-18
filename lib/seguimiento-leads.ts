@@ -14,14 +14,14 @@ import { getSheetData } from './datastore'
  * corren el cron diario y el oportunista) busca esas conversaciones y les
  * escribe.
  *
- * DOS TOQUES, NO UNO NI TRES.
- *  · Toque 1 (~50 min): retoma el contacto donde quedó.
- *  · Toque 2 (~19 h después): cierre amable, deja la puerta abierta.
- * El manual de e-commerce recomienda tres toques y rematar con un descuento
- * acotado en el tiempo. Acá no: el cliente acaba de perder a su mascota, y una
- * oferta con reloj en ese momento no es una palanca de conversión, es un motivo
- * para no volver nunca. El segundo mensaje tiene su propia voz — ver
- * SYSTEM_SEGUIMIENTO_2 en lib/agente-mensajes.
+ * UN SOLO TOQUE (~50 min): retoma el contacto donde quedó y ahí termina.
+ * Hubo un segundo toque a las ~19 h y se sacó (decisión del dueño 2026-08-17):
+ * a quien acaba de perder a su mascota se le escribe UNA vez, y si no responde
+ * se le deja tranquilo — insistir no recupera la venta, molesta. El manual de
+ * e-commerce recomienda tres toques y rematar con un descuento con reloj; acá
+ * eso no es una palanca de conversión, es un motivo para no volver nunca.
+ * El código del segundo toque queda (SEGUNDO_TOQUE_HORAS, SYSTEM_SEGUIMIENTO_2
+ * en lib/agente-mensajes): se reactiva subiendo SEGUIMIENTO_MAX_TOQUES a 2.
  *
  * GRUPO DE CONTROL (holdout). Un 10% de los leads elegibles NO recibe ningún
  * seguimiento, elegido de forma determinística por su teléfono. Sin ese grupo no
@@ -138,7 +138,9 @@ export async function enviarSeguimientosPendientes(opts: { maxEnvios?: number } 
     const toques = tieneContador ? Number(conv.seguimiento_n) : (conv.seguimiento_at ? 1 : 0)
     // −1 = grupo de control: elegible, pero a propósito sin mensajes.
     if (toques < 0) { salto('grupo de control'); continue }
-    const MAX_TOQUES = tieneContador ? 2 : 1
+    // Un solo toque por defecto (ver el encabezado). Sigue siendo configurable
+    // por env para poder volver a dos sin desplegar.
+    const MAX_TOQUES = tieneContador ? num(process.env.SEGUIMIENTO_MAX_TOQUES, 1) : 1
     if (toques >= MAX_TOQUES) { salto(`ya tiene ${toques} toque(s)`); continue }
     const etq = conv.etiquetas || []
     if (etq.includes('pausado') || etq.includes('requiere-humano')) { salto('pausada/escalada'); continue }
