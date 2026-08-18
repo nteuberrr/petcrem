@@ -232,6 +232,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
   const [cobroError, setCobroError] = useState('')
   // Confirmar pago de un cobro pendiente (adicional / diferencia) desde el banner.
   const [pagandoCobroId, setPagandoCobroId] = useState('')
+  // Cobro que se está confirmando + con qué se recibió (ver confirmarPago).
+  const [cobroAConfirmar, setCobroAConfirmar] = useState('')
+  const [medioPago, setMedioPago] = useState('transferencia')
   // Pago parcial: monto abonado por el tutor (el resto queda como saldo pendiente).
   const [abono, setAbono] = useState('')
   // Toast centrado (se auto-oculta a los 3s). Por defecto "Cambios guardados".
@@ -833,16 +836,34 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
    * nota de crédito sobre la boleta. Si la NC falla, el cierre igual queda hecho
    * (la plata ya salió) y el aviso dice que hay que emitirla a mano.
    */
+  /**
+   * Cierra un cobro pendiente. Para un COBRO (no una devolución) se pregunta
+   * antes CON QUÉ se recibió: si fue con la máquina o con un link de pago, esa
+   * plata pasó por el procesador y tiene que aparecer en Facturación → Ventas
+   * POS, con su comisión y su abono. Antes se daba por hecho que todo saldo
+   * llegaba por transferencia y quedaba fuera de la conciliación.
+   */
   async function confirmarPago(cobroId: string, devolucion = false) {
-    const pregunta = devolucion
-      ? '¿Confirmar que ya le devolviste esta plata al tutor?\n\nSe emitirá una nota de crédito sobre la boleta del servicio por ese monto.'
-      : '¿Confirmar que recibimos este pago? Se cerrará la cobranza.'
-    if (!confirm(pregunta)) return
+    if (devolucion) {
+      if (!confirm('¿Confirmar que ya le devolviste esta plata al tutor?\n\nSe emitirá una nota de crédito sobre la boleta del servicio por ese monto.')) return
+      await cerrarCobro(cobroId, undefined, true)
+      return
+    }
+    setMedioPago('transferencia')
+    setCobroAConfirmar(cobroId)
+  }
+
+  async function cerrarCobro(cobroId: string, medio?: string, devolucion = false) {
     setPagandoCobroId(cobroId)
     try {
-      const r = await fetch(`/api/cobros/${cobroId}`, { method: 'PATCH' })
+      const r = await fetch(`/api/cobros/${cobroId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(medio ? { medio } : {}),
+      })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) { alert(d.error || (devolucion ? 'No se pudo registrar la devolución.' : 'No se pudo confirmar el pago.')); return }
+      setCobroAConfirmar('')
       await recargarCliente()
       if (d.aviso) alert(d.aviso)
     } finally {
@@ -1459,6 +1480,56 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             )}
           </div>
 
+          {/* CON QUÉ SE RECIBIÓ el cobro. No es un trámite: si entró por la máquina
+              o por un link de pago, esa plata pasó por el procesador y tiene que
+              aparecer en Facturación → Ventas POS (paga comisión y llega en el
+              abono). Antes se asumía que todo saldo llegaba por transferencia y
+              quedaba fuera de la conciliación. */}
+          <Modal open={!!cobroAConfirmar} onClose={() => setCobroAConfirmar('')} title="Confirmar pago recibido">
+            <div className="space-y-4">
+              <p className="text-sm text-gray-700">¿Cómo está pagando?</p>
+              <div className="space-y-2">
+                {[
+                  { v: 'transferencia', l: 'Transferencia', d: 'No pasa por el procesador.' },
+                  { v: 'pos', l: 'POS (máquina)', d: 'Entra a Ventas POS: paga comisión y llega en el abono.' },
+                  { v: 'link', l: 'Link de pago', d: 'Entra a Ventas POS: paga comisión y llega en el abono.' },
+                  { v: 'efectivo', l: 'Efectivo', d: 'No pasa por el procesador.' },
+                ].map(o => (
+                  <label
+                    key={o.v}
+                    className={`flex items-start gap-3 rounded-xl border-2 px-4 py-3 cursor-pointer transition-colors ${
+                      medioPago === o.v ? 'border-brand bg-brand/5' : 'border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="radio" name="medio-pago" value={o.v} checked={medioPago === o.v}
+                      onChange={() => setMedioPago(o.v)} className="mt-0.5"
+                    />
+                    <span>
+                      <span className="text-sm font-semibold text-gray-900">{o.l}</span>
+                      <span className="block text-xs text-gray-600">{o.d}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  onClick={() => cerrarCobro(cobroAConfirmar, medioPago)}
+                  disabled={!!pagandoCobroId}
+                  className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-60 transition-colors"
+                >
+                  {pagandoCobroId ? '⌛…' : 'Confirmar pago'}
+                </button>
+                <button
+                  onClick={() => setCobroAConfirmar('')}
+                  className="flex-1 border-2 border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </Modal>
+
           {/* Viñeta: ¿adjuntar el video del servicio al correo del certificado? */}
           <Modal open={confirmVideoOpen} onClose={() => setConfirmVideoOpen(false)} title="Adjuntar video al correo">
             <div className="space-y-4">
@@ -2043,9 +2114,6 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     <p className="mt-0.5 text-amber-900 font-bold">Pendiente por pagar: {fmtPrecio(pendiente)}</p>
                   </div>
                 </div>
-                <p className="mt-2 text-[11px] text-amber-800">
-                  Al guardar queda un <strong>saldo pendiente</strong> por la diferencia (aparece arriba en «pendientes de cobro»). La boleta se emite recién cuando confirmes el pago total.
-                </p>
               </div>
             )
           })()}

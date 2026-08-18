@@ -1260,3 +1260,7 @@ notify pgrst, 'reload schema';
 -- Ventas sin boleta (ver supabase/sin-boleta.sql).
 alter table public.clientes
   add column if not exists sin_boleta text not null default 'FALSE';
+
+-- Medio de pago de un cobro confirmado (ver supabase/cobros-medio-pago.sql).
+alter table public.cobros
+  add column if not exists medio_pago text not null default '';

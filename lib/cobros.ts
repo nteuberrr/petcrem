@@ -30,6 +30,10 @@ const TABLE = 'cobros'
 // debe. Al confirmarlo se emite una NOTA DE CRÉDITO sobre la boleta de la ficha,
 // no una boleta nueva.
 export type TipoCobro = 'adicional' | 'diferencia' | 'saldo' | 'devolucion'
+
+/** Con qué se recibió un cobro al confirmarlo. */
+export const MEDIOS_PAGO = ['transferencia', 'pos', 'link', 'efectivo'] as const
+export type MedioPago = (typeof MEDIOS_PAGO)[number]
 export type EstadoCobro = 'pendiente' | 'cliente_confirmo' | 'pagado'
 
 /** ¿Este movimiento es plata que le devolvemos al tutor (y no que nos deba)? */
@@ -50,6 +54,13 @@ export interface Cobro {
   fecha_pagado: string
   /** Boleta (39) emitida por este cobro al confirmarse el pago. '' = sin emitir. */
   boleta_id: string
+  /**
+   * Con qué se recibió: 'transferencia' | 'pos' | 'link' | 'efectivo'.
+   * '' = transferencia (lo histórico: antes se daba por hecho). Los cobros por
+   * MÁQUINA o LINK pasan por el procesador y aparecen en Ventas POS como su
+   * propia línea, el día en que se confirmaron.
+   */
+  medio_pago: string
 }
 
 // ⚠️ toCobro DEBE mapear todas las columnas: `marcarCobroPagado`/`marcarClienteConfirmo`
@@ -61,6 +72,7 @@ function toCobro(r: Record<string, string>): Cobro {
     monto: r.monto || '0', estado: r.estado || 'pendiente', message_id: r.message_id || '',
     fecha_creacion: r.fecha_creacion || '', fecha_cliente_confirmo: r.fecha_cliente_confirmo || '', fecha_pagado: r.fecha_pagado || '',
     boleta_id: r.boleta_id || '',
+    medio_pago: r.medio_pago || '',
   }
 }
 
@@ -137,11 +149,18 @@ export async function marcarClienteConfirmo(id: string): Promise<Cobro | null> {
 }
 
 /** El equipo confirmó el pago recibido (desde la ficha). Cierra la cobranza. */
-export async function marcarCobroPagado(id: string): Promise<Cobro | null> {
+export async function marcarCobroPagado(id: string, medio?: MedioPago): Promise<Cobro | null> {
   const c = await obtenerCobro(id)
   if (!c) return null
-  await updateById(TABLE, id, { ...c, estado: 'pagado', fecha_pagado: new Date().toISOString() })
-  return { ...c, estado: 'pagado' }
+  const medio_pago = medio && MEDIOS_PAGO.includes(medio) ? medio : (c.medio_pago || '')
+  await updateById(TABLE, id, { ...c, estado: 'pagado', fecha_pagado: new Date().toISOString(), medio_pago })
+  return { ...c, estado: 'pagado', medio_pago }
+}
+
+/** ¿Este cobro pasó por el procesador (máquina o link)? Solo esos van a Ventas POS. */
+export function cobroPasaPorProcesador(medio: string | undefined): boolean {
+  const m = String(medio || '').toLowerCase()
+  return m === 'pos' || m === 'link'
 }
 
 /**

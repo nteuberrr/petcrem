@@ -159,7 +159,11 @@ export const SHEETS: Record<string, string[]> = {
   // boleta_id: boleta (39) emitida por ESE cobro al confirmarse el pago (guard de
   // idempotencia + trazabilidad). Solo 'adicional' y 'diferencia'; el 'saldo'
   // cierra la ficha y su boleta va en clientes.boleta_id.
-  cobros: ['id', 'cliente_id', 'tipo', 'detalle', 'monto', 'estado', 'message_id', 'fecha_creacion', 'fecha_cliente_confirmo', 'fecha_pagado', 'boleta_id'],
+  // medio_pago: con qué se recibió el cobro al confirmarlo ('transferencia' |
+  // 'pos' | 'link' | 'efectivo'). Los que entran por MÁQUINA o LINK pasan por el
+  // procesador, así que aparecen en Facturación → Ventas POS como su propia
+  // línea, el día en que se confirmaron. Vacío = transferencia (lo histórico).
+  cobros: ['id', 'cliente_id', 'tipo', 'detalle', 'monto', 'estado', 'message_id', 'fecha_creacion', 'fecha_cliente_confirmo', 'fecha_pagado', 'boleta_id', 'medio_pago'],
   descuentos: ['id', 'nombre', 'tipo', 'valor', 'activo', 'foto_url', 'mostrar_web', 'fecha_creacion'],
   // ── Comisiones de convenio (Configuración → Descuentos Convenios) ──────────
   // A estos vets NO se les factura: la boleta va al TUTOR por el precio completo

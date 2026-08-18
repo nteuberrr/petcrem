@@ -3,6 +3,7 @@ import { formatDateForSheet } from './dates'
 import { agregarDiasHabiles, isoFecha } from './dias-habiles'
 import { calcularPrecioFicha, type Tramo } from './ficha-precio'
 import { parseDecimalOr0 } from './numbers'
+import { cobroPasaPorProcesador } from './cobros'
 
 /**
  * VENTAS POS — lo que el procesador de pagos (TUU/Haulmer) nos tiene que abonar.
@@ -80,6 +81,13 @@ export interface VentaPos {
   liquidado: number
   /** true si el día salió del documento porque la ficha no tiene fecha de pago. */
   fecha_estimada: boolean
+  /**
+   * Esta línea NO es la venta de la ficha sino un COBRO POSTERIOR cobrado con
+   * máquina o link (el saldo de un parcial, un adicional, una diferencia de
+   * peso). Va como línea propia y fechada el día en que se confirmó, porque ese
+   * —y no el del retiro— es el día en que pasó por el procesador.
+   */
+  cobro?: 'saldo' | 'adicional' | 'diferencia'
 }
 
 export interface DiaPos {
@@ -253,6 +261,53 @@ export interface ResumenPos {
  * Arma el resumen día por día. `hoyISO` entra por parámetro para que la función
  * no dependa del reloj (mismo criterio que el motor de remuneraciones).
  */
+/**
+ * Cobros POSTERIORES que se recibieron con MÁQUINA o LINK: el saldo de un pago
+ * parcial, un adicional pedido después, una diferencia de peso. Hasta 2026-08-18
+ * se daba por hecho que todo eso llegaba por transferencia y quedaba fuera de la
+ * conciliación; ahora el equipo elige el medio al confirmar el cobro, y los que
+ * pasaron por el procesador tienen que aparecer acá: pagan comisión y llegan en
+ * el abono como cualquier otra venta.
+ *
+ * Van como línea PROPIA, no sumadas a la venta de la ficha, porque ocurren otro
+ * día: la ficha se fecha con el abono (día del retiro) y el cobro con el día en
+ * que se confirmó. Mezclarlos descuadraría los dos días.
+ */
+async function cobrosDelProcesador(
+  clientesPorId: Map<string, Record<string, string>>,
+  config: ConfigPos,
+): Promise<Array<{ dia: string; venta: VentaPos }>> {
+  const cobros = await getSheetData('cobros').catch(() => [] as Record<string, string>[])
+  const out: Array<{ dia: string; venta: VentaPos }> = []
+  for (const cb of cobros) {
+    if (String(cb.estado || '') !== 'pagado') continue
+    if (!cobroPasaPorProcesador(cb.medio_pago)) continue
+    const tipo = String(cb.tipo || '')
+    if (tipo === 'devolucion') continue   // plata que SALE, no una venta
+    const bruto = parseDecimalOr0(cb.monto) || 0
+    if (bruto <= 0) continue
+    const dia = formatDateForSheet(cb.fecha_pagado) || ''
+    if (!dia) continue
+    const ficha = clientesPorId.get(String(cb.cliente_id || ''))
+    out.push({ dia, venta: {
+      id: `cobro-${cb.id}`,
+      codigo: String(ficha?.codigo || ''),
+      nombre_mascota: String(ficha?.nombre_mascota || ''),
+      fecha_retiro: formatDateForSheet(ficha?.fecha_retiro) || '',
+      fecha_boleta: '',
+      folio: '',
+      tipo_pago: String(cb.medio_pago).toLowerCase() === 'link' ? 'link' : 'pos',
+      bruto,
+      saldo_excluido: 0,
+      eutanasia: 0,
+      ...calcularComision(bruto, config),
+      fecha_estimada: false,
+      cobro: (tipo === 'saldo' || tipo === 'adicional' || tipo === 'diferencia') ? tipo : 'adicional',
+    } })
+  }
+  return out
+}
+
 export async function resumenVentasPos(f: FiltrosPos = {}): Promise<ResumenPos> {
   const [clientes, tablas, docs, config, saldos, eutanasias] = await Promise.all([
     getSheetData('clientes'),
@@ -313,6 +368,19 @@ export async function resumenVentasPos(f: FiltrosPos = {}): Promise<ResumenPos> 
     }
 
     if (!dia) { sinFecha.push(venta); continue }
+    if (f.desde && dia < f.desde) continue
+    if (f.hasta && dia > f.hasta) continue
+    conFecha.push(venta)
+    const arr = porDia.get(dia)
+    if (arr) arr.push(venta); else porDia.set(dia, [venta])
+  }
+
+  // Cobros posteriores cobrados con máquina o link: van al día en que se
+  // confirmaron, como su propia línea. No hay doble conteo con la ficha: el
+  // saldo de un parcial SIEMPRE se descuenta de su bruto (ver saldosPorFicha),
+  // se haya cobrado como se haya cobrado.
+  const clientesPorId = new Map(clientes.map(c => [String(c.id), c]))
+  for (const { dia, venta } of await cobrosDelProcesador(clientesPorId, config)) {
     if (f.desde && dia < f.desde) continue
     if (f.hasta && dia > f.hasta) continue
     conFecha.push(venta)

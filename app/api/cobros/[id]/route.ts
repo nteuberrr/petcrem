@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { marcarCobroPagado, esDevolucion } from '@/lib/cobros'
+import { marcarCobroPagado, esDevolucion, MEDIOS_PAGO, type MedioPago } from '@/lib/cobros'
 import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { emitirBoletaSiCorresponde, emitirBoletaCobroSiCorresponde, emitirNcDevolucionSiCorresponde } from '@/lib/facturacion'
 
@@ -18,13 +18,20 @@ import { emitirBoletaSiCorresponde, emitirBoletaCobroSiCorresponde, emitirNcDevo
  *  · 'devolucion' → plata que SALE (se le devolvió al tutor): no se emite una
  *               boleta sino una NOTA DE CRÉDITO parcial sobre la boleta de la ficha.
  */
-export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   const usuario = session?.user as { id?: string; name?: string } | undefined
   if (!session?.user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   try {
     const { id } = await params
-    const cobro = await marcarCobroPagado(id)
+    // Con qué se recibió. Importa más allá del registro: un cobro cerrado con
+    // MÁQUINA o LINK pasó por el procesador, así que tiene que aparecer en
+    // Ventas POS (paga comisión y llega en el abono). Sin `medio` se conserva lo
+    // que tuviera — y lo histórico, vacío, se lee como transferencia.
+    const body = await req.json().catch(() => ({} as Record<string, unknown>))
+    const medioRaw = String((body as { medio?: unknown }).medio ?? '').toLowerCase()
+    const medio = (MEDIOS_PAGO as readonly string[]).includes(medioRaw) ? (medioRaw as MedioPago) : undefined
+    const cobro = await marcarCobroPagado(id, medio)
     if (!cobro) return NextResponse.json({ error: 'Cobro no encontrado' }, { status: 404 })
 
     let boletaId = ''
@@ -41,11 +48,11 @@ export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ i
       try {
         const ficha = (await getSheetData('clientes')).find(f => String(f.id) === String(cobro.cliente_id))
         if (ficha && String(ficha.estado_pago || '').toLowerCase() !== 'pagado') {
-          // NO se toca `fecha_pago`: el saldo de un parcial SIEMPRE se recibe por
-          // transferencia (confirmado por el dueño, 2026-08-07), así que no es una
-          // venta del procesador. El día que le importa a Ventas POS es el del
-          // ABONO —el que sí pasó por la máquina o el link—, y ese ya quedó
-          // sellado al registrar el pago parcial.
+          // NO se toca `fecha_pago` de la ficha: esa fecha es la del ABONO, lo
+          // que pasó por la máquina el día del retiro, y Ventas POS arma el día
+          // con ella. Si el SALDO también se cobra con máquina o link, no se
+          // mezcla acá: entra a Ventas POS como su PROPIA línea, fechada el día
+          // en que se confirmó (ver `cobrosDelProcesador` en lib/facturacion-pos).
           await updateByIdIf('clientes', String(ficha.id), {}, { estado_pago: 'pagado' })
           const r = await emitirBoletaSiCorresponde({ ...ficha, estado_pago: 'pagado' }, { creadoPorNombre: 'Automático (saldo de pago parcial recibido)' })
           if (r.boleta_id) boletaId = r.boleta_id

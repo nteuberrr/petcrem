@@ -35,6 +35,9 @@ interface VentaPos {
   comision_bruta: number
   liquidado: number
   fecha_estimada: boolean
+  /** Cobro POSTERIOR recibido por máquina/link (saldo, adicional, diferencia):
+   *  línea propia, fechada el día en que se confirmó, no el del retiro. */
+  cobro?: 'saldo' | 'adicional' | 'diferencia'
 }
 
 interface DiaPos {
@@ -315,7 +318,18 @@ export default function VentasPosTab() {
                                         <span className="font-mono text-xs font-semibold text-brand">{v.codigo}</span>
                                       </span>
                                     </td>
-                                    <td className="px-3 py-2.5 text-gray-900">{v.nombre_mascota}</td>
+                                    <td className="px-3 py-2.5 text-gray-900">
+                                      {v.nombre_mascota}
+                                      {/* Esta línea no es la venta de la ficha sino un cobro
+                                          posterior que se recibió por la máquina o por un link,
+                                          y que por eso cae en ESTE día y no en el del retiro. */}
+                                      {v.cobro && (
+                                        <span className="block text-[10px] font-semibold text-gray-500"
+                                          title="Cobro posterior recibido por la máquina o por un link de pago: pasa por el procesador, así que entra a la conciliación el día en que se confirmó">
+                                          {v.cobro === 'saldo' ? 'saldo del pago parcial' : v.cobro === 'diferencia' ? 'diferencia de peso' : 'producto adicional'}
+                                        </span>
+                                      )}
+                                    </td>
                                     <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{v.fecha_retiro ? fmtFecha(v.fecha_retiro) : '—'}</td>
                                     <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
                                       {v.fecha_boleta ? fmtFecha(v.fecha_boleta) : '—'}
@@ -328,8 +342,8 @@ export default function VentasPosTab() {
                                       {fmtPrecio(v.bruto)}
                                       {v.saldo_excluido > 0 && (
                                         <span className="block text-[10px] font-semibold text-gray-500"
-                                          title="Pago parcial: el saldo se recibió por transferencia, así que no pasa por el procesador">
-                                          abono · saldo {fmtPrecio(v.saldo_excluido)} por transferencia
+                                          title={`Pago parcial: por la máquina pasó el abono. El saldo de ${fmtPrecio(v.saldo_excluido)} se cobra aparte.`}>
+                                          abono
                                         </span>
                                       )}
                                       {v.eutanasia > 0 && (
