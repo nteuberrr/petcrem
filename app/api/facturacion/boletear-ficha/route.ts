@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getSheetData, updateByIdIf } from '@/lib/datastore'
 import { emitirBoletaFicha } from '@/lib/facturacion'
 import { calcularPrecioFicha, type Tramo } from '@/lib/ficha-precio'
-import { devengarComision } from '@/lib/comisiones'
+import { devengarComisionDeFicha } from '@/lib/comisiones'
 import { puedeNivel } from '@/lib/permisos-server'
 
 /**
@@ -77,20 +77,15 @@ export async function POST(req: NextRequest) {
 
   await updateByIdIf('clientes', String(c.id), {}, { boleta_id: String(r.documento.id) })
 
-  // Comisión del veterinario que derivó (si tiene regla activa). Base del %: lo
-  // efectivamente cobrado por la CREMACIÓN — sin adicionales y ya con descuento,
-  // misma regla que rige a los descuentos de convenio. Best-effort: la boleta ya
-  // está emitida ante el SII y no se revierte porque falle el devengo.
+  // Comisión del veterinario que derivó (si tiene regla activa). Misma función que
+  // usa la emisión automática — el devengo tiene que ser idéntico venga por donde
+  // venga. Best-effort: la boleta ya está emitida ante el SII y no se revierte
+  // porque falle el devengo. Si la ficha ya la había devengado al quedar pagada,
+  // esto solo completa la referencia al documento.
   let comision = 0
   if (vetId) {
     try {
-      const base = Math.max(0, precio.servicio - precio.descuento)
-      const d = await devengarComision({
-        veterinaria_id: vetId,
-        cliente_id: String(c.id),
-        documento_id: String(r.documento.id),
-        base_monto: base,
-      })
+      const d = await devengarComisionDeFicha(c, { documento_id: String(r.documento.id) })
       comision = d.monto ?? 0
     } catch (e) {
       console.warn('[boletear-ficha] no se pudo devengar la comisión (no bloqueante):', e)

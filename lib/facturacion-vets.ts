@@ -2,6 +2,7 @@ import { getSheetData } from './datastore'
 import { formatDateForSheet } from './dates'
 import { parsePeso } from './numbers'
 import { calcularPrecioFicha, type Tramo } from './ficha-precio'
+import { listarReglas } from './comisiones'
 
 /**
  * Propuesta mensual de "Facturar Veterinarios": agrupa por veterinaria las
@@ -68,6 +69,9 @@ export async function construirPropuestaMes(mes: string): Promise<PropuestaMes> 
   const tramosC = preciosC as unknown as Tramo[]
   const tramosE = preciosE as unknown as Tramo[]
   const vetById = new Map(vets.map(v => [v.id, v]))
+  const vetsConComision = new Set(
+    (await listarReglas().catch(() => [])).filter(r => r.activo).map(r => r.veterinaria_id),
+  )
 
   const porVet = new Map<string, VetPropuesta>()
 
@@ -79,6 +83,12 @@ export async function construirPropuestaMes(mes: string): Promise<PropuestaMes> 
     // en vez de facturarle al vet). Sin esta guarda, el lote del mes se la volvería
     // a facturar al veterinario = doble cobro por el mismo servicio.
     if (c.boleta_id?.trim()) continue
+    // Vet con COMISIÓN: a este no se le factura NUNCA — al tutor se le cobra el
+    // precio de lista y al vet le queda la comisión. La guarda de `boleta_id` de
+    // arriba no alcanza: una ficha suya que todavía no se boleteó (marcada "sin
+    // boleta", o pendiente de emisión) se colaba igual a su propuesta del mes y
+    // se le iba a facturar un servicio que él no nos debe.
+    if (vetsConComision.has(String(c.veterinaria_id))) continue
     const fISO = formatDateForSheet(c.fecha_retiro)
     if (!fISO || fISO < desde || fISO > hasta) continue
 

@@ -50,7 +50,11 @@ export default function DescuentosConvenios() {
   const [error, setError] = useState('')
 
   const [showRegla, setShowRegla] = useState(false)
-  const [reglaForm, setReglaForm] = useState({ veterinaria_id: '', tipo: 'fijo' as 'fijo' | 'variable', valor: '', indexar: true })
+  // `indexar` es el estado DESEADO y `indexadoActual` el que tiene hoy la vet: al
+  // guardar solo se llama a la API si difieren. Antes el checkbox era una ACCIÓN
+  // ("indexar ahora") y al editar una vet YA indexada aparecía DESMARCADO, que se
+  // lee como "no está indexada" — reporte del dueño con Manuel Astorga, 19-08-2026.
+  const [reglaForm, setReglaForm] = useState({ veterinaria_id: '', tipo: 'fijo' as 'fijo' | 'variable', valor: '', indexar: true, indexadoActual: false })
   const [reglaError, setReglaError] = useState('')
 
   const [ajuste, setAjuste] = useState<SaldoVet | null>(null)
@@ -95,8 +99,8 @@ export default function DescuentosConvenios() {
   const guardarRegla = () => ejecutar(async () => {
     setReglaError('')
     const valor = parseInt(reglaForm.valor, 10)
-    if (!reglaForm.veterinaria_id) { setReglaError('Elegí una veterinaria.'); return }
-    if (!valor || valor <= 0) { setReglaError('Ingresá un valor mayor a 0.'); return }
+    if (!reglaForm.veterinaria_id) { setReglaError('Selecciona una veterinaria.'); return }
+    if (!valor || valor <= 0) { setReglaError('Ingresa un valor mayor a 0.'); return }
     if (reglaForm.tipo === 'variable' && valor > 100) { setReglaError('Un porcentaje no puede superar 100.'); return }
     const r = await fetch('/api/comisiones', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -104,20 +108,21 @@ export default function DescuentosConvenios() {
     })
     const d = await r.json()
     if (!r.ok) { setReglaError(d.error || 'No se pudo guardar.'); return }
-    if (reglaForm.indexar) {
+    if (reglaForm.indexar !== reglaForm.indexadoActual) {
+      const accion = reglaForm.indexar ? 'indexar' : 'desindexar'
       const ri = await fetch('/api/comisiones', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'indexar', veterinaria_id: reglaForm.veterinaria_id }),
+        body: JSON.stringify({ accion, veterinaria_id: reglaForm.veterinaria_id }),
       })
       if (!ri.ok) {
         const di = await ri.json().catch(() => ({}))
-        setReglaError(`La comisión quedó guardada, pero no se pudieron indexar los precios: ${di.error || ri.status}`)
+        setReglaError(`La comisión quedó guardada, pero no se pudo ${accion} sus precios: ${di.error || ri.status}`)
         await cargar()
         return
       }
     }
     setShowRegla(false)
-    setReglaForm({ veterinaria_id: '', tipo: 'fijo', valor: '', indexar: true })
+    setReglaForm({ veterinaria_id: '', tipo: 'fijo', valor: '', indexar: true, indexadoActual: false })
     await cargar()
   })
 
@@ -144,7 +149,7 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
     if (!ajuste) return
     setAjusteError('')
     const monto = parseInt(ajusteForm.monto, 10)
-    if (!monto || monto <= 0) { setAjusteError('Ingresá un monto mayor a 0.'); return }
+    if (!monto || monto <= 0) { setAjusteError('Ingresa un monto mayor a 0.'); return }
     const r = await fetch('/api/comisiones', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ accion: 'ajuste', veterinaria_id: ajuste.veterinaria_id, monto, detalle: ajusteForm.detalle, fecha: ajusteForm.fecha }),
@@ -233,7 +238,7 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
                               Ajustar saldo
                             </button>
                             {s.regla && (
-                              <button onClick={() => { setReglaError(''); setReglaForm({ veterinaria_id: s.veterinaria_id, tipo: s.regla!.tipo, valor: String(s.regla!.valor), indexar: !s.indexado }); setShowRegla(true) }}
+                              <button onClick={() => { setReglaError(''); setReglaForm({ veterinaria_id: s.veterinaria_id, tipo: s.regla!.tipo, valor: String(s.regla!.valor), indexar: s.indexado, indexadoActual: s.indexado }); setShowRegla(true) }}
                                 className="text-xs font-semibold text-brand border border-brand/40 rounded-lg px-2 py-1 hover:bg-brand/5">
                                 Editar
                               </button>
@@ -273,7 +278,13 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
           <div>
             <label className="text-xs font-medium text-gray-700">Veterinaria</label>
             <select required value={reglaForm.veterinaria_id}
-              onChange={e => setReglaForm(f => ({ ...f, veterinaria_id: e.target.value }))}
+              onChange={e => {
+                const vid = e.target.value
+                // El estado de indexado es POR VETERINARIA: al cambiar de vet hay que
+                // traer el suyo, si no el checkbox muestra el de la anterior.
+                const ya = saldos.find(s => s.veterinaria_id === vid)?.indexado ?? false
+                setReglaForm(f => ({ ...f, veterinaria_id: vid, indexadoActual: ya, indexar: ya || f.indexar }))
+              }}
               className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="">Seleccionar…</option>
               {vets.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
@@ -299,17 +310,20 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
           </div>
           <p className="text-xs text-gray-500">
             El porcentaje se calcula sobre el precio de la <strong>cremación</strong> (sin adicionales y
-            ya con descuento aplicado). La comisión se devenga al emitirle la boleta al tutor.
+            ya con descuento aplicado). La comisión se devenga cuando la ficha queda pagada.
           </p>
           <label className="flex items-start gap-2 text-sm text-gray-700 bg-cream border border-gold-soft/40 rounded-lg px-3 py-2 cursor-pointer">
             <input type="checkbox" checked={reglaForm.indexar}
               onChange={e => setReglaForm(f => ({ ...f, indexar: e.target.checked }))}
               className="w-4 h-4 mt-0.5" />
             <span>
-              <strong>Indexar sus precios a los generales</strong>
+              <strong>Sus precios siguen a los generales</strong>
               <span className="block text-xs text-gray-500 mt-0.5">
-                Al tutor se le cobra el precio de lista, así que la tarifa del vet pasa a ser la general
-                y queda siguiéndola: si mañana cambian los precios generales, los suyos cambian solos.
+                Al tutor se le cobra el precio de lista, así que la tarifa del vet es la general y queda
+                siguiéndola: si mañana cambian los precios generales, los suyos cambian solos.
+                {reglaForm.indexadoActual && reglaForm.indexar
+                  ? ' Ya está así: desmárcalo solo si quieres darle una tarifa propia.'
+                  : ''}
               </span>
             </span>
           </label>

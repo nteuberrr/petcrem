@@ -4,7 +4,7 @@ import { todayISO } from './dates'
 import { uploadToR2 } from './cloudflare-r2'
 import { enviarBoletaCliente } from './cliente-mailer'
 import { marcarBoletaCobro } from './cobros'
-import { anularComisionPorFicha } from './comisiones'
+import { anularComisionPorFicha, devengarComisionDeFicha, reglaActivaDeVet } from './comisiones'
 import { avisarAdminsWhatsapp } from './whatsapp'
 import { sendEmail } from './resend-mailer'
 import { renderEmailLayout, getContacto, escapeHtml } from './email-layout'
@@ -203,7 +203,10 @@ export async function emitirDocumento(o: EmitirDocOpts): Promise<EmitirDocResult
  * (precio_total ya trae servicio − descuento + adicionales). Best-effort: la llama
  * el trigger del PATCH de clientes; si algo falla devuelve {ok:false} sin romper.
  *
- * NO se usa para fichas de veterinaria (esas se facturan al vet, mensual y manual).
+ * También cubre las fichas de un vet con COMISIÓN: a esos no se les factura, se le
+ * cobra el precio de lista al tutor y se le boletea a él (Configuración → Descuentos
+ * Convenios). Al resto de las fichas de veterinaria NO se les emite boleta: se les
+ * factura al vet, mensual y manual.
  */
 export async function emitirBoletaFicha(
   c: Record<string, string>,
@@ -253,8 +256,13 @@ export async function emitirBoletaFicha(
 }
 
 /**
- * Emite la boleta automática de una ficha SI corresponde: solo fichas de TUTOR
- * (sin veterinaria), REGISTRADAS, PAGADAS y SIN boleta previa. Idempotente por
+ * TODO lo tributario que dispara una ficha al quedar PAGADA, en un solo lugar:
+ * devenga la comisión del vet que la derivó (si tiene regla) y emite su boleta si
+ * corresponde. La llaman el PATCH de la ficha, el alta ya pagada y el cierre del
+ * saldo de un pago parcial — los tres tienen que hacer lo mismo.
+ *
+ * La BOLETA sale para las fichas REGISTRADAS, PAGADAS, SIN boleta previa y que
+ * sean de TUTOR (sin veterinaria) **o de un vet con COMISIÓN**. Idempotente por
  * `boleta_id`. Best-effort: ante fallo avisa al admin por WhatsApp y no lanza.
  * Persiste `boleta_id` en la ficha y lo devuelve si la emitió.
  *
@@ -265,15 +273,33 @@ export async function emitirBoletaSiCorresponde(
   ficha: Record<string, string>,
   meta: { creadoPorNombre?: string } = {},
 ): Promise<{ emitida: boolean; boleta_id?: string }> {
-  const esTutor = !String(ficha.veterinaria_id || '').trim()
+  const vetId = String(ficha.veterinaria_id || '').trim()
   const fichaRegistrada = String(ficha.estado || '') !== 'borrador' && !!String(ficha.codigo || '').trim()
   const yaTieneBoleta = !!String(ficha.boleta_id || '').trim()
   const estaPagada = String(ficha.estado_pago || '').toLowerCase() === 'pagado'
+
+  // COMISIÓN del vet que derivó, si tiene regla activa. Va PRIMERO y aparte de la
+  // boleta a propósito (dueño 2026-08-19): la comisión se gana por derivar un caso
+  // que se cobró, y hay ventas que se cierran sin documento —una ficha de Manuel
+  // Astorga quedó marcada "no emitir boleta" y su comisión no se devengó nunca—.
+  // Es idempotente, así que da igual cuántas veces pase por acá.
+  if (fichaRegistrada && estaPagada && vetId) {
+    try { await devengarComisionDeFicha(ficha) }
+    catch (e) { console.warn('[facturacion] no se pudo devengar la comisión (no bloqueante):', e) }
+  }
+
   // El dueño marcó "no emitir boleta por este servicio". No se emite ni se avisa:
   // es una decisión suya, no una falla. El ingreso igual se registra (en BRUTO,
   // ver lib/eerr-ingresos) y la Conciliación no lo cuenta como diferencia.
   if (sinBoleta(ficha)) return { emitida: false }
-  if (!esTutor || !fichaRegistrada || yaTieneBoleta || !estaPagada) return { emitida: false }
+  // Una ficha de veterinaria NO se boletea: se le factura al vet a fin de mes. La
+  // excepción son los vets con COMISIÓN, que es justamente al revés — al tutor se
+  // le cobra el precio de lista y se le boletea a él, y al vet le queda la comisión
+  // (Configuración → Descuentos Convenios). Sin esta excepción esas boletas había
+  // que emitirlas UNA POR UNA desde Facturación, y las que nadie apretaba se
+  // colaban a la propuesta de facturación mensual del veterinario.
+  if (vetId && !(await reglaActivaDeVet(vetId))) return { emitida: false }
+  if (!fichaRegistrada || yaTieneBoleta || !estaPagada) return { emitida: false }
   const nombre = String(ficha.nombre_mascota || ficha.codigo || ficha.id || '')
   const avisar = (extra: string) => avisarAdminsWhatsapp(
     `⚠️ *Boleta SII no emitida*\n\nFicha ${String(ficha.codigo || '#' + ficha.id)} (${nombre}) quedó *pagada* pero ${extra}\n\nReintenta manualmente desde Facturación → "Pagadas sin boleta".`

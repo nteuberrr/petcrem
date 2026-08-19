@@ -2,6 +2,7 @@ import { getSheetData, appendRow, getNextId, updateByIdIf, deleteById } from './
 import { todayISO } from './dates'
 import { parseMonto, parsePeso } from './numbers'
 import { origenDeVet } from './precios-indexados'
+import { calcularPrecioFicha, type Tramo } from './ficha-precio'
 
 /**
  * COMISIONES DE CONVENIO — Configuración → Descuentos Convenios.
@@ -12,8 +13,10 @@ import { origenDeVet } from './precios-indexados'
  *
  * Ciclo de vida:
  *   1. El dueño define la regla del vet: 'fijo' (CLP) o 'variable' (% sobre la cremación).
- *   2. Al emitirle la BOLETA al tutor de una ficha de ese vet, se DEVENGA la comisión
- *      (una por ficha, `cliente_id` único). Si esa boleta se anula, pasa a 'anulada'.
+ *   2. Cuando una ficha de ese vet queda PAGADA se DEVENGA la comisión (una por
+ *      ficha, `cliente_id` único). El disparador es el pago, NO el documento: hay
+ *      ventas que se cierran sin boleta y la comisión se gana igual. Si la boleta
+ *      se emite y luego se anula, el devengo pasa a 'anulada'.
  *   3. El devengo NO toca el EERR: solo acumula saldo.
  *   4. Cuando el dueño le paga y "ajusta saldo", ESE monto se registra como COSTO DE
  *      VENTA en `eerr_gastos_manuales` (partida 'Comisiones convenios'). Único golpe
@@ -133,7 +136,7 @@ export async function guardarRegla(input: {
   activo?: boolean
 }): Promise<ComisionRegla> {
   const vid = String(input.veterinaria_id || '').trim()
-  if (!vid) throw new Error('Elegí una veterinaria.')
+  if (!vid) throw new Error('Selecciona una veterinaria.')
   const tipo = normalizarTipo(input.tipo)
   const valor = Math.round(Number(input.valor) || 0)
   if (valor <= 0) throw new Error('El valor de la comisión debe ser mayor a 0.')
@@ -210,8 +213,16 @@ export async function devengarComision(input: {
   }
 
   if (previo) {
-    // Ya devengada y vigente → no tocar (idempotencia). Anulada → revivir.
-    if (String(previo.estado || '') === 'devengada') return { devengada: false }
+    // Ya devengada y vigente → no tocar (idempotencia). Única excepción: si en su
+    // momento se devengó SIN documento (la ficha se pagó antes de boletearse) y
+    // ahora sí lo hay, se completa la referencia — es la trazabilidad de la fila.
+    if (String(previo.estado || '') === 'devengada') {
+      const doc = String(input.documento_id || '').trim()
+      if (doc && !String(previo.documento_id || '').trim()) {
+        await updateByIdIf(T_COMISIONES, previo.id, {}, { documento_id: doc })
+      }
+      return { devengada: false }
+    }
     await updateByIdIf(T_COMISIONES, previo.id, {}, campos)
     return { devengada: true, monto }
   }
@@ -219,6 +230,57 @@ export async function devengarComision(input: {
   const id = await getNextId(T_COMISIONES)
   await appendRow(T_COMISIONES, { id: String(id), cliente_id: cid, ...campos, fecha_creacion: todayISO() })
   return { devengada: true, monto }
+}
+
+/**
+ * Devenga la comisión de UNA FICHA. Es el único punto de entrada del devengo:
+ * lo comparten la emisión automática de la boleta al tutor (lib/facturacion) y el
+ * botón manual de Facturación → "boletear ficha".
+ *
+ * ⚠️ El disparador es que la ficha esté PAGADA, no que exista un documento (dueño
+ * 2026-08-19). Antes colgaba de la emisión de la boleta y eso dejaba comisiones sin
+ * devengar en dos casos reales de Manuel Astorga: una ficha marcada «no emitir
+ * boleta por este servicio» (sin_boleta) y otra que nunca se boleteó a mano. La
+ * comisión se gana por DERIVAR un caso que se cobró; el documento que emitamos
+ * después es otro asunto.
+ *
+ * Idempotente (`cliente_id` único en `comisiones`), así que da lo mismo cuántas
+ * veces se llame ni por qué camino.
+ */
+export async function devengarComisionDeFicha(
+  ficha: Record<string, string>,
+  opts: { documento_id?: string } = {},
+): Promise<{ devengada: boolean; monto?: number }> {
+  const vid = String(ficha.veterinaria_id || '').trim()
+  const cid = String(ficha.id || '').trim()
+  if (!vid || !cid) return { devengada: false }
+  if (String(ficha.estado || '') === 'borrador' || !String(ficha.codigo || '').trim()) return { devengada: false }
+  if (String(ficha.estado_pago || '').toLowerCase() !== 'pagado') return { devengada: false }
+
+  const regla = await reglaActivaDeVet(vid)
+  if (!regla) return { devengada: false }
+
+  // Base del %: lo efectivamente cobrado por la CREMACIÓN — sin adicionales y ya
+  // con descuento, misma regla que rige a los descuentos de convenio. Con la
+  // comisión 'fijo' da igual, pero las tablas se leen igual para no tener dos
+  // criterios según el tipo.
+  const [preciosG, preciosC, preciosE] = await Promise.all([
+    getSheetData('precios_generales').catch(() => [] as Record<string, string>[]),
+    getSheetData('precios_convenio').catch(() => [] as Record<string, string>[]),
+    getSheetData('precios_especiales').catch(() => [] as Record<string, string>[]),
+  ])
+  const precio = calcularPrecioFicha(ficha, undefined, {
+    generales: preciosG as unknown as Tramo[],
+    convenio: preciosC as unknown as Tramo[],
+    especialesDeVet: (preciosE as unknown as Tramo[]).filter(t => t.veterinaria_id === vid),
+  })
+
+  return devengarComision({
+    veterinaria_id: vid,
+    cliente_id: cid,
+    documento_id: String(opts.documento_id || ''),
+    base_monto: Math.max(0, precio.servicio - precio.descuento),
+  })
 }
 
 /**
