@@ -7,7 +7,7 @@ import { upsertContacto, getOrCreateConversacion, insertarMensaje, actualizarCon
 import { aceptarCotizacion, rechazarEnvio } from './eutanasia-aceptar'
 import { registrarHoraRetiro, esHoraValida } from './eutanasia-hora-retiro'
 import { nombreCompletoVet } from './eutanasia-mailer'
-import { formatDate, formatHoraDia } from './dates'
+import { formatDate, formatDateConDia, formatDateForSheet, formatHoraDia, fechaChileISO } from './dates'
 import { fmtPrecio } from './format'
 
 /**
@@ -46,10 +46,18 @@ function resumenMascota(c: Record<string, string>): string {
 }
 
 /**
- * Deja registrado en el inbox lo que se le manda/responde al vet, y marca su
- * conversación como 'veterinario' + 'pausado': el agente de tutores no tiene
- * nada que decirle a un veterinario de la red, y sin la pausa le contestaría
- * cotizaciones de cremación. Best-effort, nunca frena el envío.
+ * Deja registrado en el inbox lo que se le manda/responde al vet y marca su
+ * conversación como 'veterinario'. Best-effort, nunca frena el envío.
+ *
+ * ⚠️ NO pausa al agente (dueño 2026-08-18). Antes sí lo hacía —la idea era que el
+ * bot de tutores no le contestara precios de cremación a un veterinario—, pero la
+ * pausa quedaba puesta PARA SIEMPRE: cuando esa misma vet nos escribía días
+ * después para agendar un retiro de su clínica, el agente estaba mudo y el
+ * retiro no se agendaba (caso Daniella). Hoy el agente tiene MODO VETERINARIO y
+ * sabe que le habla un vet (ver lib/vet-contexto), así que la pausa sobra.
+ *
+ * Además LIMPIA una pausa vieja, salvo que la conversación esté marcada
+ * 'requiere-humano': esa sí la puso alguien del equipo a propósito.
  */
 async function registrarEnInbox(waId: string, cuerpo: string, direccion: 'entrante' | 'saliente', nombre?: string) {
   try {
@@ -62,7 +70,8 @@ async function registrarEnInbox(waId: string, cuerpo: string, direccion: 'entran
       estado: direccion === 'saliente' ? 'enviado' : null,
       enviado_por: direccion === 'saliente' ? 'sistema' : null,
     })
-    const etiquetas = Array.from(new Set([...(conv.etiquetas || []), 'pausado']))
+    const previas = conv.etiquetas || []
+    const etiquetas = previas.includes('requiere-humano') ? previas : previas.filter(t => t !== 'pausado')
     await actualizarConversacion(conv.id, { estado: 'veterinario', etiquetas })
   } catch (e) { console.warn('[eutanasia-wa] no se pudo registrar en el inbox:', e) }
 }
@@ -120,8 +129,9 @@ async function enviarDatosYPedirHora(c: Record<string, string>, vet: Record<stri
     `Dirección: ${c.direccion}, ${c.comuna}\n${mapsUrl}\n` +
     (c.notas ? `Notas: ${c.notas}\n` : '') +
     `Pago al veterinario: ${fmtPrecio(parseInt(c.precio_snapshot || '0', 10))}\n\n` +
-    `*Apenas acuerdes la hora con la familia, respóndenos por aquí solo con la hora* (por ejemplo: 18:30). ` +
-    `Con esa hora agendamos el retiro del crematorio, que pasa 30 minutos después.\n\n` +
+    `*Apenas acuerdes la visita con la familia, respóndenos por aquí con la hora* (por ejemplo: 18:30). ` +
+    `Si además quedó para otro día, dinos la fecha (por ejemplo: 20/08 a las 18:30). ` +
+    `Con eso agendamos el retiro del crematorio, que pasa 30 minutos después.\n\n` +
     `Te enviamos también un correo con el detalle y los botones para marcar el resultado de la visita.`
   const r = await enviarTextoWhatsapp(`56${numero}`, msg)
   if (r.ok) await registrarEnInbox(`56${numero}`, msg, 'saliente', nombreCompletoVet(vet.nombre, vet.apellido))
@@ -157,22 +167,26 @@ export async function procesarBotonVetEutanasia(msg: {
   const nombreVet = nombreCompletoVet(vet.nombre, vet.apellido)
   await registrarEnInbox(numero, tipo === 'si' ? '[tocó "Puedo tomarla"]' : '[tocó "No puedo"]', 'entrante', nombreVet)
 
-  if (tipo === 'no') {
-    await rechazarEnvio(cotiId, vetId)
-    await enviarTextoWhatsapp(numero, 'Gracias por avisar. Seguimos buscando con el resto de la red 🐾')
-    return true
-  }
+  if (tipo === 'no') await declinarInvitacion(cotiId, vetId, numero)
+  else await tomarInvitacion(cotiId, vetId, numero, nombreVet)
+  return true
+}
 
+/**
+ * El vet TOMA la solicitud (tocó el botón o lo dijo por texto). Los dos caminos
+ * hacen exactamente lo mismo, por eso vive acá y no dentro del handler del botón.
+ */
+async function tomarInvitacion(cotiId: string, vetId: string, numero: string, nombreVet: string): Promise<void> {
   const res = await aceptarCotizacion({ cotizacionId: cotiId, vetId })
   if (!res.ok) {
-    await enviarTextoWhatsapp(numero, res.motivo === 'tomada'
-      ? 'Gracias por responder. Otro veterinario ya tomó esta solicitud — te avisamos apenas entre la siguiente 🐾'
-      : res.mensaje)
-    return true
+    // Perdió la carrera: el mensaje sale de MENSAJE_YA_TOMADA (mismo texto que el
+    // link del correo) y cierra prometiendo las próximas — no es un portazo.
+    await enviarTextoWhatsapp(numero, res.motivo === 'tomada' ? `${res.mensaje} 🐾` : res.mensaje)
+    return
   }
   if (res.ya_aceptada) {
-    await enviarTextoWhatsapp(numero, `Ya la tenías tomada. Contacta a ${res.c.cliente_nombre} al +56 ${(res.c.cliente_telefono || '').replace(/\D/g, '')} y, apenas acuerdes la hora, respóndenos con ella por aquí.`)
-    return true
+    await enviarTextoWhatsapp(numero, `Ya la tenías tomada. Contacta a ${res.c.cliente_nombre} al +56 ${(res.c.cliente_telefono || '').replace(/\D/g, '')} y, apenas acuerdes la visita, respóndenos con el día y la hora por aquí.`)
+    return
   }
 
   await enviarDatosYPedirHora(res.c, res.vet)
@@ -181,9 +195,92 @@ export async function procesarBotonVetEutanasia(msg: {
       `✅ *${nombreVet} tomó la eutanasia N° ${cotiId}* (por WhatsApp)\n\n` +
       `Mascota: ${res.c.mascota_nombre}\nTutor: ${res.c.cliente_nombre}\n` +
       `${formatDate(res.c.fecha_servicio)} ${formatHoraDia(res.c.hora_servicio)} · ${res.c.comuna}\n\n` +
-      `Le pedimos la hora que acuerde con la familia.`)
+      `Le pedimos el día y la hora que acuerde con la familia.`)
   } catch (e) { console.warn('[eutanasia-wa] aviso al admin falló:', e) }
-  return true
+}
+
+/** El vet dice que no puede (botón o texto). */
+async function declinarInvitacion(cotiId: string, vetId: string, numero: string): Promise<void> {
+  await rechazarEnvio(cotiId, vetId)
+  await enviarTextoWhatsapp(numero, 'Gracias por avisar. Seguimos buscando con el resto de la red y te escribimos con la próxima 🐾')
+}
+
+const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
+/** Suma días a una fecha ISO sin pasar por el reloj local. */
+function sumarDias(iso: string, dias: number): string {
+  const d = new Date(`${iso}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + dias)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Lee un DÍA escrito a mano en el mensaje del vet, relativo a `hoyISO` (hoy en
+ * Chile): "20/08", "20-08-2026", "el 20 de agosto", "hoy", "mañana", "pasado
+ * mañana", "el jueves". Devuelve ISO "YYYY-MM-DD" o null si no nombró ninguno.
+ *
+ * Existe porque al coordinar con la familia el servicio a veces se corre de DÍA,
+ * no solo de hora (dueño 2026-08-18): antes leíamos solo la hora y la eutanasia
+ * quedaba agendada el día equivocado. Es deliberadamente conservador —si no hay
+ * una señal clara de día devuelve null y se conserva el ya agendado—, y de todas
+ * formas el acuse de recibo le repite al vet la fecha completa que quedó, así que
+ * un día mal leído se ve en el acto.
+ */
+export function parseFechaTexto(texto: string, hoyISO: string): string | null {
+  const t = (texto || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // sin tildes: "miércoles" → "miercoles"
+    .replace(/\s+/g, ' ').trim()
+  if (!t) return null
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(hoyISO)) return null
+
+  if (/\bpasado\s+manana\b/.test(t)) return sumarDias(hoyISO, 2)
+  if (/\bmanana\b/.test(t)) return sumarDias(hoyISO, 1)
+  if (/\bhoy\b/.test(t)) return hoyISO
+
+  const anioHoy = Number(hoyISO.slice(0, 4))
+  // Arma la fecha eligiendo el año que la deja más cerca de hoy: un "20/08"
+  // escrito el 28-12 se refiere al año que viene, no al que termina.
+  const armar = (d: number, m: number, anio?: number): string | null => {
+    if (!(d >= 1 && d <= 31 && m >= 1 && m <= 12)) return null
+    const candidatos = anio
+      ? [anio < 100 ? 2000 + anio : anio]
+      : [anioHoy, anioHoy + 1, anioHoy - 1]
+    let mejor: string | null = null
+    let mejorDist = Infinity
+    for (const y of candidatos) {
+      const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      const chk = new Date(`${iso}T12:00:00Z`)
+      if (Number.isNaN(chk.getTime()) || chk.toISOString().slice(0, 10) !== iso) continue
+      const dist = Math.abs(chk.getTime() - new Date(`${hoyISO}T12:00:00Z`).getTime())
+      if (dist < mejorDist) { mejorDist = dist; mejor = iso }
+    }
+    return mejor
+  }
+
+  // "20/08", "20-08-2026" (nunca una hora: "18:30" lleva ':' y no matchea).
+  const num = /(?:^|[^\d])(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?(?![\d:])/.exec(t)
+  if (num) {
+    const iso = armar(Number(num[1]), Number(num[2]), num[3] ? Number(num[3]) : undefined)
+    if (iso) return iso
+  }
+
+  // "el 20 de agosto"
+  const conMes = new RegExp(`(\\d{1,2})\\s*(?:de\\s*)?(${MESES.join('|')})`).exec(t)
+  if (conMes) {
+    const iso = armar(Number(conMes[1]), MESES.indexOf(conMes[2]) + 1)
+    if (iso) return iso
+  }
+
+  // "el jueves" → el próximo jueves (hoy cuenta si es ese mismo día).
+  const dia = new RegExp(`\\b(${DIAS_SEMANA.join('|')})\\b`).exec(t)
+  if (dia) {
+    const objetivo = DIAS_SEMANA.indexOf(dia[1])
+    const hoyDow = new Date(`${hoyISO}T12:00:00Z`).getUTCDay()
+    return sumarDias(hoyISO, (objetivo - hoyDow + 7) % 7)
+  }
+
+  return null
 }
 
 /**
@@ -197,8 +294,11 @@ export async function procesarBotonVetEutanasia(msg: {
 export function parseHoraTexto(texto: string): { hora: string } | { ambigua: number } | null {
   const t = (texto || '').toLowerCase().replace(/\s+/g, ' ').trim()
   if (!t) return null
-  // Descarta fechas ("14-08", "14/08") para no leerlas como hora.
-  const limpio = t.replace(/\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?/g, ' ')
+  // Descarta fechas ("14-08", "14/08", "el 20 de agosto") para no leerlas como hora.
+  const limpio = t
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?/g, ' ')
+    .replace(new RegExp(`\\d{1,2}\\s*(?:de\\s*)?(?:${MESES.join('|')})`, 'g'), ' ')
 
   const m = /(?:^|[^\d])([0-2]?\d)\s*(?::|\.|h(?:rs?)?\s*)?\s*([0-5]\d)?\s*(am|pm|a\.m\.|p\.m\.)?/.exec(limpio)
   if (!m) return null
@@ -214,76 +314,164 @@ export function parseHoraTexto(texto: string): { hora: string } | { ambigua: num
   return { hora: `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}` }
 }
 
-/**
- * ¿Este número es de un vet con una eutanasia TOMADA y sin hora informada? Es el
- * único estado en que interpretamos su mensaje como la hora del servicio, así
- * que no hace falta guardar nada aparte: el "pendiente" ya está en la cotización.
- */
-async function eutanasiaEsperandoHora(telefono: string): Promise<{ c: Record<string, string>; vet: Record<string, string> } | null> {
+/** El vet de la red dueño de este número, o null. Primer filtro y el más barato. */
+async function vetPorTelefono(telefono: string): Promise<Record<string, string> | null> {
   const t = tel9(telefono)
   if (t.length !== 9) return null
   const vets = await getSheetData('vet_convenio_eutanasia')
-  const vet = vets.find(v => tel9(v.telefono) === t)
-  if (!vet) return null
-  const cotis = await getSheetData(SHEET_COTI)
-  const c = cotis
-    .filter(x => String(x.vet_id_asignado) === String(vet.id)
-      && (x.estado || '').toLowerCase() === 'aceptada'
-      && !(x.hora_retiro_crematorio || '').trim())
-    .sort((a, b) => (parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0))[0]
-  return c ? { c, vet } : null
+  return vets.find(v => tel9(v.telefono) === t) ?? null
 }
 
 /**
- * El vet respondió por texto mientras le debíamos la hora de una eutanasia que
- * tomó. Si el mensaje trae una hora, la registra (con TODO lo que eso dispara:
- * reagenda el retiro, actualiza la ficha, avisa al equipo y al tutor). Si no,
- * consume igual el mensaje y se lo pasa al equipo — el agente de tutores no debe
- * responderle a un veterinario.
+ * ¿Este vet tiene una eutanasia TOMADA y sin hora informada? Es el único estado
+ * en que interpretamos su mensaje como el día/hora del servicio, así que no hace
+ * falta guardar nada aparte: el "pendiente" ya está en la cotización.
+ *
+ * ⚠️ Solo cuenta si el servicio es de HOY o de más adelante (dueño 2026-08-18).
+ * Sin ese corte, una eutanasia vieja a la que el vet nunca nos informó la hora
+ * dejaba su conversación "esperando hora" para siempre, y los vets que trabajan
+ * seguido quedaban con el canal secuestrado: cada mensaje suyo se lo tragaba este
+ * handler y el agente no llegaba a verlo (caso Daniella, 18-08: pidió dos retiros
+ * de su clínica y ninguno se agendó).
+ */
+async function eutanasiaEsperandoHora(vet: Record<string, string>): Promise<Record<string, string> | null> {
+  const cotis = await getSheetData(SHEET_COTI)
+  const ayer = sumarDias(fechaChileISO(), -1)
+  return cotis
+    .filter(x => String(x.vet_id_asignado) === String(vet.id)
+      && (x.estado || '').toLowerCase() === 'aceptada'
+      && !(x.hora_retiro_crematorio || '').trim()
+      && (formatDateForSheet(x.fecha_servicio) || '') >= ayer)
+    .sort((a, b) => (parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0))[0] ?? null
+}
+
+/**
+ * ¿Este mensaje es la RESPUESTA a "dinos el día y la hora"? Tiene que parecerlo
+ * de verdad: corto y sin las marcas de otra cosa.
+ *
+ * El filtro es la mitad importante del arreglo de arriba. Un veterinario que nos
+ * debe una hora igual nos escribe por otras razones —"quiero agendar un retiro
+ * de un paciente… Retiro para las 13:00"— y ahí hay una hora perfectamente
+ * legible: sin este corte, ese texto se registraba como la hora de la eutanasia
+ * y encima le robaba el turno al agente, que era quien tenía que agendar el
+ * retiro. Lo largo, con teléfonos, direcciones o palabras de agendamiento, cae
+ * al agente (que ya sabe que le habla un vet: lib/vet-contexto).
+ */
+export function pareceRespuestaDeHora(texto: string): boolean {
+  const t = texto.trim()
+  if (t.length > 80) return false
+  const plano = t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (/\d{7,}/.test(plano)) return false                                    // teléfono
+  if (/agendar|solicitar|convenio|tutor|direccion|paciente:|kg\b|cremacion/.test(plano)) return false
+  return parseHoraTexto(t) !== null
+}
+
+/**
+ * ¿Este vet tiene una invitación ABIERTA (cotización todavía en 'enviada' a la
+ * que se le mandó la plantilla)? Sirve para leer un "sí puedo" / "no puedo"
+ * escrito a mano: no todos tocan el botón, y sin esto esa respuesta se perdía.
+ */
+async function invitacionAbierta(vet: Record<string, string>): Promise<Record<string, string> | null> {
+  const [cotis, envios] = await Promise.all([
+    getSheetData(SHEET_COTI),
+    getSheetData('cotizaciones_eutanasia_envios').catch(() => [] as Record<string, string>[]),
+  ])
+  const invitadas = new Set(
+    envios.filter(e => String(e.vet_id) === String(vet.id) && (e.estado_envio || '') !== 'rechazada')
+      .map(e => String(e.cotizacion_id)),
+  )
+  return cotis
+    .filter(x => (x.estado || '').toLowerCase() === 'enviada' && invitadas.has(String(x.id)))
+    .sort((a, b) => (parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0))[0] ?? null
+}
+
+/** ¿El vet está diciendo que SÍ la toma? Deliberadamente estrecho. */
+function diceQueSi(texto: string): boolean {
+  const t = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+  if (/\bno\b/.test(t)) return false
+  if (/(la|lo)\s+(tomo|puedo tomar)|puedo tomarla|yo la tomo|me la tomo|acepto|cuenta conmigo|voy yo|la agarro/.test(t)) return true
+  return t.length <= 25 && /^(si|si puedo|puedo|dale|ok|okey|listo|de acuerdo|perfecto|yo voy|voy)\b/.test(t)
+}
+
+/** ¿El vet está diciendo que NO puede? */
+function diceQueNo(texto: string): boolean {
+  const t = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+  if (/^no[.! ]*$/.test(t)) return true
+  return /no\s+(puedo|podre|alcanzo|estoy|voy a poder|me acomoda|tengo disponibilidad|estare)/.test(t)
+}
+
+/**
+ * El vet respondió por TEXTO. Solo DOS cosas se consumen acá:
+ *
+ *  1. La respuesta a "dinos el día y la hora" de una eutanasia que tomó → se
+ *     registra con todo lo que eso dispara (mueve la fecha si la nombró, reagenda
+ *     el retiro, actualiza la ficha, avisa al equipo y al tutor).
+ *  2. Un "sí puedo" / "no puedo" escrito a mano en vez de tocar el botón de la
+ *     invitación → vale exactamente lo mismo que el botón. Sin esto esa respuesta
+ *     se perdía y la solicitud quedaba sin tomar.
+ *
+ * TODO lo demás cae al agente, que sabe que le habla un veterinario
+ * (lib/vet-contexto) y puede agendarle el retiro de su clínica. Antes este
+ * handler se tragaba CUALQUIER mensaje de un vet con una hora pendiente y le
+ * respondía "le paso tu mensaje al equipo": los vets que trabajan seguido casi
+ * siempre tienen una pendiente, así que el agente no volvía a atenderlos nunca
+ * (caso Daniella, 18-08: dos pedidos de retiro sin agendar).
  *
  * Devuelve true si consumió el mensaje.
  */
 export async function procesarTextoVetEutanasia(msg: { from: string; text?: { body: string } }): Promise<boolean> {
   const texto = (msg.text?.body || '').trim()
   if (!texto) return false
-  const pend = await eutanasiaEsperandoHora(msg.from)
-  if (!pend) return false
-
-  const { c, vet } = pend
   const numero = `56${tel9(msg.from)}`
+
+  // El teléfono se resuelve PRIMERO y con una sola lectura: por acá pasa cada
+  // mensaje entrante del sistema y la inmensa mayoría son de tutores.
+  const vet = await vetPorTelefono(msg.from)
+  if (!vet) return false
   const nombreVet = nombreCompletoVet(vet.nombre, vet.apellido)
+
+  const leido = pareceRespuestaDeHora(texto) ? parseHoraTexto(texto) : null
+  const c = leido ? await eutanasiaEsperandoHora(vet) : null
+
+  if (!leido || !c) {
+    // Respuesta escrita a la invitación (el que no toca el botón). Solo se mira
+    // la base si el texto ya parece un sí/no: cualquier otra cosa es del agente.
+    const si = diceQueSi(texto)
+    const no = !si && diceQueNo(texto)
+    if (!si && !no) return false
+    const inv = await invitacionAbierta(vet)
+    if (!inv) return false
+    await registrarEnInbox(numero, texto, 'entrante', nombreVet)
+    if (si) await tomarInvitacion(String(inv.id), String(vet.id), numero, nombreVet)
+    else await declinarInvitacion(String(inv.id), String(vet.id), numero)
+    return true
+  }
+
   await registrarEnInbox(numero, texto, 'entrante', nombreVet)
 
-  const leido = parseHoraTexto(texto)
-
-  if (leido && 'ambigua' in leido) {
+  if ('ambigua' in leido) {
     await enviarTextoWhatsapp(numero,
       `Para no equivocarnos: ¿te refieres a las ${String(leido.ambigua).padStart(2, '0')}:00 o a las ${leido.ambigua + 12}:00? ` +
       `Respóndenos con la hora en formato de 24 horas (por ejemplo 19:30) 🐾`)
     return true
   }
+  if (!esHoraValida(leido.hora)) return false
 
-  if (!leido || !esHoraValida(leido.hora)) {
-    // No es una hora: se lo pasamos al equipo en vez de dejar que le conteste el
-    // agente de tutores (le respondería precios de cremación a un veterinario).
-    try {
-      await avisarAdminsWhatsapp(
-        `💬 *Mensaje de ${nombreVet}* (eutanasia N° ${c.id} — ${c.mascota_nombre})\n\n` +
-        `"${texto.slice(0, 400)}"\n\n` +
-        `Responde desde el inbox: +${numero}. Seguimos esperando la hora del procedimiento.`)
-    } catch (e) { console.warn('[eutanasia-wa] no se pudo avisar del mensaje del vet:', e) }
-    await enviarTextoWhatsapp(numero, 'Gracias, le paso tu mensaje al equipo y te responden en seguida 🐾')
-    return true
-  }
-
-  const res = await registrarHoraRetiro({ cotizacionId: String(c.id), hora: leido.hora })
+  // El DÍA también puede haberse movido al coordinar con la familia: si el vet lo
+  // nombra, se toma; si no dice nada, se conserva el agendado (parseFechaTexto
+  // devuelve null y registrarHoraRetiro no lo toca).
+  const fecha = parseFechaTexto(texto, fechaChileISO()) || undefined
+  const res = await registrarHoraRetiro({ cotizacionId: String(c.id), hora: leido.hora, fecha })
   if (!res.ok) {
     await enviarTextoWhatsapp(numero, res.error)
     return true
   }
+  // El acuse repite la fecha COMPLETA, con día de la semana: es la red de
+  // seguridad de la lectura del día — si entendimos mal, el vet lo ve al toque.
   await enviarTextoWhatsapp(numero,
-    `Anotado: el procedimiento de ${c.mascota_nombre} queda a las ${res.hora} hrs. ` +
+    `Anotado: el procedimiento de ${c.mascota_nombre} queda el *${formatDateConDia(res.fecha)}* a las *${res.hora}* hrs. ` +
     `Nuestro chofer pasa a retirarla a las ${res.horaRetiro} hrs${res.desplazado ? ' (el horario justo después estaba tomado)' : ''}. ` +
+    `Si algo de eso no es lo que acordaste, respóndenos y lo corregimos. ` +
     `Cuando termines la visita, marca el resultado con los botones del correo. Gracias 🐾`)
   return true
 }

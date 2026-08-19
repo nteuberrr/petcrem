@@ -12,6 +12,7 @@ import { esFeriado, nombreFeriado, avisarSiFaltanFeriados } from './feriados'
 import { ahoraChile, listarBloqueos, rangosDelDia, disponibilidadProximosDias, calcularProximoRetiro, type BloqueoAgenda, type DisponibilidadDia } from './agenda'
 import { registrarUso } from './uso-ia'
 import { revisarSalidaAgente } from './agente-salida'
+import { bloqueVeterinario } from './vet-contexto'
 
 /**
  * Agente IA del inbox de Mensajes: redacta la respuesta de atención por
@@ -1038,6 +1039,12 @@ export async function generarRespuesta(
   if (opts.ctx?.waId) {
     const notaFicha = await bloqueFichaEnProceso(opts.ctx.waId)
     if (notaFicha) system.push({ type: 'text', text: notaFicha })
+    // Si el número es de un VETERINARIO de la red, el agente tiene que saberlo
+    // ANTES de responder: si no, saluda con un pésame y cotiza precios que a un
+    // convenio no le corresponden. Reemplaza a la pausa permanente que dejaba la
+    // coordinación de eutanasias — ver lib/vet-contexto.
+    const notaVet = await bloqueVeterinario(opts.ctx.waId)
+    if (notaVet) system.push({ type: 'text', text: `QUIÉN TE ESCRIBE (no lo recites; úsalo para decidir):\n${notaVet}` })
   }
   // Canal Instagram: el agente informa/cotiza pero NO agenda (los flujos de
   // retiro/eutanasia corren por WhatsApp: botones al admin + links firmados).

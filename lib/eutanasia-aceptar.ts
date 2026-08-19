@@ -22,6 +22,16 @@ const COLS_ENVIOS = ['id', 'cotizacion_id', 'vet_id', 'vet_email', 'fecha_envio'
 
 export type MotivoRechazo = 'no_encontrada' | 'tomada' | 'cancelada' | 'vet_no_encontrado'
 
+/**
+ * Lo que se le responde al vet que llegó SEGUNDO. La invitación es una carrera y
+ * perderla no puede sonar a portazo: son los mismos veterinarios a los que les
+ * vamos a mandar la próxima solicitud, así que el mensaje cierra dejando eso
+ * claro (dueño 2026-08-18). Lo comparten el link del correo y el botón de
+ * WhatsApp, para que no se digan dos cosas distintas.
+ */
+export const MENSAJE_YA_TOMADA =
+  'Este horario ya lo tomó otro veterinario de la red. Gracias por responder: seguiremos enviándote las próximas solicitudes de tus comunas.'
+
 export type ResultadoAceptar =
   | { ok: true; ya_aceptada: boolean; c: Record<string, string>; vet: Record<string, string> }
   | { ok: false; motivo: MotivoRechazo; mensaje: string }
@@ -60,7 +70,7 @@ export async function aceptarCotizacion(opts: {
     if (String(c.vet_id_asignado) === String(vetId)) {
       return { ok: true, ya_aceptada: true, c, vet }
     }
-    return { ok: false, motivo: 'tomada', mensaje: 'Otro veterinario ya tomó esta solicitud. Gracias por tu interés.' }
+    return { ok: false, motivo: 'tomada', mensaje: MENSAJE_YA_TOMADA }
   }
   if (c.estado === 'cancelada') {
     return { ok: false, motivo: 'cancelada', mensaje: 'Esta solicitud fue cancelada.' }
@@ -88,7 +98,7 @@ export async function aceptarCotizacion(opts: {
     if (fresco && String(fresco.vet_id_asignado) === String(vetId)) {
       return { ok: true, ya_aceptada: true, c: fresco, vet }
     }
-    return { ok: false, motivo: 'tomada', mensaje: 'Otro veterinario ya tomó esta solicitud. Gracias por tu interés.' }
+    return { ok: false, motivo: 'tomada', mensaje: MENSAJE_YA_TOMADA }
   }
 
   // Un vet CONFIRMÓ: la conversación del tutor pasa a 'cliente' (servicio en curso).
