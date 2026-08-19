@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { Card, Button } from '@/components/ui/kit'
+import ConsumoWhatsapp from '@/components/ConsumoWhatsapp'
 
 type Resumen = {
   dias: number
@@ -212,6 +213,12 @@ export default function ConsumoIA() {
           </p>
         </>
       )}
+
+      {/* WhatsApp: el otro consumo que se paga por uso. Comparte el selector de
+          días de arriba para que las dos mitades hablen del mismo período. */}
+      <div className="pt-2">
+        <ConsumoWhatsapp dias={dias} />
+      </div>
     </div>
   )
 }

@@ -1157,6 +1157,62 @@ ${cfg.instrucciones.trim()}`,
 }
 
 /**
+ * DESGLOSE DEL PROMPT — cuánto pesa cada pieza y cuál se paga a precio lleno.
+ *
+ * Existe para la revisión de costos: el bot es el 64% del gasto de IA y dentro de
+ * él, el 45% son tokens de entrada que NO pasan por la caché. Saber cuáles son es
+ * la diferencia entre optimizar y adivinar. Lo consume
+ * `npx tsx scripts/medir-prompt-agente.ts`.
+ *
+ * Los tamaños van en caracteres; el script los pasa a tokens. La frontera es la
+ * marca de caché: todo lo que arma `construirPrefijo` se lee a 1/10 de precio, y
+ * lo que se agrega después (fecha/agenda, notas del cliente, historial) se paga
+ * entero en CADA respuesta.
+ */
+export async function desglosePrompt(opts: {
+  /** Teléfono del cliente, para las notas que dependen de su estado. */
+  waId?: string
+  /** Historial real de una conversación, para medir lo que pesa de verdad. */
+  historial?: TurnoMensaje[]
+} = {}): Promise<{
+  cacheado: Array<{ nombre: string; chars: number }>
+  dinamico: Array<{ nombre: string; chars: number }>
+  tools: number
+}> {
+  const handlers = {
+    solicitarRetiro: async () => '', reprogramarRetiro: async () => '', solicitarRetiroVet: async () => '',
+    cotizarCremacion: async () => '', cotizarEutanasia: async () => '', agendarEutanasia: async () => '',
+    consultarEtaRetiro: async () => '', consultarEstadoMascota: async () => '', enviarCatalogo: async () => '',
+    agregarAdicional: async () => '', cancelarAgendamiento: async () => '',
+  } as unknown as HandlersAgente
+  const { system, tools, bloqueos, dispo } = await construirPrefijo({ handlers })
+
+  const cacheado = system.map((b, i) => ({
+    nombre: i === 0 ? 'guion base + diferenciadores + tarifas'
+      : i === 1 ? 'reglas de fecha'
+      : `bloque estable ${i + 1}`,
+    chars: (b.text || '').length,
+  }))
+
+  const dinamico: Array<{ nombre: string; chars: number }> = [
+    { nombre: 'fecha, hora, calendario y disponibilidad', chars: bloqueFechaChile(bloqueos, dispo).length },
+  ]
+  if (opts.waId) {
+    const nota = await bloqueFichaEnProceso(opts.waId)
+    dinamico.push({ nombre: 'estado del cliente (ficha/eutanasia en curso)', chars: nota.length })
+    const vet = await bloqueVeterinario(opts.waId)
+    dinamico.push({ nombre: 'quién escribe (si es veterinario)', chars: vet.length })
+  }
+  if (opts.historial?.length) {
+    const msgs = construirMensajes(opts.historial.slice(-40))
+    const chars = msgs.reduce((s, m) => s + (typeof m.content === 'string' ? m.content.length : 0), 0)
+    dinamico.push({ nombre: `historial del chat (${msgs.length} turnos)`, chars })
+  }
+
+  return { cacheado, dinamico, tools: JSON.stringify(tools).length }
+}
+
+/**
  * KEEP-ALIVE de la caché del prompt.
  *
  * Cada lectura de caché RENUEVA su vida útil, así que basta una llamada mínima
@@ -1210,6 +1266,41 @@ const opts_ping: OpcionesAgente & { handlers: Required<HandlersAgente> } = {
   },
 }
 
+/**
+ * Marca el ÚLTIMO mensaje para que la conversación entera se lea de caché.
+ *
+ * El prefijo del system ya se cachea (~22k tokens), pero los MENSAJES no: se
+ * pagaban enteros, a $3 el millón, en cada llamada. Y el loop agéntico llama
+ * varias veces por respuesta —herramienta, resultado, texto—, así que el mismo
+ * historial se volvía a pagar en cada vuelta, más los bloques de tool_use y
+ * tool_result que se van acumulando. Medido en agosto: 8,67 millones de tokens de
+ * entrada sin cachear, US$26 del mes, contra 1,9 M que explica el historial solo.
+ *
+ * Con la marca acá, la segunda vuelta del loop lee todo lo anterior a 1/10 del
+ * precio, y el turno siguiente de la misma conversación también (el historial
+ * crece agregando al final, así que el prefijo previo se conserva intacto).
+ *
+ * TTL de 5 minutos a propósito, no 1 hora como el system: acá la reutilización
+ * pasa en segundos —las vueltas del loop y el ida y vuelta del chat— y escribir
+ * a 5 min cuesta 1,25× contra 2×. Una conversación de un solo turno paga ese 25%
+ * de más sobre ~1.500 tokens (menos de un décimo de centavo) y cualquier segunda
+ * lectura ya lo devuelve con creces.
+ *
+ * No muta `convo`: la marca tiene que viajar SIEMPRE en el último mensaje, y si
+ * quedara pegada en uno del medio partiría la caché en dos entradas.
+ */
+function conCacheAlFinal(msgs: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  if (msgs.length === 0) return msgs
+  const cache = { type: 'ephemeral' as const, ttl: '5m' as const }
+  const ultimo = msgs[msgs.length - 1]
+  const bloques: Anthropic.ContentBlockParam[] = typeof ultimo.content === 'string'
+    ? [{ type: 'text', text: ultimo.content }]
+    : [...ultimo.content]
+  if (bloques.length === 0) return msgs
+  bloques[bloques.length - 1] = { ...bloques[bloques.length - 1], cache_control: cache } as Anthropic.ContentBlockParam
+  return [...msgs.slice(0, -1), { ...ultimo, content: bloques }]
+}
+
 /** El loop agéntico: manda el prompt, ejecuta las herramientas y arma la respuesta. */
 async function ejecutarLoop(
   base: Anthropic.MessageParam[],
@@ -1232,7 +1323,9 @@ async function ejecutarLoop(
 
   // Loop agéntico: el modelo puede encadenar herramienta → resultado → texto.
   for (let iter = 0; iter < 5; iter++) {
-    const res = await getClient().messages.create({ model: MODEL, max_tokens: 700, system, messages: convo, tools })
+    const res = await getClient().messages.create({
+      model: MODEL, max_tokens: 700, system, messages: conCacheAlFinal(convo), tools,
+    })
     await registrarUso('bot-inbox', MODEL, res.usage, opts.ctx?.canal || '')
 
     const crudo = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('').trim()

@@ -10,6 +10,8 @@ import crypto from 'node:crypto'
  *  - WHATSAPP_VERIFY_TOKEN       string que elegimos nosotros; Meta lo manda al verificar el webhook
  */
 
+import { registrarEnvioWa, type CategoriaWa } from './uso-whatsapp'
+
 const GRAPH = 'https://graph.facebook.com'
 
 function version(): string {
@@ -28,11 +30,46 @@ export interface EnvioResult {
   fuera_de_ventana?: boolean
 }
 
+/**
+ * Qué es este envío para efectos de COBRO, leído del propio payload.
+ *
+ * Meta cobra por mensaje según su categoría: las plantillas se pagan (utility
+ * barata, marketing varias veces más cara) y el texto libre dentro de la ventana
+ * de 24 h entra como SERVICE, que hoy es gratis y deja de serlo el 1 de octubre
+ * de 2026. Como `postMensaje` es el ÚNICO punto por donde sale todo, deducirlo
+ * acá evita tener que pasar el dato por las decenas de llamadores.
+ */
+function clasificarEnvio(payload: Record<string, unknown>): { tipo: string; plantilla?: string; categoria: CategoriaWa } {
+  const tipo = String(payload.type || 'texto')
+  if (tipo === 'template') {
+    const nombre = String((payload.template as { name?: string } | undefined)?.name || '')
+    // La categoría sale del catálogo; si la plantilla no está listada asumimos
+    // UTILITY, que es lo que Meta asigna por defecto a las nuestras.
+    return { tipo: 'plantilla', plantilla: nombre, categoria: PLANTILLAS_WA[nombre]?.categoria ?? 'UTILITY' }
+  }
+  if (tipo === 'interactive') return { tipo: 'interactivo', categoria: 'SERVICE' }
+  if (tipo === 'text') return { tipo: 'texto', categoria: 'SERVICE' }
+  return { tipo, categoria: 'SERVICE' }
+}
+
 /** POST genérico a /messages (texto o media). Maneja el error de ventana de 24h. */
 async function postMensaje(payload: Record<string, unknown>): Promise<EnvioResult> {
   const token = process.env.WHATSAPP_TOKEN
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID
   if (!token || !phoneId) return { ok: false, error: 'WhatsApp no configurado' }
+  // Deja registrado el envío para saber QUÉ flujo gasta (Meta solo desglosa por
+  // categoría). Nunca se espera ni se deja fallar: primero sale el mensaje.
+  const anotar = (r: EnvioResult) => {
+    const c = clasificarEnvio(payload)
+    void registrarEnvioWa({
+      ...c,
+      destino: String(payload.to || ''),
+      ok: r.ok,
+      error: r.error,
+      provider_message_id: r.message_id,
+    })
+    return r
+  }
   try {
     const res = await fetch(`${GRAPH}/${version()}/${phoneId}/messages`, {
       method: 'POST',
@@ -45,11 +82,11 @@ async function postMensaje(payload: Record<string, unknown>): Promise<EnvioResul
       // 131047 / "re-engagement message" / "outside the allowed window" → fuera de 24h
       const code = j?.error?.code
       const fuera = code === 131047 || /window|re-engagement|24 hour/i.test(msg)
-      return { ok: false, error: msg, fuera_de_ventana: fuera }
+      return anotar({ ok: false, error: msg, fuera_de_ventana: fuera })
     }
-    return { ok: true, message_id: j?.messages?.[0]?.id }
+    return anotar({ ok: true, message_id: j?.messages?.[0]?.id })
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    return anotar({ ok: false, error: e instanceof Error ? e.message : String(e) })
   }
 }
 
