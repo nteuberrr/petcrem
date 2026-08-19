@@ -1,12 +1,13 @@
 'use client'
 import { useState, useEffect, use, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import {
   FolderOpen, Folder, FileText, RefreshCw, Mail, Clapperboard, Camera,
   PawPrint, Video, Flame, Image, Stethoscope, Save, Printer, Eye, ChevronDown, Truck,
 } from 'lucide-react'
-import { InstagramIcon } from '@/components/marketing/BrandIcons'
+import { InstagramIcon, WhatsappIcon } from '@/components/marketing/BrandIcons'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
@@ -1139,6 +1140,9 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             const borde = devolucion ? 'border-violet-300 bg-violet-50' : confirmado ? 'border-emerald-300 bg-emerald-50' : 'border-red-300 bg-red-50'
             const tinta = devolucion ? 'text-violet-900' : confirmado ? 'text-emerald-900' : 'text-red-900'
             const tintaSuave = devolucion ? 'text-violet-800' : confirmado ? 'text-emerald-800' : 'text-red-800'
+            const etiquetaCobro = NOMBRE_COBRO[cb.tipo] ?? 'Productos adicionales'
+            const det = (cb.detalle || '').trim().replace(/[:.]\s*$/, '')
+            const detalleCobro = det && det.toLowerCase() !== etiquetaCobro.toLowerCase() ? det : ''
             return (
               <div key={cb.id} className={`rounded-xl border-2 px-4 py-3 flex flex-wrap items-center justify-between gap-3 ${borde}`}>
                 <div className="min-w-[220px]">
@@ -1147,8 +1151,12 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                     {' · '}{fmtPrecio(parseInt(cb.monto, 10) || 0)}
                   </p>
                   <p className={`text-xs mt-0.5 ${tintaSuave}`}>
-                    {NOMBRE_COBRO[cb.tipo] ?? 'Productos adicionales'}
-                    {cb.detalle ? ` — ${cb.detalle}` : ''}
+                    {etiquetaCobro}
+                    {/* El detalle solo si AGREGA algo: en el saldo de un pago
+                        parcial viene repitiendo la misma etiqueta y la línea
+                        quedaba "Saldo pendiente (pago parcial) — Saldo pendiente
+                        (pago parcial): …". */}
+                    {detalleCobro ? ` — ${detalleCobro}` : ''}
                     {devolucion
                       ? '. Hay que transferirle esta plata al tutor; al confirmarlo se emite la nota de crédito de la boleta.'
                       : confirmado ? '. El cliente marcó que ya transfirió; verifica y confirma.' : '. Enviado al cliente; a la espera de la transferencia.'}
@@ -1188,10 +1196,27 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
                 {vetSeleccionada && <Badge variant="blue">{vetSeleccionada.nombre}</Badge>}
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-brand truncate">{cliente.nombre_mascota}</h1>
-              <p className="text-sm text-gray-600 mt-1">
-                <span className="text-gray-500">Tutor</span> <span className="font-semibold text-gray-900">{cliente.nombre_tutor || '—'}</span>
-                {cliente.especie && <> <span className="text-gray-300">·</span> {cliente.especie}</>}
-                {pesoKg > 0 && <> <span className="text-gray-300">·</span> {fmtKg(pesoKg)}</>}
+              <p className="text-sm text-gray-600 mt-1 flex flex-wrap items-center gap-x-1.5">
+                <span><span className="text-gray-500">Tutor</span> <span className="font-semibold text-gray-900">{cliente.nombre_tutor || '—'}</span></span>
+                {cliente.especie && <><span className="text-gray-300">·</span> <span>{cliente.especie}</span></>}
+                {pesoKg > 0 && <><span className="text-gray-300">·</span> <span>{fmtKg(pesoKg)}</span></>}
+                {/* Atajo al chat del tutor en el inbox. Va al INBOX y no a wa.me
+                    a propósito: al tutor se le responde SIEMPRE desde el número
+                    del negocio (el de la Cloud API), que no se puede abrir en la
+                    app de WhatsApp — escribirle desde el teléfono personal de
+                    quien esté mirando la ficha dejaría la conversación partida y
+                    fuera del sistema. */}
+                {cliente.telefono && (
+                  <Link
+                    href={`/mensajes?tel=${encodeURIComponent(cliente.telefono)}`}
+                    title={`Abrir el chat de WhatsApp con ${cliente.nombre_tutor || 'el tutor'} (+56 ${cliente.telefono})`}
+                    aria-label="Abrir el chat de WhatsApp con el tutor"
+                    className="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-white hover:border-[#25D366] hover:bg-[#25D366]/10 pl-1 pr-2 py-0.5 transition-colors"
+                  >
+                    <WhatsappIcon className="w-4 h-4 shrink-0" />
+                    <span className="text-xs font-semibold text-gray-700">WhatsApp</span>
+                  </Link>
+                )}
               </p>
             </div>
             {cliente.estado !== 'borrador' && (

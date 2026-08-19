@@ -57,10 +57,20 @@ export function AgenteIcon({ className = 'w-6 h-6' }: { className?: string }) {
   )
 }
 
+export function WhatsappIcon({ className = 'w-6 h-6' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path fill="#25D366" d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.46 1.32 4.96L2 22l5.25-1.38a9.87 9.87 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2z" />
+      <path fill="#fff" d="M9.6 7.34c-.18-.42-.38-.42-.55-.43h-.47c-.16 0-.43.06-.65.31-.23.25-.86.84-.86 2.05s.88 2.38 1 2.54c.13.17 1.7 2.73 4.2 3.72 2.08.82 2.5.66 2.95.62.45-.04 1.45-.59 1.66-1.17.2-.57.2-1.06.14-1.17-.06-.1-.23-.16-.48-.29-.25-.12-1.45-.72-1.68-.8-.22-.08-.39-.12-.55.13-.16.24-.62.79-.76.95-.14.17-.28.19-.53.06-.25-.12-1.03-.38-1.97-1.22a7.4 7.4 0 0 1-1.36-1.7c-.14-.24-.01-.37.11-.5.11-.11.25-.29.37-.43.13-.15.17-.25.25-.42.09-.16.04-.31-.02-.43-.06-.13-.54-1.34-.76-1.83z" />
+    </svg>
+  )
+}
+
 /** Devuelve el icono de marca para un canal del calendario. */
 export function CanalIcon({ canal, className = 'w-5 h-5' }: { canal: string; className?: string }) {
   if (canal === 'email') return <GmailIcon className={className} />
   if (canal === 'instagram') return <InstagramIcon className={className} />
   if (canal === 'facebook') return <FacebookIcon className={className} />
+  if (canal === 'whatsapp') return <WhatsappIcon className={className} />
   return null
 }

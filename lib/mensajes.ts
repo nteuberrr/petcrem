@@ -580,6 +580,35 @@ export async function getOrCreateConversacion(contactoId: number, canal: Canal, 
 }
 
 /**
+ * La conversación de WhatsApp de un teléfono (la de último mensaje más reciente),
+ * o null. Match por los ÚLTIMOS 9 DÍGITOS: en `clientes` el teléfono se guarda a
+ * 9 dígitos y en el inbox con el 56 adelante, así que comparar los strings
+ * completos no encontraría nada.
+ *
+ * La usa el botón de WhatsApp de la ficha del cliente (vía
+ * /api/mensajes/por-telefono) para abrir el chat correcto en el inbox.
+ */
+export async function conversacionPorTelefono(telefono: string): Promise<{ id: number } | null> {
+  const tel9 = (telefono || '').replace(/\D/g, '').slice(-9)
+  if (tel9.length !== 9) return null
+  try {
+    const sb = getMensajesSupabase()
+    const { data: contactos } = await sb.from(T_CONTACTOS).select('id')
+      .or(`wa_id.eq.56${tel9},wa_id.eq.${tel9},telefono.ilike.%${tel9}`)
+    const ids = (contactos ?? []).map((c: { id: number }) => c.id)
+    if (ids.length === 0) return null
+    const { data } = await sb.from(T_CONV).select('id')
+      .in('contacto_id', ids).eq('canal', 'whatsapp')
+      .order('ultimo_mensaje_at', { ascending: false, nullsFirst: false }).limit(1)
+    const conv = (data ?? [])[0] as { id: number } | undefined
+    return conv ? { id: Number(conv.id) } : null
+  } catch (e) {
+    console.warn('[mensajes] conversacionPorTelefono falló:', e instanceof Error ? e.message : e)
+    return null
+  }
+}
+
+/**
  * Mueve a un estado la(s) conversación(es) de WhatsApp del contacto con ese
  * teléfono (match por últimos 9 dígitos). `soloSi` acota a estados de partida
  * (para no pisar 'veterinario' o 'cerrado' al agendar, p. ej.). Best-effort.

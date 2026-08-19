@@ -807,10 +807,16 @@ export default function ClientesPage() {
     }
     for (const cb of cobrosPend.filter(x => String(x.cliente_id) === String(c.id))) {
       const monto = fmtPrecio(parseFloat(String(cb.monto).replace(/[^\d.-]/g, '')) || 0)
-      const detalle = [cb.detalle, cb.estado === 'cliente_confirmo' ? 'el tutor dice que ya transfirió' : ''].filter(Boolean).join(' · ')
+      const rotulo = cb.tipo === 'devolucion' ? 'Devolución al tutor' : NOMBRE_COBRO[cb.tipo] ?? 'Cobro pendiente'
+      // El detalle del saldo de un pago parcial repite el rótulo tal cual: si se
+      // concatena queda "Saldo pendiente (pago parcial) — Saldo pendiente (pago
+      // parcial)". Solo se muestra cuando agrega algo.
+      const propio = (cb.detalle || '').trim()
+      const detalle = [propio.toLowerCase() === rotulo.toLowerCase() ? '' : propio,
+        cb.estado === 'cliente_confirmo' ? 'el tutor dice que ya transfirió' : ''].filter(Boolean).join(' · ')
       out.push(cb.tipo === 'devolucion'
-        ? { texto: 'Devolución al tutor', detalle: detalle || undefined, monto, tono: 'violeta' }
-        : { texto: NOMBRE_COBRO[cb.tipo] ?? 'Cobro pendiente', detalle: detalle || undefined, monto })
+        ? { texto: rotulo, detalle: detalle || undefined, monto, tono: 'violeta' }
+        : { texto: rotulo, detalle: detalle || undefined, monto })
     }
     const correoMalo = correosMalos.find(x => String(x.cliente_id) === String(c.id))
     if (correoMalo) out.push({ texto: 'El correo del tutor no llega', detalle: `${correoMalo.email} · ${correoMalo.estado} — corrígelo en la ficha` })

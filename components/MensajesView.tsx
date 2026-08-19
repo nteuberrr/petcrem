@@ -1,6 +1,7 @@
 'use client'
 import { ArrowDown, Bot, Paperclip, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { formatDateTime } from '@/lib/dates'
 import TextoWhatsapp from '@/components/TextoWhatsapp'
 
@@ -137,6 +138,31 @@ export default function MensajesView() {
       await sincronizar(id)
     } finally { pausaRef.current-- }
   }, [sincronizar])
+
+  /**
+   * Enlace directo desde la ficha del cliente: `/mensajes?tel=<telefono>` abre su
+   * chat. La ficha no conoce el id de la conversacion (viven en tablas distintas),
+   * asi que la resolucion pasa por /api/mensajes/por-telefono y se hace UNA vez.
+   * Se limpia el filtro de categoria porque el chat de un cliente con servicio en
+   * curso no esta en "Activos"; si no existe conversacion, al menos deja el
+   * telefono en el buscador en vez de dejar la pantalla muda.
+   */
+  const paramTel = useSearchParams().get('tel') ?? ''
+  const deepLinkRef = useRef(false)
+  useEffect(() => {
+    const tel = paramTel.replace(/\D/g, '').slice(-9)
+    if (tel.length !== 9 || deepLinkRef.current) return
+    deepLinkRef.current = true
+    setEstado('')
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/mensajes/por-telefono?tel=${tel}`, { cache: 'no-store' })
+        const j = await r.json()
+        if (j?.id) { await abrir(Number(j.id)); return }
+      } catch { /* cae al buscador */ }
+      setBuscar(tel)
+    })()
+  }, [paramTel, abrir])
 
   // Refresco SILENCIOSO de la conversación abierta (no resetea ni parpadea).
   // Solo reemplaza los mensajes si cambió el último o la cantidad → evita re-render inútil.
