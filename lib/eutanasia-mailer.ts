@@ -751,10 +751,10 @@ export function renderCoordinarEmail({ vetNombre, c, linkRealizado, linkNoRealiz
       </table>
 
       ${linkHoraRetiro ? `
-      <p style="margin:22px 0 10px;font-size:14px"><strong>1) Apenas coordines con la familia la hora del procedimiento, infórmanosla</strong>: con esa hora agendamos el retiro del crematorio, que pasa <strong>30 minutos después</strong>.</p>
+      <p style="margin:22px 0 10px;font-size:14px"><strong>1) Apenas coordines la visita con la familia, infórmanos el día y la hora del procedimiento</strong>: con eso agendamos el retiro del crematorio, que pasa <strong>30 minutos después</strong>. Si el servicio se movió de día, cámbialo ahí mismo.</p>
       <div style="text-align:center;margin:0 0 6px">
         <a href="${linkHoraRetiro}" style="display:inline-block;background:${BRAND.amber};color:${BRAND.navy};text-decoration:none;font-weight:700;font-size:15px;padding:14px 30px;border-radius:12px;box-shadow:0 4px 12px rgba(242,184,75,.35)">
-          🕒 Informar la hora del procedimiento&nbsp;&nbsp;→
+          🕒 Informar día y hora del procedimiento&nbsp;&nbsp;→
         </a>
       </div>` : ''}
 
