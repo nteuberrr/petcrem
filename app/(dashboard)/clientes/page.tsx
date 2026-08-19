@@ -1091,13 +1091,20 @@ export default function ClientesPage() {
             <button
               key={c.id}
               onClick={() => setSelected(c)}
-              className="text-left bg-white rounded-xl shadow-md border-2 border-gray-300 hover:border-brand hover:shadow-lg p-4 transition-all"
+              /* @container: la tarjeta decide su propio layout según SU ancho, no
+                 según el del navegador. Es lo correcto acá porque el ancho no
+                 depende solo de la pantalla sino de cuántas columnas tenga la
+                 grilla (1 / 2 / 3): con 3 columnas la tarjeta queda angosta
+                 incluso en un monitor grande, y el resumen del servicio le comía
+                 el espacio al nombre y a los avisos de cobro, que se salían de su
+                 recuadro (reporte del dueño 2026-08-18). */
+              className="@container text-left bg-white rounded-xl shadow-md border-2 border-gray-300 hover:border-brand hover:shadow-lg p-4 transition-all"
             >
               <div className="flex items-start justify-between mb-2">
                 <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${c.codigo ? 'text-brand bg-brand/10' : 'text-gray-400 bg-gray-100'}`}>{c.codigo || 'sin código'}</span>
                 <Badge variant={c.estado === 'cremado' ? 'green' : c.estado === 'despachado' ? 'blue' : 'yellow'}>{c.estado === 'borrador' ? 'Por ingresar' : c.estado && c.estado !== 'pendiente' ? c.estado : 'retirado'}</Badge>
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-col @[23rem]:flex-row gap-3">
                 <div className="flex-1 min-w-0">
               <p className="font-bold text-gray-900 text-base">{c.nombre_mascota || <span className="text-gray-400 italic">Sin nombre</span>}</p>
               <p className="text-sm text-gray-600">{c.nombre_tutor}</p>
@@ -1156,7 +1163,7 @@ export default function ClientesPage() {
                   : c.estado_pago === 'parcial' ? 'Saldo pendiente'
                   : 'Pago pendiente'
                 return (
-                  <p className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 flex items-center justify-between gap-2">
+                  <p className="mt-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 flex flex-wrap items-center justify-between gap-x-2">
                     <span>⚠ {rotulo}</span>
                     <span className="font-bold whitespace-nowrap">{pend > 0 ? fmtPrecio(pend) : 'sin monto'}</span>
                   </p>
@@ -1166,14 +1173,14 @@ export default function ClientesPage() {
                   barato con el servicio ya cobrado). Va aparte y en violeta para
                   que no se confunda con lo que él nos debe. */}
               {(devolucionPorFicha.get(String(c.id)) ?? 0) > 0 && (
-                <p className="mt-2 text-xs font-semibold text-violet-800 bg-violet-50 border border-violet-200 rounded px-2 py-1 flex items-center justify-between gap-2">
+                <p className="mt-2 text-xs font-semibold text-violet-800 bg-violet-50 border border-violet-200 rounded px-2 py-1 flex flex-wrap items-center justify-between gap-x-2">
                   <span>↩ Devolución pendiente</span>
                   <span className="font-bold whitespace-nowrap">{fmtPrecio(devolucionPorFicha.get(String(c.id)) ?? 0)}</span>
                 </p>
               )}
                 </div>
                 {resumen && (
-                  <div className="w-40 shrink-0 border-l border-gray-200 pl-3">
+                  <div className="w-full border-t border-gray-200 pt-3 @[23rem]:w-40 @[23rem]:shrink-0 @[23rem]:border-t-0 @[23rem]:pt-0 @[23rem]:border-l @[23rem]:pl-3">
                     <p className="text-[10px] uppercase tracking-wide font-bold text-gray-500 mb-1.5">
                       Resumen del servicio
                       {resumen.estimado && (
