@@ -114,7 +114,26 @@ async function main() {
   console.log(`\nA ${LLAM_DIA} llamadas/día (ritmo de agosto):`)
   console.log(`  leer el prefijo cacheado: US$${usdMes(cacheados, 0.30).toFixed(2)}/mes`)
   console.log(`  pagar lo fresco del system: US$${usdMes(frescos, 3).toFixed(2)}/mes`)
-  console.log('\n(los mensajes de la conversación van aparte y también se pagan a $3/M)')
+
+  // Los MENSAJES: desde el 19-08-2026 el último lleva su propia marca de caché
+  // (`conCacheAlFinal` en lib/agente-mensajes), así que la conversación deja de
+  // pagarse entera en cada vuelta del loop agéntico. Se mide acá porque era la
+  // parte invisible: el system estaba medido al detalle y los mensajes iban
+  // aparte — que es justo donde estaba el gasto que no cuadraba.
+  const msgs = (req.messages ?? []) as Array<{ content?: unknown }>
+  const marcados = msgs.filter(m => Array.isArray(m.content)
+    && (m.content as Array<{ cache_control?: unknown }>).some(b => b.cache_control)).length
+  const rMsgs = await api.messages.countTokens({ model: MODEL, messages: req.messages as never })
+  const tokMsgs = rMsgs.input_tokens
+  const estado = marcados === 1 ? 'sí, en el último (correcto)'
+    : marcados === 0 ? '⚠ NINGUNA — se pagan enteros en cada vuelta'
+    : `⚠ ${marcados} marcas: la caché queda partida en varias entradas`
+  console.log(`\nMENSAJES de la conversación de prueba: ${tokMsgs} tok`)
+  console.log(`  marca de caché: ${estado}`)
+  console.log(`  a precio lleno serían US$${usdMes(tokMsgs, 3).toFixed(2)}/mes; leídos de caché, US$${usdMes(tokMsgs, 0.30).toFixed(2)}/mes`)
+  console.log('\nOjo: el loop agéntico llama VARIAS veces por respuesta y en cada vuelta')
+  console.log('reenvía los mensajes más los bloques de tool_use/tool_result acumulados.')
+  console.log('Esa repetición es lo que la marca del último mensaje evita.')
 }
 
 main().catch(e => { console.error(e); process.exit(1) })

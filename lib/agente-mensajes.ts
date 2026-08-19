@@ -1157,62 +1157,6 @@ ${cfg.instrucciones.trim()}`,
 }
 
 /**
- * DESGLOSE DEL PROMPT — cuánto pesa cada pieza y cuál se paga a precio lleno.
- *
- * Existe para la revisión de costos: el bot es el 64% del gasto de IA y dentro de
- * él, el 45% son tokens de entrada que NO pasan por la caché. Saber cuáles son es
- * la diferencia entre optimizar y adivinar. Lo consume
- * `npx tsx scripts/medir-prompt-agente.ts`.
- *
- * Los tamaños van en caracteres; el script los pasa a tokens. La frontera es la
- * marca de caché: todo lo que arma `construirPrefijo` se lee a 1/10 de precio, y
- * lo que se agrega después (fecha/agenda, notas del cliente, historial) se paga
- * entero en CADA respuesta.
- */
-export async function desglosePrompt(opts: {
-  /** Teléfono del cliente, para las notas que dependen de su estado. */
-  waId?: string
-  /** Historial real de una conversación, para medir lo que pesa de verdad. */
-  historial?: TurnoMensaje[]
-} = {}): Promise<{
-  cacheado: Array<{ nombre: string; chars: number }>
-  dinamico: Array<{ nombre: string; chars: number }>
-  tools: number
-}> {
-  const handlers = {
-    solicitarRetiro: async () => '', reprogramarRetiro: async () => '', solicitarRetiroVet: async () => '',
-    cotizarCremacion: async () => '', cotizarEutanasia: async () => '', agendarEutanasia: async () => '',
-    consultarEtaRetiro: async () => '', consultarEstadoMascota: async () => '', enviarCatalogo: async () => '',
-    agregarAdicional: async () => '', cancelarAgendamiento: async () => '',
-  } as unknown as HandlersAgente
-  const { system, tools, bloqueos, dispo } = await construirPrefijo({ handlers })
-
-  const cacheado = system.map((b, i) => ({
-    nombre: i === 0 ? 'guion base + diferenciadores + tarifas'
-      : i === 1 ? 'reglas de fecha'
-      : `bloque estable ${i + 1}`,
-    chars: (b.text || '').length,
-  }))
-
-  const dinamico: Array<{ nombre: string; chars: number }> = [
-    { nombre: 'fecha, hora, calendario y disponibilidad', chars: bloqueFechaChile(bloqueos, dispo).length },
-  ]
-  if (opts.waId) {
-    const nota = await bloqueFichaEnProceso(opts.waId)
-    dinamico.push({ nombre: 'estado del cliente (ficha/eutanasia en curso)', chars: nota.length })
-    const vet = await bloqueVeterinario(opts.waId)
-    dinamico.push({ nombre: 'quién escribe (si es veterinario)', chars: vet.length })
-  }
-  if (opts.historial?.length) {
-    const msgs = construirMensajes(opts.historial.slice(-40))
-    const chars = msgs.reduce((s, m) => s + (typeof m.content === 'string' ? m.content.length : 0), 0)
-    dinamico.push({ nombre: `historial del chat (${msgs.length} turnos)`, chars })
-  }
-
-  return { cacheado, dinamico, tools: JSON.stringify(tools).length }
-}
-
-/**
  * KEEP-ALIVE de la caché del prompt.
  *
  * Cada lectura de caché RENUEVA su vida útil, así que basta una llamada mínima
