@@ -1,4 +1,4 @@
-import sharp from 'sharp'
+import { getSharp } from './sharp-lazy'
 import { getFromR2, keyFromPublicUrl } from './cloudflare-r2'
 import { LOGO_URL } from './email-layout'
 import type { ImagenBanco } from './mailing-images'
@@ -50,13 +50,13 @@ function luminancia(r: number, g: number, b: number): number {
 /** Luminancia media de la esquina inferior derecha de la base (0=oscuro, 1=claro). */
 async function lumEsquina(base: Buffer): Promise<number> {
   try {
-    const meta = await sharp(base).metadata()
+    const meta = await (await getSharp())(base).metadata()
     const W = meta.width || 0, H = meta.height || 0
     if (!W || !H) return 0.5
     const w = Math.max(1, Math.round(W * 0.3)), h = Math.max(1, Math.round(H * 0.22))
     // OJO: sharp .stats() IGNORA el .extract() del pipeline (mide el original). Hay
     // que materializar el recorte con raw().toBuffer() y promediar a mano.
-    const { data, info } = await sharp(base)
+    const { data, info } = await (await getSharp())(base)
       .extract({ left: Math.max(0, W - w), top: Math.max(0, H - h), width: w, height: h })
       .raw().toBuffer({ resolveWithObject: true })
     const ch = info.channels
@@ -73,7 +73,7 @@ async function lumEsquina(base: Buffer): Promise<number> {
  */
 async function lumLogo(buf: Buffer): Promise<number> {
   try {
-    const { data, info } = await sharp(buf).resize({ width: 64, height: 64, fit: 'inside' })
+    const { data, info } = await (await getSharp())(buf).resize({ width: 64, height: 64, fit: 'inside' })
       .ensureAlpha().raw().toBuffer({ resolveWithObject: true })
     const ch = info.channels
     let sum = 0, n = 0
@@ -113,18 +113,18 @@ async function elegirLogo(base: Buffer, srcs: LogoSrc[], preferUrl?: string): Pr
 
 /** Pega el logo abajo a la derecha de la imagen base; devuelve un buffer nuevo. */
 async function componerLogo(base: Buffer, logoBytes: Buffer, escala: number): Promise<Buffer> {
-  const meta = await sharp(base).metadata()
+  const meta = await (await getSharp())(base).metadata()
   const W = meta.width || 1024, H = meta.height || 1024
   const targetW = Math.max(96, Math.round(W * escala))
   // Recortar el aire del asset (si la imagen es uniforme, trim() falla → usamos el original).
   let src = logoBytes
-  try { src = await sharp(logoBytes).trim().toBuffer() } catch { /* sin trim */ }
-  const logo = await sharp(src).resize({ width: targetW, withoutEnlargement: true }).png().toBuffer()
-  const lm = await sharp(logo).metadata()
+  try { src = await (await getSharp())(logoBytes).trim().toBuffer() } catch { /* sin trim */ }
+  const logo = await (await getSharp())(src).resize({ width: targetW, withoutEnlargement: true }).png().toBuffer()
+  const lm = await (await getSharp())(logo).metadata()
   const margin = Math.round(W * 0.04)
   const left = Math.max(0, W - (lm.width || targetW) - margin)
   const top = Math.max(0, H - (lm.height || targetW) - margin)
-  return sharp(base).composite([{ input: logo, left, top }]).toBuffer()
+  return (await getSharp())(base).composite([{ input: logo, left, top }]).toBuffer()
 }
 
 /**

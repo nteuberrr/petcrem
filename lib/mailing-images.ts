@@ -1,4 +1,4 @@
-import sharp from 'sharp'
+import { getSharp } from './sharp-lazy'
 import { getSheetData, appendRow, getNextId, deleteById, updateById, ensureSheet, ensureColumns } from './datastore'
 import { uploadToR2, deleteFromR2, keyFromPublicUrl, getFromR2 } from './cloudflare-r2'
 import { generarImagen, extFromMime } from './nano-banana'
@@ -210,7 +210,7 @@ export interface ImagenGeneradaResult {
  * pensado para imágenes generadas sobre fondo blanco liso. Devuelve PNG con alpha.
  */
 async function recortarFondo(input: Buffer): Promise<Buffer> {
-  const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const { data, info } = await (await getSharp())(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   const W = info.width, H = info.height, C = info.channels
   if (!W || !H || C < 4) return input
   const corners = [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]] as const
@@ -235,7 +235,7 @@ async function recortarFondo(input: Buffer): Promise<Buffer> {
     if (y > 0) stack.push(p - W)
     if (y < H - 1) stack.push(p + W)
   }
-  return sharp(data, { raw: { width: W, height: H, channels: C } }).png().toBuffer()
+  return (await getSharp())(data, { raw: { width: W, height: H, channels: C } }).png().toBuffer()
 }
 
 /**
@@ -246,7 +246,7 @@ async function recortarFondo(input: Buffer): Promise<Buffer> {
  */
 export async function reducirParaVision(buf: Buffer): Promise<{ data: Buffer; mime: 'image/jpeg' }> {
   try {
-    const out = await sharp(buf)
+    const out = await (await getSharp())(buf)
       .resize({ width: 768, height: 768, fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 78 })
       .toBuffer()
@@ -299,7 +299,7 @@ export async function generarYGuardarImagen(args: {
     // Normaliza a JPEG: Instagram (Content Publishing API) SOLO acepta JPEG, y el
     // generador suele devolver PNG. Si la conversión falla, sube el original.
     try {
-      buffer = await sharp(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 88 }).toBuffer()
+      buffer = await (await getSharp())(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 88 }).toBuffer()
       mime = 'image/jpeg'
     } catch (e) {
       console.warn('[mailing-images] no se pudo convertir a JPEG, se sube el original:', e)
@@ -350,7 +350,7 @@ export async function estamparLogoEnUrl(
     if (!bytes) return url
     const { buffer, aplicado } = await aplicarLogoMarca(bytes, logos, { preferUrl: opts.preferUrl })
     if (!aplicado) return url
-    const jpeg = await sharp(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 88 }).toBuffer()
+    const jpeg = await (await getSharp())(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 88 }).toBuffer()
     const up = await uploadToR2(jpeg, `mailing/ai-images/${Date.now()}-logo.jpg`, 'image/jpeg')
     return up.url
   } catch (e) {

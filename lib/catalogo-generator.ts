@@ -1,5 +1,5 @@
 import { PDFDocument, PDFFont, PDFImage, PDFPage, RGB, rgb } from 'pdf-lib'
-import sharp from 'sharp'
+import { getSharp } from './sharp-lazy'
 import { getSheetData } from './datastore'
 import { listarImagenes, type ImagenBanco } from './mailing-images'
 import { getContacto, LOGO_URL, SELLO_URL } from './email-layout'
@@ -71,7 +71,7 @@ async function cargarImagen(doc: PDFDocument, url: string): Promise<PDFImage | n
     const r = await fetch(url)
     if (!r.ok) return null
     const buf = Buffer.from(await r.arrayBuffer())
-    const jpg = await sharp(buf).resize({ width: 680, height: 680, fit: 'inside', withoutEnlargement: true }).flatten({ background: '#ffffff' }).jpeg({ quality: 84 }).toBuffer()
+    const jpg = await (await getSharp())(buf).resize({ width: 680, height: 680, fit: 'inside', withoutEnlargement: true }).flatten({ background: '#ffffff' }).jpeg({ quality: 84 }).toBuffer()
     return await doc.embedJpg(Uint8Array.from(jpg))
   } catch { return null }
 }

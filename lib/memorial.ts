@@ -1,4 +1,4 @@
-import sharp from 'sharp'
+import { getSharp } from './sharp-lazy'
 import { getSheetData, updateByIdIf } from './datastore'
 import { uploadToR2 } from './cloudflare-r2'
 import { renderGraficoHTML } from './grafico-render'
@@ -126,7 +126,7 @@ export async function generarImagenMemorial(
 
   const { buffer: png } = await renderGraficoHTML({ html, width: 1080, height: 1920 })
   // Instagram solo acepta JPEG; `flatten` saca cualquier transparencia.
-  const jpg = await sharp(png).flatten({ background: '#143C64' }).jpeg({ quality: 92 }).toBuffer()
+  const jpg = await (await getSharp())(png).flatten({ background: '#143C64' }).jpeg({ quality: 92 }).toBuffer()
   const key = `memoriales/${cliente.codigo || cliente.id}-${Date.now()}.jpg`
   const up = await uploadToR2(jpg, key, 'image/jpeg')
   return { url: up.url, plantilla }

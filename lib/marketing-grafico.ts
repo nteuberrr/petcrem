@@ -1,4 +1,4 @@
-import sharp from 'sharp'
+import { getSharp } from './sharp-lazy'
 import { renderGraficoHTML } from './grafico-render'
 import { generarYGuardarImagen, listarImagenes, registrarImagen, type ImagenBanco } from './mailing-images'
 import { aplicarLogoMarca, esLogo } from './marca-logo'
@@ -67,7 +67,7 @@ async function preprocesarLogos(html: string, logos: ImagenBanco[]): Promise<str
       let bytes = key ? await getFromR2(key) : null
       if (!bytes) { const r = await fetch(u); if (r.ok) bytes = Buffer.from(await r.arrayBuffer()) }
       if (!bytes) continue
-      const png = await sharp(bytes).trim().resize({ width: 600, withoutEnlargement: true }).png().toBuffer()
+      const png = await (await getSharp())(bytes).trim().resize({ width: 600, withoutEnlargement: true }).png().toBuffer()
       out = out.split(u).join(`data:image/png;base64,${png.toString('base64')}`)
     } catch { /* deja la URL original; satori la escala como antes */ }
   }
@@ -143,7 +143,7 @@ export async function generarGraficoMarca(args: {
   let mime = 'image/png'
   let ext = 'png'
   try {
-    final = await sharp(conLogo).flatten({ background: '#FBF8F3' }).jpeg({ quality: 92 }).toBuffer()
+    final = await (await getSharp())(conLogo).flatten({ background: '#FBF8F3' }).jpeg({ quality: 92 }).toBuffer()
     mime = 'image/jpeg'; ext = 'jpg'
   } catch { /* deja PNG */ }
   const up = await uploadToR2(final, `mailing/ai-images/${Date.now()}-grafico.${ext}`, mime)
