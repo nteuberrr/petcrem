@@ -4,7 +4,8 @@ import { todayISO } from './dates'
 import { uploadToR2 } from './cloudflare-r2'
 import { enviarBoletaCliente } from './cliente-mailer'
 import { marcarBoletaCobro } from './cobros'
-import { anularComisionPorFicha, devengarComisionDeFicha, reglaActivaDeVet } from './comisiones'
+import { anularComisionPorFicha, devengarComisionDeFicha } from './comisiones'
+import { vetBoleteaAlCliente } from './vet-boleta'
 import { avisarAdminsWhatsapp } from './whatsapp'
 import { sendEmail } from './resend-mailer'
 import { renderEmailLayout, getContacto, escapeHtml } from './email-layout'
@@ -293,12 +294,15 @@ export async function emitirBoletaSiCorresponde(
   // ver lib/eerr-ingresos) y la Conciliación no lo cuenta como diferencia.
   if (sinBoleta(ficha)) return { emitida: false }
   // Una ficha de veterinaria NO se boletea: se le factura al vet a fin de mes. La
-  // excepción son los vets con COMISIÓN, que es justamente al revés — al tutor se
-  // le cobra el precio de lista y se le boletea a él, y al vet le queda la comisión
-  // (Configuración → Descuentos Convenios). Sin esta excepción esas boletas había
-  // que emitirlas UNA POR UNA desde Facturación, y las que nadie apretaba se
-  // colaban a la propuesta de facturación mensual del veterinario.
-  if (vetId && !(await reglaActivaDeVet(vetId))) return { emitida: false }
+  // excepción son los convenios marcados "Boleta al cliente" (Bases → el vet), donde
+  // el veterinario solo DERIVA y al tutor se le cobra y se le boletea a él. Sin esa
+  // excepción esas boletas había que emitirlas UNA POR UNA desde Facturación, y las
+  // que nadie apretaba se colaban a la propuesta mensual del veterinario.
+  //
+  // ⚠️ El driver es el flag, NO la comisión (dueño 2026-08-19). Tiene que ser el
+  // MISMO que usa `construirPropuestaMes`: si los dos no leen lo mismo, el lote del
+  // mes le factura al vet un servicio ya boleteado al tutor.
+  if (vetId && !(await vetBoleteaAlCliente(vetId))) return { emitida: false }
   if (!fichaRegistrada || yaTieneBoleta || !estaPagada) return { emitida: false }
   const nombre = String(ficha.nombre_mascota || ficha.codigo || ficha.id || '')
   const avisar = (extra: string) => avisarAdminsWhatsapp(

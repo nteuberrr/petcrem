@@ -2,14 +2,21 @@ import { getSheetData, appendRow, getNextId, updateByIdIf, deleteById } from './
 import { todayISO } from './dates'
 import { parseMonto, parsePeso } from './numbers'
 import { origenDeVet } from './precios-indexados'
+import { boletaAlCliente } from './vet-boleta'
 import { calcularPrecioFicha, type Tramo } from './ficha-precio'
 
 /**
  * COMISIONES DE CONVENIO — Configuración → Descuentos Convenios.
  *
- * Hay veterinarios a los que NO se les factura el servicio: la BOLETA se le emite
- * al TUTOR por el precio completo (por eso su tabla de precios especiales se deja
- * igual a la general) y al vet le queda una COMISIÓN por haber derivado el caso.
+ * Lo que se le paga a un veterinario por DERIVAR un caso que terminamos cobrando.
+ *
+ * ⚠️ La comisión NO decide a quién se le cobra. Eso lo decide el flag
+ * `boleta_al_cliente` del veterinario (lib/vet-boleta.ts). Hasta el 19-08-2026 las
+ * dos cosas eran una sola —tener comisión ERA la señal de "boletéale al tutor"— y
+ * por eso no se podía tener una sin la otra. Van juntas casi siempre (al que solo
+ * deriva se le paga comisión y al tutor se le cobra a él), pero son independientes:
+ * un vet con comisión y sin el flag recibe factura por el servicio Y comisión por
+ * derivarlo, que rara vez es la intención. La pestaña lo avisa.
  *
  * Ciclo de vida:
  *   1. El dueño define la regla del vet: 'fijo' (CLP) o 'variable' (% sobre la cremación).
@@ -67,6 +74,8 @@ export interface SaldoVet {
   regla: ComisionRegla | null
   /** Su tabla de precios está indexada a los GENERALES (lib/precios-indexados.ts). */
   indexado: boolean
+  /** Se le boletea al TUTOR en vez de facturarle a él (lib/vet-boleta.ts). */
+  boleta_al_cliente: boolean
   cantidad_devengos: number
   devengado: number
   ajustado: number
@@ -314,6 +323,7 @@ export async function resumenComisiones(): Promise<SaldoVet[]> {
   ])
   const nombrePorVet = new Map(vets.map(v => [String(v.id), String(v.nombre || '')]))
   const indexadoPorVet = new Map(vets.map(v => [String(v.id), origenDeVet(v) === 'general']))
+  const boleteaPorVet = new Map(vets.map(v => [String(v.id), boletaAlCliente(v)]))
 
   const acc = new Map<string, SaldoVet>()
   const entrada = (vid: string): SaldoVet => {
@@ -324,6 +334,7 @@ export async function resumenComisiones(): Promise<SaldoVet[]> {
         nombre: nombrePorVet.get(vid) || `Veterinaria #${vid}`,
         regla: null,
         indexado: indexadoPorVet.get(vid) === true,
+        boleta_al_cliente: boleteaPorVet.get(vid) === true,
         cantidad_devengos: 0,
         devengado: 0,
         ajustado: 0,

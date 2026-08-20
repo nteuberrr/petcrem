@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSheetData } from '@/lib/datastore'
 import { puedeNivel } from '@/lib/permisos-server'
-import { listarReglas } from '@/lib/comisiones'
+import { vetsConBoletaAlCliente } from '@/lib/vet-boleta'
 
 /**
  * GET /api/facturacion/pendientes
@@ -21,15 +21,16 @@ export async function GET() {
   }
 
   const rows = await getSheetData('clientes')
-  // Vets con COMISIÓN: a esos no se les factura, se le boletea al TUTOR igual que a
-  // una venta directa — así que sus fichas pagadas sin boleta SÍ son un pendiente.
-  // Sin esto quedaban invisibles: ni acá ni en la propuesta mensual del vet.
-  const conComision = new Set((await listarReglas().catch(() => [])).filter(r => r.activo).map(r => r.veterinaria_id))
+  // Convenios con "Boleta al cliente": a esos no se les factura, se le boletea al
+  // TUTOR igual que a una venta directa — así que sus fichas pagadas sin boleta SÍ
+  // son un pendiente. Sin esto quedaban invisibles: ni acá ni en la propuesta
+  // mensual del vet. Mismo driver que el emisor y que la propuesta (lib/vet-boleta).
+  const boleteanAlTutor = await vetsConBoletaAlCliente()
   const pendientes = rows
     .filter(c =>
       String(c.estado_pago || '').toLowerCase() === 'pagado' &&
-      // Tutor directo, o vet con comisión (a los demás se les factura mensual).
-      (!String(c.veterinaria_id || '').trim() || conComision.has(String(c.veterinaria_id))) &&
+      // Tutor directo, o convenio que boletea al cliente (al resto se le factura mensual).
+      (!String(c.veterinaria_id || '').trim() || boleteanAlTutor.has(String(c.veterinaria_id))) &&
       String(c.estado || '') !== 'borrador' &&
       !!String(c.codigo || '').trim() &&
       !String(c.boleta_id || '').trim() &&

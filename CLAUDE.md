@@ -204,6 +204,23 @@ El botón **Sincronizar SII** (Estado de Resultados → Compras: mes/año + bot�
   - Verificación: **`npx tsx scripts/verificar-periodo-sii.ts <RCV_COMPRA_REGISTRO_*.csv>`** contrasta documento por documento contra el archivo real del SII (el período sale del nombre del archivo).
 - ⚠️ **Las notas de crédito de compra RESTAN.** Para leer el monto de una fila de `eerr_gastos_sii` usar SIEMPRE `netoDeCompra(f)` / `ivaDeCompra(f)` de [lib/eerr-compras-ingesta.ts](lib/eerr-compras-ingesta.ts), que niegan los tipos 60/61 — nunca sumar `monto_neto + monto_exento` a mano. Sumarlas al derecho costaba caro: 13 NC por $1.929.577 entraban como gasto, así que el resultado cargaba **$3.859.154** de costos inexistentes (nov-2025 solo, $2,64 M) y el F29 mostraba **$733.234** de IVA crédito de más. Consumidores: `/api/eerr/integral`, `/api/eerr/balance` (F29) y `/api/eerr/movimientos`. Ojo también con el guard de `add()` en integral: acepta negativos a propósito, si vuelve a exigir `monto > 0` las NC se caen del cálculo en silencio.
 
+### A quién se le cobra una ficha de convenio: «Boleta al cliente»
+
+Por defecto, la ficha que llega por un veterinario **no se le boletea al tutor**: queda esperando la **factura** que se le emite al veterinario a fin de mes ([lib/facturacion-vets.ts](lib/facturacion-vets.ts), propuesta mensual). Hay convenios que funcionan al revés — el vet solo **deriva** y al tutor se le cobra y se le boletea a él.
+
+Eso es el flag **`veterinarios.boleta_al_cliente`**, un interruptor en la ficha del vet (**Bases → el veterinario → «Boleta al cliente»**), y es el **único driver**: fuente única en [lib/vet-boleta.ts](lib/vet-boleta.ts) (`boletaAlCliente` / `vetsConBoletaAlCliente` / `vetBoleteaAlCliente`). Lo leen **tres** consumidores y **tienen que leer lo mismo**: el emisor automático (`emitirBoletaSiCorresponde` en [lib/facturacion.ts](lib/facturacion.ts)), la propuesta de factura del mes y el listado «Pagadas sin boleta» ([app/api/facturacion/pendientes/route.ts](app/api/facturacion/pendientes/route.ts)). Si se desalinean, a fin de mes se le factura al vet un servicio ya boleteado al tutor — el mismo servicio cobrado dos veces, y el que lo descubre es el veterinario. Verificalo con **`npx tsx scripts/verificar-boleta-al-cliente.ts [YYYY-MM]`**.
+
+⚠️ **La comisión NO es el driver** (dueño 2026-08-19). Hasta esa fecha las dos cosas eran una sola: `emitirBoletaSiCorresponde` decidía con `reglaActivaDeVet`, así que «boletéale al tutor» se deducía de tener comisión activa y no se podía tener una sin la otra. Hoy son independientes — la comisión se devenga por **derivar** un caso que se cobró, tenga o no el flag. Van juntas casi siempre, y por eso la pestaña **Descuentos Convenios** marca en rojo al vet con comisión y sin el flag: a ese se le factura el servicio **y** se le paga por derivarlo.
+
+Dos precisiones que no son obvias:
+- **La boleta sale cuando la ficha queda `pagada`, no al hacer el retiro.** Para el tutor que paga en la puerta es el mismo momento, pero no es el mismo disparador: emitir antes de que llegue la plata declara una venta que puede no cerrarse.
+- **«No emitir boleta por este servicio» (`sin_boleta`) le gana al flag**: ese corte está antes en `emitirBoletaSiCorresponde`.
+- **Ojo con la tarifa.** Si el convenio marcado no está indexado a los **generales**, al tutor se le boletea a precio de convenio o a la tarifa propia del vet — más barato que la lista. La ficha del vet lo avisa; `activarIndexado(id,'general')` de [lib/precios-indexados.ts](lib/precios-indexados.ts) lo corrige.
+
+**Botones manuales aparte**: `facturar-ficha` y `boletear-ficha` (Facturación) son escapes deliberados y **no** consultan el flag; su única regla dura es que una ficha lleva boleta **o** factura, nunca las dos.
+
+DDL a mano antes de desplegar: [supabase/boleta-al-cliente.sql](supabase/boleta-al-cliente.sql). Y **el orden importa**: si se despliega con el flag en FALSE, las fichas del vet que hoy se boletean al tutor se cuelan a su propuesta de factura. El backfill de los convenios que ya operaban así es `npx tsx scripts/backfill-boleta-al-cliente.ts --aplicar`.
+
 ### Cobros pendientes: con qué se recibieron
 
 Al confirmar un cobro pendiente desde la ficha (saldo de un pago parcial, adicional, diferencia de peso) el equipo **elige el medio**: transferencia · POS · link de pago · efectivo (`cobros.medio_pago`). No es un dato decorativo: los cobrados con **máquina o link pasaron por el procesador**, así que entran a Facturación → **Ventas POS** como su **propia línea**, fechada el día en que se confirmaron — pagan comisión y llegan en el abono como cualquier venta. Hasta el 18-08-2026 se daba por hecho que todo saldo llegaba por transferencia y esa plata quedaba fuera de la conciliación.

@@ -3,6 +3,8 @@ import { BarChart3, Copy, FileSpreadsheet, FileText, Mail } from 'lucide-react'
 import { useCallback, useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/Badge'
+import { Toggle } from '@/components/ui/Toggle'
+import { useAccionUnica } from '@/lib/use-accion-unica'
 import { fmtPrecio, fmtFecha } from '@/lib/format'
 import { formatDateForSheet } from '@/lib/dates'
 
@@ -18,7 +20,7 @@ type VetDetalle = {
   id: string; nombre: string; rut: string; razon_social: string; giro: string
   direccion: string; telefono: string; correo: string
   nombre_contacto: string; cargo_contacto: string; comuna: string
-  tipo_precios: string; activo: string
+  tipo_precios: string; activo: string; precios_indexados?: string; boleta_al_cliente?: string
   clientes: Cliente[]
   tramos_especiales: Tramo[]
 }
@@ -49,6 +51,41 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'error'; msg: string } | null>(null)
   const [informesEmitidos, setInformesEmitidos] = useState<InformeEmitido[]>([])
   const [verHistorico, setVerHistorico] = useState(false)
+
+  // Modelo de cobro del convenio. Guarda al instante (es un interruptor, no un
+  // formulario) y con guarda de doble-click, como toda mutación del sitio.
+  const { ejecutar: guardarCobro, procesando: guardandoCobro } = useAccionUnica()
+  const [puedeEditar, setPuedeEditar] = useState(false)
+  useEffect(() => {
+    let cancel = false
+    fetch('/api/mis-modulos')
+      .then(r => (r.ok ? r.json() : { niveles: {} }))
+      .then(d => { if (!cancel) setPuedeEditar(d?.niveles?.bases === 'editar') })
+      .catch(() => { if (!cancel) setPuedeEditar(false) })
+    return () => { cancel = true }
+  }, [])
+
+  function cambiarBoletaAlCliente(valor: boolean) {
+    guardarCobro(async () => {
+      setFeedback(null)
+      const res = await fetch('/api/veterinarios', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, boleta_al_cliente: valor ? 'TRUE' : 'FALSE' }),
+      }).catch(() => null)
+      if (!res || !res.ok) {
+        setFeedback({ kind: 'error', msg: 'No se pudo guardar el modelo de cobro.' })
+        return
+      }
+      setVet(v => (v ? { ...v, boleta_al_cliente: valor ? 'TRUE' : 'FALSE' } : v))
+      setFeedback({
+        kind: 'ok',
+        msg: valor
+          ? 'Listo: a partir de ahora las fichas de este convenio se le boletean al tutor.'
+          : 'Listo: las fichas de este convenio vuelven a la factura mensual del veterinario.',
+      })
+    })
+  }
 
   const fetchInformes = useCallback(async () => {
     const r = await fetch(`/api/veterinarios/${id}/informes`).catch(() => null)
@@ -159,6 +196,9 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
     return raw
   }
 
+  const boleteaAlTutor = String(vet.boleta_al_cliente || '').toUpperCase() === 'TRUE'
+  const indexadoVet = String(vet.precios_indexados || '').trim()
+
   return (
     <div className="max-w-4xl">
       <div className="flex items-center gap-3 mb-6">
@@ -199,6 +239,43 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
           <p className="text-3xl font-bold text-blue-600">{despachadas}</p>
           <p className="text-xs text-gray-500 mt-1">Despachadas</p>
         </div>
+      </div>
+
+      {/* Modelo de cobro del convenio. Es el ÚNICO driver de a quién se le cobra
+          (lib/vet-boleta.ts): lo leen el emisor automático de boletas, la propuesta
+          de facturación del mes y el listado de "pagadas sin boleta". */}
+      <div className="bg-white rounded-xl shadow-md border border-gray-300 p-6 mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="font-semibold text-gray-900">Boleta al cliente</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              {boleteaAlTutor
+                ? 'Este convenio solo deriva: al tutor se le cobra y se le emite la boleta a su nombre cuando la ficha queda pagada. A esta clínica no se le factura nunca.'
+                : 'A este convenio se le factura: sus fichas no se boletean al tutor, quedan esperando la factura mensual de la clínica.'}
+            </p>
+          </div>
+          <div className="shrink-0 pt-1">
+            <Toggle checked={boleteaAlTutor} onChange={cambiarBoletaAlCliente} disabled={!puedeEditar || guardandoCobro} />
+          </div>
+        </div>
+
+        {boleteaAlTutor && (
+          indexadoVet === 'general' ? (
+            <p className="mt-3 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              Su tabla está indexada a los precios generales: al tutor se le cobra el precio de lista.
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Ojo: la tarifa de este convenio no es la de lista{indexadoVet === 'convenio' ? ' (está indexada a los precios de convenio)' : vet.tipo_precios === 'precios_especiales' ? ' (tiene tarifa propia)' : ' (usa los precios de convenio)'}.
+              La boleta al tutor va a salir a esa tarifa. Para cobrarle precio de lista, indexa su tabla a los precios generales en Configuración &rarr; Precios &rarr; Convenios especiales.
+            </p>
+          )
+        )}
+
+        <p className="mt-3 text-xs text-gray-500">
+          Una ficha marcada <strong>&laquo;No emitir boleta por este servicio&raquo;</strong> no se boletea igual, esté el interruptor como esté.
+          La comisión que se le pague a la clínica por derivar se configura aparte, en Configuración &rarr; Descuentos Convenios.
+        </p>
       </div>
 
       {/* Informes de facturación */}

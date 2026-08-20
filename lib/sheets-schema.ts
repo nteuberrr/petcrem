@@ -131,6 +131,11 @@ export const SHEETS: Record<string, string[]> = {
     // de esta vet en `precios_especiales` son una copia VIVA de esa tabla base y se
     // re-sincronizan al tocarla (lib/precios-indexados.ts).
     'precios_indexados',
+    // boleta_al_cliente: 'TRUE' | 'FALSE'. UNICO driver del modelo de cobro de este
+    // vet (lib/vet-boleta.ts): TRUE = al tutor se le emite la boleta y al vet no se
+    // le factura nunca; FALSE = la ficha entra a la propuesta de factura del mes.
+    // Separado de la comision, que se devenga por derivar tenga o no este flag.
+    'boleta_al_cliente',
   ],
   precios_generales: ['id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd'],
   precios_convenio: ['id', 'peso_min', 'peso_max', 'precio_ci', 'precio_cp', 'precio_sd'],

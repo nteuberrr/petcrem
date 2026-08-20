@@ -10,10 +10,13 @@ import { useAccionUnica } from '@/lib/use-accion-unica'
 /**
  * Configuración → Descuentos Convenios.
  *
- * Veterinarios a los que NO se les factura el servicio: la boleta se le emite al
- * TUTOR por el precio completo (por eso su tabla de precios especiales se deja
- * igual a la general, con el botón "Duplicar" de la pestaña Precios) y al vet le
- * queda una COMISIÓN por la derivación.
+ * Lo que se le paga a un veterinario por DERIVAR un caso que terminamos cobrando.
+ *
+ * ⚠️ Acá NO se decide a quién se le cobra: eso es el interruptor "Boleta al cliente"
+ * de la ficha del veterinario (Bases). Van de la mano —al que solo deriva se le
+ * cobra al tutor y se le paga comisión— pero son dos datos distintos desde el
+ * 19-08-2026, así que una comisión sin ese interruptor significa facturarle el
+ * servicio Y pagarle por derivarlo. La tabla lo marca en rojo.
  *
  * La comisión se acumula como saldo y NO toca el Estado de Resultados hasta que se
  * le paga: al "Ajustar saldo", ese monto se registra como COSTO DE VENTA.
@@ -30,6 +33,7 @@ interface SaldoVet {
   regla: Regla | null
   /** Su tarifa sigue a los precios generales (se re-copian solas al cambiarlos). */
   indexado: boolean
+  boleta_al_cliente: boolean
   cantidad_devengos: number
   devengado: number
   ajustado: number
@@ -208,9 +212,17 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
                           {/* Solo las EXCEPCIONES bajo el nombre: que los precios estén
                               indexados es lo normal y no necesita confirmarse acá (se ve
                               en Configuración → Precios). Así la fila queda en una línea. */}
-                          {(!s.regla || !s.indexado) && (
+                          {(!s.regla || !s.indexado || !s.boleta_al_cliente) && (
                             <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                               {!s.regla && <Badge variant="gray">Sin regla vigente</Badge>}
+                              {/* Comisión sin "Boleta al cliente": se le factura el
+                                  servicio Y se le paga por derivarlo. Casi nunca es
+                                  la intención, y en silencio no se nota. */}
+                              {s.regla && !s.boleta_al_cliente && (
+                                <span className="text-[11px] font-semibold text-red-800 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
+                                  Se le factura el servicio — enciende &laquo;Boleta al cliente&raquo; en su ficha
+                                </span>
+                              )}
                               {!s.indexado && (
                                 <button onClick={() => indexarPrecios(s)} disabled={procesando}
                                   className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 hover:bg-amber-100 disabled:opacity-50">
