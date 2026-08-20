@@ -314,7 +314,7 @@ export default function FacturasSiiTab() {
                 {th('otro', 'Otro', 'right')}
                 {th('comentario', 'Comentario')}
                 {th('partida', 'Partida')}
-                <th className="px-2 py-2 sticky right-0 bg-gray-50 border-l border-gray-300"></th>
+                <th className="px-2 py-2 sticky right-0 bg-gray-50 border-l border-gray-300 text-right text-xs font-semibold text-gray-500">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -327,20 +327,7 @@ export default function FacturasSiiTab() {
                   </td>
                   <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{f.rut}</td>
                   <td className="px-2 py-1.5 text-gray-800 max-w-[120px] truncate" title={f.razon_social}>{f.razon_social}</td>
-                  <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1">
-                      {f.folio}
-                      <button
-                        onClick={() => descargarDoc(f)}
-                        disabled={bajando.has(f.id)}
-                        title={`Descargar el documento ${f.tipo_doc}-${f.folio}`}
-                        aria-label={`Descargar el documento ${f.tipo_doc}-${f.folio}`}
-                        className="text-gray-400 hover:text-brand disabled:opacity-40 disabled:cursor-wait"
-                      >
-                        {bajando.has(f.id) ? <RefreshCw size={13} className="animate-spin" /> : <Download size={13} />}
-                      </button>
-                    </span>
-                  </td>
+                  <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{f.folio}</td>
                   <td className="px-2 py-1.5 whitespace-nowrap">{f.fecha_documento ? <span className="text-gray-600">{formatDate(f.fecha_documento)}</span> : <span className="text-red-600 font-medium" title="Falta la fecha de emisión">⚠ falta</span>}</td>
                   <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{formatDate(f.fecha_recepcion)}</td>
                   <td className="px-2 py-1.5 text-right text-gray-500 tabular-nums whitespace-nowrap">{fmtPrecio(parseInt(f.monto_exento) || 0)}</td>
@@ -362,11 +349,24 @@ export default function FacturasSiiTab() {
                       : <span className="text-amber-600 font-medium">Sin asignar</span>}
                   </td>
                   <td className={`px-2 py-1.5 text-right sticky right-0 border-l border-gray-300 ${!f.fecha_documento ? 'bg-red-50' : f.contabilizado === 'TRUE' ? 'bg-white' : 'bg-amber-50'}`}>
-                    {!f.fecha_documento
-                      ? <span className="text-red-600 font-medium whitespace-nowrap" title="Completá la fecha de emisión (volvé a sincronizar el mes) para poder asignarla.">⚠ Falta fecha</span>
-                      : f.partida_id
-                        ? <button onClick={() => setAsig(f)} className="border border-gray-300 text-gray-600 hover:bg-gray-50 px-2 py-1 rounded-lg font-medium whitespace-nowrap">Editar</button>
-                        : <button onClick={() => setAsig(f)} className="bg-brand text-white hover:bg-brand-dark px-2.5 py-1 rounded-lg font-medium whitespace-nowrap">Asignar</button>}
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        onClick={() => descargarDoc(f)}
+                        disabled={bajando.has(f.id)}
+                        title={`Descargar el documento ${f.tipo_doc}-${f.folio}`}
+                        className="inline-flex items-center gap-1 border border-gray-300 text-gray-600 hover:bg-gray-50 px-2 py-1 rounded-lg font-medium whitespace-nowrap disabled:opacity-40 disabled:cursor-wait"
+                      >
+                        {bajando.has(f.id)
+                          ? <RefreshCw size={13} className="animate-spin" />
+                          : <Download size={13} />}
+                        PDF
+                      </button>
+                      {!f.fecha_documento
+                        ? <span className="text-red-600 font-medium whitespace-nowrap" title="Completá la fecha de emisión (volvé a sincronizar el mes) para poder asignarla.">⚠ Falta fecha</span>
+                        : f.partida_id
+                          ? <button onClick={() => setAsig(f)} className="border border-gray-300 text-gray-600 hover:bg-gray-50 px-2 py-1 rounded-lg font-medium whitespace-nowrap">Editar</button>
+                          : <button onClick={() => setAsig(f)} className="bg-brand text-white hover:bg-brand-dark px-2.5 py-1 rounded-lg font-medium whitespace-nowrap">Asignar</button>}
+                    </div>
                   </td>
                 </tr>
               ))}
