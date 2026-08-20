@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { RefreshCw, Upload } from 'lucide-react'
+import { Download, RefreshCw, Upload } from 'lucide-react'
 import { fmtPrecio } from '@/lib/format'
 import { formatDate, todayISO } from '@/lib/dates'
 import AcusePendientes from './AcusePendientes'
@@ -45,6 +45,36 @@ export default function FacturasSiiTab() {
   const [tipoFiltro, setTipoFiltro] = useState('')
   const [partidaFiltro, setPartidaFiltro] = useState('')
   const [buscar, setBuscar] = useState('')
+
+  // Descarga del documento de UNA fila. Va por fetch y no por un <a href> para
+  // poder contar qué pasó: no todo lo que está en la tabla existe en OpenFactura
+  // (la historia cargada por CSV es anterior, y un documento puede no estar), y un
+  // <a> a un endpoint que responde JSON de error abre una pestaña con el error crudo.
+  const [bajando, setBajando] = useState<Set<string>>(new Set())
+  async function descargarDoc(f: Factura) {
+    if (bajando.has(f.id)) return
+    setBajando(s => new Set(s).add(f.id))
+    setMsg('')
+    try {
+      const q = new URLSearchParams({ rut: f.rut, dte: f.tipo_doc, folio: f.folio, formato: 'pdf', descargar: '1' })
+      const r = await fetch(`/api/eerr/gastos-sii/documento?${q}`)
+      if (!r.ok || !r.headers.get('content-type')?.includes('pdf')) {
+        const d = await r.json().catch(() => null)
+        setMsg(`No se pudo bajar el documento ${f.tipo_doc}-${f.folio} de ${f.razon_social || f.rut}: ${d?.error || `error ${r.status}`}`)
+        return
+      }
+      const url = URL.createObjectURL(await r.blob())
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${f.tipo_doc}-${f.folio}-${f.rut}.pdf`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setMsg('No se pudo bajar el documento.')
+    } finally {
+      setBajando(s => { const n = new Set(s); n.delete(f.id); return n })
+    }
+  }
 
   async function cargarPartidas() {
     const r = await fetch('/api/eerr/partidas'); const d = await r.json()
@@ -297,7 +327,20 @@ export default function FacturasSiiTab() {
                   </td>
                   <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{f.rut}</td>
                   <td className="px-2 py-1.5 text-gray-800 max-w-[120px] truncate" title={f.razon_social}>{f.razon_social}</td>
-                  <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{f.folio}</td>
+                  <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1">
+                      {f.folio}
+                      <button
+                        onClick={() => descargarDoc(f)}
+                        disabled={bajando.has(f.id)}
+                        title={`Descargar el documento ${f.tipo_doc}-${f.folio}`}
+                        aria-label={`Descargar el documento ${f.tipo_doc}-${f.folio}`}
+                        className="text-gray-400 hover:text-brand disabled:opacity-40 disabled:cursor-wait"
+                      >
+                        {bajando.has(f.id) ? <RefreshCw size={13} className="animate-spin" /> : <Download size={13} />}
+                      </button>
+                    </span>
+                  </td>
                   <td className="px-2 py-1.5 whitespace-nowrap">{f.fecha_documento ? <span className="text-gray-600">{formatDate(f.fecha_documento)}</span> : <span className="text-red-600 font-medium" title="Falta la fecha de emisión">⚠ falta</span>}</td>
                   <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{formatDate(f.fecha_recepcion)}</td>
                   <td className="px-2 py-1.5 text-right text-gray-500 tabular-nums whitespace-nowrap">{fmtPrecio(parseInt(f.monto_exento) || 0)}</td>

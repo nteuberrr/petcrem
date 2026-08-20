@@ -42,9 +42,17 @@ interface Encabezado {
   Receptor?: Record<string, unknown>
   Totales?: Record<string, number>
 }
+/** Una línea del documento (lib/openfactura-acuse → LineaDocumento). */
+interface Linea {
+  nombre: string; descripcion: string
+  cantidad: number | null; unidad: string
+  precio: number | null; monto: number
+}
 interface Detalle {
   estado?: string
   encabezado?: Encabezado | null
+  /** Vacío = el emisor no comparte el desglose con OpenFactura. */
+  detalle: Linea[]
   fecha_recepcion_sii?: string
 }
 
@@ -440,9 +448,48 @@ export default function AcusePendientes() {
                   </div>
                 )}
 
-                <p className="text-xs text-gray-500">
-                  El desglose línea por línea no viaja en los datos del documento recibido: está en el PDF.
-                </p>
+                {detalle.detalle.length > 0 ? (
+                  <div className="border border-gray-300 rounded-xl overflow-hidden">
+                    <div className="font-semibold text-brand text-sm px-3 py-2 bg-gray-50 border-b border-gray-300">Detalle</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs min-w-[420px]">
+                        <thead className="bg-gray-50 text-gray-500">
+                          <tr>
+                            <th className="text-left px-3 py-1.5 font-semibold">Ítem</th>
+                            <th className="text-right px-3 py-1.5 font-semibold whitespace-nowrap">Cantidad</th>
+                            <th className="text-right px-3 py-1.5 font-semibold whitespace-nowrap">Precio</th>
+                            <th className="text-right px-3 py-1.5 font-semibold whitespace-nowrap">Monto</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {detalle.detalle.map((l, i) => (
+                            <tr key={i}>
+                              <td className="px-3 py-1.5 text-gray-800">
+                                {l.nombre || '—'}
+                                {l.descripcion && <span className="block text-gray-500">{l.descripcion}</span>}
+                              </td>
+                              <td className="px-3 py-1.5 text-right text-gray-600 tabular-nums whitespace-nowrap">
+                                {l.cantidad ?? '—'}{l.unidad ? ` ${l.unidad}` : ''}
+                              </td>
+                              <td className="px-3 py-1.5 text-right text-gray-600 tabular-nums whitespace-nowrap">{l.precio != null ? fmtPrecio(l.precio) : '—'}</td>
+                              <td className="px-3 py-1.5 text-right text-gray-800 font-medium tabular-nums whitespace-nowrap">{fmtPrecio(l.monto)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  /* Documento emitido con un proveedor de DTE que no intercambia con
+                     Haulmer: solo llegó lo que publica el RCV. Se avisa acá porque el
+                     PDF sale con el cuerpo en blanco y parece un error nuestro. */
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Este documento llegó sin su desglose: su emisor factura con un proveedor que no comparte
+                    el detalle con OpenFactura, así que solo tenemos el encabezado y los totales que publica
+                    el SII. El PDF va a salir con el cuerpo en blanco — el documento completo hay que pedírselo
+                    al proveedor.
+                  </p>
+                )}
               </>
             )}
 

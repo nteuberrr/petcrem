@@ -155,9 +155,17 @@ export async function pendientesDeAcuse(mesesAtras = 2): Promise<DocPendienteAcu
  * Detalle de un documento recibido: `GET /v2/dte/document/{rut}/{tipo}/{folio}/{value}`
  * con `value` ∈ status | json | xml | pdf | cedible.
  *
- * Ojo: para documentos RECIBIDOS el `json` trae solo el Encabezado (emisor,
- * receptor, totales) — las líneas del detalle no vienen. Para ver el desglose
- * real hay que abrir el PDF, que Haulmer devuelve en base64.
+ * ⚠️ El `Detalle` (las líneas) SÍ viene en la mayoría de los recibidos — 10 de 12
+ * comprobados el 19-08-2026. Antes acá decía lo contrario, generalizando desde un
+ * documento que resultó ser justo de los que no lo traen.
+ *
+ * Los que NO lo traen son los emitidos por un proveedor de DTE que no intercambia
+ * con Haulmer: de esos, OpenFactura solo tiene lo que publica el RCV del SII
+ * (encabezado + totales), nunca el XML completo. Se reconocen porque `json` viene
+ * sin `Detalle`, el `xml` es un esqueleto de ~2 KB y `cedible` responde "No existe
+ * Documento". Su PDF sale con el aviso naranjo de OpenFactura y el cuerpo en
+ * blanco: no es un problema nuestro y no hay forma de completarlo desde la API —
+ * el documento íntegro lo tiene el proveedor (llega por correo).
  */
 async function traerValor(rut: string, dte: number, folio: number, value: string): Promise<Record<string, unknown>> {
   const { baseUrl, apiKey } = config()
@@ -174,12 +182,40 @@ async function traerValor(rut: string, dte: number, folio: number, value: string
   try { return JSON.parse(texto) as Record<string, unknown> } catch { throw new Error('OpenFactura devolvió una respuesta ilegible.') }
 }
 
+/** Una línea del documento, tal como la publica el DTE. */
+export interface LineaDocumento {
+  nombre: string
+  descripcion: string
+  cantidad: number | null
+  unidad: string
+  precio: number | null
+  monto: number
+}
+
 export interface DetalleDocumento {
   /** Estado en el Registro de Compras del SII: Pendiente | Registrado | No_incluir | Reclamado. */
   estado: string
   encabezado: Record<string, unknown> | null
+  /** Líneas del documento. Vacío = el emisor no las comparte (ver el comentario de arriba). */
+  detalle: LineaDocumento[]
   fecha_recepcion_sii: string
   fecha_recepcion_of: string
+}
+
+function aLinea(d: Record<string, unknown>): LineaDocumento {
+  const num = (v: unknown) => {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+  }
+  return {
+    nombre: String(d.NmbItem ?? ''),
+    // DscItem puede venir como string o como array de líneas.
+    descripcion: Array.isArray(d.DscItem) ? d.DscItem.join(' ') : String(d.DscItem ?? ''),
+    cantidad: num(d.QtyItem),
+    unidad: String(d.UnmdItem ?? ''),
+    precio: num(d.PrcItem),
+    monto: num(d.MontoItem) ?? 0,
+  }
 }
 
 export async function detalleDocumento(rut: string, dte: number, folio: number): Promise<DetalleDocumento> {
@@ -187,10 +223,17 @@ export async function detalleDocumento(rut: string, dte: number, folio: number):
     traerValor(rut, dte, folio, 'status'),
     traerValor(rut, dte, folio, 'json'),
   ])
-  const cuerpo = (js.json ?? null) as { Encabezado?: Record<string, unknown> } | null
+  const cuerpo = (js.json ?? null) as {
+    Encabezado?: Record<string, unknown>
+    // Con UNA sola línea el DTE la entrega como objeto, no como array.
+    Detalle?: Record<string, unknown> | Record<string, unknown>[]
+  } | null
+  const crudo = cuerpo?.Detalle
+  const lineas = Array.isArray(crudo) ? crudo : crudo ? [crudo] : []
   return {
     estado: String(st.estado || ''),
     encabezado: cuerpo?.Encabezado ?? null,
+    detalle: lineas.map(aLinea),
     fecha_recepcion_sii: String(js.FchRecepSII || ''),
     fecha_recepcion_of: String(js.FchRecepOF || ''),
   }
