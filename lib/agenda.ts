@@ -33,7 +33,7 @@ import { formatDateForSheet, formatHora } from './dates'
 import { incluyeCremacion } from './eutanasia-cremacion'
 import { crearEstimadorFichas, valorFicha, type EstimacionFicha } from './precio-estimado'
 import { getConfigCobroEutanasia, cobroClienteCon, type ConfigCobroEutanasia } from './eutanasia-precios'
-import { ahoraEnChile, yaFueRetirada } from './ficha-retiro'
+import { fichaIngresada } from './ficha-retiro'
 
 export const HORA_APERTURA = 9         // primera hora de la agenda (09:00)
 export const HORA_ULTIMO_RETIRO = 21   // hora de referencia de la agenda; el corte real es 21:10
@@ -293,10 +293,13 @@ export async function listarAgenda(
   const inRange = (iso: string) => (!fromISO || iso >= fromISO) && (!toISO || iso <= toISO)
   const out: AgendaItem[] = []
 
-  // "Ya fue retirada": una sola definición para todo el sistema (lib/ficha-retiro),
-  // la misma que usan el bot y la ficha. Sin ficha vinculada no hay retiro posible.
-  const ahora = ahoraEnChile()
-  const yaRetirada = (ficha: Record<string, string> | undefined) => !!ficha && yaFueRetirada(ficha, ahora)
+  // La etiqueta azul ("listo") la dispara el REGISTRO de la ficha, no el reloj
+  // (dueño 2026-08-19): registrarla es el acto con el que el equipo da por
+  // recibida a la mascota —le genera el código de seguimiento y le manda el
+  // correo al tutor—, así que para ellos ahí el retiro ya está hecho. Mirando la
+  // hora agendada, un retiro adelantado (agendado 18:00, hecho 15:00) se quedaba
+  // verde hasta las 18:00. Sin ficha vinculada no hay retiro posible.
+  const yaRetirada = (ficha: Record<string, string> | undefined) => !!ficha && fichaIngresada(ficha)
 
   // Valor a cobrar de cada agendamiento: el precio congelado de la ficha si ya
   // lo tiene, si no la estimación en vivo (fichas "por ingresar" y solicitudes

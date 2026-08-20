@@ -267,7 +267,7 @@ interface ClienteMin {
  * la ficha como pagada se leería como "ya estaba saldada" y volvería a cobrar.
  */
 export function correspondeCobrarAdicional(
-  ficha: { codigo?: string; estado?: string; fecha_retiro?: string; hora_retiro?: string },
+  ficha: { codigo?: string; estado?: string; fecha_retiro?: string; hora_retiro?: string; peso_ingreso?: string | number },
   antes: { estado_pago?: string; boleta_id?: string },
   ahora: { iso: string; min: number },
 ): boolean {
