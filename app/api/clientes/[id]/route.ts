@@ -9,6 +9,7 @@ import { formatDateForSheet, todayISO } from '@/lib/dates'
 import { ahoraChile } from '@/lib/agenda'
 import { calcularSnapshotFicha, type AdicionalItem as PCAdicionalItem } from '@/lib/price-calculator'
 import { generarCodigo } from '@/lib/codigo-generator'
+import { correspondeValidacion, pedirValidacionDatos } from '@/lib/validacion-datos'
 import { enviarRegistroMascota, resumenCompraDeFicha } from '@/lib/cliente-mailer'
 import { capitalizarNombre } from '@/lib/nombres'
 import { esAdmin, esAdminTotal } from '@/lib/roles'
@@ -428,6 +429,21 @@ export async function PATCH(
         })
       } catch (e) {
         console.warn('[clientes PATCH] fallo mail registro (no bloqueante):', e)
+      }
+    }
+
+    // El TUTOR revisa los datos de su mascota por WhatsApp (lib/validacion-datos).
+    // Va junto al correo del código porque es el momento en que corregir un dato
+    // todavía no cuesta nada: después ya está impreso en el certificado o en la
+    // etiqueta. No manda a fichas de veterinario salvo convenio "boleta al
+    // cliente" — ahí el tutor no es nuestro cliente.
+    if (codigoGenerado) {
+      try {
+        if (await correspondeValidacion(updated as Record<string, string>)) {
+          await pedirValidacionDatos(updated as Record<string, string>)
+        }
+      } catch (e) {
+        console.warn('[clientes PATCH] fallo validación de datos por WhatsApp (no bloqueante):', e)
       }
     }
 

@@ -4,8 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import {
   Bell, CreditCard, Snowflake, Package, FilePen, Coins, MailWarning, Undo2,
-  SlidersHorizontal, Image, Video, FolderOpen,
-} from 'lucide-react'
+  SlidersHorizontal, Image, Video, FolderOpen, TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { TableSkeleton } from '@/components/ui/Skeleton'
@@ -821,6 +820,7 @@ export default function ClientesPage() {
     const correoMalo = correosMalos.find(x => String(x.cliente_id) === String(c.id))
     if (correoMalo) out.push({ texto: 'El correo del tutor no llega', detalle: `${correoMalo.email} · ${correoMalo.estado} — corrígelo en la ficha` })
     if (cumpleFiltro(c, 'video_pendiente', ctxAlertas)) out.push({ texto: 'Video del proceso pendiente', detalle: 'el tutor lo pidió y todavía no está cargado' })
+    if (cumpleFiltro(c, 'datos_observados', ctxAlertas)) out.push({ texto: 'Dato observado por el tutor', detalle: 'respondió que algo está mal — corrígelo antes del certificado' })
     if (esPremiumCuadro(c) && !jsonTieneItems(c.fotos_cuadro)) out.push({ texto: 'Falta la foto del cuadro conmemorativo', detalle: 'la Cremación Premium lo incluye' })
     if (esComunaNoCubierta(c.comuna)) out.push({ texto: 'Comuna fuera de cobertura', detalle: c.comuna })
     if (ep === 'pagado' && !(c.fecha_pago || '').trim()) out.push({ texto: 'Falta la fecha de pago', detalle: 'sin ella la venta no se puede cuadrar en Ventas POS' })
@@ -879,7 +879,7 @@ export default function ClientesPage() {
 
       {/* Notificaciones compactas: una fila de chips clickeables que aplican el
           filtro correspondiente. Reemplaza al banner grande de pago pendiente. */}
-      {alertas && (nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0 || alertas.videoPendiente > 0 || alertas.devolucion > 0 || correosMalos.length > 0) && (
+      {alertas && (nBorradores > 0 || alertas.pagoPendiente > 0 || alertas.enCamara > 0 || alertas.porDespachar > 0 || alertas.datosPendientes > 0 || alertas.faltaPeso > 0 || alertas.diferencia > 0 || alertas.videoPendiente > 0 || alertas.devolucion > 0 || alertas.datosObservados > 0 || correosMalos.length > 0) && (
         <div className="mb-5 flex flex-wrap items-center gap-2">
           {nBorradores > 0 && (
             <button onClick={() => setFiltro('borrador')}
@@ -928,6 +928,13 @@ export default function ClientesPage() {
               title="Fichas donde el tutor pidió el video del ingreso y todavía no se sube (de agosto en adelante). El video va adjunto en el correo del certificado, el día de la entrega."
               className="inline-flex items-center gap-1.5 rounded-lg border-2 border-sky-300 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-800 shadow-md transition-colors">
               <Video className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {alertas.videoPendiente} con video por subir
+            </button>
+          )}
+          {alertas.datosObservados > 0 && (
+            <button onClick={() => setFiltro('datos_observados')}
+              title="El tutor respondió que hay un dato malo en la ficha de su mascota. Corrígelo antes de emitir el certificado o imprimir la etiqueta."
+              className="inline-flex items-center gap-1.5 rounded-lg border-2 border-orange-400 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-900 shadow-md transition-colors">
+              <TriangleAlert className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {alertas.datosObservados} con un dato observado por el tutor
             </button>
           )}
           {alertas.devolucion > 0 && (

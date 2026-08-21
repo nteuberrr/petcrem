@@ -13,6 +13,7 @@ import { capitalizarNombre } from '@/lib/nombres'
 import { sincronizarSaldoParcial } from '@/lib/cobros'
 import { emitirBoletaSiCorresponde } from '@/lib/facturacion'
 import { vincularClientePorTelefono } from '@/lib/ads-clicks'
+import { correspondeValidacion, pedirValidacionDatos } from '@/lib/validacion-datos'
 
 const ClienteSchema = z.object({
   nombre_mascota: z.string().min(1, 'Nombre de mascota requerido'),
@@ -289,6 +290,20 @@ export async function POST(req: NextRequest) {
       })
     } catch (e) {
       console.warn('[clientes POST] fallo mail registro (no bloqueante):', e)
+    }
+
+    // El TUTOR revisa los datos de su mascota por WhatsApp (lib/validacion-datos).
+    // Va junto al correo del código porque es el momento en que corregir un dato
+    // todavía no cuesta nada: después ya está impreso en el certificado o en la
+    // etiqueta. No manda a fichas de veterinario salvo convenio "boleta al
+    // cliente" — ahí el tutor no es nuestro cliente.
+    try {
+      const ficha = row as unknown as Record<string, string>
+      if (await correspondeValidacion(ficha)) {
+        await pedirValidacionDatos(ficha)
+      }
+    } catch (e) {
+      console.warn('[clientes POST] fallo validación de datos por WhatsApp (no bloqueante):', e)
     }
 
     // Si la ficha está asociada a un veterinario de convenio, también le avisamos

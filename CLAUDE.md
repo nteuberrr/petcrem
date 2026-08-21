@@ -299,6 +299,21 @@ Toda pantalla nueva y todo retoque visual debe salir en el **estándar Alma Anim
 - **Responsive / móvil (obligatorio):** la app se usa **también desde el teléfono** (sobre todo el inbox de Mensajes y Operaciones). Toda pantalla nueva debe verse bien en móvil. Reglas: **tablas anchas** → envolver en `<div className="overflow-x-auto">` y dar `min-w-[Npx]` a la `<table>` (además hay una **regla global en [app/globals.css](app/globals.css)** que hace que toda `main table` scrollee en ≤768px, como red de seguridad). **Formularios/grids de inputs** → empezar SIEMPRE en una columna y escalar: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` (nunca arrancar en `grid-cols-2`+ en móvil). El layout base ([app/(dashboard)/layout.tsx](app/(dashboard)/layout.tsx)) ya es responsive (`md:ml-60`, padding adaptativo) y el Sidebar colapsa a hamburguesa; el inbox (`MensajesView`) muestra lista **o** conversación en móvil (estilo WhatsApp).
 - **The pet always has a name**: in client-facing copy (emails, UI, messages) refer to a specific pet by its `nombre_mascota` (in the subject and the body). For the generic noun use **"tu mascota"** (tuteo) — not the cold "su mascota" / "la mascota", and not "compañero/a" (client decision; see *Marca, propósito y voz*).
 
+### El tutor valida los datos de su mascota
+
+Al **registrar la ficha** (mismo momento en que se genera el código y salen los correos), al tutor le llega un WhatsApp con los datos que tenemos y dos botones: «Los datos están bien» / «Hay un dato malo». Existe porque los errores de tipeo —la fecha de fallecimiento sobre todo— se descubrían al emitir el certificado o al imprimir la etiqueta, cuando ya había que rehacer el trabajo. El único que sabe si el dato está bien es el tutor.
+
+Todo en [lib/validacion-datos.ts](lib/validacion-datos.ts); columnas `clientes.datos_validados` (`''` | `'ok'` | `'observado'`) + `datos_validados_at`. **DDL a mano antes de desplegar:** [supabase/validacion-datos.sql](supabase/validacion-datos.sql).
+
+- **A quién SÍ** (`correspondeValidacion`): fichas con WhatsApp válido cuyo tutor es NUESTRO cliente. Las de veterinario quedan fuera —el tutor es cliente de la clínica y muchas veces ni sabe que existimos— **salvo los convenios marcados «Boleta al cliente»** ([lib/vet-boleta.ts](lib/vet-boleta.ts)), donde le cobramos y le boleteamos nosotros (dueño 2026-08-20).
+- **Dos caminos por costo**: ventana de 24h abierta → mensaje `interactive` (gratis); cerrada → plantilla **`validar_datos_ficha`** con los mismos quick-reply. La ventana se consulta ANTES de enviar, nunca se deduce del resultado: con la ventana cerrada Meta responde 200 con `message_id` y descarta el mensaje.
+- ⚠️ **La lista de datos vive en el TEXTO de la plantilla, una variable por dato.** No puede ir como un bloque en una sola variable: `limpiarParam` colapsa los saltos de línea porque Meta rechaza el envío si una variable los trae. Y **ninguna variable puede repetirse** (por eso el nombre de la mascota va solo en el saludo). Agregar un dato = **re-crear la plantilla y esperar que Meta la apruebe de nuevo**.
+- **La respuesta** la lee `procesarBotonValidacion`, enganchada en el webhook **antes** del agente. Llega por DOS vías según el camino: `interactive.button_reply.id` o `button.payload` — hay que mirar las dos.
+- **«Hay un dato malo»** → la ficha queda `observado`, el bot le pregunta qué dato es y se avisa al equipo por WhatsApp. **La corrige una persona**: el agente no edita fichas y no se le va a dar esa herramienta.
+- **NO bloquea nada** (decisión del dueño): una ficha observada se certifica igual. Se ve en el chip «con un dato observado por el tutor» de `/clientes` (predicado `datosObservados` en [lib/fichas-alertas.ts](lib/fichas-alertas.ts), como todos) y en un banner de la ficha.
+
+Verificalo con **`npx tsx scripts/verificar-validacion-datos.ts`** (solo lectura, no envía nada): reglas de Meta sobre la plantilla, que los payloads de los botones se relean bien, y a qué fichas reales se les mandaría.
+
 ## Marca, propósito y voz (copy de cara al cliente)
 
 Fuente de verdad completa: **`C:\dev\alma-animal-marketing/_docs/biblia-visual-alma-animal.md`** (repo separado del sistema de marketing — léela antes de escribir/rediseñar piezas de cara al público). Resumen accionable para el copy que vive en este repo (correos, landing `/convenio-eutanasias`, textos de UI):

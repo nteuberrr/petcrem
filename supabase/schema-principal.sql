@@ -74,6 +74,8 @@ create table if not exists "clientes" (
   "fotos_cuadro" text not null default '',
   "videos_servicio" text not null default '',
   "video_solicitado" text not null default '',
+  "datos_validados" text not null default '',
+  "datos_validados_at" text not null default '',
   "fotos_evidencia" text not null default '',
   -- Fotos que saca el repartidor al entregar (hoja de ruta compartida).
   "fotos_entrega" text not null default '',
@@ -1214,6 +1216,8 @@ alter table "usuario_permisos" enable row level security;
 -- pasa a tener columna propia. Antes se escribía como una línea dentro de
 -- `notas`, pero ese campo es SOLO para los comentarios manuales del equipo.
 alter table "clientes" add column if not exists "video_solicitado" text not null default '';
+alter table "clientes" add column if not exists "datos_validados" text not null default '';
+alter table "clientes" add column if not exists "datos_validados_at" text not null default '';
 
 -- Migra las solicitudes que quedaron dentro de `notas` y limpia esa línea.
 -- Toma la fecha del propio texto ("(DD/MM/YYYY)") y si no se puede leer usa hoy.

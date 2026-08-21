@@ -128,6 +128,9 @@ type ClienteDetalle = {
   descuento_monto?: string
   fecha_creacion: string
   fecha_defuncion: string
+  /** El tutor revisó los datos: '' | 'ok' | 'observado' (lib/validacion-datos). */
+  datos_validados?: string
+  datos_validados_at?: string
   fecha_nacimiento: string
   notas: string
   tipo_pago: string
@@ -1123,6 +1126,26 @@ export default function ClienteDetallePage({ params }: { params: Promise<{ id: s
             Esta ficha la creó el bot al agendar. Completa los datos que falten (especie, peso, fechas, datos de pago)
             y presiona <strong>Registrar ficha</strong> para generar el código y enviarle el correo al tutor.
           </p>
+        </div>
+      )}
+
+      {/* EL TUTOR REVISÓ SUS DATOS (lib/validacion-datos). Va arriba porque es lo
+          que hay que mirar ANTES de emitir el certificado o mandar la etiqueta a
+          imprimir: si observó algo, el error todavía se corrige gratis. No
+          bloquea nada — solo avisa (decisión del dueño). Sin respuesta no se
+          muestra: la mayoría no contesta y sería ruido permanente. */}
+      {cliente.datos_validados === 'observado' && (
+        <div className="mb-4 rounded-xl border-2 border-orange-400 bg-orange-50 px-4 py-3">
+          <p className="text-sm font-bold text-orange-900">El tutor avisó que hay un dato malo</p>
+          <p className="text-xs text-orange-800 mt-0.5">
+            Respondió por WhatsApp{cliente.datos_validados_at ? ` el ${fmtFecha(cliente.datos_validados_at)}` : ''}.
+            Su mensaje con el detalle está en Mensajes. Corrígelo acá antes de emitir el certificado o imprimir la etiqueta.
+          </p>
+        </div>
+      )}
+      {cliente.datos_validados === 'ok' && (
+        <div className="mb-4 inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+          Datos confirmados por el tutor{cliente.datos_validados_at ? ` el ${fmtFecha(cliente.datos_validados_at)}` : ''}
         </div>
       )}
 

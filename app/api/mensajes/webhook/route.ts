@@ -12,6 +12,7 @@ import { isAgenteConfigurado, generarRespuesta, redactarRelayCliente } from '@/l
 import { handlersAgente } from '@/lib/agente-acciones'
 import { buscarRelayPendientePorMsg, buscarRelayPendienteUnico, marcarRelayRespondida } from '@/lib/relay-retiro'
 import { procesarBotonVetEutanasia, procesarTextoVetEutanasia } from '@/lib/eutanasia-whatsapp'
+import { procesarBotonValidacion } from '@/lib/validacion-datos'
 import { resolverSolicitudRetiro } from '@/lib/solicitudes-retiro'
 import { manejarAvisoFallido } from '@/lib/avisos-equipo'
 import { leerMarcador, limpiarMarcador, vincularTelefono, registrarClickCtwa } from '@/lib/ads-clicks'
@@ -630,6 +631,14 @@ export async function POST(req: NextRequest) {
           // Red de eutanasias: el VET tocó "Puedo tomarla" / "No puedo" en la
           // invitación (plantilla eutanasia_solicitud_vet).
           if ((msg.type === 'interactive' || msg.type === 'button') && await procesarBotonVetEutanasia(msg)) continue
+          // El TUTOR revisó los datos de su ficha: "Los datos están bien" / "Hay
+          // un dato malo" (lib/validacion-datos). Va antes del agente para que la
+          // respuesta la dé el flujo y no el modelo.
+          if ((msg.type === 'interactive' || msg.type === 'button')
+            && await procesarBotonValidacion(
+              msg.interactive?.button_reply?.id || msg.button?.payload || '',
+              msg.from || '',
+            )) continue
           // Relay: el admin respondió (citando) un aviso de ETA → reenviar al cliente.
           if (msg.type === 'text' && await procesarRelayAdmin(msg)) continue
           // Red de eutanasias: el vet que tomó un caso nos responde con la hora

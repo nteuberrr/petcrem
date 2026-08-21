@@ -49,6 +49,10 @@ export const SHEETS: Record<string, string[]> = {
     // ('' = no lo pidió). Antes esto era una marca dentro de `notas`; se sacó de
     // ahí porque `notas` es solo para comentarios manuales (lib/video-solicitado.ts).
     'video_solicitado',
+    // El TUTOR revisó los datos de su mascota (WhatsApp con botones que sale al
+    // registrar la ficha, lib/validacion-datos.ts): '' = no respondió · 'ok' =
+    // confirmó · 'observado' = avisó que algo está mal. No bloquea nada, avisa.
+    'datos_validados', 'datos_validados_at',
     // MEMORIAL EN REDES (lib/memorial.ts). El tutor autoriza —opt-in explícito,
     // desde el mismo link con que sube la foto del certificado— que publiquemos
     // un homenaje en Instagram, y puede dejarle una dedicatoria. La historia sale

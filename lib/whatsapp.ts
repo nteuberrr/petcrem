@@ -267,6 +267,27 @@ export const PLANTILLAS_WA: Record<string, PlantillaWa> = {
     ejemplos: ['Dra. Millas', 'Rocky (perro, 12 kg)', 'Ñuñoa', '14-08-2026 a las 18:00', '$45.000'],
     botones: ['Puedo tomarla', 'No puedo'],
   },
+  validar_datos_ficha: {
+    nombre: 'validar_datos_ficha',
+    categoria: 'UTILITY',
+    // Al TUTOR, apenas se registra la ficha: que revise los datos ANTES de que
+    // se conviertan en un certificado o una etiqueta impresa. Los errores de
+    // tipeo —la fecha de fallecimiento, sobre todo— se descubrían al emitir el
+    // certificado, cuando ya había que rehacer el trabajo.
+    //
+    // ⚠️ Dos reglas de Meta que condicionan cómo está escrita:
+    //  · La lista va en el TEXTO, con una variable por dato, y NO como un bloque
+    //    en una sola variable: `limpiarParam` colapsa los saltos de línea porque
+    //    Meta rechaza el envío si una variable los trae.
+    //  · Ninguna variable se repite (el nombre de la mascota va solo en el
+    //    saludo, no otra vez como "Mascota:"): una plantilla con {{2}} dos veces
+    //    no pasa la validación.
+    // Agregar un dato obliga a RE-crear la plantilla y a que Meta la apruebe de nuevo.
+    texto: 'Hola {{1}}, ya registramos a {{2}} en nuestro sistema.\n\nEstos son los datos que tenemos. ¿Están correctos?\n\nEspecie: {{3}}\nFecha de fallecimiento: {{4}}\nServicio: {{5}}\nTutor: {{6}}\nDirección de entrega: {{7}}\nCódigo: {{8}}\n\nSi algo no cuadra, avísanos ahora y lo corregimos antes de emitir el certificado.',
+    ejemplos: ['María', 'Rocky', 'Perro', '19-08-2026', 'Cremación Individual', 'María Pérez', 'Av. Los Leones 1234, Providencia', 'P247-CI'],
+    // Sin emojis: Meta los rechaza en la etiqueta de un botón.
+    botones: ['Los datos están bien', 'Hay un dato malo'],
+  },
   solicitud_retiro: {
     nombre: 'solicitud_retiro',
     categoria: 'UTILITY',

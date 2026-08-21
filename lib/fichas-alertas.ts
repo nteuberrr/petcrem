@@ -98,14 +98,25 @@ export function videoPendiente(c: FichaRow): boolean {
   return !!iso && iso >= VIDEO_DESDE
 }
 
+/**
+ * El TUTOR avisó que algún dato de su mascota está mal (respondió "Hay un dato
+ * malo" al WhatsApp de validación — lib/validacion-datos). Sigue abierto hasta
+ * que alguien lo corrija: es lo que evita que el error llegue al certificado o a
+ * la etiqueta. Solo fichas EN PROCESO — despachada, ya no hay nada que corregir.
+ */
+export function datosObservados(c: FichaRow): boolean {
+  if (c.estado === 'borrador' || c.estado === 'despachado') return false
+  return String(c.datos_validados || '').trim().toLowerCase() === 'observado'
+}
+
 /** Las situaciones filtrables desde los chips. */
 export type FiltroSituacion = 'todos' | 'borrador' | 'pendiente' | 'cremado' | 'despachado'
   | 'pago_pendiente' | 'datos_pendientes' | 'falta_peso' | 'diferencia'
-  | 'pendiente_cobro' | 'devolucion' | 'correo_malo' | 'video_pendiente'
+  | 'pendiente_cobro' | 'devolucion' | 'correo_malo' | 'video_pendiente' | 'datos_observados'
 
 export const FILTROS_VALIDOS: FiltroSituacion[] = ['todos', 'borrador', 'pendiente', 'cremado', 'despachado',
   'pago_pendiente', 'datos_pendientes', 'falta_peso', 'diferencia', 'pendiente_cobro', 'devolucion',
-  'correo_malo', 'video_pendiente']
+  'correo_malo', 'video_pendiente', 'datos_observados']
 
 /**
  * ¿Esta ficha cae en esta situación? Es el mismo criterio que usan el chip (para
@@ -133,6 +144,7 @@ export function cumpleFiltro(c: FichaRow, filtro: FiltroSituacion, ctx: Contexto
     case 'devolucion': return (ctx.devolucionPorFicha.get(id) ?? 0) > 0
     case 'correo_malo': return ctx.idsCorreoMalo.has(id)
     case 'video_pendiente': return videoPendiente(c)
+    case 'datos_observados': return datosObservados(c)
     default: return true
   }
 }
@@ -152,6 +164,7 @@ export interface ResumenFichas {
   devolucion: number
   devolucionMonto: number
   correoMalo: number
+  datosObservados: number
 }
 
 /**
@@ -172,6 +185,7 @@ export function resumirFichas(rows: FichaRow[], ctx: ContextoAlertas): ResumenFi
     diferencia: reales.filter(c => cumpleFiltro(c, 'diferencia', ctx)).length,
     videoPendiente: reales.filter(c => cumpleFiltro(c, 'video_pendiente', ctx)).length,
     pendienteCobro: reales.filter(c => cumpleFiltro(c, 'pendiente_cobro', ctx)).length,
+    datosObservados: reales.filter(c => cumpleFiltro(c, 'datos_observados', ctx)).length,
     devolucion: reales.filter(c => cumpleFiltro(c, 'devolucion', ctx)).length,
     devolucionMonto: reales.reduce((s, c) => s + (ctx.devolucionPorFicha.get(String(c.id)) ?? 0), 0),
     correoMalo: reales.filter(c => cumpleFiltro(c, 'correo_malo', ctx)).length,
