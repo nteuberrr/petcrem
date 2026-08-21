@@ -3,6 +3,7 @@ import { getSharp } from './sharp-lazy'
 import { getSheetData } from './datastore'
 import { listarImagenes, type ImagenBanco } from './mailing-images'
 import { getContacto, LOGO_URL, SELLO_URL } from './email-layout'
+import { getFromR2, keyFromPublicUrl } from './cloudflare-r2'
 import { fmtPrecio } from './format'
 import { ENTREGA_TXT, expressDisponible } from './plazo-entrega'
 import { LETTER, C, embedBrandFonts, wrapText, fitText, type BrandFonts } from './pdf-brand'
@@ -65,22 +66,89 @@ function matchFoto(nombre: string, banco: ImagenBanco[]): string {
   return bestScore >= 0.5 && best ? best.url : ''
 }
 
-async function cargarImagen(doc: PDFDocument, url: string): Promise<PDFImage | null> {
+/**
+ * Por qué falló cada foto. Antes `cargarImagen` se tragaba TODO con un
+ * `catch { return null }` y la tarjeta salía con un "sin foto": el catálogo se
+ * generaba igual, parecía correcto y nadie se enteraba. El 20-08-2026 el PDF de
+ * producción salió con CERO fotos de producto (0 JPEG contra los 33 de local) y
+ * no había un solo error en ninguna parte. Los motivos se juntan acá y se
+ * reportan al final de la generación.
+ */
+type Problemas = string[]
+
+const msgErr = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 160)
+
+/**
+ * Bytes de una imagen nuestra.
+ *
+ * Si la URL es del bucket público de R2 se baja por la **API S3 autenticada** en
+ * vez del host público `pub-*.r2.dev`. Cloudflare documenta que ese host tiene
+ * rate limit y no es para producción: bajando 30 fotos de un tirón desde las IP
+ * compartidas de Vercel es justo donde se nota, mientras que desde un notebook
+ * las mismas 30 pasan sin chistar — que es exactamente la diferencia que había
+ * entre local y producción. Por la API S3 no hay ese límite.
+ */
+async function bytesDeImagen(url: string, problemas: Problemas): Promise<Buffer | null> {
+  const key = keyFromPublicUrl(url)
+  if (key) {
+    const buf = await getFromR2(key)
+    if (buf) return buf
+    problemas.push(`${key}: no está en el bucket`)
+    return null
+  }
+  // Ajena al bucket: por HTTP, con un reintento (un 429/503 suelto no debería
+  // costarnos la foto).
+  for (const intento of [1, 2]) {
+    try {
+      const r = await fetch(url)
+      if (r.ok) return Buffer.from(await r.arrayBuffer())
+      if (intento === 2) problemas.push(`${url}: HTTP ${r.status}`)
+      else await new Promise(res => setTimeout(res, 400))
+    } catch (e) {
+      if (intento === 2) problemas.push(`${url}: ${msgErr(e)}`)
+      else await new Promise(res => setTimeout(res, 400))
+    }
+  }
+  return null
+}
+
+async function cargarImagen(doc: PDFDocument, url: string, problemas: Problemas): Promise<PDFImage | null> {
   if (!url) return null
+  const buf = await bytesDeImagen(url, problemas)
+  if (!buf) return null
   try {
-    const r = await fetch(url)
-    if (!r.ok) return null
-    const buf = Buffer.from(await r.arrayBuffer())
     const jpg = await (await getSharp())(buf).resize({ width: 680, height: 680, fit: 'inside', withoutEnlargement: true }).flatten({ background: '#ffffff' }).jpeg({ quality: 84 }).toBuffer()
     return await doc.embedJpg(Uint8Array.from(jpg))
-  } catch { return null }
+  } catch (e) {
+    // sharp no pudo (o no está). Se embebe el original: pdf-lib solo entiende PNG
+    // y JPEG, así que el formato se decide por los magic bytes. Pesa mucho más,
+    // pero un catálogo pesado le sirve al cliente y uno sin fotos no.
+    try {
+      const esPng = buf.length > 8 && buf.readUInt32BE(0) === 0x89504e47
+      const esJpg = buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8
+      const img = esPng ? await doc.embedPng(Uint8Array.from(buf))
+        : esJpg ? await doc.embedJpg(Uint8Array.from(buf))
+        : null
+      if (img) {
+        problemas.push(`${url}: sharp falló (${msgErr(e)}), se embebió el original sin achicar`)
+        return img
+      }
+      problemas.push(`${url}: sharp falló (${msgErr(e)}) y no es PNG ni JPEG`)
+    } catch (e2) {
+      problemas.push(`${url}: no se pudo embeber (${msgErr(e2)})`)
+    }
+    return null
+  }
 }
-async function cargarPng(doc: PDFDocument, url: string): Promise<PDFImage | null> {
+async function cargarPng(doc: PDFDocument, url: string, problemas: Problemas): Promise<PDFImage | null> {
+  const buf = await bytesDeImagen(url, problemas)
+  if (!buf) return null
   try {
-    const r = await fetch(url)
-    if (!r.ok) return null
-    return await doc.embedPng(Uint8Array.from(Buffer.from(await r.arrayBuffer())))
-  } catch { return null }
+    return await doc.embedPng(Uint8Array.from(buf))
+  } catch (e) {
+    problemas.push(`${url}: no se pudo embeber el PNG (${msgErr(e)})`)
+    return null
+  }
 }
 
 /** Mínimo > 0 de una columna de la tabla de precios (para el "Desde $"). */
@@ -177,10 +245,15 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
   const precioDe = (p: Producto) => parseInt(p.precio, 10) || 0
   const agotado = (p: Producto) => (parseInt(p.stock || '0', 10) || 0) <= 0
 
+  // Diagnóstico de las fotos: por qué falló cada una y cuántas entraron de verdad.
+  const problemas: Problemas = []
+  let fotosPedidas = 0
+  let fotosOk = 0
+
   const doc = await PDFDocument.create()
   const f: BrandFonts = await embedBrandFonts(doc)
-  const logo = await cargarPng(doc, LOGO_URL)
-  const sello = await cargarPng(doc, SELLO_URL)
+  const logo = await cargarPng(doc, LOGO_URL, problemas)
+  const sello = await cargarPng(doc, SELLO_URL, problemas)
 
   let page: PDFPage = null as unknown as PDFPage
   let y = 0
@@ -268,7 +341,7 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
 
   for (const s of SERVICIOS) {
     const desde = desdeDe(preciosG, s.colPrecio)
-    const img = await cargarImagen(doc, fotoBanco(s.fotoCodigo))
+    const img = await cargarImagen(doc, fotoBanco(s.fotoCodigo), problemas)
     const fotoW = img ? 168 : 0
     const tx = MARGIN + fotoW + (img ? 20 : 16)
     const tw = MARGIN + CONTENT_W - tx - 16
@@ -403,7 +476,10 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
       page.drawRectangle({ x, y: top - imgH, width: cardW, height: imgH, color: C.cream })
       page.drawRectangle({ x, y: top - imgH - 0.5, width: cardW, height: 0.7, color: C.line })
       const p = items[i]
-      const img = await cargarImagen(doc, p.foto_url || matchFoto(p.nombre, bancoProd))
+      const url = p.foto_url || matchFoto(p.nombre, bancoProd)
+      if (url) fotosPedidas++
+      const img = await cargarImagen(doc, url, problemas)
+      if (img && url) fotosOk++
       if (img) {
         const scale = Math.min((cardW - 20) / img.width, (imgH - 14) / img.height)
         const w = img.width * scale, h = img.height * scale
@@ -490,6 +566,22 @@ export async function generarCatalogoPdf(): Promise<Buffer> {
   if (sello) {
     const sw = 68, sh = (sello.height / sello.width) * sw
     page.drawImage(sello, { x: PAGE_W - MARGIN - sw, y: y - 8, width: sw, height: sh })
+  }
+
+  // ── Reporte de las fotos ──
+  // Este catálogo se le manda a un cliente en duelo por WhatsApp: uno con todas
+  // las tarjetas diciendo "sin foto" es peor que no mandar nada. Si NINGUNA foto
+  // entró, se corta acá — el botón del panel muestra el error y el bot le dice al
+  // cliente que el equipo se lo hará llegar, en vez de enviarle el PDF vacío.
+  if (problemas.length) {
+    const cab = `[catalogo] ${fotosOk}/${fotosPedidas} fotos de producto embebidas. Problemas:`
+    console.warn(cab + '\n  ' + problemas.join('\n  '))
+  }
+  if (fotosPedidas > 0 && fotosOk === 0) {
+    throw new Error(
+      `No se pudo cargar ninguna de las ${fotosPedidas} fotos del catálogo, así que saldría sin imágenes. `
+      + `Primer motivo: ${problemas[0] ?? 'desconocido'}`,
+    )
   }
 
   return Buffer.from(await doc.save())

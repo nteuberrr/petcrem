@@ -263,6 +263,16 @@ Arriba de la tabla de Compras, el panel **«Facturas por aceptar»** ([component
 - **Qué se persiste** (`conciliacion_sii`, un registro por período; DDL en [supabase/conciliacion-sii.sql](supabase/conciliacion-sii.sql)): solo el lado del SII (`docs_json` crudo + `sii_json` resumido), porque es un hecho fechado. El lado del sistema se **recalcula en vivo** siempre, también en el histórico: corregir una ficha vieja tiene que reflejarse, no quedar congelado.
 - Ojo al leer diferencias históricas: OpenFactura arrancó en julio-2026, así que los meses anteriores muestran venta sin documentos emitidos, y julio trae 41 notas de crédito que anulan boletas de una numeración vieja.
 
+### El catálogo de productos y las fotos de R2
+
+[lib/catalogo-generator.ts](lib/catalogo-generator.ts) arma el PDF que baja el panel (`/api/productos/catalogo`) y que el bot le manda al cliente por WhatsApp (`enviar_catalogo`).
+
+⚠️ **Las imágenes se bajan por la API S3 de R2 (`getFromR2`), NO por el host público `pub-*.r2.dev`.** Cloudflare documenta que ese host tiene rate limit y no es para producción, y bajar ~30 fotos de un tirón desde las IP compartidas de Vercel es justo donde se nota: el 20-08-2026 el catálogo de producción salió con **0 fotos de producto** (4 imágenes y 0 JPEG, contra 37 imágenes y 33 JPEG del mismo catálogo generado en local, 383 KB contra 1.557 KB). Sobrevivían solo el logo y el sello, que son los únicos que no pasan por `cargarImagen`. Si se agrega una imagen nueva al PDF, que baje por el mismo camino.
+
+⚠️ **Y no se falla en silencio.** `cargarImagen` se tragaba todo con un `catch { return null }` y cada tarjeta salía con un *"sin foto"*: el catálogo se generaba, parecía correcto y no había un solo error en ninguna parte. Hoy cada fallo anota su motivo, se loguean juntos al terminar, y **si no entró NINGUNA foto la generación lanza**: este PDF se le manda a un tutor en duelo por WhatsApp, y uno con todas las tarjetas vacías es peor que no mandar nada. Si sharp falla puntualmente, la foto se embebe sin achicar en vez de perderse.
+
+Verificalo con **`npx tsx scripts/verificar-catalogo.ts`**, que cuenta las imágenes REALMENTE embebidas en el PDF — un catálogo sin fotos no puede volver a pasar por bueno.
+
 ## Sistema de diseño (estándar UI) — OBLIGATORIO en todo desarrollo
 
 Toda pantalla nueva y todo retoque visual debe salir en el **estándar Alma Animal** (definido a partir del módulo Campañas, aprobado por el cliente). NO usar más `indigo-*` ni grises/azules dispares como primario.
