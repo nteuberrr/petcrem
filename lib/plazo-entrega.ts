@@ -1,43 +1,97 @@
 /**
  * PLAZO DE ENTREGA PROMETIDO — FUENTE ÚNICA.
  *
- * Lo normal son 4 días hábiles. Cuando la operación se satura se abre una
- * VENTANA DE ALTA DEMANDA con un plazo mayor, y eso hay que moverlo en TODAS
- * partes a la vez: lo que promete el sitio, lo que responde el agente de
- * WhatsApp, lo que escribe el de marketing, los PDF del catálogo/informe y
- * —sobre todo— con cuántos días se programa la entrega en el calendario de
- * despachos. Antes ese "4" estaba escrito a mano en una veintena de archivos.
+ * Lo que promete el sitio, lo que responde el agente de WhatsApp, lo que escribe
+ * el de marketing, los PDF del catálogo/informe y —sobre todo— con cuántos días
+ * se programa la entrega en el calendario de despachos. Antes ese número estaba
+ * escrito a mano en una veintena de archivos.
  *
- * ─── CÓMO VOLVER A LOS 4 DÍAS ──────────────────────────────────────────────
- * Poné en VENTANA: `activa: false` y la fecha del último día en `hasta`.
- * Es el único cambio necesario (más un deploy).
+ * ─── DOS PREGUNTAS DISTINTAS, NO UNA ───────────────────────────────────────
  *
- * El `hasta` NO es un detalle: las fichas retiradas DENTRO de la ventana
- * conservan su plazo largo aunque la ventana ya esté cerrada. Sin esa fecha,
- * cerrar la ventana volvería a marcar como atrasadas a todas las que se
- * retiraron durante la alta demanda. Por eso el plazo se decide por la FECHA DE
- * RETIRO de cada ficha y no por el día en que se mira el calendario: a cada
- * tutor se le cumple lo que se le prometió cuando entregó a su mascota.
+ *  · **¿Qué prometemos HOY?** → el RÉGIMEN vigente, que es el último de PERIODOS.
+ *    De ahí salen todos los textos (`ENTREGA_TXT`, `PLAZO_AGENTES`…) y si el
+ *    Servicio Express se ofrece o no. Cambia el día que se despliega.
+ *
+ *  · **¿Qué le debemos a ESTA ficha?** → `plazoParaRetiro(fecha_retiro)`, que
+ *    busca el período que cubría el día en que se retiró a la mascota. A cada
+ *    tutor se le cumple lo que se le prometió cuando la entregó, así que bajar
+ *    el plazo hoy NO puede reescribir el de una ficha que ya está en curso.
+ *
+ * Por eso PERIODOS es un HISTORIAL y no un solo valor: el 20-08-2026 bajamos de
+ * "4 a 10 días" a "máximo 5", y las 19 fichas que venían en curso conservaron los
+ * 10 que se les había prometido (decisión del dueño). Con un único valor eso era
+ * imposible: habrían pasado a 5 de un día para otro.
+ *
+ * ─── CÓMO SE CAMBIA EL PLAZO ───────────────────────────────────────────────
+ * 1. Cerrá el período abierto poniéndole `hasta` = el último día de retiro que
+ *    le corresponde (normalmente hoy).
+ * 2. Agregá uno nuevo al FINAL con `desde` = el día siguiente, sus `dias` y su
+ *    `formato`. Ese pasa a ser el régimen vigente.
+ * 3. Desplegá y corré `npx tsx scripts/verificar-plazo-entrega.ts`.
+ *
+ * NO edites los `dias` de un período viejo: eso le cambia el plazo a fichas ya
+ * entregadas y a las que están en curso.
  */
 
-/** El plazo de siempre, el que rige cuando no hay ventana abierta. */
+/** El plazo histórico, el que rige para retiros anteriores a todo período. */
 export const PLAZO_NORMAL = 4
 
-export const VENTANA = {
-  /** false = no hay alta demanda; el sitio y los agentes vuelven a decir 4 días. */
-  activa: true,
-  /** Plazo máximo que prometemos mientras dure. */
-  dias: 10,
-  /** Primer día de retiro afectado (ISO). Los retiros ANTERIORES conservan sus 4 días. */
-  desde: '2026-08-13',
-  /** Último día de retiro afectado (ISO). '' = sigue abierta. Ver el comentario de arriba. */
-  hasta: '',
-  /** Cómo lo nombramos de cara al cliente. */
-  periodo: 'agosto',
-  motivo: 'la alta demanda',
-  /** El Servicio Express (48 h hábiles) no se ofrece mientras dure (decisión del dueño). */
-  suspendeExpress: true,
+/**
+ * Cómo se dice de cara al cliente:
+ *  · `exacto` → "4 días hábiles"
+ *  · `rango`  → "4 a 10 días hábiles"          (el piso es PLAZO_NORMAL)
+ *  · `tope`   → "un máximo de 5 días hábiles"
+ */
+export type FormatoPlazo = 'exacto' | 'rango' | 'tope'
+
+export interface PeriodoPlazo {
+  /** Días hábiles máximos que prometemos en este período. */
+  dias: number
+  /** Primer día de RETIRO al que aplica (ISO). */
+  desde: string
+  /** Último día de RETIRO al que aplica (ISO). '' = sigue abierto. */
+  hasta: string
+  formato: FormatoPlazo
+  /** Cómo lo nombramos si hay que explicarlo ('' = no se explica, es lo normal). */
+  motivo: string
+  periodo: string
+  /** El Servicio Express (48 h hábiles) no se ofrece mientras rija. */
+  suspendeExpress: boolean
 }
+
+/** Historial, en orden. El ÚLTIMO es el régimen vigente. */
+export const PERIODOS: PeriodoPlazo[] = [
+  {
+    // Alta demanda de agosto. Cerrado el 20-08-2026: las fichas retiradas hasta
+    // ese día conservan los 10 días hábiles que se les prometió.
+    dias: 10,
+    desde: '2026-08-13',
+    hasta: '2026-08-20',
+    formato: 'rango',
+    motivo: 'la alta demanda',
+    periodo: 'agosto',
+    suspendeExpress: true,
+  },
+  {
+    // Régimen vigente: máximo 5 días hábiles, y el Express vuelve a ofrecerse.
+    dias: 5,
+    desde: '2026-08-21',
+    hasta: '',
+    formato: 'tope',
+    motivo: '',
+    periodo: '',
+    suspendeExpress: false,
+  },
+]
+
+/** Lo que prometemos HOY. Es el último período: rige desde que se despliega. */
+export const REGIMEN: PeriodoPlazo = PERIODOS[PERIODOS.length - 1]
+
+/**
+ * Alias histórico. Varios módulos leen `VENTANA.motivo`; apunta al régimen
+ * vigente, que es lo que querían saber.
+ */
+export const VENTANA = REGIMEN
 
 /**
  * Plazo en días hábiles que le corresponde a una ficha, según CUÁNDO se retiró.
@@ -47,43 +101,46 @@ export const VENTANA = {
 export function plazoParaRetiro(fechaRetiroIso: string | null | undefined, plazoBase = PLAZO_NORMAL): number {
   const iso = (fechaRetiroIso || '').slice(0, 10)
   if (!iso) return plazoBase
-  if (iso < VENTANA.desde) return plazoBase
-  if (VENTANA.hasta && iso > VENTANA.hasta) return plazoBase
-  // Ventana cerrada SIN fecha de cierre = se canceló, como si nunca hubiera existido.
-  if (!VENTANA.activa && !VENTANA.hasta) return plazoBase
-  return VENTANA.dias
+  for (const p of PERIODOS) {
+    if (iso < p.desde) continue
+    if (p.hasta && iso > p.hasta) continue
+    return p.dias
+  }
+  return plazoBase
 }
 
 /** ¿Se puede ofrecer hoy el Servicio Express? */
 export function expressDisponible(): boolean {
-  return !(VENTANA.activa && VENTANA.suspendeExpress)
+  return !REGIMEN.suspendeExpress
 }
 
-export const ENTREGA_DIAS_MIN = PLAZO_NORMAL
-export const ENTREGA_DIAS_MAX = VENTANA.activa ? VENTANA.dias : PLAZO_NORMAL
+export const ENTREGA_DIAS_MAX = REGIMEN.dias
+export const ENTREGA_DIAS_MIN = REGIMEN.formato === 'rango' ? PLAZO_NORMAL : REGIMEN.dias
 
 /**
- * "4 a 10 días hábiles" · "4 días hábiles" — PELADO, para celdas de tabla,
- * títulos y cualquier lugar donde la preposición sobra.
+ * "máximo 5 días hábiles" · "4 a 10 días hábiles" · "4 días hábiles" — PELADO,
+ * para celdas de tabla, títulos y cualquier lugar donde la preposición sobra.
  */
-export const PLAZO_TXT = VENTANA.activa
-  ? `${ENTREGA_DIAS_MIN} a ${ENTREGA_DIAS_MAX} días hábiles`
-  : `${PLAZO_NORMAL} días hábiles`
+export const PLAZO_TXT =
+  REGIMEN.formato === 'tope' ? `máximo ${REGIMEN.dias} días hábiles`
+  : REGIMEN.formato === 'rango' ? `${PLAZO_NORMAL} a ${REGIMEN.dias} días hábiles`
+  : `${REGIMEN.dias} días hábiles`
 
 /**
- * "en 4 a 10 días hábiles" — con la preposición, que es como entra en las frases
- * ("la entrega es …", "te devolvemos las cenizas …"). Va incluida a propósito:
- * los textos ya decían "en 4 días hábiles", así que el reemplazo calza sin
- * quedar cojo cuando se vuelva al plazo normal.
+ * "en un máximo de 5 días hábiles" — con la preposición, que es como entra en
+ * las frases ("la entrega es …", "te devolvemos las cenizas …"). Va incluida a
+ * propósito: los textos ya decían "en 4 días hábiles", así que el reemplazo
+ * calza sin quedar cojo.
  */
-export const ENTREGA_TXT = `en ${PLAZO_TXT}`
+export const ENTREGA_TXT =
+  REGIMEN.formato === 'tope' ? `en un máximo de ${REGIMEN.dias} días hábiles` : `en ${PLAZO_TXT}`
 
-/** "entrega de 4 a 10 días hábiles" — para listas de diferenciadores. */
+/** "entrega en un máximo de 5 días hábiles" — para listas de diferenciadores. */
 export const ENTREGA = `entrega ${ENTREGA_TXT}`
 
 /** El mismo plazo con el porqué, para donde convenga explicarlo (web, correos). */
-export const ENTREGA_FRASE = VENTANA.activa
-  ? `${ENTREGA_TXT} (plazo excepcional durante ${VENTANA.periodo} por ${VENTANA.motivo})`
+export const ENTREGA_FRASE = REGIMEN.motivo
+  ? `${ENTREGA_TXT} (plazo excepcional durante ${REGIMEN.periodo} por ${REGIMEN.motivo})`
   : ENTREGA_TXT
 
 /**
@@ -92,20 +149,33 @@ export const ENTREGA_FRASE = VENTANA.activa
  * badge del hero. Editarlos se perdería en la próxima exportación, así que el
  * plazo se reemplaza al vuelo, al servir la página. Si algún día se cambia la
  * redacción del template, hay que sumar el patrón nuevo acá.
+ *
+ * ⚠️ Los patrones tienen que cubrir TODAS las redacciones que hayan estado
+ * vigentes, no solo la original: si un template quedó con "en 4 a 10 días
+ * hábiles" de la ventana anterior, sin su patrón se publica ese texto viejo.
+ *
+ * ⚠️ Y NO pueden ser más anchos de la cuenta. Las políticas de privacidad
+ * prometen responder "dentro del plazo de 10 días hábiles" y "en un plazo
+ * razonable y no superior a 10 días hábiles": son plazos LEGALES, no de entrega,
+ * y reescribirlos cambiaría un compromiso ante el titular de los datos. Por eso
+ * cada patrón exige el número pegado a la preposición ("dentro de 4 días", no
+ * "dentro del plazo de 10 días"). `scripts/verificar-plazo-entrega.ts` recorre
+ * los templates e imprime CADA línea que se toca, para poder mirarlas.
  */
 export function aplicarPlazoEntrega(html: string): string {
-  if (!VENTANA.activa) return html
   return html
-    .replace(/en 4 días hábiles/g, ENTREGA_TXT)
-    .replace(/dentro de 4 días hábiles/g, `dentro de ${PLAZO_TXT}`)
-    .replace(/en un máximo de 4 días hábiles/g, ENTREGA_TXT)
+    .replace(/en un máximo de \d+ días hábiles/g, ENTREGA_TXT)
+    .replace(/en \d+ a \d+ días hábiles/g, ENTREGA_TXT)
+    .replace(/en \d+ días hábiles/g, ENTREGA_TXT)
+    // "Entregamos tu ánfora dentro de 4 días hábiles": cambia la preposición
+    // entera, porque "dentro de máximo 5 días hábiles" queda cojo.
+    .replace(/dentro de \d+(?: a \d+)? días hábiles/g, ENTREGA_TXT)
 }
 
 /** Bloque para los prompts de los agentes (WhatsApp y marketing). */
-export const PLAZO_AGENTES = VENTANA.activa
-  ? `PLAZO DE ENTREGA — VIGENTE, es el ÚNICO que puedes prometer:
-- La entrega de las cenizas + certificado es ${ENTREGA_TXT.toUpperCase()} desde el retiro. NUNCA prometas ${PLAZO_NORMAL} días: hoy no es el plazo.
-- Es excepcional, por ${VENTANA.motivo} de ${VENTANA.periodo}; lo habitual son ${PLAZO_NORMAL} días hábiles y volveremos a eso. Dilo con naturalidad ("la entrega es ${ENTREGA_TXT}") y explica el motivo SOLO si preguntan o si ves que la fecha le importa. Sin dramatizar y sin pedir disculpas de más.
-- Si el cliente ya tiene su código, la fecha máxima exacta sale de la herramienta de estado: esa fecha manda sobre cualquier estimación tuya.${VENTANA.suspendeExpress ? `
-- El Servicio Express (48 horas hábiles) está SUSPENDIDO mientras dure: NO lo ofrezcas, no lo cotices y no lo menciones. Si el cliente lo pide por su nombre, dile que por ahora no está disponible y ofrécele el plazo normal.` : ''}`
-  : `PLAZO DE ENTREGA: ${PLAZO_NORMAL} días hábiles desde el retiro.`
+export const PLAZO_AGENTES = `PLAZO DE ENTREGA — VIGENTE, es el ÚNICO que puedes prometer:
+- La entrega de las cenizas + certificado es ${ENTREGA_TXT.toUpperCase()} desde el retiro. Dilo con naturalidad ("la entrega es ${ENTREGA_TXT}") y agrega que puede ser antes. No prometas una fecha más corta que esa.
+- Si el cliente ya tiene su código, la fecha máxima exacta sale de la herramienta de estado: esa fecha manda sobre cualquier estimación tuya.${REGIMEN.motivo ? `
+- Es excepcional, por ${REGIMEN.motivo} de ${REGIMEN.periodo}; lo habitual son ${PLAZO_NORMAL} días hábiles y volveremos a eso. Explica el motivo SOLO si preguntan o si ves que la fecha le importa, sin dramatizar y sin pedir disculpas de más.` : ''}${REGIMEN.suspendeExpress ? `
+- El Servicio Express (48 horas hábiles) está SUSPENDIDO: NO lo ofrezcas, no lo cotices y no lo menciones. Si el cliente lo pide por su nombre, dile que por ahora no está disponible y ofrécele el plazo normal.` : `
+- OJO con las fichas ANTERIORES al ${REGIMEN.desde}: a esos tutores se les prometió un plazo más largo y su fecha máxima es la que devuelve la herramienta de estado. Nunca les rebajes la fecha de memoria.`}`

@@ -20,7 +20,7 @@ Cómo atendemos a un tutor que nos escribe (hoy por WhatsApp). Documento derivad
 4. **Invitar a agendar:** "¿Quieres agendar el servicio?"
 5. **Tomar datos:** nombre + dirección (+ comuna) y coordinar **hora de retiro**.
 6. **Pago:** indicar formas de pago / datos de transferencia y confirmar con comprobante.
-7. **Cierre:** confirmar retiro, recordar el plazo de entrega vigente (ver lib/plazo-entrega.ts; hoy 4 a 10 días hábiles por alta demanda) y que recibirá ánfora + certificado.
+7. **Cierre:** confirmar retiro, recordar el plazo de entrega vigente (ver lib/plazo-entrega.ts; hoy un máximo de 5 días hábiles) y que recibirá ánfora + certificado.
 
 ## Plantillas (texto base real, con variables `{{}}`)
 
@@ -43,7 +43,7 @@ Cómo atendemos a un tutor que nos escribe (hoy por WhatsApp). Documento derivad
 > Las formas de pago son {{formas_pago}}. Una vez realizada la transferencia, envíame el comprobante y dejamos el retiro confirmado.
 
 **Cierre**
-> Listo {{nombre_tutor}}, retiro confirmado. Cuidaremos cada detalle de la despedida de {{nombre_mascota}}. La entrega es en 4 a 10 días hábiles e incluye ánfora + certificado. Cualquier cosa, aquí estamos.
+> Listo {{nombre_tutor}}, retiro confirmado. Cuidaremos cada detalle de la despedida de {{nombre_mascota}}. La entrega es en un máximo de 5 días hábiles e incluye ánfora + certificado. Cualquier cosa, aquí estamos.
 
 > Estas plantillas son la base de las **respuestas tipo** del asistente y de las **plantillas de WhatsApp** (que Meta debe aprobar) cuando construyamos el módulo.
 
@@ -74,14 +74,14 @@ Adicional configurado: **Transporte por distancia** $20.000. (Eutanasia a domici
 - **CP · Cremación Premium** — Individual + adicionales/materiales premium.
 - **SD · Cremación Sin Devolución** — no se devuelven cenizas; la opción más económica. (Ofrecerla cuando piden "algo más económico".)
 
-Entrega: **4 a 10 días hábiles** (plazo excepcional por la alta demanda de agosto-2026; lo normal son 4). El plazo vigente sale de lib/plazo-entrega.ts, no de este documento.
+Entrega: **máximo 5 días hábiles** (desde el 21-08-2026; antes hubo una ventana de 4 a 10 por la alta demanda de agosto). El plazo vigente sale de lib/plazo-entrega.ts, no de este documento — y a las fichas retiradas durante esa ventana se les sigue cumpliendo el plazo que se les prometió.
 
 ## FAQ (preguntas reales de clientes + respuesta sugerida)
 
 - **"¿Cuál es el valor?"** → Pedir peso y cotizar de la tabla (CI por defecto).
 - **"¿Formas de pago?"** → {{formas_pago}} (transferencia + comprobante).
 - **"¿Podemos estar en la cremación?"** → Responder según política real del negocio (definir).
-- **"¿En cuánto tiempo entregan las cenizas?"** → el plazo vigente (hoy 4 a 10 días hábiles).
+- **"¿En cuánto tiempo entregan las cenizas?"** → el plazo vigente (hoy un máximo de 5 días hábiles).
 - **"¿A qué hora pasan a retirar / horarios de retiro?"** → Coordinar según ruta del día (atención 08:00–23:00).
 - **"¿El certificado lo envían por correo?"** → Sí; también va físico con la entrega.
 - **"¿De qué material es el ánfora?"** → Responder según catálogo (definir / enlazar catálogo).
