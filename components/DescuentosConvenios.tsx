@@ -451,6 +451,13 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
               <input type="date" value={ajusteForm.fecha}
                 onChange={e => setAjusteForm(f => ({ ...f, fecha: e.target.value }))}
                 className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              {/* Se dice de dónde salió la fecha: cambia sola al elegir la
+                  mascota y es la que decide en QUÉ MES cae el costo de venta. */}
+              {fichaElegida && fichaElegida.fecha && (
+                fichaElegida.fecha === ajusteForm.fecha
+                  ? <p className="mt-1 text-[11px] text-gray-500">Es la fecha de retiro de {fichaElegida.nombre_mascota}.</p>
+                  : <p className="mt-1 text-[11px] text-amber-700">{fichaElegida.nombre_mascota} se retiró el {fmtFecha(fichaElegida.fecha)}.</p>
+              )}
             </div>
           </div>
           {/* CANJE: contra qué servicio se aplicó el saldo. Es opcional — un pago
@@ -460,16 +467,20 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
             <label className="text-xs font-medium text-gray-700">Mascota canjeada (opcional)</label>
             <select value={ajusteForm.cliente_id}
               onChange={e => {
-                // Al elegir la mascota, el monto del ajuste PASA A SER el precio
-                // de ese servicio: eso es lo que se está canjeando. Queda
-                // editable por si se acordó otra cosa, pero el default es el
-                // precio real y no un número escrito a mano.
+                // Al elegir la mascota, el ajuste toma el PRECIO y la FECHA DE
+                // RETIRO de ese servicio: eso es lo que se está canjeando. Los
+                // dos quedan editables por si se acordó otra cosa, pero el
+                // default son los datos reales y no algo escrito a mano.
+                // Ojo con la fecha: es la que le pone el mes al costo de venta
+                // en el Estado de Resultados, así que el canje queda imputado
+                // al mes en que se prestó el servicio, no al de la carga.
                 const cid = e.target.value
                 const f2 = canjeables.find(c => c.id === cid)
                 setAjusteForm(f => ({
                   ...f,
                   cliente_id: cid,
                   monto: f2 && f2.monto > 0 ? String(f2.monto) : f.monto,
+                  fecha: f2?.fecha || f.fecha,
                 }))
               }}
               className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
