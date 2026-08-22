@@ -229,7 +229,11 @@ El «Ajustar saldo» de Configuración → Descuentos Convenios ([lib/comisiones
 
 La **veterinaria no se edita**: mover un pago de una vet a otra es borrarlo y cargarlo de nuevo. Y solo los ABONOS son editables — una comisión se devenga sola desde la ficha y a mano no se toca.
 
-Verificalo con **`npx tsx scripts/verificar-comisiones-eerr.ts`** (solo lectura): compara monto y fecha de cada ajuste contra su gasto, y caza los gastos de la partida que quedaron sin su pago.
+**El CANJE** (dueño 2026-08-22): un ajuste no siempre es una transferencia — muchas veces el saldo se canjea por un servicio que prestamos y que no se le cobró a nadie. Al registrar el pago se puede elegir esa ficha (`comisiones_ajustes.cliente_id`, DDL en [supabase/comisiones-canje-ficha.sql](supabase/comisiones-canje-ficha.sql)) y el libro mayor muestra su **código** en vez de un comentario; el código también viaja al detalle del gasto en el EERR, que es lo único que después permite rastrear contra qué servicio se aplicó ese costo. El comentario libre sigue existiendo aparte.
+
+⚠️ **Qué fichas se ofrecen** (`fichasCanjeables`): las de **agosto-2026 en adelante** (`CANJE_DESDE`) marcadas **«No emitir boleta por este servicio»** (`sin_boleta`) y sin `boleta_id` ni `factura_vet_id`. La marca es el criterio, no solo la ausencia de documento: hoy hay 12 fichas sin documento pero solo 2 marcadas, y las otras 10 están esperando la **factura del mes de su veterinario** — canjear una de esas cobraría el servicio dos veces. El modal ofrece un checkbox para ver igual las no marcadas, con ese aviso a la vista.
+
+Verificalo con **`npx tsx scripts/verificar-comisiones-eerr.ts`** (solo lectura): compara monto y fecha de cada ajuste contra su gasto, caza los gastos de la partida que quedaron sin su pago, y revisa que ninguna ficha canjeada haya terminado con boleta o factura.
 
 ### Cobros pendientes: con qué se recibieron
 

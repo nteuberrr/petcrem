@@ -45,7 +45,16 @@ interface Devengo {
   base_monto: number; tipo: string; valor: number; monto: number
   estado: string; fecha_devengo: string
 }
-interface Ajuste { id: string; monto: number; detalle: string; fecha: string; creado_por_nombre: string }
+interface Ajuste {
+  id: string; monto: number; detalle: string; fecha: string; creado_por_nombre: string
+  /** Ficha contra la que se canjeo el saldo ('' = transferencia). */
+  cliente_id: string; codigo: string; nombre_mascota: string
+}
+/** Ficha ofrecible para canjear: servicio prestado que no se le cobro a nadie. */
+interface Canjeable {
+  id: string; codigo: string; nombre_mascota: string; fecha: string
+  veterinaria_id: string; monto: number; sin_boleta: boolean
+}
 
 export default function DescuentosConvenios() {
   const [saldos, setSaldos] = useState<SaldoVet[]>([])
@@ -62,7 +71,12 @@ export default function DescuentosConvenios() {
   const [reglaError, setReglaError] = useState('')
 
   const [ajuste, setAjuste] = useState<SaldoVet | null>(null)
-  const [ajusteForm, setAjusteForm] = useState({ monto: '', detalle: '', fecha: todayISO() })
+  const [ajusteForm, setAjusteForm] = useState({ monto: '', detalle: '', fecha: todayISO(), cliente_id: '' })
+  const [canjeables, setCanjeables] = useState<Canjeable[]>([])
+  // Por defecto solo las MARCADAS "no emitir boleta": son las que de verdad no se
+  // le cobraron a nadie. El resto todavia puede entrar en la factura del mes de
+  // su veterinario, y canjear una de esas cobraria el servicio dos veces.
+  const [verTodasCanjeables, setVerTodasCanjeables] = useState(false)
   const [ajusteError, setAjusteError] = useState('')
   /** Pago que se está CORRIGIENDO (null = se está registrando uno nuevo). */
   const [editando, setEditando] = useState<Ajuste | null>(null)
@@ -90,6 +104,19 @@ export default function DescuentosConvenios() {
   }, [])
 
   useEffect(() => { cargar() }, [cargar])
+
+  // Las fichas canjeables se piden al ABRIR el modal (y al cambiar el filtro), no
+  // al montar: son una consulta sobre todas las fichas y la mayoria de las veces
+  // esta pestana se usa sin registrar ningun pago.
+  useEffect(() => {
+    if (!ajuste) return
+    let cancel = false
+    fetch(`/api/comisiones?canjeables=1${verTodasCanjeables ? '&todas=1' : ''}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : []))
+      .then(d => { if (!cancel) setCanjeables(Array.isArray(d) ? d : []) })
+      .catch(() => { if (!cancel) setCanjeables([]) })
+    return () => { cancel = true }
+  }, [ajuste, verTodasCanjeables])
 
   /** `forzar` = recargar el detalle sin plegarlo (después de editar un pago). */
   async function abrirDetalle(vetId: string, opts: { forzar?: boolean } = {}) {
@@ -156,7 +183,7 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
   const cerrarAjuste = async () => {
     setAjuste(null)
     setEditando(null)
-    setAjusteForm({ monto: '', detalle: '', fecha: todayISO() })
+    setAjusteForm({ monto: '', detalle: '', fecha: todayISO(), cliente_id: '' })
     const vid = expandido
     await cargar()
     // Se vuelve a pedir el detalle en vez de cerrarlo: después de corregir un
@@ -174,11 +201,11 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
     const r = editando
       ? await fetch('/api/comisiones', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'ajuste', id: editando.id, monto, detalle: ajusteForm.detalle, fecha: ajusteForm.fecha }),
+        body: JSON.stringify({ accion: 'ajuste', id: editando.id, monto, detalle: ajusteForm.detalle, fecha: ajusteForm.fecha, cliente_id: ajusteForm.cliente_id }),
       })
       : await fetch('/api/comisiones', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'ajuste', veterinaria_id: ajuste.veterinaria_id, monto, detalle: ajusteForm.detalle, fecha: ajusteForm.fecha }),
+        body: JSON.stringify({ accion: 'ajuste', veterinaria_id: ajuste.veterinaria_id, monto, detalle: ajusteForm.detalle, fecha: ajusteForm.fecha, cliente_id: ajusteForm.cliente_id }),
       })
     const d = await r.json()
     if (!r.ok) { setAjusteError(d.error || 'No se pudo guardar.'); return }
@@ -206,7 +233,7 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
     setAjusteError('')
     setEditando(a)
     setAjuste(vet)
-    setAjusteForm({ monto: String(a.monto), detalle: a.detalle || '', fecha: a.fecha || todayISO() })
+    setAjusteForm({ monto: String(a.monto), detalle: a.detalle || '', fecha: a.fecha || todayISO(), cliente_id: a.cliente_id || '' })
   }
 
   const etiquetaRegla = (r: Regla | null) =>
@@ -288,7 +315,7 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
                         </td>
                         <td className="px-2 md:px-4 py-2.5">
                           <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => { setAjusteError(''); setAjusteForm({ monto: '', detalle: '', fecha: todayISO() }); setAjuste(s) }}
+                            <button onClick={() => { setAjusteError(''); setAjusteForm({ monto: '', detalle: '', fecha: todayISO(), cliente_id: '' }); setAjuste(s) }}
                               className="text-xs font-semibold text-white bg-brand rounded-lg px-3 py-1.5 hover:bg-brand-dark">
                               Ajustar saldo
                             </button>
@@ -413,6 +440,33 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
                 className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
           </div>
+          {/* CANJE: contra qué servicio se aplicó el saldo. Es opcional — un pago
+              por transferencia no tiene ficha —, pero cuando la hay el libro
+              mayor muestra el código en vez de un comentario escrito a mano. */}
+          <div>
+            <label className="text-xs font-medium text-gray-700">Mascota canjeada (opcional)</label>
+            <select value={ajusteForm.cliente_id}
+              onChange={e => setAjusteForm(f => ({ ...f, cliente_id: e.target.value }))}
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+              <option value="">Sin canje (fue una transferencia)</option>
+              {canjeables.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.codigo} · {c.nombre_mascota}{c.fecha ? ` · ${fmtFecha(c.fecha)}` : ''}{c.monto > 0 ? ` · ${fmtPrecio(c.monto)}` : ''}
+                </option>
+              ))}
+            </select>
+            <label className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gray-500 cursor-pointer">
+              <input type="checkbox" checked={verTodasCanjeables}
+                onChange={e => setVerTodasCanjeables(e.target.checked)} />
+              Ver también las que aún no tienen documento pero no están marcadas
+            </label>
+            <p className="mt-1 text-[11px] text-gray-400">
+              {verTodasCanjeables
+                ? <>Ojo: acá entran fichas que todavía pueden salir en la factura del mes de su veterinario. Canjear una de esas cobraría el servicio dos veces.</>
+                : <>Se ofrecen los servicios de agosto en adelante marcados <strong>«No emitir boleta por este servicio»</strong> y sin factura al veterinario. Si no aparece la que buscas, márcala así en su ficha.</>}
+            </p>
+          </div>
+
           <div>
             <label className="text-xs font-medium text-gray-700">Detalle (opcional)</label>
             <input type="text" value={ajusteForm.detalle}
@@ -474,8 +528,13 @@ function LibroMayor({ detalle, onEditarAjuste }: {
       key: `a${a.id}`,
       ajusteId: a.id,
       fecha: a.fecha,
-      codigo: 'ABONO',
-      detalle: a.detalle || 'Pago al veterinario',
+      // Con canje manda el codigo de la ficha: es lo que dice contra QUE servicio
+      // se aplico el saldo. Sin canje fue una transferencia y va la etiqueta.
+      codigo: a.codigo || 'ABONO',
+      detalle: [
+        a.codigo ? `Canje · ${a.nombre_mascota || 'servicio'}` : '',
+        a.detalle,
+      ].filter(Boolean).join(' — ') || 'Pago al veterinario',
       comision: 0,
       abono: a.monto,
       anulada: false,

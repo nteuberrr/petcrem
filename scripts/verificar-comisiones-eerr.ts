@@ -78,6 +78,33 @@ async function main() {
     console.log(`\n  (la partida "${PARTIDA}" todavía no existe: se crea con el primer pago)`)
   }
 
+  // CANJES: la ficha contra la que se aplicó el saldo no puede haber terminado
+  // con boleta al tutor ni con factura al veterinario. Si la tiene, ese servicio
+  // se cobró DOS veces — con plata y con saldo — y nadie lo va a notar solo.
+  const canjes = ajustes.filter(a => String(a.cliente_id || '').trim())
+  if (canjes.length) {
+    const clientes = await getSheetData('clientes').catch(() => [] as Record<string, string>[])
+    console.log(`\n  ${canjes.length} pago(s) canjeados contra una ficha:`)
+    for (const a of canjes) {
+      const f = clientes.find(c => String(c.id) === String(a.cliente_id))
+      if (!f) { mal(`el ajuste ${a.id} apunta a la ficha ${a.cliente_id}, que no existe`); continue }
+      const boleta = String(f.boleta_id || '').trim()
+      const factura = String(f.factura_vet_id || '').trim()
+      console.log(`    ${String(f.codigo || '').padEnd(11)} ${String(f.nombre_mascota || '').slice(0, 18).padEnd(20)} ajuste ${a.id}`)
+      if (boleta) mal(`la ficha ${f.codigo} se canjeó (ajuste ${a.id}) pero tiene la boleta ${boleta}: cobrada dos veces`)
+      if (factura) mal(`la ficha ${f.codigo} se canjeó (ajuste ${a.id}) pero tiene la factura ${factura}: cobrada dos veces`)
+    }
+    // Dos ajustes contra la MISMA ficha: el servicio se descontó dos veces del saldo.
+    const vistas = new Map<string, string[]>()
+    for (const a of canjes) {
+      const k = String(a.cliente_id)
+      vistas.set(k, [...(vistas.get(k) ?? []), String(a.id)])
+    }
+    for (const [cid, ids] of vistas) {
+      if (ids.length > 1) mal(`la ficha ${cid} está canjeada en ${ids.length} ajustes (${ids.join(', ')})`)
+    }
+  }
+
   const totalSaldo = ajustes.reduce((s, a) => s + (parseInt(String(a.monto || '0'), 10) || 0), 0)
   const totalEerr = ajustes
     .map(a => gastoPorId.get(String(a.gasto_manual_id || '')))

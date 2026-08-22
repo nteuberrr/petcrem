@@ -54,12 +54,16 @@ create table if not exists "comisiones_ajustes" (
   "monto" text not null default '0',
   "detalle" text not null default '',
   "fecha" text not null default '',
+  "cliente_id" text not null default '',
   "gasto_manual_id" text not null default '',
   "creado_por_id" text not null default '',
   "creado_por_nombre" text not null default '',
   "fecha_creacion" text not null default ''
 );
 create index if not exists "comisiones_ajustes_vet_idx" on "comisiones_ajustes" ("veterinaria_id");
+-- Idempotente para bases ya creadas (ver supabase/comisiones-canje-ficha.sql).
+alter table "comisiones_ajustes" add column if not exists "cliente_id" text not null default '';
+create index if not exists "comisiones_ajustes_cliente_idx" on "comisiones_ajustes" ("cliente_id");
 alter table "comisiones_ajustes" enable row level security;
 
 -- ── 4) Partida de costo donde caen los ajustes ───────────────────────────────

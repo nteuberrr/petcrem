@@ -191,6 +191,9 @@ export const SHEETS: Record<string, string[]> = {
   // en eerr_gastos_manuales (partida de tipo 'costo') — único golpe al EERR.
   comisiones_ajustes: [
     'id', 'veterinaria_id', 'monto', 'detalle', 'fecha',
+    // cliente_id: ficha contra la que se CANJEO el saldo ('' = transferencia).
+    // El libro mayor muestra su codigo. El comentario va aparte, no lo reemplaza.
+    'cliente_id',
     'gasto_manual_id', 'creado_por_id', 'creado_por_nombre', 'fecha_creacion',
   ],
   // perfil_id → tabla `perfiles`: define qué módulos ve/edita la persona

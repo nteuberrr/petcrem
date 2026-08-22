@@ -1,5 +1,5 @@
 import { getSheetData, appendRow, getNextId, updateByIdIf, deleteById } from './datastore'
-import { todayISO } from './dates'
+import { todayISO, formatDateForSheet } from './dates'
 import { parseMonto, parsePeso } from './numbers'
 import { origenDeVet } from './precios-indexados'
 import { boletaAlCliente } from './vet-boleta'
@@ -36,6 +36,13 @@ const T_REGLAS = 'comisiones_reglas'
 const T_COMISIONES = 'comisiones'
 const T_AJUSTES = 'comisiones_ajustes'
 
+/**
+ * Desde cuándo se ofrecen fichas para canjear (decisión del dueño 2026-08-22).
+ * Antes de agosto los servicios sin documento son historia que ya se cerró de
+ * otra forma y ofrecerlos solo agrega ruido a la lista.
+ */
+export const CANJE_DESDE = '2026-08-01'
+
 export type TipoComision = 'fijo' | 'variable'
 
 export interface ComisionRegla {
@@ -65,6 +72,8 @@ export interface ComisionAjuste {
   monto: number
   detalle: string
   fecha: string
+  /** Ficha contra la que se CANJEO el saldo ('' = fue una transferencia). */
+  cliente_id: string
   creado_por_nombre: string
 }
 
@@ -118,6 +127,7 @@ function toAjuste(r: Record<string, string>): ComisionAjuste {
     monto: parseMonto(r.monto),
     detalle: String(r.detalle ?? ''),
     fecha: String(r.fecha ?? ''),
+    cliente_id: String(r.cliente_id ?? ''),
     creado_por_nombre: String(r.creado_por_nombre ?? ''),
   }
 }
@@ -363,7 +373,7 @@ export async function resumenComisiones(): Promise<SaldoVet[]> {
 /** Devengos + ajustes de una veterinaria, para el detalle expandible. */
 export async function detalleVet(veterinariaId: string): Promise<{
   devengos: Array<ComisionDevengo & { codigo: string; nombre_mascota: string; peso: number; codigo_servicio: string }>
-  ajustes: ComisionAjuste[]
+  ajustes: Array<ComisionAjuste & { codigo: string; nombre_mascota: string }>
 }> {
   const vid = String(veterinariaId || '').trim()
   const [comisiones, ajustes, clientes] = await Promise.all([
@@ -389,9 +399,19 @@ export async function detalleVet(veterinariaId: string): Promise<{
     })
     .sort((a, b) => (b.fecha_devengo || '').localeCompare(a.fecha_devengo || ''))
 
+  // Los ajustes canjeados llevan el codigo de su ficha: en el libro mayor es lo
+  // que dice contra QUE servicio se aplico ese saldo, en vez de un comentario.
   const lista = ajustes
     .map(toAjuste)
     .filter(a => a.veterinaria_id === vid)
+    .map(a => {
+      const f = a.cliente_id ? fichaPorId.get(a.cliente_id) : undefined
+      return {
+        ...a,
+        codigo: String(f?.codigo || ''),
+        nombre_mascota: String(f?.nombre_mascota || ''),
+      }
+    })
     .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
 
   return { devengos, ajustes: lista }
@@ -436,8 +456,59 @@ async function partidaComisiones(): Promise<string> {
  * edición escriban EXACTAMENTE lo mismo: si divergen, la partida "Comisiones
  * convenios" queda con dos redacciones para el mismo tipo de gasto.
  */
-function detalleGasto(vetNombre: string, detalle: string): string {
-  return `Comisión convenio — ${vetNombre}${detalle ? ` · ${detalle}` : ''}`.slice(0, 500)
+function detalleGasto(vetNombre: string, detalle: string, ficha?: string): string {
+  const partes = [`Comisión convenio — ${vetNombre}`]
+  // El código de la ficha canjeada va ANTES del comentario libre: en el EERR es
+  // lo único que permite rastrear contra qué servicio se aplicó ese costo.
+  if (ficha) partes.push(`canje ${ficha}`)
+  if (detalle) partes.push(detalle)
+  return partes.join(' · ').slice(0, 500)
+}
+
+/** Código de una ficha (para el detalle del gasto), o '' si no hay ficha. */
+async function codigoFicha(clienteId: string): Promise<string> {
+  const cid = String(clienteId || '').trim()
+  if (!cid) return ''
+  const rows = await getSheetData('clientes').catch(() => [] as Record<string, string>[])
+  const f = rows.find(c => String(c.id) === cid)
+  if (!f) return ''
+  return [String(f.codigo || `#${cid}`), String(f.nombre_mascota || '')].filter(Boolean).join(' ')
+}
+
+/**
+ * FICHAS CANJEABLES: los servicios que se pueden pagar con el saldo del vet.
+ *
+ * Un canje es un servicio que prestamos y que no se le cobró a NADIE: ni boleta
+ * al tutor ni factura al veterinario. Por eso el criterio estricto es la marca
+ * «No emitir boleta por este servicio» (`sin_boleta`) más la ausencia de los dos
+ * documentos — así una ficha que después se boletea deja de ofrecerse sola.
+ *
+ * `incluirSinMarcar` afloja el filtro a "todavía no tiene documento", que
+ * incluye las que están esperando la factura del mes de su veterinario. Es más
+ * ancho de la cuenta a propósito: sirve para el canje que se registra ANTES de
+ * marcar la ficha, pero elegir ahí una que sí se va a facturar duplica el cobro.
+ */
+export async function fichasCanjeables(opts: { desde?: string; incluirSinMarcar?: boolean } = {}): Promise<Array<{
+  id: string; codigo: string; nombre_mascota: string; fecha: string
+  veterinaria_id: string; monto: number; sin_boleta: boolean
+}>> {
+  const desde = opts.desde || CANJE_DESDE
+  const rows = await getSheetData('clientes').catch(() => [] as Record<string, string>[])
+  return rows
+    .filter(c => String(c.estado || '') !== 'borrador' && String(c.codigo || '').trim())
+    .filter(c => !String(c.boleta_id || '').trim() && !String(c.factura_vet_id || '').trim())
+    .filter(c => opts.incluirSinMarcar || String(c.sin_boleta || '').toUpperCase() === 'TRUE')
+    .map(c => ({
+      id: String(c.id),
+      codigo: String(c.codigo || ''),
+      nombre_mascota: String(c.nombre_mascota || ''),
+      fecha: formatDateForSheet(c.fecha_retiro) || formatDateForSheet(c.fecha_creacion) || '',
+      veterinaria_id: String(c.veterinaria_id || ''),
+      monto: parseMonto(c.precio_total),
+      sin_boleta: String(c.sin_boleta || '').toUpperCase() === 'TRUE',
+    }))
+    .filter(f => f.fecha >= desde)
+    .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.codigo.localeCompare(a.codigo))
 }
 
 /** Nombre de la veterinaria, para el detalle del gasto. */
@@ -451,6 +522,8 @@ export async function ajustarSaldo(input: {
   monto: number
   detalle?: string
   fecha?: string
+  /** Ficha contra la que se canjea el saldo ('' = transferencia). */
+  cliente_id?: string
   creado_por_id?: string
   creado_por_nombre?: string
 }): Promise<ComisionAjuste> {
@@ -462,6 +535,8 @@ export async function ajustarSaldo(input: {
   const vetNombre = await nombreVet(vid)
   const fecha = String(input.fecha || todayISO())
   const detalle = String(input.detalle || '').trim()
+  const clienteId = String(input.cliente_id || '').trim()
+  const ficha = await codigoFicha(clienteId)
 
   // Contrapartida en el EERR (costo de venta). Si falla, NO registramos el ajuste:
   // un saldo descontado sin su costo dejaría el Estado de Resultados incompleto.
@@ -471,7 +546,7 @@ export async function ajustarSaldo(input: {
     id: String(gastoId),
     tipo_asignacion: 'costo',
     partida_id: partidaId,
-    detalle: detalleGasto(vetNombre, detalle),
+    detalle: detalleGasto(vetNombre, detalle, ficha),
     monto: String(monto),
     fecha,
     fecha_creacion: todayISO(),
@@ -484,6 +559,7 @@ export async function ajustarSaldo(input: {
     monto: String(monto),
     detalle,
     fecha,
+    cliente_id: clienteId,
     gasto_manual_id: String(gastoId),
     creado_por_id: String(input.creado_por_id || ''),
     creado_por_nombre: String(input.creado_por_nombre || ''),
@@ -513,6 +589,8 @@ export async function editarAjuste(id: string, input: {
   monto: number
   detalle?: string
   fecha?: string
+  /** Ficha canjeada. `undefined` = no se toca; '' = se le quita. */
+  cliente_id?: string
 }): Promise<ComisionAjuste> {
   const aid = String(id || '').trim()
   if (!aid) throw new Error('Falta el ajuste.')
@@ -525,6 +603,7 @@ export async function editarAjuste(id: string, input: {
 
   const fecha = String(input.fecha || previo.fecha || todayISO())
   const detalle = String(input.detalle ?? previo.detalle ?? '').trim()
+  const clienteId = String(input.cliente_id ?? previo.cliente_id ?? '').trim()
   const vid = String(previo.veterinaria_id || '')
 
   // 1) El EERR. Un ajuste viejo puede no tener `gasto_manual_id`: ahí no hay nada
@@ -534,7 +613,7 @@ export async function editarAjuste(id: string, input: {
     const gastos = await getSheetData('eerr_gastos_manuales').catch(() => [] as Record<string, string>[])
     if (gastos.some(g => String(g.id) === gastoId)) {
       await updateByIdIf('eerr_gastos_manuales', gastoId, {}, {
-        detalle: detalleGasto(await nombreVet(vid), detalle),
+        detalle: detalleGasto(await nombreVet(vid), detalle, await codigoFicha(clienteId)),
         monto: String(monto),
         fecha,
       })
@@ -544,7 +623,7 @@ export async function editarAjuste(id: string, input: {
   }
 
   // 2) El saldo.
-  const campos = { monto: String(monto), detalle, fecha }
+  const campos = { monto: String(monto), detalle, fecha, cliente_id: clienteId }
   try {
     await updateByIdIf(T_AJUSTES, aid, {}, campos)
   } catch (e) {

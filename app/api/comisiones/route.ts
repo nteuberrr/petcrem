@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { esAdminTotal } from '@/lib/roles'
 import {
   resumenComisiones, detalleVet, guardarRegla, eliminarRegla, ajustarSaldo,
-  editarAjuste, eliminarAjuste,
+  editarAjuste, eliminarAjuste, fichasCanjeables,
   type TipoComision,
 } from '@/lib/comisiones'
 import { activarIndexado, desactivarIndexado } from '@/lib/precios-indexados'
@@ -24,11 +24,20 @@ async function noAutorizado(): Promise<boolean> {
   return !esAdminTotal((s?.user as { role?: string })?.role)
 }
 
-/** GET → resumen de saldos. `?veterinaria_id=` → detalle (devengos + ajustes) de esa vet. */
+/**
+ * GET → resumen de saldos.
+ *   `?veterinaria_id=` → detalle (devengos + ajustes) de esa vet.
+ *   `?canjeables=1`    → fichas contra las que se puede canjear el saldo.
+ *                        `&todas=1` afloja el filtro (ver `fichasCanjeables`).
+ */
 export async function GET(req: NextRequest) {
   if (await noAutorizado()) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   try {
-    const vetId = new URL(req.url).searchParams.get('veterinaria_id')
+    const q = new URL(req.url).searchParams
+    if (q.get('canjeables')) {
+      return NextResponse.json(await fichasCanjeables({ incluirSinMarcar: !!q.get('todas') }))
+    }
+    const vetId = q.get('veterinaria_id')
     if (vetId) return NextResponse.json(await detalleVet(vetId))
     return NextResponse.json(await resumenComisiones())
   } catch (e) {
@@ -71,6 +80,7 @@ export async function POST(req: NextRequest) {
         monto: Number(b.monto),
         detalle: b.detalle ? String(b.detalle) : '',
         fecha: b.fecha ? String(b.fecha) : undefined,
+        cliente_id: b.cliente_id ? String(b.cliente_id) : '',
         creado_por_id: user?.id || '',
         creado_por_nombre: user?.name || '',
       })
@@ -107,6 +117,7 @@ export async function PATCH(req: NextRequest) {
       monto: Number(b.monto),
       detalle: b.detalle === undefined ? undefined : String(b.detalle),
       fecha: b.fecha ? String(b.fecha) : undefined,
+      cliente_id: b.cliente_id === undefined ? undefined : String(b.cliente_id),
     })
     return NextResponse.json(ajuste)
   } catch (e) {
