@@ -64,6 +64,8 @@ export default function DescuentosConvenios() {
   const [ajuste, setAjuste] = useState<SaldoVet | null>(null)
   const [ajusteForm, setAjusteForm] = useState({ monto: '', detalle: '', fecha: todayISO() })
   const [ajusteError, setAjusteError] = useState('')
+  /** Pago que se está CORRIGIENDO (null = se está registrando uno nuevo). */
+  const [editando, setEditando] = useState<Ajuste | null>(null)
 
   const [expandido, setExpandido] = useState<string | null>(null)
   const [detalle, setDetalle] = useState<{ devengos: Devengo[]; ajustes: Ajuste[] } | null>(null)
@@ -89,8 +91,9 @@ export default function DescuentosConvenios() {
 
   useEffect(() => { cargar() }, [cargar])
 
-  async function abrirDetalle(vetId: string) {
-    if (expandido === vetId) { setExpandido(null); setDetalle(null); return }
+  /** `forzar` = recargar el detalle sin plegarlo (después de editar un pago). */
+  async function abrirDetalle(vetId: string, opts: { forzar?: boolean } = {}) {
+    if (expandido === vetId && !opts.forzar) { setExpandido(null); setDetalle(null); return }
     setExpandido(vetId); setDetalle(null); setCargandoDetalle(true)
     try {
       const r = await fetch(`/api/comisiones?veterinaria_id=${vetId}`, { cache: 'no-store' })
@@ -149,22 +152,62 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
     await cargar()
   })
 
+  /** Cierra el modal y refresca saldo + libro mayor de la vet abierta. */
+  const cerrarAjuste = async () => {
+    setAjuste(null)
+    setEditando(null)
+    setAjusteForm({ monto: '', detalle: '', fecha: todayISO() })
+    const vid = expandido
+    await cargar()
+    // Se vuelve a pedir el detalle en vez de cerrarlo: después de corregir un
+    // pago lo que uno quiere es VER cómo quedó la cuenta, no que se pliegue.
+    if (vid) await abrirDetalle(vid, { forzar: true })
+  }
+
   const guardarAjuste = () => ejecutar(async () => {
     if (!ajuste) return
     setAjusteError('')
     const monto = parseInt(ajusteForm.monto, 10)
     if (!monto || monto <= 0) { setAjusteError('Ingresa un monto mayor a 0.'); return }
-    const r = await fetch('/api/comisiones', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'ajuste', veterinaria_id: ajuste.veterinaria_id, monto, detalle: ajusteForm.detalle, fecha: ajusteForm.fecha }),
-    })
+    // Editar mueve TAMBIÉN el gasto en el EERR (lo resuelve el servidor): el
+    // saldo y el Estado de Resultados no pueden quedar con números distintos.
+    const r = editando
+      ? await fetch('/api/comisiones', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'ajuste', id: editando.id, monto, detalle: ajusteForm.detalle, fecha: ajusteForm.fecha }),
+      })
+      : await fetch('/api/comisiones', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'ajuste', veterinaria_id: ajuste.veterinaria_id, monto, detalle: ajusteForm.detalle, fecha: ajusteForm.fecha }),
+      })
     const d = await r.json()
-    if (!r.ok) { setAjusteError(d.error || 'No se pudo registrar.'); return }
-    setAjuste(null)
-    setAjusteForm({ monto: '', detalle: '', fecha: todayISO() })
-    if (expandido) { setExpandido(null); setDetalle(null) }
-    await cargar()
+    if (!r.ok) { setAjusteError(d.error || 'No se pudo guardar.'); return }
+    await cerrarAjuste()
   })
+
+  const borrarAjuste = () => ejecutar(async () => {
+    if (!editando) return
+    setAjusteError('')
+    if (!confirm(
+      `¿Borrar este pago de ${fmtPrecio(editando.monto)}?\n\n`
+      + 'Se elimina también su costo en el Estado de Resultados, y el saldo del veterinario vuelve a subir.',
+    )) return
+    const r = await fetch(`/api/comisiones?ajuste_id=${encodeURIComponent(editando.id)}`, { method: 'DELETE' })
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}))
+      setAjusteError(d.error || 'No se pudo borrar.')
+      return
+    }
+    await cerrarAjuste()
+  })
+
+  /** Abre el modal cargado con un pago ya registrado, para corregirlo. */
+  function editarAjuste(vet: SaldoVet, a: Ajuste) {
+    setAjusteError('')
+    setEditando(a)
+    setAjuste(vet)
+    setAjusteForm({ monto: String(a.monto), detalle: a.detalle || '', fecha: a.fecha || todayISO() })
+  }
 
   const etiquetaRegla = (r: Regla | null) =>
     !r ? '—' : r.tipo === 'variable' ? `${r.valor}% de la cremación` : fmtPrecio(r.valor)
@@ -270,7 +313,7 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
                             {cargandoDetalle ? <p className="text-xs text-gray-400">Cargando detalle…</p>
                             : !detalle ? <p className="text-xs text-gray-400">Sin detalle.</p>
                             : (
-                              <LibroMayor detalle={detalle} />
+                              <LibroMayor detalle={detalle} onEditarAjuste={a => editarAjuste(s, a)} />
                             )}
                           </td>
                         </tr>
@@ -347,8 +390,10 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
         </form>
       </Modal>
 
-      {/* Ajuste de saldo → costo de venta */}
-      <Modal open={!!ajuste} onClose={() => setAjuste(null)} title={`Ajustar saldo — ${ajuste?.nombre ?? ''}`}>
+      {/* Ajuste de saldo → costo de venta. El MISMO modal registra y corrige: si
+          fueran dos, el día que cambie un campo hay que acordarse de los dos. */}
+      <Modal open={!!ajuste} onClose={() => { setAjuste(null); setEditando(null) }}
+        title={`${editando ? 'Editar pago' : 'Ajustar saldo'} — ${ajuste?.nombre ?? ''}`}>
         <form onSubmit={e => { e.preventDefault(); guardarAjuste() }} className="space-y-4">
           <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm">
             <div className="flex justify-between"><span className="text-gray-600">Saldo actual</span>
@@ -376,14 +421,25 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
               className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            Este monto se registra como <strong>costo de venta</strong> en el Estado de Resultados
-            (partida “Comisiones convenios”), con la fecha indicada.
+            {editando
+              ? <>Al guardar se corrige también su <strong>costo de venta</strong> en el Estado de Resultados
+                  (partida “Comisiones convenios”). Para moverlo a otra veterinaria hay que borrarlo y cargarlo de nuevo.</>
+              : <>Este monto se registra como <strong>costo de venta</strong> en el Estado de Resultados
+                  (partida “Comisiones convenios”), con la fecha indicada.</>}
           </p>
           {ajusteError && <p className="text-xs text-red-600">{ajusteError}</p>}
-          <button type="submit" disabled={procesando}
-            className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-50">
-            {procesando ? 'Registrando…' : 'Registrar pago'}
-          </button>
+          <div className="flex gap-2">
+            {editando && (
+              <button type="button" onClick={borrarAjuste} disabled={procesando}
+                className="border border-red-300 text-red-700 hover:bg-red-50 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50">
+                Borrar
+              </button>
+            )}
+            <button type="submit" disabled={procesando}
+              className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-50">
+              {procesando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Registrar pago'}
+            </button>
+          </div>
         </form>
       </Modal>
     </div>
@@ -396,10 +452,17 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
  * (comisión suma al saldo, abono lo baja). Arriba, los dos totales con el saldo
  * en el medio. Las comisiones anuladas se muestran tachadas y no suman.
  */
-function LibroMayor({ detalle }: { detalle: { devengos: Devengo[]; ajustes: Ajuste[] } }) {
+function LibroMayor({ detalle, onEditarAjuste }: {
+  detalle: { devengos: Devengo[]; ajustes: Ajuste[] }
+  /** Corregir un pago ya registrado. Solo los ABONOS son editables: una comisión
+   *  se devenga sola desde la ficha, así que a mano no se toca. */
+  onEditarAjuste?: (a: Ajuste) => void
+}) {
+  const ajustePorId = new Map(detalle.ajustes.map(a => [a.id, a]))
   const filas = [
     ...detalle.devengos.map(d => ({
       key: `c${d.id}`,
+      ajusteId: '',
       fecha: d.fecha_devengo,
       codigo: d.codigo || `#${d.cliente_id}`,
       detalle: [d.nombre_mascota, d.peso > 0 ? fmtKg(d.peso) : ''].filter(Boolean).join(' · '),
@@ -409,6 +472,7 @@ function LibroMayor({ detalle }: { detalle: { devengos: Devengo[]; ajustes: Ajus
     })),
     ...detalle.ajustes.map(a => ({
       key: `a${a.id}`,
+      ajusteId: a.id,
       fecha: a.fecha,
       codigo: 'ABONO',
       detalle: a.detalle || 'Pago al veterinario',
@@ -452,6 +516,7 @@ function LibroMayor({ detalle }: { detalle: { devengos: Devengo[]; ajustes: Ajus
               <th className="text-left px-3 py-1.5 font-semibold">Detalle</th>
               <th className="text-right px-3 py-1.5 font-semibold">Comisión</th>
               <th className="text-right px-3 py-1.5 font-semibold">Abono</th>
+              <th className="px-2 py-1.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -469,6 +534,15 @@ function LibroMayor({ detalle }: { detalle: { devengos: Devengo[]; ajustes: Ajus
                 <td className="px-3 py-1.5 text-right font-semibold text-red-600 whitespace-nowrap">
                   {f.abono > 0 ? fmtPrecio(f.abono) : ''}
                 </td>
+                <td className="px-2 py-1.5 text-right whitespace-nowrap">
+                  {f.ajusteId && onEditarAjuste && (
+                    <button
+                      onClick={() => { const a = ajustePorId.get(f.ajusteId); if (a) onEditarAjuste(a) }}
+                      className="text-[11px] font-semibold text-brand hover:underline">
+                      Editar
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -477,6 +551,7 @@ function LibroMayor({ detalle }: { detalle: { devengos: Devengo[]; ajustes: Ajus
               <td colSpan={3} className="px-3 py-1.5 text-right font-semibold text-gray-600">Totales</td>
               <td className="px-3 py-1.5 text-right font-bold text-emerald-700 whitespace-nowrap">{fmtPrecio(totalComisiones)}</td>
               <td className="px-3 py-1.5 text-right font-bold text-red-600 whitespace-nowrap">{fmtPrecio(totalAbonos)}</td>
+              <td className="px-2 py-1.5"></td>
             </tr>
           </tfoot>
         </table>

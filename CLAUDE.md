@@ -221,6 +221,16 @@ Dos precisiones que no son obvias:
 
 DDL a mano antes de desplegar: [supabase/boleta-al-cliente.sql](supabase/boleta-al-cliente.sql). Y **el orden importa**: si se despliega con el flag en FALSE, las fichas del vet que hoy se boletean al tutor se cuelan a su propuesta de factura. El backfill de los convenios que ya operaban así es `npx tsx scripts/backfill-boleta-al-cliente.ts --aplicar`.
 
+### Comisiones de convenio: cada pago tiene DOS filas
+
+El «Ajustar saldo» de Configuración → Descuentos Convenios ([lib/comisiones.ts](lib/comisiones.ts)) escribe **dos** filas: la del saldo (`comisiones_ajustes`) y su contrapartida de **costo de venta** en el Estado de Resultados (`eerr_gastos_manuales`, partida «Comisiones convenios»), enlazadas por `gasto_manual_id`. El devengo NO toca el EERR; este pago es el único momento en que lo hace.
+
+⚠️ **Los ajustes se pueden EDITAR y BORRAR (dueño 2026-08-22), y por eso las dos filas se pueden separar.** `editarAjuste` / `eliminarAjuste` mueven siempre las dos: primero el gasto (el EERR), después el saldo, y si el segundo paso falla el error nombra las dos filas para arreglarlo a mano. Tocar solo `comisiones_ajustes` deja el saldo del veterinario diciendo una cosa y el resultado del mes otra — un descuadre que no hace ruido hasta que alguien cuadra los números. El detalle del gasto lo arma `detalleGasto()` para que el alta y la edición escriban exactamente lo mismo.
+
+La **veterinaria no se edita**: mover un pago de una vet a otra es borrarlo y cargarlo de nuevo. Y solo los ABONOS son editables — una comisión se devenga sola desde la ficha y a mano no se toca.
+
+Verificalo con **`npx tsx scripts/verificar-comisiones-eerr.ts`** (solo lectura): compara monto y fecha de cada ajuste contra su gasto, y caza los gastos de la partida que quedaron sin su pago.
+
 ### Cobros pendientes: con qué se recibieron
 
 Al confirmar un cobro pendiente desde la ficha (saldo de un pago parcial, adicional, diferencia de peso) el equipo **elige el medio**: transferencia · POS · link de pago · efectivo (`cobros.medio_pago`). No es un dato decorativo: los cobrados con **máquina o link pasaron por el procesador**, así que entran a Facturación → **Ventas POS** como su **propia línea**, fechada el día en que se confirmaron — pagan comisión y llegan en el abono como cualquier venta. Hasta el 18-08-2026 se daba por hecho que todo saldo llegaba por transferencia y esa plata quedaba fuera de la conciliación.

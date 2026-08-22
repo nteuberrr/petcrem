@@ -431,6 +431,21 @@ async function partidaComisiones(): Promise<string> {
  * contrapartida como COSTO DE VENTA en eerr_gastos_manuales. Es el único momento
  * en que las comisiones golpean el Estado de Resultados.
  */
+/**
+ * Cómo se describe el pago en el EERR. Una sola función para que el alta y la
+ * edición escriban EXACTAMENTE lo mismo: si divergen, la partida "Comisiones
+ * convenios" queda con dos redacciones para el mismo tipo de gasto.
+ */
+function detalleGasto(vetNombre: string, detalle: string): string {
+  return `Comisión convenio — ${vetNombre}${detalle ? ` · ${detalle}` : ''}`.slice(0, 500)
+}
+
+/** Nombre de la veterinaria, para el detalle del gasto. */
+async function nombreVet(vid: string): Promise<string> {
+  const vets = await getSheetData('veterinarios').catch(() => [] as Record<string, string>[])
+  return String(vets.find(v => String(v.id) === vid)?.nombre || `Veterinaria #${vid}`)
+}
+
 export async function ajustarSaldo(input: {
   veterinaria_id: string
   monto: number
@@ -444,8 +459,7 @@ export async function ajustarSaldo(input: {
   const monto = Math.round(Number(input.monto) || 0)
   if (monto <= 0) throw new Error('El monto debe ser mayor a 0.')
 
-  const vets = await getSheetData('veterinarios').catch(() => [] as Record<string, string>[])
-  const vetNombre = String(vets.find(v => String(v.id) === vid)?.nombre || `Veterinaria #${vid}`)
+  const vetNombre = await nombreVet(vid)
   const fecha = String(input.fecha || todayISO())
   const detalle = String(input.detalle || '').trim()
 
@@ -457,7 +471,7 @@ export async function ajustarSaldo(input: {
     id: String(gastoId),
     tipo_asignacion: 'costo',
     partida_id: partidaId,
-    detalle: `Comisión convenio — ${vetNombre}${detalle ? ` · ${detalle}` : ''}`.slice(0, 500),
+    detalle: detalleGasto(vetNombre, detalle),
     monto: String(monto),
     fecha,
     fecha_creacion: todayISO(),
@@ -477,4 +491,93 @@ export async function ajustarSaldo(input: {
   }
   await appendRow(T_AJUSTES, row)
   return toAjuste(row)
+}
+
+/**
+ * Edita un ajuste ya registrado (monto, detalle o fecha).
+ *
+ * ⚠️ Un ajuste NO es una fila suelta: tiene su contrapartida en el EERR
+ * (`eerr_gastos_manuales`, partida "Comisiones convenios"), y las dos se
+ * escribieron juntas. Editar solo el ajuste dejaría el saldo del veterinario
+ * diciendo una cosa y el Estado de Resultados otra — un error que no hace ruido
+ * en ninguna parte hasta que alguien cuadra los números a fin de mes.
+ *
+ * Por eso se mueve PRIMERO el gasto y después el ajuste: si el EERR falla, el
+ * saldo queda como estaba y se puede reintentar. Si falla el segundo paso, el
+ * error nombra las dos filas para poder arreglarlo a mano.
+ *
+ * La VETERINARIA no se cambia: mover un pago de una vet a otra es borrarlo y
+ * cargarlo de nuevo, no editarlo.
+ */
+export async function editarAjuste(id: string, input: {
+  monto: number
+  detalle?: string
+  fecha?: string
+}): Promise<ComisionAjuste> {
+  const aid = String(id || '').trim()
+  if (!aid) throw new Error('Falta el ajuste.')
+  const monto = Math.round(Number(input.monto) || 0)
+  if (monto <= 0) throw new Error('El monto debe ser mayor a 0.')
+
+  const rows = await getSheetData(T_AJUSTES).catch(() => [] as Record<string, string>[])
+  const previo = rows.find(r => String(r.id) === aid)
+  if (!previo) throw new Error('Ese ajuste ya no existe.')
+
+  const fecha = String(input.fecha || previo.fecha || todayISO())
+  const detalle = String(input.detalle ?? previo.detalle ?? '').trim()
+  const vid = String(previo.veterinaria_id || '')
+
+  // 1) El EERR. Un ajuste viejo puede no tener `gasto_manual_id`: ahí no hay nada
+  //    que sincronizar y se edita solo el saldo.
+  const gastoId = String(previo.gasto_manual_id || '').trim()
+  if (gastoId) {
+    const gastos = await getSheetData('eerr_gastos_manuales').catch(() => [] as Record<string, string>[])
+    if (gastos.some(g => String(g.id) === gastoId)) {
+      await updateByIdIf('eerr_gastos_manuales', gastoId, {}, {
+        detalle: detalleGasto(await nombreVet(vid), detalle),
+        monto: String(monto),
+        fecha,
+      })
+    } else {
+      console.warn(`[comisiones] el ajuste ${aid} apunta al gasto ${gastoId}, que ya no está en el EERR`)
+    }
+  }
+
+  // 2) El saldo.
+  const campos = { monto: String(monto), detalle, fecha }
+  try {
+    await updateByIdIf(T_AJUSTES, aid, {}, campos)
+  } catch (e) {
+    throw new Error(
+      `Se actualizó el gasto ${gastoId} en el EERR pero NO el ajuste ${aid}: quedaron descuadrados. `
+      + `Corregí el ajuste a mano. Detalle: ${e instanceof Error ? e.message : String(e)}`,
+    )
+  }
+  return toAjuste({ ...previo, ...campos })
+}
+
+/**
+ * Borra un ajuste y su gasto en el EERR. Es lo que corresponde cuando el pago se
+ * cargó por error o a la veterinaria equivocada (editar no cambia de vet).
+ * Mismo orden y mismo motivo que `editarAjuste`.
+ */
+export async function eliminarAjuste(id: string): Promise<void> {
+  const aid = String(id || '').trim()
+  if (!aid) throw new Error('Falta el ajuste.')
+  const rows = await getSheetData(T_AJUSTES).catch(() => [] as Record<string, string>[])
+  const previo = rows.find(r => String(r.id) === aid)
+  if (!previo) return
+
+  const gastoId = String(previo.gasto_manual_id || '').trim()
+  if (gastoId) await deleteById('eerr_gastos_manuales', gastoId).catch(e =>
+    console.warn(`[comisiones] no se pudo borrar el gasto ${gastoId} del EERR:`, e))
+
+  try {
+    await deleteById(T_AJUSTES, aid)
+  } catch (e) {
+    throw new Error(
+      `Se borró el gasto ${gastoId} del EERR pero NO el ajuste ${aid}: el saldo sigue descontado sin su costo. `
+      + `Borralo a mano. Detalle: ${e instanceof Error ? e.message : String(e)}`,
+    )
+  }
 }

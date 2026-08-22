@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { esAdminTotal } from '@/lib/roles'
 import {
   resumenComisiones, detalleVet, guardarRegla, eliminarRegla, ajustarSaldo,
+  editarAjuste, eliminarAjuste,
   type TipoComision,
 } from '@/lib/comisiones'
 import { activarIndexado, desactivarIndexado } from '@/lib/precios-indexados'
@@ -88,15 +89,52 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** DELETE ?id= — quita la regla. Los devengos ya generados se conservan. */
+/**
+ * PATCH { accion: 'ajuste', id, monto, detalle?, fecha? } — corrige un pago ya
+ * registrado. Mueve TAMBIÉN su gasto en el EERR (ver `editarAjuste`): editar solo
+ * el saldo dejaría el Estado de Resultados con otro número.
+ *
+ * La veterinaria no se cambia: para eso se borra y se carga de nuevo.
+ */
+export async function PATCH(req: NextRequest) {
+  if (await noAutorizado()) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
+  try {
+    const b = await req.json()
+    if (String(b.accion || '') !== 'ajuste') {
+      return NextResponse.json({ error: 'Acción no soportada.' }, { status: 400 })
+    }
+    const ajuste = await editarAjuste(String(b.id || ''), {
+      monto: Number(b.monto),
+      detalle: b.detalle === undefined ? undefined : String(b.detalle),
+      fecha: b.fecha ? String(b.fecha) : undefined,
+    })
+    return NextResponse.json(ajuste)
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 400 })
+  }
+}
+
+/**
+ * DELETE ?id=       — quita la REGLA (los devengos ya generados se conservan).
+ * DELETE ?ajuste_id= — borra un PAGO y su gasto en el EERR.
+ *
+ * Son dos parámetros distintos a propósito: un `id` ambiguo entre regla y ajuste
+ * es una forma cómoda de borrar la cosa equivocada.
+ */
 export async function DELETE(req: NextRequest) {
   if (await noAutorizado()) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   try {
-    const id = new URL(req.url).searchParams.get('id')
+    const q = new URL(req.url).searchParams
+    const ajusteId = q.get('ajuste_id')
+    if (ajusteId) {
+      await eliminarAjuste(ajusteId)
+      return NextResponse.json({ ok: true })
+    }
+    const id = q.get('id')
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
     await eliminarRegla(id)
     return NextResponse.json({ ok: true })
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
 }
