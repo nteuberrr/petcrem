@@ -145,7 +145,15 @@ export async function generarGraficoMarca(args: {
   try {
     final = await (await getSharp())(conLogo).flatten({ background: '#FBF8F3' }).jpeg({ quality: 92 }).toBuffer()
     mime = 'image/jpeg'; ext = 'jpg'
-  } catch { /* deja PNG */ }
+  } catch (e) {
+    // ⚠️ Quedarse en PNG NO es un degradado inofensivo: Instagram solo publica
+    // JPEG y rechaza la pieza al subirla ("el formato de la foto no es válido").
+    // Antes esto se tragaba el error y la imagen se veía bien en el panel: el
+    // problema aparecía recién al intentar publicarla, sin ninguna pista de por
+    // qué (agosto 2026, con sharp caído en producción durante días).
+    console.warn('[marketing-grafico] sharp no pudo convertir a JPEG, queda en PNG:', e)
+    avisos.push('⚠️ La imagen quedó en PNG porque falló la conversión a JPEG. Instagram NO acepta PNG: revisa el servidor antes de publicarla.')
+  }
   const up = await uploadToR2(final, `mailing/ai-images/${Date.now()}-grafico.${ext}`, mime)
   // Es una PUBLICACIÓN (portada/placa con texto) → código de campaña C-X.1.
   const reg = await registrarImagen({

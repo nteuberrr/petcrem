@@ -78,4 +78,28 @@ for (const ruta of CRITICAS) {
 console.log(fallos === 0
   ? `\n${CRITICAS.length}/${CRITICAS.length} OK — sharp queda fuera de la operación`
   : `\n${fallos} ruta(s) alcanzan sharp. Usa getSharp() de lib/sharp-lazy en el modulo señalado.`)
+/**
+ * La OTRA mitad del problema, y la que costó días encontrar: sacarlo de las
+ * rutas críticas no basta, sharp tiene que SEGUIR FUNCIONANDO donde sí se usa.
+ *
+ * Es un módulo nativo: su .node carga libvips desde su propia carpeta. Si el
+ * bundler de Next se lo lleva, el binario queda sin su biblioteca y toda llamada
+ * revienta EN PRODUCCIÓN con "libvips-cpp.so: cannot open shared object file",
+ * mientras en local anda perfecto. Pasó del 19 al 22-08-2026: pasar sharp a
+ * import dinámico lo destapó y rompió tres cosas en silencio (las historias de
+ * despedida de Instagram, los gráficos de marketing —que quedaron en PNG, que
+ * Instagram rechaza— y las fotos del catálogo).
+ */
+console.log('\n════ sharp como paquete externo ════')
+const config = readFileSync(join(RAIZ, 'next.config.ts'), 'utf8')
+const lista = config.match(/serverExternalPackages:\s*\[([^\]]*)\]/)?.[1] ?? ''
+if (/['"]sharp['"]/.test(lista)) {
+  console.log("OK    'sharp' está en serverExternalPackages de next.config.ts")
+} else {
+  fallos++
+  console.log("FALLA 'sharp' NO está en serverExternalPackages de next.config.ts.")
+  console.log('      Sin eso el bundler se lleva el binario y sharp falla SOLO en producción,')
+  console.log('      en silencio: los gráficos quedan en PNG y las historias no se publican.')
+}
+
 if (fallos > 0) process.exit(1)

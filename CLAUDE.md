@@ -277,6 +277,22 @@ Arriba de la tabla de Compras, el panel **«Facturas por aceptar»** ([component
 - **Qué se persiste** (`conciliacion_sii`, un registro por período; DDL en [supabase/conciliacion-sii.sql](supabase/conciliacion-sii.sql)): solo el lado del SII (`docs_json` crudo + `sii_json` resumido), porque es un hecho fechado. El lado del sistema se **recalcula en vivo** siempre, también en el histórico: corregir una ficha vieja tiene que reflejarse, no quedar congelado.
 - Ojo al leer diferencias históricas: OpenFactura arrancó en julio-2026, así que los meses anteriores muestran venta sin documentos emitidos, y julio trae 41 notas de crédito que anulan boletas de una numeración vieja.
 
+### sharp: nativo, y por eso frágil en Vercel
+
+`sharp` convierte a JPEG los gráficos de marketing, arma la historia de despedida de Instagram y achica las fotos del catálogo. Es un módulo **nativo**: su `.node` carga libvips (`libvips-cpp.so`) desde su propia carpeta.
+
+⚠️ **Tiene que estar en `serverExternalPackages` de [next.config.ts](next.config.ts)**, igual que `@resvg/resvg-js` y `@napi-rs/canvas`. Si el bundler se lo lleva, el binario queda sin su biblioteca y **toda** llamada falla EN PRODUCCIÓN con *"libvips-cpp.so.8.x: cannot open shared object file"* — mientras en local, que resuelve desde `node_modules`, anda perfecto.
+
+Faltaba, y el 19-08-2026 pasar sharp a import **dinámico** ([lib/sharp-lazy.ts](lib/sharp-lazy.ts), para que no arrastrara al webhook) lo destapó: con el import estático el trazado de Next igual lo dejaba resolver. Rompió **tres cosas a la vez y ninguna dio error visible**, que es lo que costó encontrarlo:
+
+- **Las historias de despedida de Instagram dejaron de publicarse.** 13 tutores que habían autorizado el homenaje se quedaron sin él, y el disparador (la entrega) no vuelve a pasar.
+- **Los gráficos de marketing quedaron en PNG** — `marketing-grafico` tenía un `catch { /* deja PNG */ }` mudo — e **Instagram RECHAZA PNG**, así que la campaña fallaba recién al publicarla. Señal a mano: 591 imágenes JPG históricas y las últimas 20 todas PNG.
+- **El catálogo salió sin sus fotos** (0 JPEG contra 33). ⚠️ En su momento esto se atribuyó al rate limit de `pub-*.r2.dev`; la causa real era sharp. Bajar por la API S3 sigue siendo lo correcto, pero no era el problema.
+
+Los dos verificadores: **`npx tsx scripts/verificar-sharp-aislado.ts`** (sharp fuera de las rutas críticas **y** en `serverExternalPackages`) y **`npx tsx scripts/verificar-memorial.ts`** (hace cuántos días que no se publica una despedida y cuáles quedaron sin homenaje). Para recuperar las perdidas: `npx tsx scripts/publicar-memoriales-pendientes.ts --aplicar` — publica en la cuenta REAL, por defecto solo lista.
+
+**Regla que deja este incidente:** un `catch` que degrada en silencio a un formato que el destino no acepta no es un degradado, es una bomba de tiempo. Si el respaldo no sirve para lo que sigue, tiene que avisar.
+
 ### El catálogo de productos y las fotos de R2
 
 [lib/catalogo-generator.ts](lib/catalogo-generator.ts) arma el PDF que baja el panel (`/api/productos/catalogo`) y que el bot le manda al cliente por WhatsApp (`enviar_catalogo`).

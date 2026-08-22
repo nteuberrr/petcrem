@@ -236,6 +236,9 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
     setAjusteForm({ monto: String(a.monto), detalle: a.detalle || '', fecha: a.fecha || todayISO(), cliente_id: a.cliente_id || '' })
   }
 
+  /** La ficha elegida para canjear, si hay alguna. */
+  const fichaElegida = canjeables.find(c => c.id === ajusteForm.cliente_id) || null
+
   const etiquetaRegla = (r: Regla | null) =>
     !r ? '—' : r.tipo === 'variable' ? `${r.valor}% de la cremación` : fmtPrecio(r.valor)
 
@@ -428,10 +431,20 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-700">Monto pagado</label>
+              <label className="text-xs font-medium text-gray-700">
+                {ajusteForm.cliente_id ? 'Monto canjeado' : 'Monto pagado'}
+              </label>
               <input type="number" required min={1} value={ajusteForm.monto}
                 onChange={e => setAjusteForm(f => ({ ...f, monto: e.target.value }))}
                 className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              {/* Si se tocó a mano y ya no calza con el precio del servicio, se
+                  dice: un canje por un monto distinto al del servicio suele ser
+                  un error de tipeo, no una decisión. */}
+              {fichaElegida && fichaElegida.monto > 0 && parseInt(ajusteForm.monto, 10) !== fichaElegida.monto && (
+                <p className="mt-1 text-[11px] text-amber-700">
+                  El servicio de {fichaElegida.nombre_mascota} vale {fmtPrecio(fichaElegida.monto)}.
+                </p>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium text-gray-700">Fecha</label>
@@ -446,7 +459,19 @@ Se copian los tramos generales a su tabla de precios especiales y quedan siguié
           <div>
             <label className="text-xs font-medium text-gray-700">Mascota canjeada (opcional)</label>
             <select value={ajusteForm.cliente_id}
-              onChange={e => setAjusteForm(f => ({ ...f, cliente_id: e.target.value }))}
+              onChange={e => {
+                // Al elegir la mascota, el monto del ajuste PASA A SER el precio
+                // de ese servicio: eso es lo que se está canjeando. Queda
+                // editable por si se acordó otra cosa, pero el default es el
+                // precio real y no un número escrito a mano.
+                const cid = e.target.value
+                const f2 = canjeables.find(c => c.id === cid)
+                setAjusteForm(f => ({
+                  ...f,
+                  cliente_id: cid,
+                  monto: f2 && f2.monto > 0 ? String(f2.monto) : f.monto,
+                }))
+              }}
               className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
               <option value="">Sin canje (fue una transferencia)</option>
               {canjeables.map(c => (
