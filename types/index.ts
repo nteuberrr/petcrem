@@ -58,6 +58,8 @@ export type Veterinario = {
   nombre: string
   direccion: string
   telefono: string
+  /** Los otros celulares de la clinica, separados por coma (lib/vet-lookup). */
+  telefonos_adicionales: string
   correo: string
   nombre_contacto: string
   cargo_contacto: string

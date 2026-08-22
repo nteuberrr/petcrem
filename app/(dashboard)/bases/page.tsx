@@ -10,9 +10,9 @@ import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 
-type Vet = { id: string; nombre: string; comuna: string; nombre_contacto: string; cargo_contacto: string; tipo_precios: string; activo: string; direccion: string; telefono: string; correo: string; rut: string; razon_social: string; giro: string }
+type Vet = { id: string; nombre: string; comuna: string; nombre_contacto: string; cargo_contacto: string; tipo_precios: string; activo: string; direccion: string; telefono: string; telefonos_adicionales: string; correo: string; rut: string; razon_social: string; giro: string }
 
-const emptyVet = { nombre: '', direccion: '', telefono: '', correo: '', nombre_contacto: '', cargo_contacto: '', comuna: '', rut: '', razon_social: '', giro: '', tipo_precios: 'precios_convenio' }
+const emptyVet = { nombre: '', direccion: '', telefono: '', telefonos_adicionales: '', correo: '', nombre_contacto: '', cargo_contacto: '', comuna: '', rut: '', razon_social: '', giro: '', tipo_precios: 'precios_convenio' }
 
 export default function BasesPage() {
   const { data: session, status } = useSession()
@@ -40,6 +40,7 @@ export default function BasesPage() {
   const [editingVet, setEditingVet] = useState<Vet | null>(null)
 
   const [vetForm, setVetForm] = useState(emptyVet)
+  const [vetError, setVetError] = useState('')
 
   const fetchAll = useCallback(async () => {
     const v = await fetch('/api/veterinarios').then(r => r.json())
@@ -48,14 +49,20 @@ export default function BasesPage() {
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
-  const patch = async (url: string, body: object) => {
-    await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  // Devuelven el mensaje de error de la API, o '' si salió bien. El formulario de
+  // veterinario lo NECESITA: rechaza un celular que ya es de otra clínica, y sin
+  // esto el modal se cerraba igual y el cambio se perdía sin decir nada.
+  const enviar = async (url: string, method: 'PATCH' | 'POST', body: object): Promise<string> => {
+    const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .catch(() => null)
+    if (!r || !r.ok) {
+      const d = r ? await r.json().catch(() => ({})) : {}
+      return String(d?.error || 'No se pudo guardar. Volvé a intentarlo.')
+    }
     await fetchAll()
+    return ''
   }
-  const post = async (url: string, body: object) => {
-    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    await fetchAll()
-  }
+  const patch = async (url: string, body: object) => { await enviar(url, 'PATCH', body) }
   const del = async (url: string) => {
     await fetch(url, { method: 'DELETE' })
     await fetchAll()
@@ -80,7 +87,7 @@ export default function BasesPage() {
       <div className="bg-white rounded-xl shadow-md border border-gray-300 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-300">
             <h2 className="font-semibold text-gray-900">Veterinarios</h2>
-            <button onClick={() => { setEditingVet(null); setVetForm(emptyVet); setShowVetModal(true) }}
+            <button onClick={() => { setEditingVet(null); setVetForm(emptyVet); setVetError(''); setShowVetModal(true) }}
               className="bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
               + Agregar
             </button>
@@ -113,7 +120,7 @@ export default function BasesPage() {
                         Ver
                       </Link>
                       <button
-                        onClick={() => { setEditingVet(v); setVetForm({ nombre: v.nombre, direccion: v.direccion, telefono: v.telefono, correo: v.correo, nombre_contacto: v.nombre_contacto, cargo_contacto: v.cargo_contacto, comuna: v.comuna, rut: v.rut, razon_social: v.razon_social, giro: v.giro, tipo_precios: v.tipo_precios }); setShowVetModal(true) }}
+                        onClick={() => { setEditingVet(v); setVetError(''); setVetForm({ nombre: v.nombre, direccion: v.direccion, telefono: v.telefono, telefonos_adicionales: v.telefonos_adicionales || '', correo: v.correo, nombre_contacto: v.nombre_contacto, cargo_contacto: v.cargo_contacto, comuna: v.comuna, rut: v.rut, razon_social: v.razon_social, giro: v.giro, tipo_precios: v.tipo_precios }); setShowVetModal(true) }}
                         className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-3 py-1.5 min-h-9 rounded-xl text-xs font-medium transition-colors">
                         Editar
                       </button>
@@ -141,16 +148,18 @@ export default function BasesPage() {
         title={editingVet ? 'Editar veterinario' : 'Agregar veterinario'}>
         <form onSubmit={async e => {
           e.preventDefault()
-          if (editingVet) {
-            await patch('/api/veterinarios', { id: editingVet.id, ...vetForm })
-          } else {
-            await post('/api/veterinarios', vetForm)
-          }
+          setVetError('')
+          const err = editingVet
+            ? await enviar('/api/veterinarios', 'PATCH', { id: editingVet.id, ...vetForm })
+            : await enviar('/api/veterinarios', 'POST', vetForm)
+          // Si falló, el modal SE QUEDA ABIERTO con lo escrito y el motivo a la
+          // vista: cerrarlo perdería el formulario sin explicar por qué.
+          if (err) { setVetError(err); return }
           setShowVetModal(false)
           setEditingVet(null)
           setVetForm(emptyVet)
         }} className="space-y-3">
-          {([['Nombre', 'nombre'], ['RUT', 'rut'], ['Razón social', 'razon_social'], ['Giro', 'giro'], ['Dirección', 'direccion'], ['Comuna', 'comuna'], ['Teléfono', 'telefono'], ['Correo', 'correo'], ['Nombre contacto', 'nombre_contacto'], ['Cargo contacto', 'cargo_contacto']] as [string, string][]).map(([label, key]) => (
+          {([['Nombre', 'nombre'], ['RUT', 'rut'], ['Razón social', 'razon_social'], ['Giro', 'giro'], ['Dirección', 'direccion'], ['Comuna', 'comuna'], ['Teléfono', 'telefono'], ['Otros celulares', 'telefonos_adicionales'], ['Correo', 'correo'], ['Nombre contacto', 'nombre_contacto'], ['Cargo contacto', 'cargo_contacto']] as [string, string][]).map(([label, key]) => (
             <div key={key}>
               <label className="text-xs font-medium text-gray-700">{label}</label>
               {key === 'direccion' ? (
@@ -163,7 +172,17 @@ export default function BasesPage() {
               ) : (
                 <input value={(vetForm as Record<string, string>)[key]}
                   onChange={e => setVetForm(f => ({ ...f, [key]: e.target.value }))}
+                  placeholder={key === 'telefonos_adicionales' ? '912345678, 987654321' : undefined}
                   className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              )}
+              {/* Se explica para qué sirve: no es un dato de contacto más, es lo
+                  que hace que el agente reconozca a la clínica escriba quien
+                  escriba. Los envíos siguen yendo al teléfono principal. */}
+              {key === 'telefonos_adicionales' && (
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Separados por coma. Si escriben desde cualquiera de estos números, el agente sabe que es esta veterinaria.
+                  Los mensajes que enviamos nosotros siguen yendo al teléfono de arriba.
+                </p>
               )}
             </div>
           ))}
@@ -178,6 +197,9 @@ export default function BasesPage() {
               Se define <strong>automáticamente</strong>: <strong>Especial</strong> si la clínica tiene precios especiales configurados (Configuración → Precios → Especiales); si no tiene ninguno, <strong>Convenio</strong>.
             </p>
           </div>
+          {vetError && (
+            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{vetError}</p>
+          )}
           <button type="submit" className="w-full bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition-colors">
             {editingVet ? 'Guardar cambios' : 'Guardar'}
           </button>

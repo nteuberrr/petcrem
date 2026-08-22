@@ -1,6 +1,7 @@
 import { getSheetData } from './datastore'
 import { formatDate, formatDateForSheet, fechaChileISO } from './dates'
 import { nombreCompletoVet } from './eutanasia-mailer'
+import { telefonosDeVet } from './vet-lookup'
 
 /**
  * Lo que el agente necesita saber cuando quien escribe es un VETERINARIO.
@@ -30,8 +31,11 @@ export async function bloqueVeterinario(waId: string): Promise<string> {
     getSheetData('veterinarios').catch(() => [] as Record<string, string>[]),
     getSheetData('vet_convenio_eutanasia').catch(() => [] as Record<string, string>[]),
   ])
-  const convenio = vets.find(v => tel9(v.telefono) === t && ACTIVO(v.activo))
-  const red = vetsEut.find(v => tel9(v.telefono) === t && ACTIVO(v.activo))
+  // Por la lista COMPLETA de números de la clínica, no por `telefono` a secas:
+  // una veterinaria tiene varios celulares y todos son la misma veterinaria
+  // (ver lib/vet-lookup).
+  const convenio = vets.find(v => ACTIVO(v.activo) && telefonosDeVet(v).includes(t))
+  const red = vetsEut.find(v => ACTIVO(v.activo) && telefonosDeVet(v).includes(t))
   if (!convenio && !red) return ''
 
   // nombreCompletoVet y no un join a mano: en la red de eutanasias varios tienen

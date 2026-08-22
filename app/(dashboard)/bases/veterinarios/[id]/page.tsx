@@ -18,7 +18,7 @@ type Tramo = { id: string; peso_min: string; peso_max: string; precio_ci: string
 
 type VetDetalle = {
   id: string; nombre: string; rut: string; razon_social: string; giro: string
-  direccion: string; telefono: string; correo: string
+  direccion: string; telefono: string; telefonos_adicionales?: string; correo: string
   nombre_contacto: string; cargo_contacto: string; comuna: string
   tipo_precios: string; activo: string; precios_indexados?: string; boleta_al_cliente?: string
   clientes: Cliente[]
@@ -378,6 +378,9 @@ export default function VetDetallePage({ params }: { params: Promise<{ id: strin
           <div className="space-y-3 text-sm">
             {[
               ['Teléfono', vet.telefono],
+              // Los otros celulares de la clínica: no se les escribe, pero el
+              // agente los reconoce como de esta veterinaria (lib/vet-lookup).
+              ['Otros celulares', vet.telefonos_adicionales],
               ['Email', vet.correo],
               ['Contacto', vet.nombre_contacto],
               ['Cargo', vet.cargo_contacto],

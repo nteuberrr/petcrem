@@ -129,6 +129,12 @@ export const SHEETS: Record<string, string[]> = {
   veterinarios: [
     'id', 'nombre', 'rut', 'razon_social', 'giro',
     'direccion', 'comuna', 'telefono', 'correo',
+    // telefonos_adicionales: los OTROS celulares de la clínica (texto libre,
+    // separados por coma). El principal sigue siendo `telefono` — es al que se le
+    // escribe—, pero el RECONOCIMIENTO mira la lista completa: escriba quien
+    // escriba de la clínica, el agente sabe que es esa veterinaria
+    // (lib/vet-lookup `telefonosDeVet`).
+    'telefonos_adicionales',
     'nombre_contacto', 'cargo_contacto',
     'tipo_precios', 'precios_especiales', 'activo', 'fecha_creacion',
     // precios_indexados: '' | 'general' | 'convenio'. Si viene con valor, los tramos

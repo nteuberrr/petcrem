@@ -6,11 +6,29 @@ import { capitalizarNombre } from '@/lib/nombres'
 import { enviarBienvenidaConvenioVet } from '@/lib/vet-cremacion-mailer'
 import { sincronizarMailingCliente } from '@/lib/mailing-vet-sync'
 import { exigirNivel } from '@/lib/permisos-server'
+import { telefonosDeVet, telefonoDeOtroVet } from '@/lib/vet-lookup'
+
+/**
+ * Un celular no puede estar en dos fichas de veterinario: el reconocimiento del
+ * agente resuelve por número, así que un duplicado lo haría entrar en modo
+ * veterinario con la clínica equivocada —nombre, convenio y tarifas de otro—.
+ * Devuelve el mensaje del choque, o '' si no hay.
+ */
+async function chocaTelefono(vet: Record<string, string>, excluirId?: string): Promise<string> {
+  for (const t of telefonosDeVet(vet)) {
+    const otro = await telefonoDeOtroVet(t, excluirId)
+    if (otro) return `El teléfono +56 ${t} ya está en la ficha de ${otro.nombre}. Un mismo celular no puede estar en dos veterinarias: el agente no sabría cuál de las dos le está escribiendo.`
+  }
+  return ''
+}
 
 const VetSchema = z.object({
   nombre: z.string().min(1),
   direccion: z.string(),
   telefono: z.string(),
+  // Los OTROS celulares de la clínica, separados por coma. El reconocimiento del
+  // agente mira esta lista además del principal (lib/vet-lookup).
+  telefonos_adicionales: z.string().optional().default(''),
   correo: z.string(),
   nombre_contacto: z.string(),
   cargo_contacto: z.string(),
@@ -47,6 +65,8 @@ export async function POST(req: NextRequest) {
     const data = VetSchema.parse(body)
     data.nombre = capitalizarNombre(data.nombre)
     if (data.nombre_contacto) data.nombre_contacto = capitalizarNombre(data.nombre_contacto)
+    const choque = await chocaTelefono(data as unknown as Record<string, string>)
+    if (choque) return NextResponse.json({ error: choque }, { status: 400 })
     const id = await getNextId('veterinarios')
     const now = todayISO()
     const row = { id, ...data, activo: 'TRUE', fecha_creacion: now }
@@ -122,6 +142,8 @@ export async function PATCH(req: NextRequest) {
     const idx = rows.findIndex((r) => r.id === id)
     if (idx === -1) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     const updated = { ...rows[idx], ...updates }
+    const choque = await chocaTelefono(updated, String(id))
+    if (choque) return NextResponse.json({ error: choque }, { status: 400 })
     await updateRow('veterinarios', idx, updated)
     return NextResponse.json(updated)
   } catch (e) {
